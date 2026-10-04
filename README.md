@@ -1,3 +1,9 @@
+## V6 branding update
+
+- Replaced the temporary C mark with the supplied CallFocus logo across the customer site and admin portal.
+- Rebuilt the PWA and Apple Home Screen icons from the supplied logo.
+- Added a browser favicon.
+
 # CallFocus Worker V5
 
 Cloudflare Workers + Static Assets build.
@@ -42,4 +48,4 @@ No API key belongs in GitHub.
 
 The customer site includes `manifest.webmanifest`, iOS standalone meta tags, install icons and `sw.js`. When added to the iPhone Home Screen it launches as a standalone web app using the maximum screen area iOS permits.
 
-The current letter-C app icon is a temporary placeholder until the final CallFocus logo is supplied.
+The supplied CallFocus phone-wave logo is now used for the site header, admin header, favicon, Apple Home Screen icon and PWA icons.
