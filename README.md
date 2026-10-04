@@ -1,29 +1,36 @@
-# CallFocus V1 - Cloudflare Workers Build
+# CallFocus Worker V2
 
-This build is configured for Cloudflare Workers + Static Assets.
+Updated browser + Cloudflare Worker build.
 
-## GitHub root files
+## What changed in V2
+- Premium dark-glass UI redesign
+- Mobile menu closes when tapping outside
+- Recent calls redesigned like reusable conversation threads
+- Open a previous call and call again from the same thread
+- Caller name now uses the actual saved/manual person name
+- New one-off caller fields for unsaved calls
+- Improved call screen with:
+  - Mute
+  - Audio toggle
+  - Hold
+  - Request end
+  - End now
+- Server status copy now reads like:
+  - Connecting to server
+  - Connected to server
+  - Disconnected from server
+- Better error visibility on failed realtime connection
+
+## Deploy notes
+This remains a Cloudflare Workers + static assets project.
+
+Required runtime secret:
+- `OPENAI_API_KEY`
+
+## Files
 - `index.html`
 - `app.css`
 - `app.js`
 - `_worker.js`
 - `wrangler.jsonc`
 - `.assetsignore`
-- `README.md`
-
-## Cloudflare build settings
-- Build command: leave blank
-- Deploy command: `npx wrangler deploy`
-- Preview command: `npx wrangler preview` can remain as shown by Cloudflare; it is not required for production deployment.
-
-## Runtime secret
-After the Worker is created, add this runtime secret in Cloudflare:
-
-`OPENAI_API_KEY`
-
-Do not put the API key in GitHub or client-side JavaScript.
-
-## Architecture
-- Static website files are served using Cloudflare Workers Static Assets.
-- `_worker.js` handles `/api/session` and forwards the WebRTC SDP session request to OpenAI Realtime.
-- Other requests are served through the `ASSETS` binding.
