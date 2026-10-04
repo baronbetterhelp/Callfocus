@@ -16,38 +16,74 @@
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="/admin">
-        <span class="brand-logo-shell"><img class="brand-logo-image" src="./logo.png" alt="" /></span>
+        <span class="brand-logo-shell"><img class="brand-logo-image" src="./logo.png" alt="CallFocus" /></span>
         <span class="brand-copy"><strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong><small>Private system control</small></span>
       </a>
       <div class="header-actions"><a class="btn btn-ghost admin-back-link" href="/">Customer site</a></div>
     </div>
   </header>
+
   <main class="admin-shell">
     <section class="admin-login-card" id="adminGate">
       <span class="kicker">Admin access</span>
-      <h1 id="adminGateTitle">Set up admin access</h1>
-      <p id="adminGateText">Create a private passcode for the CallFocus admin panel on this device. Production should later move admin authentication to the server.</p>
-      <label>Admin passcode<input id="adminPasscode" type="password" placeholder="At least 6 characters" /></label>
-      <button class="btn btn-primary full" id="adminGateBtn">Continue</button>
+      <h1>Admin sign in</h1>
+      <p>Enter the private CallFocus admin passcode stored in Cloudflare. This controls the live service for every customer.</p>
+      <label>Admin passcode<input id="adminPasscode" type="password" autocomplete="current-password" placeholder="Enter admin passcode" /></label>
+      <button class="btn btn-primary full" id="adminGateBtn">Unlock admin</button>
+      <div class="admin-gate-note" id="adminGateNote"></div>
     </section>
 
     <section class="admin-dashboard hidden" id="adminDashboard">
-      <div class="admin-page-head"><div><span class="kicker">System control</span><h1>CallFocus Admin</h1><p>Choose the default male and female voices and the master behavior used by customer calls.</p></div><button class="btn btn-ghost" id="adminLockBtn">Lock admin</button></div>
+      <div class="admin-page-head">
+        <div><span class="kicker">System control</span><h1>CallFocus Admin</h1><p>Control live calling, voices and the conversational behavior used across the entire website.</p></div>
+        <button class="btn btn-ghost" id="adminLockBtn">Lock admin</button>
+      </div>
+
+      <div class="premium-panel admin-server-panel">
+        <div class="admin-server-copy">
+          <span class="kicker">Global server switch</span>
+          <h3>Calling availability</h3>
+          <p>Turn calls off instantly for every customer. The website stays online, but Start Call will show your maintenance message.</p>
+          <div class="admin-storage-status" id="adminStorageStatus">Checking global settings storage…</div>
+        </div>
+        <div class="admin-server-control">
+          <div class="server-state-badge" id="serverStateBadge"><span></span><b>Online</b></div>
+          <label class="server-switch"><input id="adminServerOnline" type="checkbox" checked /><span></span></label>
+        </div>
+        <label class="admin-maintenance-message">Offline message<input id="adminServerMessage" maxlength="240" placeholder="Server not active right now. Please try again soon." /></label>
+      </div>
+
       <div class="admin-grid-v3">
         <div class="premium-panel form-panel">
-          <span class="kicker">Voice engine</span><h3>Default voice pair</h3>
-          <div class="form-grid two"><label>Male voice<select id="adminMaleVoice"></select></label><label>Female voice<select id="adminFemaleVoice"></select></label></div>
+          <span class="kicker">Voice engine</span><h3>Customer voice pair</h3>
+          <p class="admin-panel-copy">Customers only choose Male or Female. The actual voices selected here become the two voices across CallFocus.</p>
+          <div class="voice-admin-card">
+            <label>Male voice<select id="adminMaleVoice"></select></label>
+            <button class="btn btn-ghost voice-preview-btn" data-preview="male">Preview male voice</button>
+          </div>
+          <div class="voice-admin-card">
+            <label>Female voice<select id="adminFemaleVoice"></select></label>
+            <button class="btn btn-ghost voice-preview-btn" data-preview="female">Preview female voice</button>
+          </div>
           <label>Realtime model<input id="adminModel" /></label>
-          <div class="toggle-row"><span>Allow interruption / natural barge-in</span><input id="adminInterruptions" type="checkbox" /></div>
+          <div class="admin-recommendation">OpenAI currently recommends <strong>marin</strong> and <strong>cedar</strong> for best Realtime voice quality.</div>
+          <audio id="voicePreviewAudio" class="hidden" controls></audio>
+          <div class="toggle-row"><span>Allow natural interruption / barge-in</span><input id="adminInterruptions" type="checkbox" /></div>
           <div class="toggle-row"><span>Assistant speaks first when a call connects</span><input id="adminSpeakFirst" type="checkbox" /></div>
         </div>
+
         <div class="premium-panel form-panel">
-          <span class="kicker">Global behavior</span><h3>Call instructions</h3>
-          <label>Master call rules<textarea id="adminInstructions" rows="13"></textarea></label>
-          <label>Default opening behavior<textarea id="adminOpening" rows="5"></textarea></label>
+          <span class="kicker">Conversation behavior</span><h3>Make calls sound natural</h3>
+          <label>Natural speech style<textarea id="adminSpeechStyle" rows="9" placeholder="Rules that control pacing, tone and how human the conversation feels"></textarea></label>
+          <label>Master call rules<textarea id="adminInstructions" rows="11" placeholder="Global rules for every call"></textarea></label>
+          <label>Default opening behavior<textarea id="adminOpening" rows="5" placeholder="How the first line should begin"></textarea></label>
         </div>
       </div>
-      <div class="premium-panel admin-save-panel"><div class="info-note">The OpenAI API key remains stored in Cloudflare as the <strong>OPENAI_API_KEY</strong> runtime secret and is never displayed in this page.</div><button class="btn btn-primary large" id="saveAdminBtn">Save admin settings</button></div>
+
+      <div class="premium-panel admin-save-panel">
+        <div class="info-note">Changes saved here are global. New calls use them immediately. Active calls keep the settings they started with.</div>
+        <button class="btn btn-primary large" id="saveAdminBtn">Save global settings</button>
+      </div>
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>

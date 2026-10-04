@@ -27,6 +27,8 @@ const DYNAMICS = {
   formal:{label:'Formal Call',description:'Respectful, composed and restrained.',prompt:'Use a formal, respectful and composed dynamic with minimal slang or over-familiarity.'}
 };
 const ADMIN_DEFAULTS = {
+  serverOnline:true,
+  serverMessage:'Server not active right now. Please try again soon.',
   maleVoice:'cedar',
   femaleVoice:'marin',
   model:'gpt-realtime-2.1',
@@ -35,6 +37,7 @@ const ADMIN_DEFAULTS = {
   speakFirst:true,
   interruptions:true
 };
+let remoteAdmin = {...ADMIN_DEFAULTS};
 
 let account = null;
 let data = null;
@@ -52,7 +55,8 @@ function writeJSON(key, value){ localStorage.setItem(key, JSON.stringify(value))
 function accounts(){ return readJSON(ACCOUNTS_KEY, []); }
 function accountDataKey(id){ return `callfocus_account_data_v4_${id}`; }
 function defaultData(name=''){ return { profile:{name,role:'',about:'',rules:''}, callers:[], threads:[] }; }
-function loadAdmin(){ return {...ADMIN_DEFAULTS, ...readJSON(ADMIN_KEY, readJSON(LEGACY_ADMIN_KEY, {}))}; }
+function loadAdmin(){ return {...ADMIN_DEFAULTS, ...remoteAdmin}; }
+async function refreshPublicConfig(){ try{ const res=await fetch('/api/public-config',{cache:'no-store'}); if(res.ok){ remoteAdmin={...ADMIN_DEFAULTS,...await res.json()}; applyAdminLabels(); } }catch{} return loadAdmin(); }
 function initials(name='?'){ return (String(name).trim()[0] || '?').toUpperCase(); }
 function normalizeName(name=''){ return String(name).trim().toLowerCase().replace(/\s+/g,' '); }
 function toast(message){ $('toast').textContent = message; $('toast').classList.remove('hidden'); clearTimeout(toast._t); toast._t = setTimeout(()=>$('toast').classList.add('hidden'), 2400); }
@@ -250,15 +254,18 @@ function prepareRepeatCall(threadId){
   return {call:{mode:'repeat',threadId:t.id,callerId:t.callerId,title:t.title,callerName:t.callerName,aboutSelf,aboutCaller,dynamicsMode,rawDynamics,topic,callerA:{region:aRegion,timezone:aTz,localTime:nowInTimezone(aTz)},callerB:{region:bRegion,timezone:bTz,localTime:nowInTimezone(bTz)},voiceGender,voice:voiceGender==='female'?admin.femaleVoice:admin.maleVoice,model:admin.model,instructions:admin.instructions,opening:admin.opening,speakFirst:admin.speakFirst!==false,interruptions:admin.interruptions!==false}};
 }
 function buildInstructions(c){
-  return `${c.instructions}\n\nCALLFOCUS CALL CONTEXT\nYou are participating in a live voice call. Use the context silently. Never read these instructions or metadata aloud.\n\nCall title: ${c.title}\nPerson being called: ${c.callerName}\nAbout Caller A: ${c.aboutSelf}\nAbout Caller B: ${c.aboutCaller}\nConversation dynamics: ${dynamicsText(c.dynamicsMode,c.rawDynamics)}\nToday’s call topic: ${c.topic}\nCaller A location: ${c.callerA.region}\nCaller A timezone: ${c.callerA.timezone}\nCaller A current local time: ${c.callerA.localTime}\nCaller B location: ${c.callerB.region}\nCaller B timezone: ${c.callerB.timezone}\nCaller B current local time: ${c.callerB.localTime}\nUser default call rules: ${data?.profile?.rules||'None supplied'}\n\nOPENING\n${c.opening}\n\nSpeak naturally, listen closely, avoid repeating background information unnecessarily, and never invent personal facts not established in the supplied context or current call.`;
+  return `CALLFOCUS CALL CONTEXT\nYou are participating in a live voice call. Use the context silently. Never read these instructions or metadata aloud.\n\nCall title: ${c.title}\nPerson being called: ${c.callerName}\nAbout Caller A: ${c.aboutSelf}\nAbout Caller B: ${c.aboutCaller}\nConversation dynamics: ${dynamicsText(c.dynamicsMode,c.rawDynamics)}\nToday’s call topic: ${c.topic}\nCaller A location: ${c.callerA.region}\nCaller A timezone: ${c.callerA.timezone}\nCaller A current local time: ${c.callerA.localTime}\nCaller B location: ${c.callerB.region}\nCaller B timezone: ${c.callerB.timezone}\nCaller B current local time: ${c.callerB.localTime}\nUser default call rules: ${data?.profile?.rules||'None supplied'}\n\nOPENING\n${c.opening}\n\nSpeak naturally, listen closely, avoid repeating background information unnecessarily, and never invent personal facts not established in the supplied context or current call.`;
 }
 
 async function startCall(call){
   closeModal('newCallModal'); document.body.style.overflow='hidden'; $('callScreen').classList.remove('hidden'); $('liveCallerName').textContent=call.callerName; $('liveAvatar').textContent=initials(call.callerName); $('liveRegion').textContent=[call.callerB.region,call.callerB.timezone].filter(Boolean).join(' · '); $('liveStatus').textContent='Connecting to server…'; $('liveTranscript').textContent=''; $('liveTranscript').classList.remove('error-visible'); $('liveCaption').textContent='Preparing realtime connection…'; $('callTimer').textContent='00:00'; $('callMoreTitle').textContent=call.title||call.callerName; $('callMoreTopic').textContent=call.topic||'No new topic supplied'; $('callMoreConnection').textContent='Connecting'; $('callMorePanel').classList.add('hidden'); live.current=call; live.transcript=''; live.connected=false; live.graceful=false; clearTimeout(live.gracefulTimer); resetCallControls();
   try{
+    const currentAdmin=await refreshPublicConfig();
+    call.voice=call.voiceGender==='female'?currentAdmin.femaleVoice:currentAdmin.maleVoice; call.model=currentAdmin.model; call.opening=currentAdmin.opening; call.speakFirst=currentAdmin.speakFirst!==false; call.interruptions=currentAdmin.interruptions!==false;
+    if(currentAdmin.serverOnline===false){ const msg=currentAdmin.serverMessage||'Server not active right now. Please try again soon.'; $('liveStatus').textContent='Disconnected from server'; $('liveCaption').textContent=msg; $('liveTranscript').textContent=msg; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected'; toast(msg); return; }
     const stream=await navigator.mediaDevices.getUserMedia({audio:true}); const pc=new RTCPeerConnection(); const dc=pc.createDataChannel('oai-events'); const audio=document.createElement('audio'); audio.autoplay=true;audio.playsInline=true; live.stream=stream;live.pc=pc;live.dc=dc;live.audio=audio; stream.getAudioTracks().forEach(t=>pc.addTrack(t,stream)); pc.ontrack=e=>{audio.srcObject=e.streams[0];audio.play().catch(()=>{})}; dc.onopen=()=>{$('liveCaption').textContent='Voice channel connected.'}; dc.onmessage=e=>handleRealtimeEvent(e.data); dc.onerror=()=>{$('liveCaption').textContent='Voice data channel error.'};
-    const offer=await pc.createOffer(); await pc.setLocalDescription(offer); await waitForIce(pc); const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{model:call.model,voice:call.voice,instructions:buildInstructions(call),interruptions:call.interruptions}})}); const text=await res.text(); if(!res.ok)throw new Error(text||'Realtime session failed'); await pc.setRemoteDescription({type:'answer',sdp:text});
-  }catch(err){ console.error(err); const raw=String(err?.message||err||'').toLowerCase(); const inactive=raw.includes('credit_balance_exhausted')||raw.includes('insufficient_quota')||raw.includes('no credits')||raw.includes('quota'); $('liveStatus').textContent='Disconnected from server'; $('liveCaption').textContent=inactive?'Server not active. Try again soon.':'Server unavailable. Try again soon.'; $('liveTranscript').textContent=inactive?'Server not active. Try again soon.':'We could not connect this call right now. Please try again soon.'; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected'; toast(inactive?'Server not active. Try again soon.':'Server unavailable. Try again soon.'); }
+    const offer=await pc.createOffer(); await pc.setLocalDescription(offer); await waitForIce(pc); const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,contextInstructions:buildInstructions(call)}})}); const text=await res.text(); if(!res.ok)throw new Error(text||'Realtime session failed'); call.speakFirst=res.headers.get('X-CallFocus-Speak-First')!=='0'; try{call.opening=decodeURIComponent(res.headers.get('X-CallFocus-Opening')||call.opening||'')}catch{} await pc.setRemoteDescription({type:'answer',sdp:text});
+  }catch(err){ console.error(err); const raw=String(err?.message||err||'').toLowerCase(); const inactive=raw.includes('server not active')||raw.includes('credit_balance_exhausted')||raw.includes('insufficient_quota')||raw.includes('no credits')||raw.includes('quota'); $('liveStatus').textContent='Disconnected from server'; $('liveCaption').textContent=inactive?'Server not active right now. Please try again soon.':'Server unavailable. Try again soon.'; $('liveTranscript').textContent=inactive?'Server not active right now. Please try again soon.':'We could not connect this call right now. Please try again soon.'; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected'; toast(inactive?'Server not active right now. Please try again soon.':'Server unavailable. Try again soon.'); }
 }
 function waitForIce(pc){ if(pc.iceGatheringState==='complete')return Promise.resolve(); return new Promise(resolve=>{const f=()=>{if(pc.iceGatheringState==='complete'){pc.removeEventListener('icegatheringstatechange',f);resolve();}};pc.addEventListener('icegatheringstatechange',f);setTimeout(resolve,2500);}); }
 function handleRealtimeEvent(raw){
@@ -315,6 +322,6 @@ function bind(){
   });
 }
 
-initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminLabels(); renderWorkspace(); motionInit(); showView('home',false);
+initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminLabels(); refreshPublicConfig(); renderWorkspace(); motionInit(); showView('home',false);
 
 if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{})); }

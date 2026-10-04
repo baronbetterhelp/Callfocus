@@ -1,51 +1,54 @@
-## V6 branding update
+# CallFocus Worker V7
 
-- Replaced the temporary C mark with the supplied CallFocus logo across the customer site and admin portal.
-- Rebuilt the PWA and Apple Home Screen icons from the supplied logo.
-- Added a browser favicon.
+V7 turns `/admin` into a true global control center instead of a device-only settings page.
 
-# CallFocus Worker V5
+## New in V7
+- Global Server Online / Offline switch
+- Custom customer-facing maintenance message
+- Global male/female Realtime voice selection
+- Voice preview buttons for every supported CallFocus Realtime voice
+- Global natural-speech style instructions to reduce chatbot-like delivery
+- Global master call rules and opening behavior
+- Admin settings are enforced server-side for every new call
+- Customer pages automatically reflect the selected male/female voices
+- Server-off mode is enforced by the Worker, not just hidden in the UI
 
-Cloudflare Workers + Static Assets build.
+## Required Cloudflare runtime secrets
+Existing:
+- `OPENAI_API_KEY`
 
-## V5 changes
+Add:
+- `CALLFOCUS_ADMIN_PASSCODE`
 
-- API quota/credit errors are no longer exposed to customers. The call screen shows: `Server not active. Try again soon.`
-- Reworked full-screen call experience for Add to Home Screen / PWA use.
-- Added PWA manifest, iOS web-app meta tags, placeholder app icons and a lightweight service worker.
-- Call controls now use a 2 x 3 phone-style dial layout:
-  - Speaker
-  - Mute
-  - Hold
-  - More
-  - Request end
-  - End now
-- More opens call details instead of showing a keypad.
-- Call minimize now works and creates a small active-call bar that can be restored.
-- New-call locations have U.S. city autocomplete. Selecting a city automatically selects its matching IANA time zone.
-- New calls default to random major U.S. locations instead of Nigeria.
-- Location/timezone spacing tightened in the new-call form.
-- Account password storage upgraded to salted PBKDF2-SHA256 with legacy SHA-256 account migration on successful sign-in.
-- Existing account data/storage keys remain compatible with V4.
+Choose the private passcode you want to use at `/admin` and store it as a Secret.
 
-## Deployment
+## Required Cloudflare KV binding
+Create one Workers KV namespace, for example:
+- Namespace name: `callfocus-config`
 
-Replace the files in your existing CallFocus GitHub repository with the contents of this folder and commit to `main`.
-Cloudflare should automatically redeploy.
+Bind it to this Worker using the binding/variable name:
+- `CALLFOCUS_CONFIG`
 
-Keep the existing Cloudflare runtime secret:
+This KV namespace stores the global admin configuration. Without the binding, customer calls still use safe defaults, but the admin panel cannot persist global changes.
 
-`OPENAI_API_KEY`
+## Admin URL
+- `https://YOUR-DOMAIN/admin`
+- Current workers.dev example: `https://callfocus.baronbetterhelp.workers.dev/admin`
 
-No API key belongs in GitHub.
+## Voice notes
+Realtime voice choices in this build:
+- alloy
+- ash
+- ballad
+- coral
+- echo
+- sage
+- shimmer
+- verse
+- marin
+- cedar
 
-## Routes
+OpenAI currently recommends `marin` or `cedar` for best Realtime voice quality.
 
-- `/` customer site
-- `/admin` admin portal
-
-## PWA
-
-The customer site includes `manifest.webmanifest`, iOS standalone meta tags, install icons and `sw.js`. When added to the iPhone Home Screen it launches as a standalone web app using the maximum screen area iOS permits.
-
-The supplied CallFocus phone-wave logo is now used for the site header, admin header, favicon, Apple Home Screen icon and PWA icons.
+## Important
+Voice previews use the OpenAI speech endpoint and consume a small amount of API credit.
