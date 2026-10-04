@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0d10" />
+  <title>CallFocus</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./app.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-row">
+        <div class="brand-mark">C</div>
+        <div>
+          <div class="brand-name">CallFocus</div>
+          <div class="brand-sub">Realtime calling workspace</div>
+        </div>
+      </div>
+
+      <nav class="nav-list">
+        <button class="nav-item active" data-view="home">Home</button>
+        <button class="nav-item" data-view="callers">My callers</button>
+        <button class="nav-item" data-view="history">Call history</button>
+        <button class="nav-item" data-view="profile">My profile</button>
+        <button class="nav-item" data-view="admin">Admin</button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="mini-profile">
+          <div class="avatar">U</div>
+          <div>
+            <div class="mini-name" id="miniProfileName">Your profile</div>
+            <div class="mini-meta">Customer workspace</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn mobile-only" id="menuBtn" aria-label="Menu">☰</button>
+        <div>
+          <div class="eyebrow" id="viewEyebrow">Workspace</div>
+          <h1 id="viewTitle">Home</h1>
+        </div>
+        <button class="primary-btn" id="quickCallBtn">New call</button>
+      </header>
+
+      <section class="view active" id="view-home">
+        <div class="hero-card">
+          <div class="hero-copy">
+            <span class="status-pill"><span class="status-dot"></span> Voice system ready</span>
+            <h2>Prepare the context. Start the call. Let the conversation flow.</h2>
+            <p>Choose a saved caller or start fresh. Regions and time zones are selected separately for every individual call.</p>
+            <div class="hero-actions">
+              <button class="primary-btn large" id="heroNewCallBtn">Start a new call</button>
+              <button class="secondary-btn" data-view-target="callers">Manage callers</button>
+            </div>
+          </div>
+          <div class="phone-preview">
+            <div class="preview-orb"><div class="pulse"></div></div>
+            <div class="preview-name">Realtime Call</div>
+            <div class="preview-time">00:00</div>
+            <div class="preview-controls">
+              <div>Mute</div><div>Audio</div><div>More</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-3 stats-grid">
+          <div class="stat-card"><span>Saved callers</span><strong id="statCallers">0</strong></div>
+          <div class="stat-card"><span>Recent calls</span><strong id="statCalls">0</strong></div>
+          <div class="stat-card"><span>Default voice mode</span><strong id="statVoice">Male</strong></div>
+        </div>
+
+        <div class="section-head">
+          <div><span class="eyebrow">Continue</span><h3>Saved callers</h3></div>
+          <button class="text-btn" data-view-target="callers">View all</button>
+        </div>
+        <div class="cards-list" id="homeCallerList"></div>
+      </section>
+
+      <section class="view" id="view-callers">
+        <div class="section-head">
+          <div><span class="eyebrow">Memory</span><h3>My callers</h3><p>Save relationship context, caller information, conversation dynamics and recent-call memory.</p></div>
+          <button class="primary-btn" id="addCallerBtn">Add caller</button>
+        </div>
+        <div class="cards-list" id="callerList"></div>
+      </section>
+
+      <section class="view" id="view-history">
+        <div class="section-head">
+          <div><span class="eyebrow">Activity</span><h3>Call history</h3><p>Recent sessions saved on this device in this first build.</p></div>
+        </div>
+        <div class="history-list" id="historyList"></div>
+      </section>
+
+      <section class="view" id="view-profile">
+        <div class="section-head"><div><span class="eyebrow">Optional defaults</span><h3>My profile</h3></div></div>
+        <div class="panel form-panel">
+          <label>Display name<input id="profileName" placeholder="Your name" /></label>
+          <label>About me<textarea id="profileAbout" rows="5" placeholder="Information that can be reused across calls"></textarea></label>
+          <label>Default caller rules<textarea id="profileRules" rows="6" placeholder="Optional personal rules that apply to your calls"></textarea></label>
+          <div class="notice">Region and timezone are intentionally not stored here. They are selected for each call.</div>
+          <button class="primary-btn" id="saveProfileBtn">Save profile</button>
+        </div>
+      </section>
+
+      <section class="view" id="view-admin">
+        <div class="section-head"><div><span class="eyebrow">System control</span><h3>Admin</h3><p>Choose the two customer-facing voice defaults and set global call behavior.</p></div></div>
+        <div class="admin-grid">
+          <div class="panel form-panel">
+            <h4>Voice defaults</h4>
+            <label>Male option<select id="adminMaleVoice"></select></label>
+            <label>Female option<select id="adminFemaleVoice"></select></label>
+            <label>Realtime model<input id="adminModel" value="gpt-realtime-2.1" /></label>
+          </div>
+          <div class="panel form-panel">
+            <h4>General call instructions</h4>
+            <textarea id="adminInstructions" rows="14" placeholder="Master rules for every call"></textarea>
+          </div>
+        </div>
+        <div class="panel form-panel admin-wide">
+          <h4>Opening behavior</h4>
+          <label>First-line instruction<input id="adminOpening" placeholder="Start naturally as soon as the call begins." /></label>
+          <div class="toggle-row"><span>Assistant speaks immediately when Start Call is pressed</span><input type="checkbox" id="adminSpeakFirst" checked /></div>
+          <div class="toggle-row"><span>Allow interruption / natural barge-in</span><input type="checkbox" id="adminInterruptions" checked /></div>
+          <button class="primary-btn" id="saveAdminBtn">Save admin settings</button>
+          <div class="notice">V1 stores admin settings in the browser for testing. Production will move these settings to the protected database so changes apply to every customer instantly.</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop hidden" id="callerModal">
+    <div class="modal">
+      <div class="modal-head"><div><span class="eyebrow">Caller profile</span><h3 id="callerModalTitle">Add caller</h3></div><button class="icon-btn" data-close="callerModal">×</button></div>
+      <input type="hidden" id="callerId" />
+      <div class="form-grid two">
+        <label>Name<input id="callerName" placeholder="e.g. David" /></label>
+        <label>Relationship<input id="callerRelationship" placeholder="e.g. Friend" /></label>
+      </div>
+      <label>About this caller<textarea id="callerAbout" rows="4"></textarea></label>
+      <label>About me in relation to this caller<textarea id="callerAboutMe" rows="4"></textarea></label>
+      <label>Conversation dynamics<textarea id="callerDynamics" rows="5" placeholder="How you normally communicate, established tone, boundaries and relationship context"></textarea></label>
+      <label>Recent call memory<textarea id="callerMemory" rows="5" placeholder="Important developments from the most recent conversations"></textarea></label>
+      <label>Caller-specific rules<textarea id="callerRules" rows="4" placeholder="Optional rules only for calls with this person"></textarea></label>
+      <div class="notice">No region or timezone is saved in a caller profile. Those are chosen at the start of each call.</div>
+      <div class="modal-actions"><button class="secondary-btn" data-close="callerModal">Cancel</button><button class="primary-btn" id="saveCallerBtn">Save caller</button></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="callSetupModal">
+    <div class="modal wide-modal">
+      <div class="modal-head"><div><span class="eyebrow">New call</span><h3>Prepare this call</h3></div><button class="icon-btn" data-close="callSetupModal">×</button></div>
+      <div class="step-row"><span class="step active">1 Context</span><span class="step">2 Time & voice</span><span class="step">3 Call</span></div>
+      <div class="form-grid two">
+        <label>Saved caller<select id="callSavedCaller"><option value="">New / unsaved caller</option></select></label>
+        <label>Call name<input id="callTitle" placeholder="e.g. Sunday check-in" /></label>
+      </div>
+      <label>What should this call be about? <span class="optional">Optional</span><textarea id="callTopic" rows="5" placeholder="What you want to discuss on this specific call. Leave blank to rely on saved information and memory."></textarea></label>
+      <div class="divider"></div>
+      <h4>Call-specific location and time</h4>
+      <div class="form-grid two">
+        <div class="subpanel">
+          <strong>Caller A</strong>
+          <label>Region / location<input id="callerARegion" placeholder="e.g. Los Angeles, California" /></label>
+          <label>Timezone<select id="callerATimezone"></select></label>
+        </div>
+        <div class="subpanel">
+          <strong>Caller B</strong>
+          <label>Region / location<input id="callerBRegion" placeholder="e.g. Louisville, Kentucky" /></label>
+          <label>Timezone<select id="callerBTimezone"></select></label>
+        </div>
+      </div>
+      <div class="form-grid two">
+        <label>Voice<select id="callVoiceGender"><option value="male">Male</option><option value="female">Female</option></select></label>
+        <label>Call opening<input id="callOpeningOverride" placeholder="Optional one-call opening instruction" /></label>
+      </div>
+      <details class="advanced-block">
+        <summary>Review / edit memory for this call</summary>
+        <label>About caller<textarea id="callAboutCaller" rows="3"></textarea></label>
+        <label>About Caller A<textarea id="callAboutSelf" rows="3"></textarea></label>
+        <label>Conversation dynamics<textarea id="callDynamics" rows="4"></textarea></label>
+        <label>Recent memory<textarea id="callMemory" rows="4"></textarea></label>
+        <label>Caller rules<textarea id="callRules" rows="3"></textarea></label>
+      </details>
+      <div class="modal-actions"><button class="secondary-btn" data-close="callSetupModal">Cancel</button><button class="primary-btn large" id="startCallBtn">Start call</button></div>
+    </div>
+  </div>
+
+  <div class="call-screen hidden" id="callScreen">
+    <div class="call-top"><button class="call-top-btn" id="callMinimizeBtn">⌄</button><div class="call-secure">Realtime audio</div><div class="call-top-placeholder"></div></div>
+    <div class="call-center">
+      <div class="call-avatar" id="liveAvatar">D</div>
+      <h2 id="liveCallerName">Caller</h2>
+      <div class="live-region" id="liveRegion"></div>
+      <div class="live-status" id="liveStatus">Connecting…</div>
+      <div class="call-timer" id="callTimer">00:00</div>
+    </div>
+    <div class="call-controls">
+      <button class="round-control" id="muteBtn"><span>⌁</span><small>Mute</small></button>
+      <button class="round-control" id="audioBtn"><span>◖</span><small>Audio</small></button>
+      <button class="round-control" id="notesBtn"><span>≡</span><small>Notes</small></button>
+      <button class="round-control danger" id="endCallBtn"><span>⌕</span><small>End</small></button>
+    </div>
+    <div class="call-caption" id="liveCaption">Call context is ready.</div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+  <script src="./app.js"></script>
+</body>
+</html>
