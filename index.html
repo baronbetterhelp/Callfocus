@@ -146,7 +146,15 @@
       </div>
       <label>About this caller<textarea id="callerAbout" rows="4"></textarea></label>
       <label>About me in relation to this caller<textarea id="callerAboutMe" rows="4"></textarea></label>
-      <label>Conversation dynamics<textarea id="callerDynamics" rows="5" placeholder="How you normally communicate, established tone, boundaries and relationship context"></textarea></label>
+      <div class="dynamics-box">
+        <div class="dynamics-heading"><strong>Conversation dynamics</strong><span class="recommended-pill">Recommended</span></div>
+        <div class="notice warning-notice">For the best call experience, add your own conversation dynamics. Preset dynamics are a general fallback and cannot know your exact history, tone, boundaries or established relationship unless you provide them.</div>
+        <label>Dynamics type<select id="callerDynamicsMode"></select></label>
+        <div id="callerDynamicsCustomWrap">
+          <label>Upload / enter your conversation dynamics<textarea id="callerDynamics" rows="5" placeholder="How you normally communicate, established tone, boundaries, relationship context and anything the assistant should understand about the way you talk"></textarea></label>
+        </div>
+        <div class="preset-help hidden" id="callerDynamicsHelp"></div>
+      </div>
       <label>Recent call memory<textarea id="callerMemory" rows="5" placeholder="Important developments from the most recent conversations"></textarea></label>
       <label>Caller-specific rules<textarea id="callerRules" rows="4" placeholder="Optional rules only for calls with this person"></textarea></label>
       <div class="notice">No region or timezone is saved in a caller profile. Those are chosen at the start of each call.</div>
@@ -163,6 +171,15 @@
         <label>Call name<input id="callTitle" placeholder="e.g. Sunday check-in" /></label>
       </div>
       <label>What should this call be about? <span class="optional">Optional</span><textarea id="callTopic" rows="5" placeholder="What you want to discuss on this specific call. Leave blank to rely on saved information and memory."></textarea></label>
+      <div class="dynamics-box compact-dynamics">
+        <div class="dynamics-heading"><strong>Conversation dynamics</strong><span class="recommended-pill">Recommended</span></div>
+        <div class="notice warning-notice">For a better call experience, use your own conversation dynamics when possible. If you skip them, choose a preset below and CallFocus will use that style as a general fallback.</div>
+        <label>Dynamics type<select id="callDynamicsMode"></select></label>
+        <div id="callDynamicsCustomWrap">
+          <label>Your conversation dynamics<textarea id="callDynamics" rows="4" placeholder="Add the real relationship tone, how you normally speak, established boundaries and recent conversational style"></textarea></label>
+        </div>
+        <div class="preset-help hidden" id="callDynamicsHelp"></div>
+      </div>
       <div class="divider"></div>
       <h4>Call-specific location and time</h4>
       <div class="form-grid two">
@@ -185,7 +202,6 @@
         <summary>Review / edit memory for this call</summary>
         <label>About caller<textarea id="callAboutCaller" rows="3"></textarea></label>
         <label>About Caller A<textarea id="callAboutSelf" rows="3"></textarea></label>
-        <label>Conversation dynamics<textarea id="callDynamics" rows="4"></textarea></label>
         <label>Recent memory<textarea id="callMemory" rows="4"></textarea></label>
         <label>Caller rules<textarea id="callRules" rows="3"></textarea></label>
       </details>
