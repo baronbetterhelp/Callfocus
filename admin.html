@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0c1220" />
+  <title>CallFocus Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./app.css" />
+</head>
+<body class="admin-page">
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand-lockup"><div class="brand-symbol">C</div><div><div class="brand-name">CallFocus Admin</div><div class="brand-tagline">Private system control</div></div></div>
+      <a class="header-cta admin-back-link" href="/">Customer site</a>
+    </div>
+  </header>
+
+  <main class="admin-shell">
+    <section class="admin-login-card premium-panel" id="adminGate">
+      <span class="kicker">Admin access</span>
+      <h1 id="adminGateTitle">Set up admin access</h1>
+      <p id="adminGateText">Create a private admin passcode for this device. The production version will use server-side admin authentication.</p>
+      <div class="form-field"><label>Admin passcode</label><input id="adminPasscode" type="password" placeholder="At least 6 characters" /></div>
+      <button class="primary-btn full" id="adminGateBtn">Continue</button>
+    </section>
+
+    <section class="admin-dashboard hidden" id="adminDashboard">
+      <div class="admin-page-head"><div><span class="kicker">System control</span><h1>CallFocus Admin</h1><p>Changes here control the default voice engine and general behavior used by the customer site on this device.</p></div><button class="secondary-btn" id="adminLockBtn">Lock admin</button></div>
+      <div class="admin-grid-v3">
+        <div class="premium-panel form-panel">
+          <span class="kicker">Voice engine</span><h3>Default voices</h3>
+          <div class="form-grid two"><div class="form-field"><label>Male voice</label><select id="adminMaleVoice"></select></div><div class="form-field"><label>Female voice</label><select id="adminFemaleVoice"></select></div></div>
+          <div class="form-field"><label>Realtime model</label><input id="adminModel" /></div>
+          <div class="toggle-row"><span>Allow interruption / natural barge-in</span><input id="adminInterruptions" type="checkbox" /></div>
+          <div class="toggle-row"><span>Assistant speaks first when a call connects</span><input id="adminSpeakFirst" type="checkbox" /></div>
+        </div>
+        <div class="premium-panel form-panel">
+          <span class="kicker">Global behavior</span><h3>Call instructions</h3>
+          <div class="form-field"><label>Master call rules</label><textarea id="adminInstructions" rows="13"></textarea></div>
+          <div class="form-field"><label>Default opening behavior</label><textarea id="adminOpening" rows="5"></textarea></div>
+        </div>
+      </div>
+      <div class="premium-panel form-panel admin-save-panel"><div class="info-note">The OpenAI API key remains stored only in Cloudflare as a runtime secret and is not displayed here.</div><div class="form-actions"><button class="primary-btn large" id="saveAdminBtn">Save admin settings</button></div></div>
+    </section>
+  </main>
+  <div class="toast hidden" id="toast"></div>
+  <script src="./admin.js"></script>
+</body>
+</html>

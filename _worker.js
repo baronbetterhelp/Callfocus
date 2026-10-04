@@ -1,3 +1,9 @@
+async function sha256Hex(value) {
+  const bytes = new TextEncoder().encode(String(value || 'anonymous'));
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 async function handleSession(request, env) {
   if (!env.OPENAI_API_KEY) {
     return new Response('OPENAI_API_KEY is not configured on the server.', { status: 503 });
@@ -37,11 +43,12 @@ async function handleSession(request, env) {
   form.set('sdp', body.sdp);
   form.set('session', JSON.stringify(sessionConfig));
 
+  const safetyId = await sha256Hex(body.userId || 'callfocus-user');
   const openai = await fetch('https://api.openai.com/v1/realtime/calls', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-      'OpenAI-Safety-Identifier': 'callfocus-web-v1'
+      'OpenAI-Safety-Identifier': safetyId
     },
     body: form
   });
@@ -59,12 +66,19 @@ async function handleSession(request, env) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
     if (url.pathname === '/api/session') {
       if (request.method !== 'POST') {
         return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
       }
       return handleSession(request, env);
     }
+
+    if (url.pathname === '/admin' || url.pathname === '/admin/') {
+      const adminUrl = new URL('/admin.html', url.origin);
+      return env.ASSETS.fetch(new Request(adminUrl, request));
+    }
+
     return env.ASSETS.fetch(request);
   }
 };

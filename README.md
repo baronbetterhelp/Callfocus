@@ -1,36 +1,15 @@
-# CallFocus Worker V2
+# CallFocus Worker V3
 
-Updated browser + Cloudflare Worker build.
+## Customer site
+`/`
 
-## What changed in V2
-- Premium dark-glass UI redesign
-- Mobile menu closes when tapping outside
-- Recent calls redesigned like reusable conversation threads
-- Open a previous call and call again from the same thread
-- Caller name now uses the actual saved/manual person name
-- New one-off caller fields for unsaved calls
-- Improved call screen with:
-  - Mute
-  - Audio toggle
-  - Hold
-  - Request end
-  - End now
-- Server status copy now reads like:
-  - Connecting to server
-  - Connected to server
-  - Disconnected from server
-- Better error visibility on failed realtime connection
+## Admin site
+`/admin`
 
-## Deploy notes
-This remains a Cloudflare Workers + static assets project.
+V3 separates customer and admin experiences, adds account-first onboarding, saved account data on the current device, recent-call threads, caller profiles, call-specific time zones, custom/preset dynamics, and a redesigned live call screen.
 
-Required runtime secret:
-- `OPENAI_API_KEY`
+## Required Cloudflare runtime secret
+`OPENAI_API_KEY`
 
-## Files
-- `index.html`
-- `app.css`
-- `app.js`
-- `_worker.js`
-- `wrangler.jsonc`
-- `.assetsignore`
+## Important production step
+This build uses local browser storage for customer accounts/data so the complete product flow can be tested immediately. For true cross-device accounts and secure server-side storage, connect Supabase Auth/Postgres or Cloudflare D1 before public launch.
