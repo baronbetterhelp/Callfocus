@@ -1,5 +1,5 @@
 async function sha256Hex(value) {
-  const bytes = new TextEncoder().encode(String(value || 'anonymous'));
+  const bytes = new TextEncoder().encode(String(value || 'callfocus-user'));
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2, '0')).join('');
 }
@@ -44,23 +44,29 @@ async function handleSession(request, env) {
   form.set('session', JSON.stringify(sessionConfig));
 
   const safetyId = await sha256Hex(body.userId || 'callfocus-user');
-  const openai = await fetch('https://api.openai.com/v1/realtime/calls', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-      'OpenAI-Safety-Identifier': safetyId
-    },
-    body: form
-  });
+  let openai;
+  try {
+    openai = await fetch('https://api.openai.com/v1/realtime/calls', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        'OpenAI-Safety-Identifier': safetyId
+      },
+      body: form
+    });
+  } catch (error) {
+    return new Response(`Realtime upstream connection failed: ${error?.message || error}`, { status: 502 });
+  }
 
   const responseBody = await openai.text();
-  return new Response(responseBody, {
-    status: openai.status,
-    headers: {
-      'Content-Type': openai.headers.get('Content-Type') || 'application/sdp',
-      'Cache-Control': 'no-store'
-    }
+  const headers = new Headers({
+    'Content-Type': openai.headers.get('Content-Type') || 'application/sdp',
+    'Cache-Control': 'no-store'
   });
+  const location = openai.headers.get('Location');
+  if (location) headers.set('X-CallFocus-Realtime-Location', location);
+
+  return new Response(responseBody, { status: openai.status, headers });
 }
 
 export default {
@@ -75,8 +81,7 @@ export default {
     }
 
     if (url.pathname === '/admin' || url.pathname === '/admin/') {
-      const adminUrl = new URL('/admin.html', url.origin);
-      return env.ASSETS.fetch(new Request(adminUrl, request));
+      return env.ASSETS.fetch(new Request(new URL('/admin.html', url.origin), request));
     }
 
     return env.ASSETS.fetch(request);
