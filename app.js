@@ -8,7 +8,10 @@ const ADMIN_KEY = 'callfocus_admin_global_v4';
 const LEGACY_ADMIN_KEY = 'callfocus_admin_global_v3';
 const VOICES = ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
 const TIMEZONES = [
-  ['Africa/Lagos','Nigeria / West Africa (Lagos)'],['America/Los_Angeles','US Pacific (Los Angeles)'],['America/Denver','US Mountain (Denver)'],['America/Chicago','US Central (Chicago)'],['America/New_York','US Eastern (New York)'],['America/Phoenix','Arizona (Phoenix)'],['America/Toronto','Canada Eastern (Toronto)'],['America/Vancouver','Canada Pacific (Vancouver)'],['Europe/London','United Kingdom (London)'],['Europe/Rome','Italy (Rome)'],['Europe/Paris','France (Paris)'],['Europe/Berlin','Germany (Berlin)'],['Asia/Dubai','UAE (Dubai)'],['Asia/Kolkata','India (Kolkata)'],['Asia/Tokyo','Japan (Tokyo)'],['Asia/Shanghai','China (Shanghai)'],['Australia/Sydney','Australia (Sydney)'],['Pacific/Auckland','New Zealand (Auckland)']
+  ['Africa/Lagos','Nigeria / West Africa (Lagos)'],['America/Los_Angeles','US Pacific (Los Angeles)'],['America/Denver','US Mountain (Denver)'],['America/Chicago','US Central (Chicago)'],['America/New_York','US Eastern (New York)'],['America/Phoenix','Arizona (Phoenix)'],['America/Toronto','Canada Eastern (Toronto)'],['America/Vancouver','Canada Pacific (Vancouver)'],['Europe/London','United Kingdom (London)'],['Europe/Rome','Italy (Rome)'],['Europe/Paris','France (Paris)'],['Europe/Berlin','Germany (Berlin)'],['Asia/Dubai','UAE (Dubai)'],['Asia/Kolkata','India (Kolkata)'],['Asia/Tokyo','Japan (Tokyo)'],['Asia/Shanghai','China (Shanghai)'],['Australia/Sydney','Australia (Sydney)'],['Pacific/Auckland','New Zealand (Auckland)'],['America/Indiana/Indianapolis','US Eastern (Indiana)'],['Pacific/Honolulu','Hawaii (Honolulu)'],['America/Anchorage','Alaska (Anchorage)']
+];
+const US_CITIES = [
+  ['New York, New York','America/New_York'],['Los Angeles, California','America/Los_Angeles'],['Chicago, Illinois','America/Chicago'],['Houston, Texas','America/Chicago'],['Phoenix, Arizona','America/Phoenix'],['Philadelphia, Pennsylvania','America/New_York'],['San Antonio, Texas','America/Chicago'],['San Diego, California','America/Los_Angeles'],['Dallas, Texas','America/Chicago'],['San Jose, California','America/Los_Angeles'],['Austin, Texas','America/Chicago'],['Jacksonville, Florida','America/New_York'],['Fort Worth, Texas','America/Chicago'],['Columbus, Ohio','America/New_York'],['Charlotte, North Carolina','America/New_York'],['Indianapolis, Indiana','America/Indiana/Indianapolis'],['San Francisco, California','America/Los_Angeles'],['Seattle, Washington','America/Los_Angeles'],['Denver, Colorado','America/Denver'],['Washington, District of Columbia','America/New_York'],['Nashville, Tennessee','America/Chicago'],['Oklahoma City, Oklahoma','America/Chicago'],['El Paso, Texas','America/Denver'],['Boston, Massachusetts','America/New_York'],['Portland, Oregon','America/Los_Angeles'],['Las Vegas, Nevada','America/Los_Angeles'],['Detroit, Michigan','America/New_York'],['Memphis, Tennessee','America/Chicago'],['Louisville, Kentucky','America/New_York'],['Baltimore, Maryland','America/New_York'],['Milwaukee, Wisconsin','America/Chicago'],['Albuquerque, New Mexico','America/Denver'],['Tucson, Arizona','America/Phoenix'],['Fresno, California','America/Los_Angeles'],['Sacramento, California','America/Los_Angeles'],['Atlanta, Georgia','America/New_York'],['Miami, Florida','America/New_York'],['Minneapolis, Minnesota','America/Chicago'],['New Orleans, Louisiana','America/Chicago'],['Salt Lake City, Utah','America/Denver'],['Kansas City, Missouri','America/Chicago'],['Raleigh, North Carolina','America/New_York'],['Cleveland, Ohio','America/New_York'],['Pittsburgh, Pennsylvania','America/New_York'],['St. Louis, Missouri','America/Chicago'],['Orlando, Florida','America/New_York'],['Tampa, Florida','America/New_York'],['Honolulu, Hawaii','Pacific/Honolulu'],['Anchorage, Alaska','America/Anchorage']
 ];
 const DYNAMICS = {
   custom:{label:'Upload my own dynamics (Recommended)',description:'Describe the real tone, relationship patterns, boundaries and conversational style.',prompt:''},
@@ -41,7 +44,7 @@ let pendingAction = null;
 let selectedNewCallVoice = 'male';
 let live = {
   pc:null, dc:null, stream:null, audio:null, timer:null, seconds:0, connected:false,
-  muted:false, audioMuted:false, held:false, graceful:false, current:null, transcript:'', gracefulTimer:null
+  muted:false, speakerOn:true, held:false, graceful:false, current:null, transcript:'', gracefulTimer:null, minimized:false, moreOpen:false
 };
 
 function readJSON(key, fallback){ try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
@@ -66,6 +69,11 @@ function relativeTime(iso){
 }
 function dateLabel(iso){ try { return new Date(iso).toLocaleString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}); } catch { return iso || ''; } }
 async function sha256(text){ const bytes=new TextEncoder().encode(text); const digest=await crypto.subtle.digest('SHA-256',bytes); return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join(''); }
+function bytesToB64(bytes){ let s=''; bytes.forEach(b=>s+=String.fromCharCode(b)); return btoa(s); }
+function b64ToBytes(value){ const s=atob(value); return Uint8Array.from(s,c=>c.charCodeAt(0)); }
+async function derivePasswordHash(password,saltB64,iterations=120000){ const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveBits']); const bits=await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:b64ToBytes(saltB64),iterations},key,256); return bytesToB64(new Uint8Array(bits)); }
+async function buildPasswordRecord(password){ const salt=crypto.getRandomValues(new Uint8Array(16)); const saltB64=bytesToB64(salt); const iterations=120000; return {passwordVersion:2,passwordSalt:saltB64,passwordIterations:iterations,passwordHash:await derivePasswordHash(password,saltB64,iterations)}; }
+async function verifyPassword(acc,password){ if(acc.passwordVersion===2&&acc.passwordSalt){ return (await derivePasswordHash(password,acc.passwordSalt,acc.passwordIterations||120000))===acc.passwordHash; } return (await sha256(password))===acc.passwordHash; }
 function sortedThreads(){ return [...(data?.threads || [])].sort((a,b)=>new Date(b.updatedAt||b.createdAt)-new Date(a.updatedAt||a.createdAt)); }
 function lastCall(thread){ return thread?.calls?.length ? thread.calls[thread.calls.length-1] : null; }
 function dynamicsText(mode, custom){ const preset=DYNAMICS[mode]||DYNAMICS.custom; return mode==='custom' ? (String(custom||'').trim() || 'No custom dynamics were supplied. Use the saved caller information conservatively without inventing relationship history or tone.') : `${preset.label}: ${preset.prompt}`; }
@@ -75,7 +83,7 @@ function initOptions(){
   $('newCallATimezone').innerHTML = tz; $('newCallBTimezone').innerHTML = tz;
   const dyn = Object.entries(DYNAMICS).map(([v,d])=>`<option value="${v}">${d.label}</option>`).join('');
   $('newCallDynamicsMode').innerHTML = dyn; $('callerDynamicsMode').innerHTML = dyn;
-  $('newCallATimezone').value = 'Africa/Lagos'; $('newCallBTimezone').value = 'America/New_York';
+  $('newCallATimezone').value = 'America/Los_Angeles'; $('newCallBTimezone').value = 'America/New_York';
   updateDynamicsUI('newCall'); updateDynamicsUI('caller');
 }
 function updateDynamicsUI(scope){
@@ -124,10 +132,10 @@ async function createAccount(event){
   if(password.length<8) return toast('Password must be at least 8 characters');
   if(password!==confirm) return toast('Passwords do not match');
   const list=accounts(); if(list.some(a=>a.email===email)) return toast('An account already exists for that email');
-  const acc={id:uuid(),name,email,passwordHash:await sha256(password),createdAt:new Date().toISOString()}; list.push(acc); writeJSON(ACCOUNTS_KEY,list); setSession(acc); closeModal('authModal'); toast('Account created'); runPendingAction();
+  const passwordRecord=await buildPasswordRecord(password); const acc={id:uuid(),name,email,...passwordRecord,createdAt:new Date().toISOString()}; list.push(acc); writeJSON(ACCOUNTS_KEY,list); setSession(acc); closeModal('authModal'); toast('Account created'); runPendingAction();
 }
 async function signIn(event){
-  event.preventDefault(); const email=$('signinEmail').value.trim().toLowerCase(),password=$('signinPassword').value; const acc=accounts().find(a=>a.email===email); if(!acc)return toast('Account not found'); if(await sha256(password)!==acc.passwordHash)return toast('Incorrect password'); setSession(acc); closeModal('authModal'); toast('Signed in'); runPendingAction();
+  event.preventDefault(); const email=$('signinEmail').value.trim().toLowerCase(),password=$('signinPassword').value; const list=accounts(); const acc=list.find(a=>a.email===email); if(!acc)return toast('Account not found'); if(!(await verifyPassword(acc,password)))return toast('Incorrect password'); if(acc.passwordVersion!==2){ const upgraded=await buildPasswordRecord(password); Object.assign(acc,upgraded); writeJSON(ACCOUNTS_KEY,list); } setSession(acc); closeModal('authModal'); toast('Signed in'); runPendingAction();
 }
 function signOut(){ localStorage.removeItem(SESSION_KEY); account=null; data=null; selectedThreadId=null; closeMobileMenu(); $('headerAccountDropdown').classList.add('hidden'); showView('home',false); renderAccountUI(); renderWorkspace(); toast('Signed out'); }
 function deleteAccount(){ if(!account)return; if($('deleteConfirmInput').value.trim()!=='DELETE')return toast('Type DELETE to confirm'); const list=accounts().filter(a=>a.id!==account.id); writeJSON(ACCOUNTS_KEY,list); localStorage.removeItem(accountDataKey(account.id)); localStorage.removeItem(SESSION_KEY); account=null;data=null;selectedThreadId=null;closeModal('deleteAccountModal');showView('home',false);renderAccountUI();renderWorkspace();toast('Account deleted'); }
@@ -186,8 +194,23 @@ function showView(view, scroll=true){
 function openMobileMenu(){ $('mobileMenuWrap').classList.remove('hidden'); $('mobileMenuBtn').setAttribute('aria-expanded','true'); $('mobileMenuBtn').querySelector('.menu-glyph').textContent='×'; renderMobileAccount(); renderMobileRecents(); }
 function closeMobileMenu(){ $('mobileMenuWrap').classList.add('hidden'); $('mobileMenuBtn').setAttribute('aria-expanded','false'); $('mobileMenuBtn').querySelector('.menu-glyph').textContent='☰'; }
 
+function renderLocationSuggestions(inputId,suggestionsId,timezoneId){
+  const input=$(inputId), box=$(suggestionsId);
+  const query=input.value.trim().toLowerCase();
+  if(query.length<1){box.classList.add('hidden');box.innerHTML='';return;}
+  const matches=US_CITIES.filter(([name])=>name.toLowerCase().includes(query)).slice(0,7);
+  if(!matches.length){box.classList.add('hidden');box.innerHTML='';return;}
+  box.innerHTML=matches.map(([name,tz])=>`<button type="button" data-location="${esc(name)}" data-timezone="${esc(tz)}"><strong>${esc(name)}</strong><small>${esc(TIMEZONES.find(x=>x[0]===tz)?.[1]||tz)}</small></button>`).join('');
+  box.classList.remove('hidden');
+  box.querySelectorAll('button').forEach(btn=>btn.onclick=()=>{input.value=btn.dataset.location;$(timezoneId).value=btn.dataset.timezone;box.classList.add('hidden');});
+}
+function bindLocationAutocomplete(){
+  const pairs=[['newCallARegion','newCallASuggestions','newCallATimezone'],['newCallBRegion','newCallBSuggestions','newCallBTimezone']];
+  pairs.forEach(([inputId,suggestionsId,timezoneId])=>{const input=$(inputId);input.addEventListener('input',()=>renderLocationSuggestions(inputId,suggestionsId,timezoneId));input.addEventListener('focus',()=>renderLocationSuggestions(inputId,suggestionsId,timezoneId));input.addEventListener('blur',()=>setTimeout(()=>$(suggestionsId).classList.add('hidden'),180));});
+}
+
 function resetNewCallForm(){
-  $('newCallForm').reset(); $('newCallAboutSelf').value=data?.profile?.about||''; $('newCallDynamicsMode').value='custom'; $('newCallDynamics').value=''; $('newCallATimezone').value='Africa/Lagos'; $('newCallBTimezone').value='America/New_York'; selectedNewCallVoice='male'; $('newCallVoiceGender').value='male'; qsa('.voice-option').forEach(b=>b.classList.toggle('active',b.dataset.voice==='male')); updateDynamicsUI('newCall'); applyAdminLabels();
+  $('newCallForm').reset(); $('newCallAboutSelf').value=data?.profile?.about||''; $('newCallDynamicsMode').value='custom'; $('newCallDynamics').value=''; const picks=[...US_CITIES].sort(()=>Math.random()-.5).slice(0,2); $('newCallARegion').value=picks[0][0]; $('newCallATimezone').value=picks[0][1]; $('newCallBRegion').value=picks[1][0]; $('newCallBTimezone').value=picks[1][1]; selectedNewCallVoice='male'; $('newCallVoiceGender').value='male'; qsa('.voice-option').forEach(b=>b.classList.toggle('active',b.dataset.voice==='male')); updateDynamicsUI('newCall'); applyAdminLabels();
 }
 function openNewCall(prefillCaller=null){
   if(!requireAccount({type:'newcall'},'Create an account or sign in before placing a call. Your caller details and recent-call thread will then be saved to your account.'))return;
@@ -231,28 +254,28 @@ function buildInstructions(c){
 }
 
 async function startCall(call){
-  closeModal('newCallModal'); document.body.style.overflow='hidden'; $('callScreen').classList.remove('hidden'); $('liveCallerName').textContent=call.callerName; $('liveAvatar').textContent=initials(call.callerName); $('liveRegion').textContent=[call.callerB.region,call.callerB.timezone].filter(Boolean).join(' · '); $('liveStatus').textContent='Connecting to server…'; $('liveTranscript').textContent='Call context is ready.'; $('liveCaption').textContent='Preparing realtime connection…'; $('callTimer').textContent='00:00'; live.current=call; live.transcript=''; live.connected=false; live.graceful=false; clearTimeout(live.gracefulTimer); resetCallControls();
+  closeModal('newCallModal'); document.body.style.overflow='hidden'; $('callScreen').classList.remove('hidden'); $('liveCallerName').textContent=call.callerName; $('liveAvatar').textContent=initials(call.callerName); $('liveRegion').textContent=[call.callerB.region,call.callerB.timezone].filter(Boolean).join(' · '); $('liveStatus').textContent='Connecting to server…'; $('liveTranscript').textContent=''; $('liveTranscript').classList.remove('error-visible'); $('liveCaption').textContent='Preparing realtime connection…'; $('callTimer').textContent='00:00'; $('callMoreTitle').textContent=call.title||call.callerName; $('callMoreTopic').textContent=call.topic||'No new topic supplied'; $('callMoreConnection').textContent='Connecting'; $('callMorePanel').classList.add('hidden'); live.current=call; live.transcript=''; live.connected=false; live.graceful=false; clearTimeout(live.gracefulTimer); resetCallControls();
   try{
     const stream=await navigator.mediaDevices.getUserMedia({audio:true}); const pc=new RTCPeerConnection(); const dc=pc.createDataChannel('oai-events'); const audio=document.createElement('audio'); audio.autoplay=true;audio.playsInline=true; live.stream=stream;live.pc=pc;live.dc=dc;live.audio=audio; stream.getAudioTracks().forEach(t=>pc.addTrack(t,stream)); pc.ontrack=e=>{audio.srcObject=e.streams[0];audio.play().catch(()=>{})}; dc.onopen=()=>{$('liveCaption').textContent='Voice channel connected.'}; dc.onmessage=e=>handleRealtimeEvent(e.data); dc.onerror=()=>{$('liveCaption').textContent='Voice data channel error.'};
     const offer=await pc.createOffer(); await pc.setLocalDescription(offer); await waitForIce(pc); const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{model:call.model,voice:call.voice,instructions:buildInstructions(call),interruptions:call.interruptions}})}); const text=await res.text(); if(!res.ok)throw new Error(text||'Realtime session failed'); await pc.setRemoteDescription({type:'answer',sdp:text});
-  }catch(err){ console.error(err); $('liveStatus').textContent='Disconnected from server'; $('liveCaption').textContent='The call could not connect.'; $('liveTranscript').textContent=String(err.message||err).slice(0,700); toast('Voice connection failed'); }
+  }catch(err){ console.error(err); const raw=String(err?.message||err||'').toLowerCase(); const inactive=raw.includes('credit_balance_exhausted')||raw.includes('insufficient_quota')||raw.includes('no credits')||raw.includes('quota'); $('liveStatus').textContent='Disconnected from server'; $('liveCaption').textContent=inactive?'Server not active. Try again soon.':'Server unavailable. Try again soon.'; $('liveTranscript').textContent=inactive?'Server not active. Try again soon.':'We could not connect this call right now. Please try again soon.'; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected'; toast(inactive?'Server not active. Try again soon.':'Server unavailable. Try again soon.'); }
 }
 function waitForIce(pc){ if(pc.iceGatheringState==='complete')return Promise.resolve(); return new Promise(resolve=>{const f=()=>{if(pc.iceGatheringState==='complete'){pc.removeEventListener('icegatheringstatechange',f);resolve();}};pc.addEventListener('icegatheringstatechange',f);setTimeout(resolve,2500);}); }
 function handleRealtimeEvent(raw){
   let e; try{e=JSON.parse(raw)}catch{return}
-  if(e.type==='session.created'){ live.connected=true; $('liveStatus').textContent='Connected to server'; $('liveCaption').textContent='Call started.'; startTimer(); if(live.current?.speakFirst&&live.dc?.readyState==='open')setTimeout(()=>live.dc.send(JSON.stringify({type:'response.create',response:{instructions:`Begin the call now. ${live.current.opening}`}})),140); }
+  if(e.type==='session.created'){ live.connected=true; $('liveTranscript').classList.remove('error-visible'); $('liveStatus').textContent='Connected to server'; $('liveCaption').textContent='Call started.'; $('callMoreConnection').textContent='Connected'; startTimer(); if(live.current?.speakFirst&&live.dc?.readyState==='open')setTimeout(()=>live.dc.send(JSON.stringify({type:'response.create',response:{instructions:`Begin the call now. ${live.current.opening}`}})),140); }
   if(e.type==='input_audio_buffer.speech_started')$('liveStatus').textContent='Connected to server · Listening';
   if(e.type==='input_audio_buffer.speech_stopped')$('liveStatus').textContent='Connected to server · Thinking';
   if(e.type==='response.created')$('liveStatus').textContent='Connected to server · Speaking';
   if(e.type==='response.done'){ $('liveStatus').textContent=live.held?'Connected to server · On hold':'Connected to server'; if(live.graceful){ $('liveCaption').textContent='Natural call ending delivered. Ending call…'; live.graceful=false; clearTimeout(live.gracefulTimer); live.gracefulTimer=setTimeout(()=>cleanupCall(true),5000); } }
-  if(e.type==='response.output_audio_transcript.delta'&&e.delta){ live.transcript+=e.delta; $('liveTranscript').textContent=live.transcript.slice(-1200); }
+  if(e.type==='response.output_audio_transcript.delta'&&e.delta){ live.transcript+=e.delta; }
   if(e.type==='conversation.item.input_audio_transcription.completed'&&e.transcript)$('liveCaption').textContent=`Heard: ${e.transcript}`;
-  if(e.type==='error'){ $('liveStatus').textContent='Disconnected from server'; $('liveCaption').textContent=e.error?.message||'Realtime error'; }
+  if(e.type==='error'){ $('liveStatus').textContent='Disconnected from server'; $('liveCaption').textContent='Server unavailable. Try again soon.'; $('liveTranscript').textContent='Server unavailable. Try again soon.'; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected'; }
 }
-function startTimer(){ clearInterval(live.timer);live.seconds=0;live.timer=setInterval(()=>{$('callTimer').textContent=fmtDuration(++live.seconds)},1000); }
-function resetCallControls(){ live.muted=false;live.audioMuted=false;live.held=false;['muteBtn','audioBtn','holdBtn'].forEach(id=>$(id).classList.remove('active')); }
+function startTimer(){ clearInterval(live.timer);live.seconds=0;live.timer=setInterval(()=>{const t=fmtDuration(++live.seconds);$('callTimer').textContent=t;$('activeCallTime').textContent=t},1000); }
+function resetCallControls(){ live.muted=false;live.speakerOn=true;live.held=false;live.moreOpen=false;['muteBtn','holdBtn'].forEach(id=>$(id).classList.remove('active')); $('speakerBtn').classList.add('active'); $('moreBtn').classList.remove('active'); $('callMorePanel').classList.add('hidden'); }
 function saveCompletedCall(){ if(!live.current||!data)return; const t=data.threads.find(x=>x.id===live.current.threadId); if(!t)return; t.updatedAt=new Date().toISOString(); t.calls ||= []; t.calls.push({id:uuid(),topic:live.current.topic,createdAt:new Date().toISOString(),duration:fmtDuration(live.seconds),voiceGender:live.current.voiceGender,connected:live.connected}); saveData(); }
-function cleanupCall(save=true){ clearInterval(live.timer);clearTimeout(live.gracefulTimer);if(save&&live.current)saveCompletedCall();try{live.dc?.close()}catch{}try{live.stream?.getTracks().forEach(t=>t.stop())}catch{}try{live.pc?.close()}catch{}live={pc:null,dc:null,stream:null,audio:null,timer:null,seconds:0,connected:false,muted:false,audioMuted:false,held:false,graceful:false,current:null,transcript:'',gracefulTimer:null};$('callScreen').classList.add('hidden');document.body.style.overflow='';renderWorkspace(); if(activeView==='recent')renderRecentThreads(); }
+function cleanupCall(save=true){ clearInterval(live.timer);clearTimeout(live.gracefulTimer);if(save&&live.current)saveCompletedCall();try{live.dc?.close()}catch{}try{live.stream?.getTracks().forEach(t=>t.stop())}catch{}try{live.pc?.close()}catch{}live={pc:null,dc:null,stream:null,audio:null,timer:null,seconds:0,connected:false,muted:false,speakerOn:true,held:false,graceful:false,current:null,transcript:'',gracefulTimer:null,minimized:false,moreOpen:false};$('callScreen').classList.add('hidden');$('activeCallBar').classList.add('hidden');document.body.style.overflow='';renderWorkspace(); if(activeView==='recent')renderRecentThreads(); }
 
 function saveProfile(){ if(!account)return; data.profile={name:$('profileName').value.trim()||account.name,role:$('profileRole').value.trim(),about:$('profileAbout').value.trim(),rules:$('profileRules').value.trim()}; const list=accounts(); const idx=list.findIndex(a=>a.id===account.id); if(idx>=0){list[idx].name=data.profile.name;account.name=data.profile.name;writeJSON(ACCOUNTS_KEY,list);} saveData();toast('Profile saved'); }
 
@@ -270,10 +293,13 @@ function bind(){
   $('newCallForm').onsubmit=e=>{e.preventDefault();const r=prepareNewCall();if(r.error)return toast(r.error);startCall(r.call)};
   $('addCallerBtn').onclick=()=>openCallerModal(); $('callerForm').onsubmit=saveCallerFromForm; $('saveProfileBtn').onclick=saveProfile; $('settingsEditProfileBtn').onclick=()=>showView('profile'); $('deleteAccountBtn').onclick=()=>{if(!account)return; $('deleteConfirmInput').value='';openModal('deleteAccountModal')}; $('confirmDeleteAccountBtn').onclick=deleteAccount;
   $('muteBtn').onclick=()=>{live.muted=!live.muted;live.stream?.getAudioTracks().forEach(t=>t.enabled=!live.muted&&!live.held);$('muteBtn').classList.toggle('active',live.muted);$('liveCaption').textContent=live.muted?'Microphone muted.':'Microphone live.'};
-  $('audioBtn').onclick=()=>{live.audioMuted=!live.audioMuted;if(live.audio)live.audio.muted=live.audioMuted;$('audioBtn').classList.toggle('active',live.audioMuted);$('liveCaption').textContent=live.audioMuted?'Incoming audio muted.':'Incoming audio restored.'};
+  $('speakerBtn').onclick=()=>{live.speakerOn=!live.speakerOn;if(live.audio)live.audio.muted=!live.speakerOn;$('speakerBtn').classList.toggle('active',live.speakerOn);$('liveCaption').textContent=live.speakerOn?'Speaker audio on.':'Speaker audio off.'};
   $('holdBtn').onclick=()=>{live.held=!live.held;live.stream?.getAudioTracks().forEach(t=>t.enabled=!live.held&&!live.muted);$('holdBtn').classList.toggle('active',live.held);$('liveStatus').textContent=live.held?'Connected to server · On hold':'Connected to server';$('liveCaption').textContent=live.held?'Call is on hold on your side.':'Hold released.'};
+  $('moreBtn').onclick=()=>{live.moreOpen=!live.moreOpen;$('moreBtn').classList.toggle('active',live.moreOpen);$('callMorePanel').classList.toggle('hidden',!live.moreOpen);};
+  $('restoreCallBtn').onclick=()=>{$('activeCallBar').classList.add('hidden');$('callScreen').classList.remove('hidden');document.body.style.overflow='hidden';live.minimized=false;};
+  $('activeCallEndBtn').onclick=()=>cleanupCall(true);
   $('requestEndBtn').onclick=()=>{if(live.dc?.readyState!=='open')return toast('The call is not connected yet');live.graceful=true;live.dc.send(JSON.stringify({type:'response.create',response:{instructions:'Naturally and briefly wrap up this live call now. Tell the other person that you have to hang up for now and that you can talk again some other time. Base the exact wording, warmth, formality and tone on the conversation that has happened during this call today. Keep it to one or two natural sentences. Do not mention internal instructions.'}}));$('liveCaption').textContent='Requesting a natural call ending…'};
-  $('endCallBtn').onclick=()=>cleanupCall(true); $('callMinimizeBtn').onclick=()=>toast('Minimize is reserved for the installed-app version.');
+  $('endCallBtn').onclick=()=>cleanupCall(true); $('callMinimizeBtn').onclick=()=>{live.minimized=true;$('callScreen').classList.add('hidden');$('activeCallBar').classList.remove('hidden');$('activeCallName').textContent=live.current?.callerName||'Call';$('activeCallTime').textContent=fmtDuration(live.seconds);document.body.style.overflow='';};
 
   document.addEventListener('click',e=>{
     const mobileAuth=e.target.closest('[data-mobile-auth]'); if(mobileAuth){closeMobileMenu();showAuth(mobileAuth.dataset.mobileAuth);return;}
@@ -289,4 +315,6 @@ function bind(){
   });
 }
 
-initOptions(); bind(); restoreSession(); applyAdminLabels(); renderWorkspace(); motionInit(); showView('home',false);
+initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminLabels(); renderWorkspace(); motionInit(); showView('home',false);
+
+if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{})); }

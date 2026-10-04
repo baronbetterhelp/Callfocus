@@ -59,6 +59,16 @@ async function handleSession(request, env) {
   }
 
   const responseBody = await openai.text();
+  if (!openai.ok) {
+    let code = '';
+    try { code = JSON.parse(responseBody)?.error?.code || ''; } catch {}
+    const quota = openai.status === 429 || code === 'credit_balance_exhausted' || code === 'insufficient_quota';
+    return new Response(quota ? 'Server not active. Try again soon.' : 'Server unavailable. Try again soon.', {
+      status: quota ? 503 : openai.status,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }
+    });
+  }
+
   const headers = new Headers({
     'Content-Type': openai.headers.get('Content-Type') || 'application/sdp',
     'Cache-Control': 'no-store'

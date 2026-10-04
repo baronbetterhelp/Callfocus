@@ -1,82 +1,45 @@
-# CallFocus Worker V4
+# CallFocus Worker V5
 
-CallFocus V4 is a full redesign of the customer experience using the user-approved LodgeFinder graphite-black visual system as the reference: dark glass header, black/graphite surfaces, restrained CallFocus green, warm premium gold, staggered hero entrances, scroll reveals, subtle parallax and a brighter mobile drawer.
+Cloudflare Workers + Static Assets build.
 
-## Core customer flow
+## V5 changes
 
-### Public home
-New visitors always land on the public Home page. They are not forced into a login screen.
+- API quota/credit errors are no longer exposed to customers. The call screen shows: `Server not active. Try again soon.`
+- Reworked full-screen call experience for Add to Home Screen / PWA use.
+- Added PWA manifest, iOS web-app meta tags, placeholder app icons and a lightweight service worker.
+- Call controls now use a 2 x 3 phone-style dial layout:
+  - Speaker
+  - Mute
+  - Hold
+  - More
+  - Request end
+  - End now
+- More opens call details instead of showing a keypad.
+- Call minimize now works and creates a small active-call bar that can be restored.
+- New-call locations have U.S. city autocomplete. Selecting a city automatically selects its matching IANA time zone.
+- New calls default to random major U.S. locations instead of Nigeria.
+- Location/timezone spacing tightened in the new-call form.
+- Account password storage upgraded to salted PBKDF2-SHA256 with legacy SHA-256 account migration on successful sign-in.
+- Existing account data/storage keys remain compatible with V4.
 
-Account creation / sign-in is triggered only when a guest tries to:
-- start a call
-- open My Callers
-- open Recent Calls
-- open My Profile
-- add a caller
+## Deployment
 
-### Completely new call
-A new call asks for exactly these seven groups:
-1. Call title
-2. Name of the person being called
-3. About both callers
-4. Conversation dynamics
-5. What today's call is about
-6. Location and time zone for both callers
-7. Male or female voice
+Replace the files in your existing CallFocus GitHub repository with the contents of this folder and commit to `main`.
+Cloudflare should automatically redeploy.
 
-A clear explanation tells customers this is the one-time setup. Future calls should be continued from Recent Calls.
+Keep the existing Cloudflare runtime secret:
 
-### Repeat call
-Recent Calls are reusable threads. Opening a previous thread shows one primary field:
-- What is new for today's call?
+`OPENAI_API_KEY`
 
-The previous caller information, dynamics, last-used locations/time zones and voice are reused automatically. Optional sections allow the customer to edit those saved details when needed.
+No API key belongs in GitHub.
 
-## Navigation
-The mobile menu contains:
-- account information / sign-in state
-- Account settings
-- Sign out
-- Home
-- My Callers
-- Recent Calls
-- My Profile
-- a scrollable recent-call list ordered newest first
+## Routes
 
-## Account settings
-Users can delete their CallFocus account and all data saved for that local account in this prototype.
+- `/` customer site
+- `/admin` admin portal
 
-## Admin
-The customer site does not contain an Admin menu item.
+## PWA
 
-Admin is separate at:
-- `/admin`
+The customer site includes `manifest.webmanifest`, iOS standalone meta tags, install icons and `sw.js`. When added to the iPhone Home Screen it launches as a standalone web app using the maximum screen area iOS permits.
 
-The admin panel controls:
-- default male voice
-- default female voice
-- Realtime model
-- master call instructions
-- opening behavior
-- speak-first behavior
-- interruption behavior
-
-## Realtime call controls
-- Mute
-- Audio mute
-- Hold
-- Request end
-- End now
-
-Request end asks the voice model to naturally wrap up based on that day's conversation, then closes the call after the wrap-up response finishes.
-
-## Cloudflare deployment
-This remains a Cloudflare Worker + Static Assets build.
-
-Required Cloudflare runtime secret:
-- `OPENAI_API_KEY`
-
-If that secret is already configured on the existing `callfocus` Worker, replacing the GitHub files does not require recreating it.
-
-## Important production note
-V4 account authentication/data storage is a functional browser prototype using local storage and hashed passwords. Before public launch, move accounts, caller profiles, threads and call history to Supabase Auth + Postgres so users can access the same account across devices and so authentication is server-backed.
+The current letter-C app icon is a temporary placeholder until the final CallFocus logo is supplied.

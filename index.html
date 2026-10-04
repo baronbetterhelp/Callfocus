@@ -4,6 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#080808" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="CallFocus" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
   <title>CallFocus — Context for every call</title>
   <meta name="description" content="CallFocus keeps caller context, conversation dynamics, locations, time zones and recent call threads together for more natural realtime calls." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -281,7 +287,10 @@
         <div class="field-section"><span class="field-number">03</span><div class="field-content"><div class="field-heading"><strong>About both callers</strong><small>These are saved with this caller and can be edited later.</small></div><div class="form-grid two"><label>About you on this call<textarea id="newCallAboutSelf" rows="5" placeholder="Who you are, relevant personal context, and anything the voice assistant should know about you"></textarea></label><label>About the person you’re calling<textarea id="newCallAboutCaller" rows="5" placeholder="Information about the person you’re calling"></textarea></label></div></div></div>
         <div class="field-section"><span class="field-number">04</span><div class="field-content"><div class="field-heading"><strong>Dynamics of the conversation</strong><small>Custom dynamics give the best experience.</small></div><div class="dynamics-warning">For a better call experience, describe the real dynamics yourself. If you prefer not to, choose a preset such as Romantic, Friendship or Business.</div><label>Dynamics type<select id="newCallDynamicsMode"></select></label><label id="newCallDynamicsCustomWrap">Your conversation dynamics<textarea id="newCallDynamics" rows="5" placeholder="How both of you normally speak, how close you are, established tone, boundaries, recurring patterns and anything the voice assistant should understand"></textarea></label><div class="preset-description hidden" id="newCallDynamicsHelp"></div></div></div>
         <div class="field-section"><span class="field-number">05</span><div class="field-content"><label>What today’s call is about<textarea id="newCallTopic" rows="5" placeholder="What do you want to discuss on this specific call?"></textarea></label></div></div>
-        <div class="field-section"><span class="field-number">06</span><div class="field-content"><div class="field-heading"><strong>Location and time zone for this call</strong><small>These belong to this call thread, not to your account profile.</small></div><div class="form-grid two"><div class="location-card"><strong>Caller A</strong><label>Location<input id="newCallARegion" placeholder="e.g. Los Angeles, California" /></label><label>Time zone<select id="newCallATimezone"></select></label></div><div class="location-card"><strong>Caller B</strong><label>Location<input id="newCallBRegion" placeholder="e.g. Louisville, Kentucky" /></label><label>Time zone<select id="newCallBTimezone"></select></label></div></div></div></div>
+        <div class="field-section"><span class="field-number">06</span><div class="field-content"><div class="field-heading"><strong>Location and time zone for this call</strong><small>These belong to this call thread, not to your account profile.</small></div><div class="form-grid two">
+          <div class="location-card"><strong>Caller A</strong><label>Location<div class="location-autocomplete"><input id="newCallARegion" autocomplete="off" placeholder="Start typing a U.S. city" /><div class="location-suggestions hidden" id="newCallASuggestions"></div></div></label><label class="timezone-label">Time zone<select id="newCallATimezone"></select></label></div>
+          <div class="location-card"><strong>Caller B</strong><label>Location<div class="location-autocomplete"><input id="newCallBRegion" autocomplete="off" placeholder="Start typing a U.S. city" /><div class="location-suggestions hidden" id="newCallBSuggestions"></div></div></label><label class="timezone-label">Time zone<select id="newCallBTimezone"></select></label></div>
+        </div></div></div>
         <div class="field-section"><span class="field-number">07</span><div class="field-content"><div class="field-heading"><strong>Voice selection</strong><small>You choose Male or Female. The admin-selected voice behind that choice is used automatically.</small></div><div class="voice-choice"><button type="button" class="voice-option active" data-voice="male"><span>Male</span><small id="maleVoiceLabel">Default male voice</small></button><button type="button" class="voice-option" data-voice="female"><span>Female</span><small id="femaleVoiceLabel">Default female voice</small></button></div><input type="hidden" id="newCallVoiceGender" value="male" /></div></div>
         <div class="call-form-footer"><div><strong>After this call</strong><span>This caller and thread will appear in My Callers and Recent Calls automatically.</span></div><button class="btn btn-primary large" type="submit">Start call</button></div>
       </form>
@@ -323,17 +332,24 @@
         <div class="call-timer" id="callTimer">00:00</div>
         <div class="live-transcript" id="liveTranscript">Call context is ready.</div>
       </div>
-      <div class="call-controls">
+      <div class="call-controls dial-grid">
+        <button class="call-control" id="speakerBtn"><span>◖)))</span><small>Speaker</small></button>
         <button class="call-control" id="muteBtn"><span>⌁</span><small>Mute</small></button>
-        <button class="call-control" id="audioBtn"><span>◖</span><small>Audio</small></button>
         <button class="call-control" id="holdBtn"><span>Ⅱ</span><small>Hold</small></button>
+        <button class="call-control" id="moreBtn"><span>•••</span><small>More</small></button>
         <button class="call-control request" id="requestEndBtn"><span>↘</span><small>Request end</small></button>
-        <button class="call-control danger" id="endCallBtn"><span>×</span><small>End now</small></button>
+        <button class="call-control danger" id="endCallBtn"><span>⌕</span><small>End now</small></button>
+      </div>
+      <div class="call-more-panel hidden" id="callMorePanel">
+        <div><strong>Call details</strong><span id="callMoreTitle">Current call</span></div>
+        <div><strong>Connection</strong><span id="callMoreConnection">Connecting</span></div>
+        <div><strong>Today</strong><span id="callMoreTopic">No topic supplied</span></div>
       </div>
       <div class="call-caption" id="liveCaption">Ready to connect.</div>
     </div>
   </div>
 
+  <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
   <script src="./app.js"></script>
 </body>
