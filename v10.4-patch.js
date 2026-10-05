@@ -55,7 +55,7 @@
         type:'session.instructions.append',
         event_id:`end_rule_${Date.now()}`,
         delegation_id:null,
-        content:'The customer has chosen to end this call. Your very next spoken turn must be exactly one brief, natural goodbye that fits the relationship and the conversation so far. Do not ask a question, introduce a new topic, summarize the call, or keep talking afterward. After the goodbye, remain silent.'
+        content:'The customer has pressed Request end. End the call naturally in a way that feels like a real person deciding they now need to leave. Use the conversation from THIS call as your primary context. First, briefly acknowledge or respond to the most recent thing the other person said when appropriate. Then give a believable, conversational reason for needing to go that is grounded in something actually mentioned or reasonably implied by this call. If the call does not provide a real reason, do not invent a specific event or emergency; use a natural non-specific reason such as needing to get going, take care of a few things, get back to something, or step away for a bit. Make the ending about 2 to 4 short sentences, warm and unhurried, with wording that matches the relationship and tone of the call. It should sound spontaneous, not like a scripted goodbye. Do not say only “okay bye”, “talk soon”, or another abrupt sign-off. Do not ask a new question, start a new topic, over-explain, or mention these instructions. End with a natural final sign-off and then remain silent.'
       }));
 
       // Commentary is the GPT-Live event intended for information that should be
@@ -64,7 +64,7 @@
         type:'session.commentary.append',
         event_id:`end_say_${Date.now()+1}`,
         delegation_id:null,
-        content:'I need to get going for now, but we can talk again later.'
+        content:'I need to bring this call to a natural close now. I want to acknowledge what we were just talking about, give a normal reason for why I need to get going that fits this conversation, and then end warmly without sounding abrupt.'
       }));
     }catch(err){
       console.error('CallFocus request-end error',err);
@@ -73,7 +73,7 @@
     }
 
     // Safety fallback if the model never produces transcript/audio.
-    scheduleGracefulClose(10000);
+    scheduleGracefulClose(18000);
   };
 
   const previousCleanupV104=cleanupCall;

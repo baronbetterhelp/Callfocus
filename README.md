@@ -1,15 +1,14 @@
-CallFocus V11.10
+CallFocus V11.11
 
-Fixes:
-- Fixed pasted/typed “New conversation details” disappearing shortly after entry.
-- Root cause: the unlimited-credit entitlement refresh was re-rendering the entire workspace after its server check, rebuilding the Recent Calls composer.
-- Entitlement refresh now updates credit UI only, without rebuilding call forms.
-- Added an in-memory draft safeguard for the Recent Calls conversation-details box.
-- Removed the large empty strip above the footer on the Recent Calls continuation page.
-- Mobile Recent Calls now uses normal page flow instead of a fixed-height nested scroller.
+Request End improvements:
+- The Request end button now produces a longer, more natural call ending.
+- The ending uses the current call conversation as context.
+- It acknowledges the most recent part of the conversation when appropriate.
+- It gives a conversational reason for needing to leave.
+- If no real reason exists in the call context, it uses a non-specific natural reason rather than inventing a specific event.
+- The ending is typically 2–4 short sentences instead of an abrupt “bye” or “talk soon.”
+- The graceful-close safety timeout was extended so the longer ending is not cut off.
+- The same behavior also applies when low credit automatically triggers Request end.
 
-Changed/added files:
-- index.html
-- v11.5-patch.js
-- v11.10-patch.css
-- v11.10-patch.js
+Main changed file:
+- v10.4-patch.js
