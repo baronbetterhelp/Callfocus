@@ -1,0 +1,106 @@
+/* CallFocus V11.30 — uniform Recent Calls preview cards
+   Keeps every Recent Calls preview the same height and shows only one line of
+   conversation details until the conversation is opened. */
+
+.thread-preview-list{
+  display:grid!important;
+  gap:14px!important;
+}
+
+.thread-preview-item{
+  box-sizing:border-box!important;
+  height:126px!important;
+  min-height:126px!important;
+  max-height:126px!important;
+  overflow:hidden!important;
+  grid-template-columns:64px minmax(0,1fr) 24px!important;
+  grid-template-areas:
+    "avatar identity arrow"
+    "avatar topic arrow"!important;
+  grid-template-rows:auto minmax(0,1fr)!important;
+  column-gap:16px!important;
+  row-gap:7px!important;
+  align-items:center!important;
+  padding:18px!important;
+}
+
+.thread-preview-item>.thread-avatar{
+  grid-area:avatar!important;
+  width:64px!important;
+  height:64px!important;
+  align-self:center!important;
+  margin:0!important;
+  flex:0 0 auto!important;
+}
+
+.thread-preview-item>span:not(.thread-avatar){
+  grid-area:identity!important;
+  min-width:0!important;
+  width:100%!important;
+  margin:0!important;
+  overflow:hidden!important;
+  align-self:end!important;
+}
+
+.thread-preview-item>span:not(.thread-avatar)>strong,
+.thread-preview-item>span:not(.thread-avatar)>span,
+.thread-preview-item>small{
+  width:100%!important;
+  max-width:100%!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+}
+
+.thread-preview-item>span:not(.thread-avatar)>strong{
+  display:block!important;
+  margin:0!important;
+}
+
+.thread-preview-item>span:not(.thread-avatar)>span{
+  display:block!important;
+  margin:4px 0 0!important;
+}
+
+.thread-preview-item>small{
+  grid-area:topic!important;
+  display:block!important;
+  min-width:0!important;
+  margin:0!important;
+  align-self:start!important;
+  -webkit-box-orient:initial!important;
+  -webkit-line-clamp:unset!important;
+  line-clamp:unset!important;
+}
+
+.thread-preview-item>.thread-arrow{
+  grid-area:arrow!important;
+  align-self:center!important;
+  justify-self:center!important;
+  margin:0!important;
+}
+
+/* Long titles should never make one card taller than another. */
+.thread-preview-item strong,
+.thread-preview-item span,
+.thread-preview-item small{
+  word-break:normal!important;
+  overflow-wrap:normal!important;
+}
+
+@media(max-width:620px){
+  .thread-preview-list{gap:12px!important}
+  .thread-preview-item{
+    height:116px!important;
+    min-height:116px!important;
+    max-height:116px!important;
+    grid-template-columns:58px minmax(0,1fr) 20px!important;
+    column-gap:14px!important;
+    row-gap:6px!important;
+    padding:15px 16px!important;
+  }
+  .thread-preview-item>.thread-avatar{
+    width:58px!important;
+    height:58px!important;
+  }
+}
