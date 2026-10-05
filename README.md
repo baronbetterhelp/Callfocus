@@ -1,9 +1,11 @@
-# CallFocus V11.4 Update
+# CallFocus V11.5 Update
 
-For a current V11.3 installation:
+Replace/upload these files over V11.4.
 
-1. Replace `index.html`.
-2. Add `v11.4-patch.css` to the repository root.
-3. Commit and let Cloudflare redeploy.
+Changes:
+- Admin can grant/revoke unlimited credit access by customer email.
+- Unlimited users are exempt from credit deduction on both live calls and voice notes.
+- Customer UI shows Unlimited credit instead of a countdown.
+- Includes the approved tighter hero spacing and right-aligned compact credit card.
 
-This update tightens the hero spacing, pushes the Call Credit card to the right, and makes Pearl Aurora apply to all customer-facing setup/modals and the live call screen.
+Important prototype note: customer accounts are still browser-local. Email entitlement works for testing, but server-side customer authentication (Supabase/D1) is required before treating unlimited/paid balances as tamper-resistant production entitlements.

@@ -14,6 +14,8 @@
   let creditBurnStartBalance = 0;
   let creditEndRequested = false;
   let lastSavedCreditSecond = null;
+  const UNLIMITED_SENTINEL_SECONDS = 86400;
+  function isUnlimitedAccount(){ return !!window.CallFocusEntitlements?.unlimited; }
 
   const contactIcon = () => `
     <span class="cf-contact-icon" aria-hidden="true">
@@ -67,12 +69,13 @@
     return data.wallet;
   }
 
-  function currentBalanceSeconds(){ return ensureWallet(true)?.balanceSeconds||0; }
+  function currentBalanceSeconds(){ return isUnlimitedAccount()?UNLIMITED_SENTINEL_SECONDS:(ensureWallet(true)?.balanceSeconds||0); }
 
   // Shared wallet API used by live calls and generated voice notes.
   // One wallet second equals one second of either live-call time or generated voice-note audio.
   function deductUsageSeconds(seconds, meta={}){
     if(!account||!data) return {ok:false, reason:'account'};
+    if(isUnlimitedAccount()) return {ok:true, unlimited:true, deductedSeconds:0, balanceSeconds:UNLIMITED_SENTINEL_SECONDS, requestedSeconds:Math.max(0,Math.ceil(Number(seconds)||0))};
     const wallet=ensureWallet(true);
     const requested=Math.max(0,Math.ceil(Number(seconds)||0));
     if(!requested) return {ok:true, deductedSeconds:0, balanceSeconds:wallet.balanceSeconds};
@@ -103,6 +106,7 @@
       if(sub) sub.textContent='50 credits = 1 minute';
       return;
     }
+    if(isUnlimitedAccount()){ root.textContent='Unlimited credit · no time limit'; if(sub) sub.textContent='Unlimited for live calls and voice notes'; return; }
     const seconds=currentBalanceSeconds();
     root.textContent=`${formatCredits(creditsForSeconds(seconds))} credits · ${humanTime(seconds)} available`;
     if(sub) sub.textContent='Shared with live calls · 50 credits = 1 minute';
@@ -128,6 +132,8 @@
       action.textContent='Create account';
       return;
     }
+    if(isUnlimitedAccount()){ label.textContent='Call credit'; balance.textContent='Unlimited credit · no time limit'; action.textContent='Unlimited access'; action.classList.add('unlimited-credit-action'); return; }
+    action.classList.remove('unlimited-credit-action');
     const wallet=ensureWallet(true);
     const credits=creditsForSeconds(wallet.balanceSeconds);
     label.textContent='Call credit';
@@ -137,6 +143,7 @@
 
   function renderLiveCredit(){
     if(!account||!data) return;
+    if(isUnlimitedAccount()){ if($('liveCreditBalance')) $('liveCreditBalance').textContent='Unlimited'; if($('callMoreCredit')) $('callMoreCredit').textContent='Unlimited credit'; $('liveCreditPill')?.classList.remove('low-credit'); return; }
     const seconds=currentBalanceSeconds();
     const credits=formatCredits(creditsForSeconds(seconds));
     if($('liveCreditBalance')) $('liveCreditBalance').textContent=`${credits} credits · ${humanTime(seconds)}`;
@@ -147,6 +154,8 @@
 
   function renderCreditPage(){
     if(!account||!data) return;
+    if(isUnlimitedAccount()){ if($('creditPageBalance')) $('creditPageBalance').textContent='Unlimited'; if($('creditPageTime')) $('creditPageTime').textContent='No call or voice-note time limit'; document.documentElement.dataset.creditAccess='unlimited'; return; }
+    document.documentElement.dataset.creditAccess='metered';
     const wallet=ensureWallet(true), credits=creditsForSeconds(wallet.balanceSeconds);
     if($('creditPageBalance')) $('creditPageBalance').textContent=`${formatCredits(credits)} credits`;
     if($('creditPageTime')) $('creditPageTime').textContent=`${humanTime(wallet.balanceSeconds)} call time`;
@@ -156,6 +165,7 @@
   function renderSettingsCredit(){
     if(!account) return;
     if($('settingsPhone')) $('settingsPhone').textContent=account.phone || 'Not added';
+    if(isUnlimitedAccount()){ if($('settingsCreditBalance')) $('settingsCreditBalance').textContent='Unlimited credit'; return; }
     const sec=currentBalanceSeconds();
     if($('settingsCreditBalance')) $('settingsCreditBalance').textContent=`${formatCredits(creditsForSeconds(sec))} credits · ${humanTime(sec)}`;
   }
@@ -230,6 +240,7 @@
 
   function openCreditPaymentPlaceholder(){
     if(!account) return requireAccount({type:'route',route:'credits'},'Sign in before purchasing call credit.');
+    if(isUnlimitedAccount()) return toast('This account already has unlimited CallFocus credit.');
     const input=$('customCreditAmount');
     let amount=Number(input?.value||selectedCreditAmount||300);
     if(amount<CREDIT_RULES.minimumPurchaseCredits) return toast('The minimum purchase is 300 credits');
@@ -240,6 +251,7 @@
   }
 
   function syncCreditBurn(){
+    if(isUnlimitedAccount()){ if(live) live.creditSecondsUsed=0; renderLiveCredit(); return; }
     if(!creditBurnStartedAt||!account||!data) return;
     const wallet=ensureWallet(true);
     const elapsed=Math.max(0,Math.floor((Date.now()-creditBurnStartedAt)/1000));
@@ -265,6 +277,7 @@
   function startCreditBurn(){
     stopCreditBurn(false);
     if(!account||!data||!live?.started) return;
+    if(isUnlimitedAccount()){ live.creditSecondsUsed=0; renderLiveCredit(); return; }
     const wallet=ensureWallet(true);
     creditBurnStartBalance=wallet.balanceSeconds;
     creditBurnStartedAt=Date.now();
@@ -287,6 +300,7 @@
   const priorStartCallV11=startCall;
   startCall=async function(call){
     if(!account||!data) return priorStartCallV11(call);
+    if(isUnlimitedAccount()){ renderLiveCredit(); return priorStartCallV11(call); }
     const seconds=currentBalanceSeconds();
     if(seconds<15){
       renderCreditDock();
@@ -304,7 +318,7 @@
     priorSaveCompletedCallV11();
     if(threadId&&data){
       const t=data.threads?.find(x=>x.id===threadId); const c=t?.calls?.[t.calls.length-1];
-      if(c){ c.creditSecondsUsed=used; c.creditsUsed=Math.round(creditsForSeconds(used)*10)/10; }
+      if(c){ c.creditSecondsUsed=used; c.creditsUsed=Math.round(creditsForSeconds(used)*10)/10; c.unlimitedCredit=isUnlimitedAccount(); }
       saveData();
     }
   };
@@ -315,6 +329,7 @@
   // UI interactions.
   $('creditDockAction')?.addEventListener('click',()=>{
     if(!account) return showAuth('signup',null,'Create an account with your mobile number to receive the starter 1:30 call credit.');
+    if(isUnlimitedAccount()) return toast('This account has unlimited CallFocus credit.');
     showView('credits');
   });
   $('creditBackBtn')?.addEventListener('click',()=>showView('home'));

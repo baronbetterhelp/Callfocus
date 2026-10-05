@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="./app.css" />
   <link rel="stylesheet" href="./v10.2-patch.css" />
   <link rel="stylesheet" href="./v10.5-patch.css" />
+  <link rel="stylesheet" href="./v11.5-patch.css" />
 </head>
 <body class="admin-page">
   <header class="site-header">
@@ -104,6 +105,20 @@
           <label>Master call rules<textarea id="adminInstructions" rows="11" placeholder="Your global rules for every call. These are loaded server-side into every new Live session."></textarea></label>
           <label>Default opening behavior<textarea id="adminOpening" rows="5" placeholder="How the first line should begin"></textarea></label>
         </div>
+      </div>
+
+      <div class="premium-panel admin-unlimited-panel">
+        <div>
+          <span class="kicker">Credit access</span>
+          <h3>Unlimited credit users</h3>
+          <p class="admin-panel-copy">Add an account email here to exempt that user from CallFocus credit deductions for both live calls and voice notes.</p>
+        </div>
+        <div class="admin-unlimited-add">
+          <label>Email address<input id="adminUnlimitedEmail" type="email" inputmode="email" autocomplete="off" placeholder="customer@example.com" /></label>
+          <button class="btn btn-primary" type="button" id="adminUnlimitedAddBtn">Add unlimited user</button>
+        </div>
+        <div class="admin-unlimited-note">The email must match the email used on the customer’s CallFocus account. Changes take effect after you press <strong>Save global settings</strong>.</div>
+        <div class="admin-unlimited-list" id="adminUnlimitedList"></div>
       </div>
 
       <div class="premium-panel admin-save-panel">

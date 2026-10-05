@@ -46,6 +46,7 @@ const DEFAULT_CONFIG = {
   opening: 'Use the customer-selected opening for each call. Greet naturally, then pause and let the other person respond before moving further into the topic.',
   speakFirst: true,
   interruptions: true,
+  unlimitedCreditEmails: [],
   updatedAt: null
 };
 
@@ -74,6 +75,10 @@ async function getConfig(env) {
 
 function sanitizeConfig(input = {}) {
   const voice = v => VOICES.includes(v) ? v : null;
+  const unlimitedCreditEmails = [...new Set((Array.isArray(input.unlimitedCreditEmails) ? input.unlimitedCreditEmails : [])
+    .map(v => String(v || '').trim().toLowerCase())
+    .filter(v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)))]
+    .slice(0, 500);
   return {
     serverOnline: input.serverOnline !== false,
     serverMessage: String(input.serverMessage || DEFAULT_CONFIG.serverMessage).slice(0, 240),
@@ -87,6 +92,7 @@ function sanitizeConfig(input = {}) {
     opening: String(input.opening || DEFAULT_CONFIG.opening).slice(0, 4000),
     speakFirst: input.speakFirst !== false,
     interruptions: input.interruptions !== false,
+    unlimitedCreditEmails,
     updatedAt: new Date().toISOString()
   };
 }
@@ -112,6 +118,18 @@ async function handlePublicConfig(env) {
     updatedAt: c.updatedAt || null,
     engine: 'GPT-Live 1'
   });
+}
+
+
+async function handleCreditEntitlement(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  let body;
+  try { body = await request.json(); } catch { return json({ unlimited: false }, 200); }
+  const email = String(body?.email || '').trim().toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ unlimited: false }, 200);
+  const config = await getConfig(env);
+  const list = Array.isArray(config.unlimitedCreditEmails) ? config.unlimitedCreditEmails : [];
+  return json({ unlimited: list.includes(email), email });
 }
 
 async function handleAdminConfig(request, env) {
@@ -459,6 +477,7 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
+    if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
     if (url.pathname === '/api/admin/login' && request.method === 'POST') return handleAdminLogin(request, env);
     if (url.pathname === '/api/admin/config') return handleAdminConfig(request, env);
     if (url.pathname === '/api/admin/voice-preview' && request.method === 'POST') return handleVoicePreview(request, env);

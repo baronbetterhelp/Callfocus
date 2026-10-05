@@ -194,7 +194,7 @@
     $('voiceNoteEmptyState')?.classList.add('hidden');
     box.classList.remove('hidden');
     $('voiceNoteResultScript').textContent = note.script || '';
-    $('voiceNoteResultMeta').textContent = `${note.voiceGender==='female'?'Female':'Male'} · ${note.voiceName || ''} · ${formatDurationSeconds(note.duration)}${Number.isFinite(Number(note.creditsUsed)) ? ' · ' + note.creditsUsed + ' credits' : ''}`;
+    $('voiceNoteResultMeta').textContent = `${note.voiceGender==='female'?'Female':'Male'} · ${note.voiceName || ''} · ${formatDurationSeconds(note.duration)}${note.unlimitedCredit ? ' · Unlimited access' : (Number.isFinite(Number(note.creditsUsed)) ? ' · ' + note.creditsUsed + ' credits' : '')}`;
     if($('voiceNoteResultMode')) $('voiceNoteResultMode').textContent = resultModeText(note);
     const play = $('voiceNoteResultPlay');
     play.disabled = false;
@@ -205,7 +205,7 @@
   function voiceHistoryItem(note,index){
     return `<article class="voice-note-history-item">
       <div class="voice-note-history-top">
-        <div><strong>Voice note ${String(index+1).padStart(2,'0')}</strong><small>${esc(voiceDate(note.createdAt))} · ${esc(note.voiceGender==='female'?'Female':'Male')} · ${esc(note.voiceName || '')}${Number.isFinite(Number(note.creditsUsed)) ? ' · ' + esc(String(note.creditsUsed)) + ' credits' : ''}</small></div>
+        <div><strong>Voice note ${String(index+1).padStart(2,'0')}</strong><small>${esc(voiceDate(note.createdAt))} · ${esc(note.voiceGender==='female'?'Female':'Male')} · ${esc(note.voiceName || '')}${note.unlimitedCredit ? ' · Unlimited access' : (Number.isFinite(Number(note.creditsUsed)) ? ' · ' + esc(String(note.creditsUsed)) + ' credits' : '')}</small></div>
         <span class="voice-note-duration">${esc(formatDurationSeconds(note.duration))}</span>
       </div>
       <div class="voice-note-history-prompt-row">
@@ -289,7 +289,8 @@
           status.textContent = 'Voice note generated, but your remaining credit was exhausted. Top up before creating another one.';
         }
       }
-      const creditsUsed = window.CallFocusCredits ? Math.round(window.CallFocusCredits.creditsForSeconds(creditResult?.deductedSeconds ?? billableSeconds) * 10) / 10 : null;
+      const unlimitedCredit = !!creditResult?.unlimited;
+      const creditsUsed = unlimitedCredit ? null : (window.CallFocusCredits ? Math.round(window.CallFocusCredits.creditsForSeconds(creditResult?.deductedSeconds ?? billableSeconds) * 10) / 10 : null);
       const note = {
         id:noteId,
         mode:voiceNoteMode,
@@ -299,7 +300,8 @@
         voiceName,
         duration,
         creditsUsed,
-        creditSecondsUsed:creditResult?.deductedSeconds ?? billableSeconds,
+        unlimitedCredit,
+        creditSecondsUsed:unlimitedCredit ? 0 : (creditResult?.deductedSeconds ?? billableSeconds),
         createdAt:new Date().toISOString()
       };
       ensureVoiceNoteData();
@@ -313,7 +315,7 @@
       if(window.CallFocusCredits) window.CallFocusCredits.render();
       if(!status.classList.contains('error')){
         status.className = 'voice-note-status success';
-        status.textContent = `${voiceNoteMode === 'reply' ? 'Reply' : 'Voice note'} ready · ${creditsUsed != null ? creditsUsed + ' credits used · ' : ''}Tap Play voice note to listen.`;
+        status.textContent = `${voiceNoteMode === 'reply' ? 'Reply' : 'Voice note'} ready · ${unlimitedCredit ? 'Unlimited access · ' : (creditsUsed != null ? creditsUsed + ' credits used · ' : '')}Tap Play voice note to listen.`;
       }
       requestAnimationFrame(()=>$('voiceNoteResult')?.scrollIntoView({behavior:'smooth',block:'center'}));
     } catch(err){
