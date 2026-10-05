@@ -213,12 +213,18 @@ async function deriveCustomerPasswordHash(password, saltB64, iterations = 180000
   return bytesToB64(new Uint8Array(bits));
 }
 
+const CUSTOMER_PASSWORD_ITERATIONS = 12000;
+const CUSTOMER_LEGACY_MAX_SAFE_ITERATIONS = 25000;
+
 async function buildCustomerPasswordRecord(password) {
+  // V11.19: keep password hashing inside the CPU budget of Workers Free.
+  // The previous 180,000-round PBKDF2 could exceed the 10 ms request CPU limit
+  // and terminate signup/sign-in before a JSON response was returned.
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const passwordSalt = bytesToB64(salt);
-  const passwordIterations = 180000;
+  const passwordIterations = CUSTOMER_PASSWORD_ITERATIONS;
   return {
-    passwordVersion: 2,
+    passwordVersion: 3,
     passwordSalt,
     passwordIterations,
     passwordHash: await deriveCustomerPasswordHash(password, passwordSalt, passwordIterations)
@@ -226,8 +232,13 @@ async function buildCustomerPasswordRecord(password) {
 }
 
 async function verifyCustomerPassword(user, password) {
-  if (user?.passwordVersion === 2 && user?.passwordSalt && user?.passwordHash) {
-    const actual = await deriveCustomerPasswordHash(password, user.passwordSalt, user.passwordIterations || 120000);
+  if ((user?.passwordVersion === 3 || user?.passwordVersion === 2) && user?.passwordSalt && user?.passwordHash) {
+    const storedIterations = Number(user.passwordIterations || (user.passwordVersion === 3 ? CUSTOMER_PASSWORD_ITERATIONS : 120000));
+    // Old V11.17/V11.18 accounts may contain a 180k-round record. Do not let
+    // those records crash a Free-plan Worker. They can be recovered with the
+    // email password-reset flow once the sender is configured.
+    if (user.passwordVersion === 2 && storedIterations > CUSTOMER_LEGACY_MAX_SAFE_ITERATIONS) return false;
+    const actual = await deriveCustomerPasswordHash(password, user.passwordSalt, storedIterations);
     return actual === user.passwordHash;
   }
   if (user?.passwordHash) return (await sha256Hex(password)) === user.passwordHash;
@@ -546,6 +557,9 @@ async function handleCustomerSignin(request, env) {
   if (!email || !password) return json({ error: 'Enter your email and password.' }, 400);
   const user = await readCustomerUserByEmail(env, email);
   if (!user) return json({ error: 'Account not found.', code: 'account_not_found' }, 404);
+  if (user?.passwordVersion === 2 && Number(user?.passwordIterations || 0) > CUSTOMER_LEGACY_MAX_SAFE_ITERATIONS) {
+    return json({ error: 'This older account needs a password reset before it can sign in on the new domain.', code: 'password_upgrade_required' }, 409);
+  }
   if (!(await verifyCustomerPassword(user, password))) return json({ error: 'Incorrect password.', code: 'incorrect_password' }, 401);
   const token = await createCustomerSession(env, user);
   const data = (await env.CALLFOCUS_CONFIG.get(customerDataKey(user.id), { type: 'json' })) || defaultCustomerData(user.name);
@@ -1123,17 +1137,33 @@ The entire spoken call must stay in ${callLanguage}. This is a hard CallFocus se
   return new Response(answerSdp, { status: 200, headers });
 }
 
+async function safeCustomerRoute(label, handler) {
+  try {
+    return await handler();
+  } catch (error) {
+    console.error(`CallFocus account route failed: ${label}`, error?.stack || error?.message || error);
+    return json({
+      error: 'The CallFocus account service hit a server error. Please try again.',
+      code: 'account_internal_error',
+      detail: String(error?.message || error || 'Unknown account error').slice(0, 220)
+    }, 500);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname === '/api/auth/signup') return handleCustomerSignup(request, env);
-    if (url.pathname === '/api/auth/signup/request') return handleCustomerSignupRequest(request, env);
-    if (url.pathname === '/api/auth/signup/verify') return handleCustomerSignupVerify(request, env);
-    if (url.pathname === '/api/auth/password-reset/request') return handlePasswordResetRequest(request, env);
-    if (url.pathname === '/api/auth/password-reset/verify') return handlePasswordResetVerify(request, env);
-    if (url.pathname === '/api/auth/signin') return handleCustomerSignin(request, env);
-    if (url.pathname === '/api/auth/session') return handleCustomerSession(request, env);
-    if (url.pathname === '/api/auth/signout') return handleCustomerSignout(request, env);
+    if (url.pathname === '/api/auth/health' && request.method === 'GET') {
+      return json({ ok: true, storageConnected: !!env.CALLFOCUS_CONFIG, passwordHashVersion: 3, passwordIterations: CUSTOMER_PASSWORD_ITERATIONS });
+    }
+    if (url.pathname === '/api/auth/signup') return safeCustomerRoute('signup', () => handleCustomerSignup(request, env));
+    if (url.pathname === '/api/auth/signup/request') return safeCustomerRoute('signup-request', () => handleCustomerSignupRequest(request, env));
+    if (url.pathname === '/api/auth/signup/verify') return safeCustomerRoute('signup-verify', () => handleCustomerSignupVerify(request, env));
+    if (url.pathname === '/api/auth/password-reset/request') return safeCustomerRoute('password-reset-request', () => handlePasswordResetRequest(request, env));
+    if (url.pathname === '/api/auth/password-reset/verify') return safeCustomerRoute('password-reset-verify', () => handlePasswordResetVerify(request, env));
+    if (url.pathname === '/api/auth/signin') return safeCustomerRoute('signin', () => handleCustomerSignin(request, env));
+    if (url.pathname === '/api/auth/session') return safeCustomerRoute('session', () => handleCustomerSession(request, env));
+    if (url.pathname === '/api/auth/signout') return safeCustomerRoute('signout', () => handleCustomerSignout(request, env));
     if (url.pathname === '/api/auth/migrate') return handleCustomerMigration(request, env);
     if (url.pathname === '/api/account/data') return handleCustomerData(request, env);
     if (url.pathname === '/api/account' && request.method === 'DELETE') return handleCustomerDelete(request, env);
