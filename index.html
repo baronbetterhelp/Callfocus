@@ -40,6 +40,7 @@
   <link rel="stylesheet" href="/v11.29-compact-history.css?v=11.29" />
   <link rel="stylesheet" href="/v11.30-recent-cards.css?v=11.30" />
   <link rel="stylesheet" href="/v11.32-dynamics.css?v=11.32" />
+  <link rel="stylesheet" href="/v11.33-payment-disabled.css?v=11.33" />
 </head>
 <body>
   <div class="app-root home-page" id="pageRoot">
@@ -355,7 +356,7 @@
               <label><span>Credits</span><input id="customCreditAmount" type="number" min="300" step="50" value="300" inputmode="numeric" /></label>
               <div class="credit-custom-summary"><span id="customCreditMinutes">6 minutes</span><strong id="customCreditNaira">₦3,000</strong></div>
             </div>
-            <button class="credit-checkout-btn" id="creditCheckoutBtn" type="button"><span>Continue to payment</span><small id="creditCheckoutSummary">300 credits · ₦3,000</small></button>
+            <button class="credit-checkout-btn" id="creditCheckoutBtn" type="button" disabled aria-disabled="true"><span>Continue to payment</span><small id="creditCheckoutSummary">300 credits · ₦3,000</small></button>
             <p class="credit-payment-note">Secure checkout is handled by Paystack. Credits are added only after CallFocus verifies a successful payment on the server.</p>
           </section>
 

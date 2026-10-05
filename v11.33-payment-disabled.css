@@ -1,0 +1,10 @@
+/* CallFocus V11.33 — temporarily disable credit checkout */
+#creditCheckoutBtn:disabled {
+  opacity: .52;
+  cursor: not-allowed;
+  filter: saturate(.45);
+  box-shadow: none;
+}
+#creditCheckoutBtn:disabled > small {
+  opacity: .88;
+}
