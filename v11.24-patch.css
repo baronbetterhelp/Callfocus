@@ -1,0 +1,136 @@
+/* CallFocus V11.24 — full-screen conversation-style history viewer */
+body.cf-chat-screen-open{overflow:hidden!important}
+body.cf-chat-screen-open #page-recent{
+  display:block!important;
+  position:fixed!important;
+  inset:0!important;
+  z-index:300!important;
+  min-height:100dvh!important;
+  padding:0!important;
+  background:#f6f8f5!important;
+}
+body.cf-chat-screen-open #page-recent>.app-page-inner{
+  width:100%!important;
+  max-width:none!important;
+  height:100dvh!important;
+  min-height:0!important;
+  margin:0!important;
+  padding:0!important;
+}
+body.cf-chat-screen-open #page-recent .app-page-head{display:none!important}
+body.cf-chat-screen-open #page-recent .recent-layout{
+  width:100%!important;
+  height:100dvh!important;
+  min-height:100dvh!important;
+  margin:0!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+}
+body.cf-chat-screen-open #page-recent .thread-detail-panel{height:100%!important}
+body.cf-chat-screen-open #page-recent .cf-chat-thread{height:100dvh!important}
+
+/* Chat viewer only: keep the history readable and do not expose the full saved setup. */
+body.cf-chat-screen-open #page-recent .cf-thread-context-message,
+body.cf-chat-screen-open #page-recent .cf-thread-edit-card,
+body.cf-chat-screen-open #page-recent .cf-next-call-composer{display:none!important}
+body.cf-chat-screen-open #page-recent .cf-chat-scroll{padding-top:24px!important}
+body.cf-chat-screen-open #page-recent .cf-timeline-heading{margin-top:0!important}
+
+/* ChatGPT-like top bar with an explicit close control. */
+body.cf-chat-screen-open #page-recent .cf-chat-header{
+  grid-template-columns:auto 46px minmax(0,1fr) auto!important;
+  min-height:76px!important;
+  height:76px!important;
+  flex-basis:76px!important;
+  padding-left:max(16px,env(safe-area-inset-left))!important;
+  padding-right:max(16px,env(safe-area-inset-right))!important;
+  background:rgba(250,251,249,.96)!important;
+  border-bottom:1px solid #e1e9e5!important;
+  box-shadow:0 1px 0 rgba(34,65,60,.02)!important;
+}
+.cf-v1124-chat-close{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  min-height:40px;
+  padding:0 14px;
+  border:1px solid #dce6e1;
+  border-radius:999px;
+  background:#fff;
+  color:#24433e;
+  font:700 12px/1 'DM Sans',sans-serif;
+  box-shadow:0 7px 22px rgba(35,70,64,.055);
+  cursor:pointer;
+}
+.cf-v1124-chat-close span{font-size:22px;font-weight:400;line-height:1;transform:translateY(-1px)}
+.cf-v1124-chat-close b{font:700 12px/1 'DM Sans',sans-serif}
+.cf-v1124-chat-close:hover{background:#f2f7f4;border-color:#cfded8}
+
+body.cf-chat-screen-open #page-recent .cf-chat-heading h2{color:#17312e!important}
+body.cf-chat-screen-open #page-recent .cf-chat-heading span{color:#788a85!important}
+body.cf-chat-screen-open #page-recent .cf-conversation-switcher{
+  background:#fff!important;
+  border-color:#dce6e1!important;
+  color:#315c55!important;
+}
+
+/* The left side becomes the ChatGPT-style Recents menu. */
+body.cf-chat-screen-open #page-recent .recent-list-panel,
+body.cf-chat-screen-open #page-recent .recent-list{
+  background:#f7f8f6!important;
+}
+body.cf-chat-screen-open #page-recent .recent-list-panel{border-right:1px solid #e1e8e4!important}
+body.cf-chat-screen-open #page-recent .cf-recent-list-head{
+  background:rgba(247,248,246,.96)!important;
+  border-bottom-color:#e3e9e6!important;
+}
+body.cf-chat-screen-open #page-recent .cf-recent-list-head strong{color:#17312e!important}
+body.cf-chat-screen-open #page-recent .cf-recent-list-head small{color:#879590!important}
+body.cf-chat-screen-open #page-recent .recent-thread-button{border-bottom-color:#e6ece9!important;color:#17312e!important}
+body.cf-chat-screen-open #page-recent .recent-thread-button:hover,
+body.cf-chat-screen-open #page-recent .recent-thread-button.active{background:#edf4f1!important}
+body.cf-chat-screen-open #page-recent .recent-thread-copy span,
+body.cf-chat-screen-open #page-recent .recent-thread-copy small,
+body.cf-chat-screen-open #page-recent .cf-thread-list-meta time{color:#7b8b86!important}
+
+/* Internal shade stays in the same full-screen stacking context as the drawer. */
+.cf-v1124-drawer-shade{
+  display:none;
+  position:absolute;
+  inset:0;
+  z-index:155;
+  border:0;
+  padding:0;
+  background:rgba(20,38,34,.34);
+  backdrop-filter:blur(2px);
+}
+body.cf-chat-screen-open .cf-v1124-drawer-shade.show{display:block}
+body.cf-chat-screen-open~.cf-conversation-backdrop,
+body.cf-chat-screen-open .cf-conversation-backdrop{display:none!important}
+
+@media(max-width:1000px){
+  body.cf-chat-screen-open #page-recent .recent-list-panel{z-index:160!important;width:min(340px,88vw)!important}
+  body.cf-chat-screen-open #page-recent .cf-chat-header{grid-template-columns:auto 42px minmax(0,1fr) auto!important}
+}
+
+@media(max-width:620px){
+  body.cf-chat-screen-open #page-recent{padding:0!important}
+  body.cf-chat-screen-open #page-recent .recent-layout{height:100dvh!important;min-height:100dvh!important;border-radius:0!important}
+  body.cf-chat-screen-open #page-recent .cf-chat-header{
+    grid-template-columns:auto minmax(0,1fr) auto!important;
+    min-height:68px!important;
+    height:68px!important;
+    flex-basis:68px!important;
+    padding:10px 12px!important;
+  }
+  body.cf-chat-screen-open #page-recent .cf-chat-header .thread-detail-avatar{display:none!important}
+  .cf-v1124-chat-close{width:40px;min-width:40px;height:40px;min-height:40px;padding:0;border-radius:50%}
+  .cf-v1124-chat-close b{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important}
+  .cf-v1124-chat-close span{font-size:24px}
+  body.cf-chat-screen-open #page-recent .cf-chat-scroll{padding:18px 12px 28px!important}
+  body.cf-chat-screen-open #page-recent .cf-conversation-switcher{width:40px;height:40px;padding:0!important;justify-content:center;border-radius:50%!important;font-size:0!important}
+  body.cf-chat-screen-open #page-recent .cf-conversation-switcher::before{content:'☰';font-size:17px;line-height:1}
+  body.cf-chat-screen-open #page-recent .cf-timeline-heading{padding:0 6px!important}
+}
