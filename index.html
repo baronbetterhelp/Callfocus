@@ -32,6 +32,7 @@
   <link rel="stylesheet" href="./v11.10-patch.css" />
   <link rel="stylesheet" href="./v11.14-patch.css?v=11.14" />
   <link rel="stylesheet" href="./v11.16-patch.css?v=11.16" />
+  <link rel="stylesheet" href="./v11.17-patch.css?v=11.17" />
 </head>
 <body>
   <div class="app-root home-page" id="pageRoot">
@@ -382,7 +383,7 @@
 
       <section class="page-view app-page" id="page-settings" data-view="settings">
         <div class="container app-page-inner narrow-app-page">
-          <div class="app-page-head"><div><span class="section-eyebrow">Account</span><h1>Account Settings</h1><p>Manage your CallFocus account and saved data.</p></div></div>
+          <div class="app-page-head"><div><span class="section-eyebrow">Account</span><h1>Account Settings</h1><p>Manage your CallFocus account and synced saved data.</p></div></div>
           <div class="surface-card settings-card">
             <div class="settings-row"><div><strong>Name</strong><span id="settingsName">—</span></div><button class="btn btn-ghost" id="settingsEditProfileBtn">Edit profile</button></div>
             <div class="settings-row"><div><strong>Email</strong><span id="settingsEmail">—</span></div></div>
@@ -391,7 +392,7 @@
             <div class="settings-row"><div><strong>Account created</strong><span id="settingsCreated">—</span></div></div>
           </div>
           <div class="danger-card">
-            <div><span class="section-eyebrow danger-text">Danger zone</span><h2>Delete account</h2><p>This permanently removes this account and its locally saved callers, recent call threads, profile and preferences from this browser.</p></div>
+            <div><span class="section-eyebrow danger-text">Danger zone</span><h2>Delete account</h2><p>This permanently removes this account and its synced callers, recent call threads, profile and preferences.</p></div>
             <button class="btn danger-button" id="deleteAccountBtn">Delete account</button>
           </div>
         </div>
@@ -423,7 +424,9 @@
         <label>Password<input id="signinPassword" type="password" autocomplete="current-password" placeholder="Your password" /></label>
         <button class="btn btn-primary full" type="submit">Sign in</button>
       </form>
-      <p class="modal-footnote">Prototype note: this build saves accounts on this device. The production launch should move authentication and account data to Supabase so it follows users across devices.</p>
+      <button class="btn btn-ghost full legacy-transfer-btn hidden" id="transferLegacyAccountBtn" type="button">Transfer my old Workers.dev account</button>
+      <p class="legacy-transfer-note hidden" id="legacyTransferNote">Used CallFocus before the custom domain? This securely moves the account and saved callers from the old Workers.dev address.</p>
+      <p class="modal-footnote">Your CallFocus account and saved call data are synced securely so the same account can be used on your custom domain and other devices.</p>
     </div>
   </div>
 
@@ -519,7 +522,7 @@
 
   <div class="modal-backdrop hidden" id="deleteAccountModal">
     <div class="modal small-modal">
-      <div class="modal-head"><div><span class="section-eyebrow danger-text">Delete account</span><h2>This cannot be undone.</h2><p>Type <strong>DELETE</strong> to remove this account and all locally saved CallFocus data from this browser.</p></div><button class="modal-close" data-close="deleteAccountModal">×</button></div>
+      <div class="modal-head"><div><span class="section-eyebrow danger-text">Delete account</span><h2>This cannot be undone.</h2><p>Type <strong>DELETE</strong> to permanently remove this account and all synced CallFocus data.</p></div><button class="modal-close" data-close="deleteAccountModal">×</button></div>
       <label>Confirmation<input id="deleteConfirmInput" placeholder="DELETE" /></label>
       <div class="form-actions end"><button class="btn btn-ghost" data-close="deleteAccountModal">Cancel</button><button class="btn danger-button" id="confirmDeleteAccountBtn">Delete permanently</button></div>
     </div>
@@ -578,5 +581,6 @@
   <script src="./v11.11-patch.js?v=11.11"></script>
   <script src="./v11.12-patch.js?v=11.14"></script>
   <script src="./v11.16-patch.js?v=11.16"></script>
+  <script src="./v11.17-patch.js?v=11.17"></script>
 </body>
 </html>

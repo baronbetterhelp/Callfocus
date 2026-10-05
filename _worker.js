@@ -67,6 +67,341 @@ function json(data, status = 200) {
   });
 }
 
+
+// -----------------------------------------------------------------------------
+// V11.17 server-backed customer accounts
+// Uses the existing CALLFOCUS_CONFIG Workers KV namespace with isolated key
+// prefixes, so no additional Cloudflare binding is required.
+// -----------------------------------------------------------------------------
+const CUSTOMER_SESSION_TTL = 60 * 60 * 24 * 30; // 30 days
+const CUSTOMER_DATA_MAX_BYTES = 2_000_000;
+
+function normalizeCustomerEmail(value = '') {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizeCustomerPhone(value = '') {
+  const raw = String(value || '').trim();
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length < 8 || digits.length > 15) return '';
+  return raw.startsWith('+') ? `+${digits}` : digits;
+}
+
+function customerPhoneKey(value = '') {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function bytesToB64(bytes) {
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
+}
+
+function b64ToBytes(value = '') {
+  const binary = atob(String(value || ''));
+  const out = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  return out;
+}
+
+function randomToken(byteLength = 32) {
+  const bytes = crypto.getRandomValues(new Uint8Array(byteLength));
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+async function deriveCustomerPasswordHash(password, saltB64, iterations = 180000) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(String(password || '')),
+    'PBKDF2',
+    false,
+    ['deriveBits']
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: b64ToBytes(saltB64), iterations },
+    key,
+    256
+  );
+  return bytesToB64(new Uint8Array(bits));
+}
+
+async function buildCustomerPasswordRecord(password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const passwordSalt = bytesToB64(salt);
+  const passwordIterations = 180000;
+  return {
+    passwordVersion: 2,
+    passwordSalt,
+    passwordIterations,
+    passwordHash: await deriveCustomerPasswordHash(password, passwordSalt, passwordIterations)
+  };
+}
+
+async function verifyCustomerPassword(user, password) {
+  if (user?.passwordVersion === 2 && user?.passwordSalt && user?.passwordHash) {
+    const actual = await deriveCustomerPasswordHash(password, user.passwordSalt, user.passwordIterations || 120000);
+    return actual === user.passwordHash;
+  }
+  if (user?.passwordHash) return (await sha256Hex(password)) === user.passwordHash;
+  return false;
+}
+
+function publicCustomerUser(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    name: user.name || '',
+    email: user.email || '',
+    phone: user.phone || '',
+    phoneVerified: !!user.phoneVerified,
+    createdAt: user.createdAt || null,
+    updatedAt: user.updatedAt || null
+  };
+}
+
+function defaultCustomerData(name = '') {
+  const now = new Date().toISOString();
+  return {
+    profile: { name: String(name || ''), role: '', about: '', rules: '' },
+    callers: [],
+    threads: [],
+    wallet: {
+      version: 1,
+      balanceSeconds: 90,
+      starterGranted: true,
+      starterGrantedAt: now,
+      starterGrantMode: 'server_account_signup',
+      purchases: [],
+      usage: []
+    }
+  };
+}
+
+async function customerEmailIndexKey(email) {
+  return `customer:email:${await sha256Hex(normalizeCustomerEmail(email))}`;
+}
+
+function customerUserKey(userId) { return `customer:user:${userId}`; }
+function customerDataKey(userId) { return `customer:data:${userId}`; }
+function customerPhoneIndexKey(phone) { return `customer:phone:${customerPhoneKey(phone)}`; }
+async function customerSessionKey(token) { return `customer:session:${await sha256Hex(token)}`; }
+
+async function readCustomerUserByEmail(env, email) {
+  if (!env.CALLFOCUS_CONFIG) return null;
+  const userId = await env.CALLFOCUS_CONFIG.get(await customerEmailIndexKey(email));
+  if (!userId) return null;
+  return await env.CALLFOCUS_CONFIG.get(customerUserKey(userId), { type: 'json' });
+}
+
+async function createCustomerSession(env, userId) {
+  const token = randomToken(36);
+  const key = await customerSessionKey(token);
+  await env.CALLFOCUS_CONFIG.put(key, JSON.stringify({ userId, createdAt: new Date().toISOString() }), { expirationTtl: CUSTOMER_SESSION_TTL });
+  return token;
+}
+
+async function authenticatedCustomer(request, env) {
+  if (!env.CALLFOCUS_CONFIG) return null;
+  const auth = String(request.headers.get('Authorization') || '');
+  const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!token) return null;
+  const session = await env.CALLFOCUS_CONFIG.get(await customerSessionKey(token), { type: 'json' });
+  if (!session?.userId) return null;
+  const user = await env.CALLFOCUS_CONFIG.get(customerUserKey(session.userId), { type: 'json' });
+  if (!user) return null;
+  return { token, session, user };
+}
+
+function validCustomerDataShape(data) {
+  return !!data && typeof data === 'object' && !Array.isArray(data);
+}
+
+function mergeById(existing = [], incoming = []) {
+  const map = new Map();
+  for (const item of Array.isArray(existing) ? existing : []) if (item?.id) map.set(item.id, item);
+  for (const item of Array.isArray(incoming) ? incoming : []) if (item?.id) map.set(item.id, item);
+  return [...map.values()];
+}
+
+function mergeMigratedCustomerData(existing, incoming, name = '') {
+  if (!validCustomerDataShape(existing)) return validCustomerDataShape(incoming) ? incoming : defaultCustomerData(name);
+  if (!validCustomerDataShape(incoming)) return existing;
+  return {
+    ...incoming,
+    ...existing,
+    profile: { ...(incoming.profile || {}), ...(existing.profile || {}) },
+    callers: mergeById(existing.callers, incoming.callers),
+    threads: mergeById(existing.threads, incoming.threads),
+    wallet: existing.wallet || incoming.wallet || defaultCustomerData(name).wallet,
+    voiceNotes: mergeById(existing.voiceNotes, incoming.voiceNotes)
+  };
+}
+
+async function handleCustomerSignup(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is temporarily unavailable.' }, 503);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const name = String(body?.name || '').trim().slice(0, 120);
+  const email = normalizeCustomerEmail(body?.email);
+  const phone = normalizeCustomerPhone(body?.phone);
+  const password = String(body?.password || '');
+  if (!name || !email || !phone || !password) return json({ error: 'Complete every account field.' }, 400);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: 'Enter a valid email address.' }, 400);
+  if (password.length < 8) return json({ error: 'Use at least 8 characters for your password.' }, 400);
+  const emailKey = await customerEmailIndexKey(email);
+  if (await env.CALLFOCUS_CONFIG.get(emailKey)) return json({ error: 'An account with that email already exists.' }, 409);
+  const phoneKey = customerPhoneIndexKey(phone);
+  if (phoneKey.endsWith(':')) return json({ error: 'Enter a valid mobile number.' }, 400);
+  if (await env.CALLFOCUS_CONFIG.get(phoneKey)) return json({ error: 'That mobile number is already attached to an account.' }, 409);
+
+  const id = crypto.randomUUID();
+  const passwordRecord = await buildCustomerPasswordRecord(password);
+  const now = new Date().toISOString();
+  const user = { id, name, email, phone, phoneVerified: false, ...passwordRecord, createdAt: now, updatedAt: now };
+  const data = defaultCustomerData(name);
+  await Promise.all([
+    env.CALLFOCUS_CONFIG.put(customerUserKey(id), JSON.stringify(user)),
+    env.CALLFOCUS_CONFIG.put(emailKey, id),
+    env.CALLFOCUS_CONFIG.put(phoneKey, id),
+    env.CALLFOCUS_CONFIG.put(customerDataKey(id), JSON.stringify(data))
+  ]);
+  const token = await createCustomerSession(env, id);
+  return json({ ok: true, token, user: publicCustomerUser(user), data });
+}
+
+async function handleCustomerSignin(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is temporarily unavailable.' }, 503);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const email = normalizeCustomerEmail(body?.email);
+  const password = String(body?.password || '');
+  if (!email || !password) return json({ error: 'Enter your email and password.' }, 400);
+  const user = await readCustomerUserByEmail(env, email);
+  if (!user) return json({ error: 'Account not found.', code: 'account_not_found' }, 404);
+  if (!(await verifyCustomerPassword(user, password))) return json({ error: 'Incorrect password.', code: 'incorrect_password' }, 401);
+  const token = await createCustomerSession(env, user.id);
+  const data = (await env.CALLFOCUS_CONFIG.get(customerDataKey(user.id), { type: 'json' })) || defaultCustomerData(user.name);
+  return json({ ok: true, token, user: publicCustomerUser(user), data });
+}
+
+async function handleCustomerSession(request, env) {
+  if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Session expired.', code: 'session_expired' }, 401);
+  const data = (await env.CALLFOCUS_CONFIG.get(customerDataKey(auth.user.id), { type: 'json' })) || defaultCustomerData(auth.user.name);
+  return json({ ok: true, user: publicCustomerUser(auth.user), data });
+}
+
+async function handleCustomerSignout(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  const authHeader = String(request.headers.get('Authorization') || '');
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  if (token && env.CALLFOCUS_CONFIG) {
+    try { await env.CALLFOCUS_CONFIG.delete(await customerSessionKey(token)); } catch {}
+  }
+  return json({ ok: true });
+}
+
+async function handleCustomerData(request, env) {
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Session expired.', code: 'session_expired' }, 401);
+  if (request.method === 'GET') {
+    const data = (await env.CALLFOCUS_CONFIG.get(customerDataKey(auth.user.id), { type: 'json' })) || defaultCustomerData(auth.user.name);
+    return json({ ok: true, data });
+  }
+  if (request.method !== 'PUT' && request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET, PUT, POST' } });
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const incoming = body?.data;
+  if (!validCustomerDataShape(incoming)) return json({ error: 'Invalid account data.' }, 400);
+  const encoded = JSON.stringify(incoming);
+  if (new TextEncoder().encode(encoded).byteLength > CUSTOMER_DATA_MAX_BYTES) return json({ error: 'Account data is too large.' }, 413);
+  await env.CALLFOCUS_CONFIG.put(customerDataKey(auth.user.id), encoded);
+  const profileName = String(incoming?.profile?.name || '').trim().slice(0, 120);
+  if (profileName && profileName !== auth.user.name) {
+    auth.user.name = profileName;
+    auth.user.updatedAt = new Date().toISOString();
+    await env.CALLFOCUS_CONFIG.put(customerUserKey(auth.user.id), JSON.stringify(auth.user));
+  }
+  return json({ ok: true, user: publicCustomerUser(auth.user), savedAt: new Date().toISOString() });
+}
+
+async function handleCustomerDelete(request, env) {
+  if (request.method !== 'DELETE') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'DELETE' } });
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Session expired.', code: 'session_expired' }, 401);
+  const emailKey = await customerEmailIndexKey(auth.user.email);
+  const phoneKey = customerPhoneIndexKey(auth.user.phone);
+  await Promise.all([
+    env.CALLFOCUS_CONFIG.delete(customerUserKey(auth.user.id)),
+    env.CALLFOCUS_CONFIG.delete(customerDataKey(auth.user.id)),
+    env.CALLFOCUS_CONFIG.delete(emailKey),
+    phoneKey.endsWith(':') ? Promise.resolve() : env.CALLFOCUS_CONFIG.delete(phoneKey),
+    env.CALLFOCUS_CONFIG.delete(await customerSessionKey(auth.token))
+  ]);
+  return json({ ok: true });
+}
+
+async function handleCustomerMigration(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is temporarily unavailable.' }, 503);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid migration request.' }, 400); }
+  const legacy = body?.account || {};
+  const incomingData = validCustomerDataShape(body?.data) ? body.data : null;
+  const email = normalizeCustomerEmail(legacy.email);
+  const phone = normalizeCustomerPhone(legacy.phone);
+  const name = String(legacy.name || incomingData?.profile?.name || '').trim().slice(0, 120);
+  if (!email || !name || !legacy.passwordHash) return json({ error: 'The old account is missing required login information.' }, 400);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: 'The old account email is invalid.' }, 400);
+
+  const existing = await readCustomerUserByEmail(env, email);
+  let user;
+  let data;
+  if (existing) {
+    const samePassword = existing.passwordHash === String(legacy.passwordHash || '') &&
+      String(existing.passwordSalt || '') === String(legacy.passwordSalt || '') &&
+      Number(existing.passwordIterations || 120000) === Number(legacy.passwordIterations || 120000);
+    if (!samePassword) return json({ error: 'This email already has a server account. Sign in on callfocus.link instead.', code: 'server_account_exists' }, 409);
+    user = existing;
+    const currentData = await env.CALLFOCUS_CONFIG.get(customerDataKey(existing.id), { type: 'json' });
+    data = mergeMigratedCustomerData(currentData, incomingData, user.name);
+    await env.CALLFOCUS_CONFIG.put(customerDataKey(existing.id), JSON.stringify(data));
+  } else {
+    const id = String(legacy.id || crypto.randomUUID()).slice(0, 160);
+    const now = new Date().toISOString();
+    user = {
+      id,
+      name,
+      email,
+      phone,
+      phoneVerified: !!legacy.phoneVerified,
+      passwordVersion: legacy.passwordVersion === 2 ? 2 : 1,
+      passwordSalt: String(legacy.passwordSalt || ''),
+      passwordIterations: Number(legacy.passwordIterations || 120000),
+      passwordHash: String(legacy.passwordHash || ''),
+      createdAt: legacy.createdAt || now,
+      updatedAt: now
+    };
+    const emailKey = await customerEmailIndexKey(email);
+    const phoneKey = phone ? customerPhoneIndexKey(phone) : '';
+    if (phoneKey && await env.CALLFOCUS_CONFIG.get(phoneKey)) return json({ error: 'That mobile number is already attached to another account.' }, 409);
+    data = incomingData || defaultCustomerData(name);
+    await Promise.all([
+      env.CALLFOCUS_CONFIG.put(customerUserKey(id), JSON.stringify(user)),
+      env.CALLFOCUS_CONFIG.put(emailKey, id),
+      phoneKey ? env.CALLFOCUS_CONFIG.put(phoneKey, id) : Promise.resolve(),
+      env.CALLFOCUS_CONFIG.put(customerDataKey(id), JSON.stringify(data))
+    ]);
+  }
+  const token = await createCustomerSession(env, user.id);
+  return json({ ok: true, migrated: true, token, user: publicCustomerUser(user), data });
+}
+
 async function getConfig(env) {
   if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.get !== 'function') return { ...DEFAULT_CONFIG };
   try {
@@ -525,6 +860,13 @@ The entire spoken call must stay in ${callLanguage}. This is a hard CallFocus se
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === '/api/auth/signup') return handleCustomerSignup(request, env);
+    if (url.pathname === '/api/auth/signin') return handleCustomerSignin(request, env);
+    if (url.pathname === '/api/auth/session') return handleCustomerSession(request, env);
+    if (url.pathname === '/api/auth/signout') return handleCustomerSignout(request, env);
+    if (url.pathname === '/api/auth/migrate') return handleCustomerMigration(request, env);
+    if (url.pathname === '/api/account/data') return handleCustomerData(request, env);
+    if (url.pathname === '/api/account' && request.method === 'DELETE') return handleCustomerDelete(request, env);
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
     if (url.pathname === '/api/admin/login' && request.method === 'POST') return handleAdminLogin(request, env);
