@@ -39,6 +39,7 @@
   <link rel="stylesheet" href="/v11.28-router.css?v=11.28" />
   <link rel="stylesheet" href="/v11.29-compact-history.css?v=11.29" />
   <link rel="stylesheet" href="/v11.30-recent-cards.css?v=11.30" />
+  <link rel="stylesheet" href="/v11.32-dynamics.css?v=11.32" />
 </head>
 <body>
   <div class="app-root home-page" id="pageRoot">
@@ -130,7 +131,7 @@
               <div class="hero-actions hero-enter hero-enter-4">
                 <button class="btn btn-primary hero-primary" id="heroNewCallBtn">Start a new call</button>
                 <button class="btn btn-ghost voice-note-launch voice-note-launch-main" id="heroCreateVoiceBtn"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Create a voice note</span></button>
-                <button class="btn btn-ghost voice-note-launch" id="heroHowBtn"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Reply with voice note</span></button>
+                <button class="btn btn-ghost voice-note-launch dynamics-launch" id="heroHowBtn"><span class="voice-note-launch-icon" aria-hidden="true">◎</span><span>Generate conversation dynamics</span></button>
               </div>
               <div class="hero-proof hero-enter hero-enter-4 hero-proof-spaced">
                 <div class="avatar-stack"><span>C</span><span>F</span><span>+</span></div>
@@ -637,5 +638,6 @@
   <script src="./v11.23-patch.js?v=11.23"></script>
   <script src="/v11.28-router.js?v=11.28"></script>
   <script src="/v11.29-compact-history.js?v=11.29"></script>
+  <script src="/v11.32-dynamics.js?v=11.32"></script>
 </body>
 </html>

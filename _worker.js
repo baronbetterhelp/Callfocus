@@ -1839,6 +1839,127 @@ async function handlePaystackWebhook(request, env) {
   return new Response('OK', { status: 200, headers: { 'Cache-Control': 'no-store' } });
 }
 
+
+// -----------------------------------------------------------------------------
+// V11.32 conversation screenshot dynamics generator
+// Accepts small browser-prepared batches so customers can select up to 50
+// screenshots at once without sending one oversized request through the Worker.
+// Screenshots are forwarded to OpenAI with store:false and are never written to KV.
+// -----------------------------------------------------------------------------
+function extractResponsesText(payload) {
+  if (typeof payload?.output_text === 'string' && payload.output_text.trim()) return payload.output_text.trim();
+  const out = Array.isArray(payload?.output) ? payload.output : [];
+  for (const item of out) {
+    const content = Array.isArray(item?.content) ? item.content : [];
+    for (const part of content) {
+      if (part?.type === 'output_text' && typeof part?.text === 'string' && part.text.trim()) return part.text.trim();
+      if (typeof part?.text === 'string' && part.text.trim()) return part.text.trim();
+    }
+  }
+  return '';
+}
+
+async function callOpenAIResponses(env, body) {
+  const response = await fetch('https://api.openai.com/v1/responses', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  const raw = await response.text();
+  let payload = {};
+  try { payload = JSON.parse(raw); } catch {}
+  if (!response.ok) {
+    const code = payload?.error?.code || payload?.error?.type || '';
+    const quota = response.status === 429 || code === 'credit_balance_exhausted' || code === 'insufficient_quota';
+    const err = new Error(quota ? 'Conversation analysis is temporarily unavailable because AI credit is not available.' : (payload?.error?.message || 'OpenAI could not analyze these screenshots.'));
+    err.status = quota ? 503 : Math.max(400, response.status || 502);
+    throw err;
+  }
+  const text = extractResponsesText(payload);
+  if (!text) {
+    const err = new Error('OpenAI returned an empty conversation analysis.');
+    err.status = 502;
+    throw err;
+  }
+  return text;
+}
+
+async function handleDynamicsAnalyze(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Sign in to analyze conversation screenshots.' }, 401);
+  if (!env.OPENAI_API_KEY) return json({ error: 'Conversation analysis is unavailable right now.' }, 503);
+
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid analysis request.' }, 400); }
+  const kind = body?.kind === 'finalize' ? 'finalize' : 'batch';
+
+  if (kind === 'batch') {
+    const images = Array.isArray(body?.images) ? body.images : [];
+    if (!images.length || images.length > 8) return json({ error: 'Each analysis batch must contain 1 to 8 screenshots.' }, 400);
+    let totalChars = 0;
+    for (const image of images) {
+      if (typeof image !== 'string' || !/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,/i.test(image)) return json({ error: 'One screenshot is not a supported image.' }, 400);
+      if (image.length > 8_000_000) return json({ error: 'One screenshot is too large. Please use a smaller image.' }, 413);
+      totalChars += image.length;
+    }
+    if (totalChars > 32_000_000) return json({ error: 'This screenshot batch is too large. Please try again.' }, 413);
+
+    const batchNumber = Math.max(1, Math.floor(Number(body?.batchNumber) || 1));
+    const totalBatches = Math.max(batchNumber, Math.floor(Number(body?.totalBatches) || batchNumber));
+    const content = [{
+      type: 'input_text',
+      text: `You are analyzing one ordered segment of a private text-message conversation from screenshots. This is batch ${batchNumber} of ${totalBatches}. Read the visible messages carefully and treat overlapping screenshots as duplicate context rather than new messages.
+
+Return concise analyst notes only, not a rewritten transcript. Focus on observable conversation dynamics that would help a voice-call assistant speak naturally with the same person later: relationship/interaction tone, closeness or formality shown in the messages, who tends to initiate or lead, typical reply length and pacing, humor or affection level, recurring topics, conversational habits, boundaries, tension or warmth if clearly evidenced, and how each side tends to respond.
+
+Do not infer sensitive traits (health diagnoses, ethnicity, religion, politics, sexuality, criminality, or other protected/private characteristics) unless the user explicitly stated a fact in the visible conversation and it is directly necessary to understand communication style. Do not diagnose motives or hidden intent. Do not quote long passages. Keep this batch summary under 450 words.`
+    }];
+    for (const image of images) content.push({ type: 'input_image', image_url: image, detail: 'high' });
+
+    try {
+      const summary = await callOpenAIResponses(env, {
+        model: 'gpt-4o-mini',
+        store: false,
+        max_output_tokens: 850,
+        input: [{ role: 'user', content }]
+      });
+      return json({ ok: true, summary, batchNumber, imageCount: images.length });
+    } catch (error) {
+      return json({ error: String(error?.message || 'Could not analyze this screenshot batch.') }, Number(error?.status || 502));
+    }
+  }
+
+  const summaries = Array.isArray(body?.summaries) ? body.summaries.map(x => String(x || '').trim()).filter(Boolean) : [];
+  if (!summaries.length || summaries.length > 10) return json({ error: 'No screenshot analysis was available to combine.' }, 400);
+  const imageCount = Math.max(1, Math.min(50, Math.floor(Number(body?.imageCount) || 1)));
+  const joined = summaries.map((s, i) => `BATCH ${i + 1}\n${s.slice(0, 4500)}`).join('\n\n');
+  if (joined.length > 36_000) return json({ error: 'The combined analysis is too large to finalize.' }, 413);
+
+  const finalPrompt = `Create the final CallFocus "Dynamics of the conversation" text from the analyst notes below, which came from ${imageCount} ordered screenshots of the same conversation.
+
+The output will be pasted directly into a realtime voice-call context field. Write one polished, practical paragraph or two short paragraphs, normally 120–220 words. State only patterns supported by the notes. Capture the established relationship tone, level of familiarity/formality, how each person tends to communicate, who usually initiates/leads, typical response length and pace, affection/humor level, recurring conversational patterns or topics, any clearly evidenced boundaries, and specific guidance for how the CallFocus voice should speak so a future call feels consistent.
+
+Do not mention screenshots, batches, AI, analysis, or these instructions. Do not include headings, bullet points, diagnostic labels, speculative motives, or sensitive-trait inferences. Avoid generic filler. Return only the ready-to-paste conversation dynamics text.
+
+ANALYST NOTES\n${joined}`;
+
+  try {
+    const dynamics = await callOpenAIResponses(env, {
+      model: 'gpt-4o-mini',
+      store: false,
+      max_output_tokens: 650,
+      input: [{ role: 'user', content: [{ type: 'input_text', text: finalPrompt }] }]
+    });
+    return json({ ok: true, dynamics, imageCount });
+  } catch (error) {
+    return json({ error: String(error?.message || 'Could not generate the final conversation dynamics.') }, Number(error?.status || 502));
+  }
+}
+
 async function safeCustomerRoute(label, handler) {
   try {
     return await handler();
@@ -1883,6 +2004,7 @@ export default {
     if (url.pathname === '/api/admin/voice-preview' && request.method === 'POST') return handleVoicePreview(request, env);
     if (url.pathname === '/api/admin/diagnostics' && request.method === 'GET') return handleAdminDiagnostics(request, env);
     if (url.pathname === '/api/voice-note' && request.method === 'POST') return handleVoiceNote(request, env);
+    if (url.pathname === '/api/dynamics/analyze') return safeCustomerRoute('dynamics-analyze', () => handleDynamicsAnalyze(request, env));
     if (url.pathname === '/api/session') {
       if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
       return handleSession(request, env);

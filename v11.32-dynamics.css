@@ -1,0 +1,33 @@
+/* CallFocus V11.32 — conversation screenshot dynamics generator */
+.dynamics-launch .voice-note-launch-icon{
+  width:38px;height:38px;border-radius:999px;display:inline-grid;place-items:center;
+  border:1px solid rgba(26,111,99,.16);background:rgba(236,247,243,.82);font-size:18px;
+}
+.dynamics-modal{width:min(760px,calc(100vw - 28px));max-height:min(88vh,920px);overflow:auto;padding-bottom:22px}
+.dynamics-modal .modal-head{position:sticky;top:0;z-index:4;background:rgba(250,252,250,.96);backdrop-filter:blur(16px);padding-bottom:14px}
+.dynamics-upload-zone{border:1.5px dashed rgba(30,98,88,.28);border-radius:22px;padding:24px 18px;text-align:center;background:linear-gradient(135deg,rgba(236,248,244,.72),rgba(252,248,239,.7));cursor:pointer;transition:.2s ease}
+.dynamics-upload-zone:hover,.dynamics-upload-zone:focus-within{border-color:rgba(22,121,103,.55);transform:translateY(-1px)}
+.dynamics-upload-zone strong{display:block;font-size:18px;color:#173f38;margin-bottom:6px}
+.dynamics-upload-zone p{margin:0;color:#71827e;font-size:14px;line-height:1.55}
+.dynamics-upload-icon{width:54px;height:54px;margin:0 auto 12px;border-radius:18px;display:grid;place-items:center;background:#fff;border:1px solid rgba(26,111,99,.14);font-size:25px;color:#1b7569}
+.dynamics-file-input{position:absolute;inline-size:1px;block-size:1px;opacity:0;pointer-events:none}
+.dynamics-selection-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:18px 2px 10px}
+.dynamics-selection-head strong{font-size:15px;color:#173f38}.dynamics-selection-head span{font-size:13px;color:#73827e}
+.dynamics-thumbs{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;max-height:190px;overflow:auto;padding:2px}
+.dynamics-thumb{position:relative;aspect-ratio:3/4;border-radius:12px;overflow:hidden;border:1px solid rgba(25,73,66,.12);background:#eef3f1}
+.dynamics-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.dynamics-thumb b{position:absolute;left:5px;bottom:5px;min-width:22px;height:22px;padding:0 5px;border-radius:999px;background:rgba(10,42,37,.78);color:white;font-size:11px;display:grid;place-items:center}
+.dynamics-empty-thumbs{grid-column:1/-1;padding:18px;border-radius:14px;background:rgba(241,245,243,.7);color:#84918e;text-align:center;font-size:13px}
+.dynamics-privacy{margin:15px 0 0;padding:12px 14px;border-radius:14px;background:#f6f7f4;color:#6d7c78;font-size:12.5px;line-height:1.5}
+.dynamics-progress-wrap{margin:18px 0 2px}.dynamics-progress-line{height:8px;border-radius:999px;background:#e8efec;overflow:hidden}.dynamics-progress-bar{height:100%;width:0;background:linear-gradient(90deg,#1f8e7e,#17695f);border-radius:999px;transition:width .25s ease}.dynamics-progress-copy{display:flex;justify-content:space-between;gap:12px;margin-top:8px;font-size:12.5px;color:#70807c}.dynamics-progress-wrap.hidden{display:none}
+.dynamics-result{margin-top:18px;padding:18px;border-radius:20px;border:1px solid rgba(29,91,82,.14);background:#fff}.dynamics-result.hidden{display:none}.dynamics-result-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.dynamics-result-head strong{font-size:16px;color:#163e37}.dynamics-result textarea{width:100%;min-height:210px;resize:vertical;border-radius:15px;border:1px solid rgba(22,72,65,.16);background:#f9fbfa;padding:14px 15px;font:500 14px/1.6 'DM Sans',sans-serif;color:#173f38;outline:none}.dynamics-result textarea:not([readonly]){background:white;border-color:rgba(20,126,109,.42);box-shadow:0 0 0 3px rgba(32,139,121,.08)}
+.dynamics-result-actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:12px}.dynamics-result-actions .btn{min-height:44px}.dynamics-status-error{color:#a54848!important}
+.dynamics-modal-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:18px}.dynamics-modal-actions .btn{min-width:150px}
+@media(max-width:680px){
+  .dynamics-modal{width:calc(100vw - 18px);max-height:92vh;border-radius:24px;padding:18px}
+  .dynamics-thumbs{grid-template-columns:repeat(5,minmax(0,1fr));max-height:170px}
+  .dynamics-upload-zone{padding:20px 14px}
+  .dynamics-modal-actions{display:grid;grid-template-columns:1fr}.dynamics-modal-actions .btn{width:100%}
+  .dynamics-result-actions{display:grid;grid-template-columns:1fr 1fr}.dynamics-result-actions .btn{width:100%}
+}
+@media(max-width:420px){.dynamics-thumbs{grid-template-columns:repeat(4,minmax(0,1fr))}}
