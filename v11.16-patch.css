@@ -1,0 +1,39 @@
+/* CallFocus V11.16 — individual conversation deletion */
+.cf-thread-delete-btn{
+  appearance:none;
+  border:1px solid rgba(255,111,111,.24);
+  background:rgba(255,111,111,.07);
+  color:#e99494;
+  border-radius:12px;
+  min-height:38px;
+  padding:0 12px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  font:700 9px/1 'DM Sans',system-ui,sans-serif;
+  transition:background .18s ease,border-color .18s ease,transform .18s ease;
+  justify-self:end;
+}
+.cf-thread-delete-btn:hover{background:rgba(255,111,111,.12);border-color:rgba(255,111,111,.38);transform:translateY(-1px)}
+.cf-thread-delete-btn span{font-size:15px;line-height:1}.cf-thread-delete-btn b{font:inherit}
+.cf-chat-header.cf-thread-head-with-delete{grid-template-columns:auto 46px minmax(0,1fr) auto}
+.thread-detail-head.cf-thread-head-with-delete{grid-template-columns:58px minmax(0,1fr) auto}
+.cf-delete-conversation-note{display:grid;gap:5px;padding:13px 14px;margin:4px 0 16px;border:1px solid rgba(255,111,111,.16);background:rgba(255,111,111,.045);border-radius:14px}
+.cf-delete-conversation-note strong{font-size:10px;color:#f0b0b0}.cf-delete-conversation-note span{font-size:9px;line-height:1.55;color:#9e8585}
+.cf-delete-conversation-actions{margin-top:4px}
+html[data-theme="pearl"] .cf-thread-delete-btn{background:#fff7f6;border-color:#ead0cd;color:#a84d49;box-shadow:0 8px 22px rgba(112,54,49,.045)}
+html[data-theme="pearl"] .cf-thread-delete-btn:hover{background:#fff0ee;border-color:#ddb6b2}
+html[data-theme="pearl"] .cf-delete-conversation-note{background:#fff8f7;border-color:#ead7d4}
+html[data-theme="pearl"] .cf-delete-conversation-note strong{color:#8f4541}
+html[data-theme="pearl"] .cf-delete-conversation-note span{color:#856b68}
+html[data-theme="pearl"] .cf-delete-conversation-modal .danger-button{background:#8f3f3b!important;color:#fff!important;border-color:#8f3f3b!important}
+@media(max-width:1000px){
+  .cf-chat-header.cf-thread-head-with-delete{grid-template-columns:auto 42px minmax(0,1fr) auto}
+}
+@media(max-width:620px){
+  .cf-chat-header.cf-thread-head-with-delete{grid-template-columns:auto minmax(0,1fr) auto}
+  .cf-thread-delete-btn{width:38px;height:38px;min-height:38px;padding:0;border-radius:50%}
+  .cf-thread-delete-btn b{display:none}
+  .cf-thread-delete-btn span{font-size:16px}
+}
