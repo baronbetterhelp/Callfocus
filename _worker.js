@@ -132,6 +132,34 @@ async function handleCreditEntitlement(request, env) {
   return json({ unlimited: list.includes(email), email });
 }
 
+
+async function handleAdminUnlimitedUser(request, env) {
+  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.put !== 'function') {
+    return json({ error: 'Global admin storage is not connected yet. Add a Workers KV binding named CALLFOCUS_CONFIG.' }, 503);
+  }
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const action = String(body?.action || '').trim().toLowerCase();
+  const email = String(body?.email || '').trim().toLowerCase();
+  if (!['add','remove'].includes(action)) return json({ error: 'Invalid action.' }, 400);
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: 'Enter a valid email address.' }, 400);
+
+  const current = await getConfig(env);
+  let list = Array.isArray(current.unlimitedCreditEmails) ? current.unlimitedCreditEmails.map(v => String(v || '').trim().toLowerCase()) : [];
+  list = [...new Set(list.filter(v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)))];
+  if (action === 'add') {
+    if (!list.includes(email)) list.push(email);
+  } else {
+    list = list.filter(v => v !== email);
+  }
+  list = list.slice(0, 500);
+  const config = sanitizeConfig({ ...current, unlimitedCreditEmails: list });
+  await env.CALLFOCUS_CONFIG.put('global_config', JSON.stringify(config));
+  return json({ ok: true, action, email, unlimitedCreditEmails: config.unlimitedCreditEmails, config });
+}
+
 async function handleAdminConfig(request, env) {
   if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method === 'GET') {
@@ -480,6 +508,7 @@ export default {
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
     if (url.pathname === '/api/admin/login' && request.method === 'POST') return handleAdminLogin(request, env);
     if (url.pathname === '/api/admin/config') return handleAdminConfig(request, env);
+    if (url.pathname === '/api/admin/unlimited-user') return handleAdminUnlimitedUser(request, env);
     if (url.pathname === '/api/admin/voice-preview' && request.method === 'POST') return handleVoicePreview(request, env);
     if (url.pathname === '/api/admin/diagnostics' && request.method === 'GET') return handleAdminDiagnostics(request, env);
     if (url.pathname === '/api/voice-note' && request.method === 'POST') return handleVoiceNote(request, env);

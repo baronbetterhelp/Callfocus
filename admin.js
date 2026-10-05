@@ -21,11 +21,26 @@ function renderUnlimitedUsers(){
   const list=[...unlimitedCreditEmails].sort((a,b)=>a.localeCompare(b));
   root.innerHTML=list.length?list.map(email=>`<div class="admin-unlimited-user"><span><strong>${email.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</strong><small>Unlimited calls + voice notes</small></span><button type="button" data-remove-unlimited="${email.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}">Remove</button></div>`).join(''):'<div class="admin-unlimited-empty">No unlimited-credit users yet.</div>';
 }
-function addUnlimitedUser(){
-  const input=$('adminUnlimitedEmail'); const email=normalizeUnlimitedEmail(input?.value||'');
+async function setUnlimitedUser(action,email,button){
+  const normalized=normalizeUnlimitedEmail(email);
+  if(!validUnlimitedEmail(normalized))return toast('Enter a valid email address');
+  const oldText=button?.textContent||'';
+  if(button){button.disabled=true;button.textContent=action==='add'?'Adding…':'Removing…';}
+  try{
+    const result=await api('/api/admin/unlimited-user',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,email:normalized})});
+    unlimitedCreditEmails=Array.isArray(result.unlimitedCreditEmails)?result.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail):[];
+    renderUnlimitedUsers();
+    saveBackup({...formPayload(),unlimitedCreditEmails:[...unlimitedCreditEmails]});
+    toast(action==='add'?'Unlimited access enabled immediately':'Unlimited access removed immediately');
+    return true;
+  }catch(err){toast(err.message);return false}
+  finally{if(button){button.disabled=false;button.textContent=oldText;}}
+}
+async function addUnlimitedUser(){
+  const input=$('adminUnlimitedEmail'); const email=normalizeUnlimitedEmail(input?.value||''); const btn=$('adminUnlimitedAddBtn');
   if(!validUnlimitedEmail(email))return toast('Enter a valid email address');
   if(unlimitedCreditEmails.includes(email))return toast('That email already has unlimited access');
-  unlimitedCreditEmails=[...unlimitedCreditEmails,email]; if(input)input.value=''; renderUnlimitedUsers(); scheduleDraftBackup(); toast('Unlimited user added — save global settings to apply');
+  const ok=await setUnlimitedUser('add',email,btn); if(ok&&input)input.value='';
 }
 function fill(config,storageConnected){currentConfig=config;unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);renderServerState();renderBackupStatus(storageConnected)}
 async function api(path,options={}){const res=await fetch(path,{...options,headers:authHeaders(options.headers||{})});const type=res.headers.get('content-type')||'';const data=type.includes('application/json')?await res.json():await res.text();if(!res.ok)throw new Error(data?.error||data||'Request failed');return data}
@@ -40,7 +55,7 @@ $('adminGateBtn').onclick=login;$('adminPasscode').addEventListener('keydown',e=
 ['adminServerMessage','adminMaleVoice','adminFemaleVoice','adminSpeakingPace','adminSpeechStyle','adminInstructions','adminOpening','adminSpeakFirst','adminInterruptions'].forEach(id=>$(id)?.addEventListener('input',scheduleDraftBackup));
 $('adminUnlimitedAddBtn')?.addEventListener('click',addUnlimitedUser);
 $('adminUnlimitedEmail')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addUnlimitedUser();}});
-$('adminUnlimitedList')?.addEventListener('click',e=>{const btn=e.target.closest('[data-remove-unlimited]');if(!btn)return;const email=normalizeUnlimitedEmail(btn.dataset.removeUnlimited);unlimitedCreditEmails=unlimitedCreditEmails.filter(x=>x!==email);renderUnlimitedUsers();scheduleDraftBackup();toast('Unlimited user removed — save global settings to apply');});
+$('adminUnlimitedList')?.addEventListener('click',async e=>{const btn=e.target.closest('[data-remove-unlimited]');if(!btn)return;const email=normalizeUnlimitedEmail(btn.dataset.removeUnlimited);await setUnlimitedUser('remove',email,btn);});
 const remembered=sessionStorage.getItem('callfocus_admin_key');if(remembered){adminKey=remembered;api('/api/admin/config').then(r=>{$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!r.storageConnected&&backup?.config){fill(backup.config,false)}else{fill(r.config,r.storageConnected);if(r.storageConnected)saveBackup(r.config)}}).catch(()=>{adminKey='';sessionStorage.removeItem('callfocus_admin_key')})}
 
 async function runDiagnostics(){
