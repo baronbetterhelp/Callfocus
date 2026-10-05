@@ -12,6 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./app.css" />
   <link rel="stylesheet" href="./v10.2-patch.css" />
+  <link rel="stylesheet" href="./v10.5-patch.css" />
 </head>
 <body class="admin-page">
   <header class="site-header">
@@ -38,6 +39,28 @@
       <div class="admin-page-head">
         <div><span class="kicker">System control</span><h1>CallFocus Admin</h1><p>Control live calling, voices and the conversational behavior used across the entire website.</p></div>
         <button class="btn btn-ghost" id="adminLockBtn">Lock admin</button>
+      </div>
+
+
+      <div class="premium-panel admin-theme-panel">
+        <div>
+          <span class="kicker">Website appearance</span>
+          <h3>Customer site theme</h3>
+          <p class="admin-panel-copy">Switch the customer website globally. New visitors and refreshed pages use the selected theme immediately.</p>
+        </div>
+        <div class="admin-theme-choice" role="radiogroup" aria-label="Customer site theme">
+          <button class="admin-theme-option active" type="button" data-site-theme="black" aria-pressed="true">
+            <span class="admin-theme-preview admin-theme-preview-black"><i></i><b></b><em></em></span>
+            <strong>Midnight Black</strong>
+            <small>Current premium dark theme</small>
+          </button>
+          <button class="admin-theme-option" type="button" data-site-theme="pearl" aria-pressed="false">
+            <span class="admin-theme-preview admin-theme-preview-pearl"><i></i><b></b><em></em></span>
+            <strong>Pearl Aurora</strong>
+            <small>Porcelain pearl, jade, champagne and icy blue</small>
+          </button>
+        </div>
+        <input type="hidden" id="adminSiteTheme" value="black" />
       </div>
 
       <div class="premium-panel admin-server-panel">

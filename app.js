@@ -32,6 +32,7 @@ const ADMIN_DEFAULTS = {
   maleVoice:'cedar',
   femaleVoice:'marin',
   model:'gpt-live-1',
+  siteTheme:'black',
   instructions:'Follow the customer-provided call rules and relationship context closely. Keep the conversation responsive and natural. Do not turn a social call into an interview, support exchange, coaching session, or scripted agenda.',
   opening:'Use the customer-selected opening for each call. Greet naturally, then pause and let the other person respond before moving further into the topic.',
   speakFirst:true,
@@ -56,7 +57,14 @@ function accounts(){ return readJSON(ACCOUNTS_KEY, []); }
 function accountDataKey(id){ return `callfocus_account_data_v4_${id}`; }
 function defaultData(name=''){ return { profile:{name,role:'',about:'',rules:''}, callers:[], threads:[] }; }
 function loadAdmin(){ return {...ADMIN_DEFAULTS, ...remoteAdmin}; }
-async function refreshPublicConfig(){ try{ const res=await fetch('/api/public-config',{cache:'no-store'}); if(res.ok){ remoteAdmin={...ADMIN_DEFAULTS,...await res.json()}; applyAdminLabels(); } }catch{} return loadAdmin(); }
+function applyGlobalTheme(theme){
+  const next=theme==='pearl'?'pearl':'black';
+  document.documentElement.dataset.theme=next;
+  document.documentElement.style.colorScheme=next==='pearl'?'light':'dark';
+  const meta=document.querySelector('meta[name="theme-color"]');
+  if(meta) meta.setAttribute('content',next==='pearl'?'#f7f8f5':'#080808');
+}
+async function refreshPublicConfig(){ try{ const res=await fetch('/api/public-config',{cache:'no-store'}); if(res.ok){ remoteAdmin={...ADMIN_DEFAULTS,...await res.json()}; applyGlobalTheme(remoteAdmin.siteTheme); applyAdminLabels(); } }catch{} return loadAdmin(); }
 function initials(name='?'){ return (String(name).trim()[0] || '?').toUpperCase(); }
 function normalizeName(name=''){ return String(name).trim().toLowerCase().replace(/\s+/g,' '); }
 function toast(message){ $('toast').textContent = message; $('toast').classList.remove('hidden'); clearTimeout(toast._t); toast._t = setTimeout(()=>$('toast').classList.add('hidden'), 2400); }
