@@ -1,0 +1,94 @@
+/* CallFocus V11.25 — mobile full-screen Recent Calls viewer fixes */
+
+/* In the read-only full-screen viewer, keep the top bar as simple as ChatGPT:
+   menu + conversation title + close. Conversation deletion remains available
+   on the normal Recent Calls management page. */
+body.cf-chat-screen-open #page-recent .cf-thread-delete-btn{
+  display:none!important;
+}
+
+/* Prevent the full-screen conversation shell from creating a second header row. */
+body.cf-chat-screen-open #page-recent .cf-chat-header{
+  grid-template-columns:auto 46px minmax(0,1fr) auto!important;
+  grid-template-rows:1fr!important;
+  grid-auto-rows:0!important;
+  align-items:center!important;
+  box-sizing:border-box!important;
+}
+
+/* Keep the conversation itself as the only vertical scroller. This fixes iOS
+   getting visually stuck at the top of a fixed full-screen page. */
+body.cf-chat-screen-open #page-recent .thread-detail-panel,
+body.cf-chat-screen-open #page-recent .cf-chat-thread{
+  min-height:0!important;
+  overflow:hidden!important;
+}
+body.cf-chat-screen-open #page-recent .cf-chat-scroll{
+  min-height:0!important;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+  -webkit-overflow-scrolling:touch!important;
+  overscroll-behavior-y:contain!important;
+  touch-action:pan-y!important;
+  scroll-behavior:auto!important;
+}
+
+/* The conversation drawer must also remain independently scrollable. */
+body.cf-chat-screen-open #page-recent .recent-list-panel{
+  min-height:0!important;
+  overflow:hidden!important;
+}
+body.cf-chat-screen-open #page-recent .recent-list{
+  height:100%!important;
+  max-height:none!important;
+  overflow-y:auto!important;
+  -webkit-overflow-scrolling:touch!important;
+  touch-action:pan-y!important;
+}
+
+@media(max-width:1000px){
+  body.cf-chat-screen-open #page-recent .cf-chat-header{
+    grid-template-columns:auto 42px minmax(0,1fr) auto!important;
+  }
+}
+
+@media(max-width:620px){
+  /* V11.24 used viewport-fit=cover but did not reserve the iPhone safe area.
+     That placed the title underneath the status bar / Dynamic Island. */
+  body.cf-chat-screen-open #page-recent .cf-chat-header{
+    grid-template-columns:42px minmax(0,1fr) 42px!important;
+    gap:10px!important;
+    height:calc(68px + env(safe-area-inset-top))!important;
+    min-height:calc(68px + env(safe-area-inset-top))!important;
+    flex-basis:calc(68px + env(safe-area-inset-top))!important;
+    padding:calc(10px + env(safe-area-inset-top)) 12px 10px!important;
+  }
+
+  body.cf-chat-screen-open #page-recent .cf-conversation-switcher{
+    grid-column:1!important;
+    grid-row:1!important;
+    align-self:end!important;
+  }
+  body.cf-chat-screen-open #page-recent .cf-chat-heading{
+    grid-column:2!important;
+    grid-row:1!important;
+    align-self:end!important;
+    min-width:0!important;
+  }
+  body.cf-chat-screen-open #page-recent .cf-v1124-chat-close{
+    grid-column:3!important;
+    grid-row:1!important;
+    align-self:end!important;
+    justify-self:end!important;
+  }
+
+  body.cf-chat-screen-open #page-recent .cf-chat-scroll{
+    padding:18px 12px calc(30px + env(safe-area-inset-bottom))!important;
+  }
+
+  /* The Recents drawer gets the same safe-area treatment when opened. */
+  body.cf-chat-screen-open #page-recent .recent-list-panel{
+    padding-top:env(safe-area-inset-top)!important;
+    padding-bottom:env(safe-area-inset-bottom)!important;
+  }
+}

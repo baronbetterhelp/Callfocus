@@ -1,17 +1,15 @@
-# CallFocus V11.24
+# CallFocus V11.25
 
-Built directly on V11.23 and keeps the V11.22 Paystack reconciliation fixes intact.
+Mobile full-screen Recent Calls viewer fix built directly on V11.24.
 
-## Added in V11.24
+## Fixed in V11.25
 
-- Clicking a Recent Call card from the workspace now opens a dedicated full-screen conversation-history view, similar to opening a conversation in ChatGPT.
-- On mobile, the menu button opens a slide-in Recents drawer containing every saved CallFocus conversation thread, so the user can switch conversations without leaving the history screen.
-- Desktop keeps the complete conversation list visible as a left sidebar.
-- Added an explicit Close button in the conversation header to return to the previous CallFocus screen.
-- The full-screen viewer intentionally hides the large saved-context/edit/setup panels and focuses on the V11.23 compact call-history information: date, time, duration, call number and brief details.
-- Existing Recent Calls continuation/edit/call-again functionality remains available through the normal Recent Calls workspace and has not been removed.
-- No payment, credit, OpenAI, Paystack, account, voice-note or admin logic was changed.
+- fixes the conversation header sitting underneath the iPhone status bar / Dynamic Island
+- keeps the Close button inside the same top bar instead of wrapping onto a second row
+- hides the destructive Delete Conversation control only inside the read-only full-screen viewer; it remains available on the normal Recent Calls management page
+- makes the call-history area the dedicated vertical scroller on iOS
+- preserves touch scrolling and safe-area spacing at the top and bottom
+- gives the mobile Recents drawer safe-area spacing and independent scrolling
+- resets a newly opened conversation to its true top after the mobile layout finishes
 
-## Stable payment base
-
-V11.24 includes the V11.22 Paystack recovery/reconciliation fixes and V11.23 compact history changes unchanged.
+No changes were made to Paystack V11.22 reconciliation, credits, realtime calling, voice notes, admin rules, account sync, or the Pearl Aurora theme.
