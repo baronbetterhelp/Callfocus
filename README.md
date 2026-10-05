@@ -1,29 +1,45 @@
-CallFocus V11.17 — Server-backed Accounts
+CallFocus V11.18 — Account Repair + Email Verification Ready
 
 What changed
-- Customer accounts now live in the existing Cloudflare Workers KV binding CALLFOCUS_CONFIG instead of being tied only to one browser domain.
-- Sign up, sign in, sign out, session restore and account deletion now use secure server endpoints.
-- Passwords are stored as salted PBKDF2-SHA256 hashes, never plaintext.
-- Caller profiles, Recent Calls, profile data, wallet/credit state and voice-note metadata sync to the server account.
-- The same account can now work on callfocus.link, www.callfocus.link and other devices/browsers after sign-in.
-- Added a one-time Workers.dev migration flow so an existing local account can be transferred to callfocus.link without losing callers or call threads.
-- No new Cloudflare binding is required. The existing CALLFOCUS_CONFIG KV namespace is reused with separate customer key prefixes.
+- Removed the old Workers.dev account-transfer controls from the customer login/create-account screen.
+- New accounts are stored in the existing server-side CALLFOCUS_CONFIG Workers KV namespace so the same login can be used on callfocus.link and other devices/browsers.
+- Added an account-recovery safeguard: if a previous deployment created the KV account but failed before returning the browser session, entering the same email/password during Create account recovers and signs into that existing account instead of failing with a duplicate-account loop.
+- Added password visibility eye buttons to create account, sign in and password-reset fields.
+- Added Forgot password flow.
+- Added optional email verification for new users with a branded CallFocus verification-code email.
+- Added branded CallFocus password-reset emails.
+- Password resets increment the account authentication version so older sessions are invalidated.
+- Passwords remain salted PBKDF2-SHA256 hashes on the server and are never stored as plaintext.
+- Added wrangler.jsonc to the UPDATE package so the CALLFOCUS_CONFIG KV binding is kept in GitHub/Cloudflare deployments.
 
-One-time migration for the existing account
-1. Deploy V11.17 first.
-2. Open https://callfocus.link and choose Sign in.
-3. Tap “Transfer my old Workers.dev account”.
-4. CallFocus opens the old workers.dev address.
-5. If you are still signed in there, transfer happens automatically. If not, sign in once using the old account password.
-6. CallFocus redirects back to https://callfocus.link and signs the migrated account in.
+Important account-storage fix
+The V11.18 update package includes wrangler.jsonc with:
+- binding: CALLFOCUS_CONFIG
+- KV namespace ID: 772f9544dbb7486480e876df3a7a7d3d
+- keep_vars: true
 
-Important
-- Do not delete the old Workers.dev account/data before migration is complete.
-- Keep the CALLFOCUS_CONFIG binding attached to Production deployments.
-- This update does not require a new KV namespace.
+Do not remove that binding from wrangler.jsonc. This is what makes customer accounts persist across deployments and devices.
 
-Files changed from V11.16
+Email verification behavior
+V11.18 supports Resend automatically when BOTH of these Cloudflare runtime values exist:
+- RESEND_API_KEY
+- CALLFOCUS_FROM_EMAIL
+
+Recommended sender after verifying callfocus.link in Resend:
+CallFocus <accounts@callfocus.link>
+
+Until those two values are configured, account creation still works for testing and creates a server-backed account without blocking on email verification. Once both values are configured, NEW account creation automatically changes to:
+1. Customer enters account details.
+2. CallFocus sends a branded 6-digit verification code.
+3. The code expires after 10 minutes.
+4. The account is created only after the correct code is entered.
+
+Forgot password
+Forgot password uses the same verified sender. When email is configured, CallFocus sends a 6-digit password-reset code. A successful reset invalidates older authenticated sessions.
+
+Files changed from V11.17
 - _worker.js
 - index.html
-- v11.17-patch.js
-- v11.17-patch.css
+- v11.18-patch.js
+- v11.18-patch.css
+- wrangler.jsonc (included in update package to preserve the KV binding)

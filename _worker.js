@@ -75,6 +75,92 @@ function json(data, status = 200) {
 // -----------------------------------------------------------------------------
 const CUSTOMER_SESSION_TTL = 60 * 60 * 24 * 30; // 30 days
 const CUSTOMER_DATA_MAX_BYTES = 2_000_000;
+const CUSTOMER_EMAIL_CODE_TTL = 60 * 10; // 10 minutes
+
+function callFocusEmailConfigured(env) {
+  return !!String(env.RESEND_API_KEY || '').trim() && !!String(env.CALLFOCUS_FROM_EMAIL || '').trim();
+}
+
+function escapeHtml(value = '') {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function makeSixDigitCode() {
+  const a = new Uint32Array(1);
+  crypto.getRandomValues(a);
+  return String(100000 + (a[0] % 900000));
+}
+
+async function customerCodeHash(email, code, purpose = 'verify') {
+  return sha256Hex(`${purpose}:${normalizeCustomerEmail(email)}:${String(code || '').trim()}`);
+}
+
+async function pendingSignupKey(email) {
+  return `customer:pending-signup:${await sha256Hex(normalizeCustomerEmail(email))}`;
+}
+
+async function passwordResetKey(email) {
+  return `customer:password-reset:${await sha256Hex(normalizeCustomerEmail(email))}`;
+}
+
+function callFocusEmailShell({ preheader = '', eyebrow = 'CALLFOCUS ACCOUNT', title = '', body = '', code = '', footer = '' }) {
+  const safePreheader = escapeHtml(preheader);
+  const safeEyebrow = escapeHtml(eyebrow);
+  const safeTitle = escapeHtml(title);
+  const safeCode = escapeHtml(code);
+  const safeFooter = escapeHtml(footer || 'If you did not request this, you can ignore this email.');
+  return `<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#eef5f2;font-family:Arial,Helvetica,sans-serif;color:#173d37;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${safePreheader}</div>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef5f2;padding:28px 12px;"><tr><td align="center">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border:1px solid #dbe8e3;border-radius:28px;overflow:hidden;box-shadow:0 18px 50px rgba(21,75,65,.08);">
+    <tr><td style="padding:30px 30px 18px;">
+      <div style="font-size:13px;font-weight:800;letter-spacing:.18em;color:#2a897b;">${safeEyebrow}</div>
+      <div style="margin-top:10px;font-size:32px;line-height:1.12;font-weight:800;color:#123c35;">${safeTitle}</div>
+    </td></tr>
+    <tr><td style="padding:0 30px 12px;font-size:17px;line-height:1.65;color:#5b746f;">${body}</td></tr>
+    ${safeCode ? `<tr><td style="padding:12px 30px 22px;"><div style="background:linear-gradient(135deg,#edf8f4,#f8f5ed);border:1px solid #cfe4dc;border-radius:20px;padding:22px;text-align:center;"><div style="font-size:13px;font-weight:800;letter-spacing:.16em;color:#6a7e79;margin-bottom:8px;">VERIFICATION CODE</div><div style="font-size:38px;letter-spacing:.18em;font-weight:800;color:#165f53;">${safeCode}</div><div style="margin-top:10px;font-size:13px;color:#7d8e89;">This code expires in 10 minutes.</div></div></td></tr>` : ''}
+    <tr><td style="padding:0 30px 30px;font-size:13px;line-height:1.6;color:#8a9a96;">${safeFooter}</td></tr>
+  </table>
+  <div style="max-width:560px;padding:16px 10px 0;font-size:12px;color:#90a09c;text-align:center;">CallFocus · Conversation continuity, simplified.</div>
+</td></tr></table>
+</body></html>`;
+}
+
+async function sendCallFocusEmail(env, { to, subject, html, text = '' }) {
+  if (!callFocusEmailConfigured(env)) {
+    const error = new Error('Email verification is not configured yet.');
+    error.code = 'email_not_configured';
+    throw error;
+  }
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${String(env.RESEND_API_KEY).trim()}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      from: String(env.CALLFOCUS_FROM_EMAIL).trim(),
+      to: [to],
+      subject,
+      html,
+      text: text || undefined
+    })
+  });
+  if (!response.ok) {
+    let detail = '';
+    try { detail = (await response.json())?.message || ''; } catch {}
+    const error = new Error(detail || 'The verification email could not be sent.');
+    error.code = 'email_send_failed';
+    throw error;
+  }
+}
 
 function normalizeCustomerEmail(value = '') {
   return String(value || '').trim().toLowerCase();
@@ -156,6 +242,7 @@ function publicCustomerUser(user) {
     email: user.email || '',
     phone: user.phone || '',
     phoneVerified: !!user.phoneVerified,
+    emailVerified: !!user.emailVerified,
     createdAt: user.createdAt || null,
     updatedAt: user.updatedAt || null
   };
@@ -195,10 +282,12 @@ async function readCustomerUserByEmail(env, email) {
   return await env.CALLFOCUS_CONFIG.get(customerUserKey(userId), { type: 'json' });
 }
 
-async function createCustomerSession(env, userId) {
+async function createCustomerSession(env, userOrId) {
+  const userId = typeof userOrId === 'string' ? userOrId : userOrId?.id;
+  const authVersion = typeof userOrId === 'string' ? 1 : Number(userOrId?.authVersion || 1);
   const token = randomToken(36);
   const key = await customerSessionKey(token);
-  await env.CALLFOCUS_CONFIG.put(key, JSON.stringify({ userId, createdAt: new Date().toISOString() }), { expirationTtl: CUSTOMER_SESSION_TTL });
+  await env.CALLFOCUS_CONFIG.put(key, JSON.stringify({ userId, authVersion, createdAt: new Date().toISOString() }), { expirationTtl: CUSTOMER_SESSION_TTL });
   return token;
 }
 
@@ -211,6 +300,9 @@ async function authenticatedCustomer(request, env) {
   if (!session?.userId) return null;
   const user = await env.CALLFOCUS_CONFIG.get(customerUserKey(session.userId), { type: 'json' });
   if (!user) return null;
+  const userAuthVersion = Number(user.authVersion || 1);
+  const sessionAuthVersion = Number(session.authVersion || 1);
+  if (userAuthVersion !== sessionAuthVersion) return null;
   return { token, session, user };
 }
 
@@ -239,36 +331,208 @@ function mergeMigratedCustomerData(existing, incoming, name = '') {
   };
 }
 
-async function handleCustomerSignup(request, env) {
-  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
-  if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is temporarily unavailable.' }, 503);
-  let body;
-  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+function validateCustomerSignupBody(body) {
   const name = String(body?.name || '').trim().slice(0, 120);
   const email = normalizeCustomerEmail(body?.email);
   const phone = normalizeCustomerPhone(body?.phone);
   const password = String(body?.password || '');
-  if (!name || !email || !phone || !password) return json({ error: 'Complete every account field.' }, 400);
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: 'Enter a valid email address.' }, 400);
-  if (password.length < 8) return json({ error: 'Use at least 8 characters for your password.' }, 400);
-  const emailKey = await customerEmailIndexKey(email);
-  if (await env.CALLFOCUS_CONFIG.get(emailKey)) return json({ error: 'An account with that email already exists.' }, 409);
-  const phoneKey = customerPhoneIndexKey(phone);
-  if (phoneKey.endsWith(':')) return json({ error: 'Enter a valid mobile number.' }, 400);
-  if (await env.CALLFOCUS_CONFIG.get(phoneKey)) return json({ error: 'That mobile number is already attached to an account.' }, 409);
+  if (!name || !email || !phone || !password) return { error: 'Complete every account field.' };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: 'Enter a valid email address.' };
+  if (password.length < 8) return { error: 'Use at least 8 characters for your password.' };
+  return { name, email, phone, password };
+}
 
+async function ensureCustomerIdentityAvailable(env, email, phone) {
+  const emailKey = await customerEmailIndexKey(email);
+  if (await env.CALLFOCUS_CONFIG.get(emailKey)) return { error: 'An account with that email already exists.', status: 409 };
+  const phoneKey = customerPhoneIndexKey(phone);
+  if (phoneKey.endsWith(':')) return { error: 'Enter a valid mobile number.', status: 400 };
+  if (await env.CALLFOCUS_CONFIG.get(phoneKey)) return { error: 'That mobile number is already attached to an account.', status: 409 };
+  return { emailKey, phoneKey };
+}
+
+async function createCustomerAccount(env, { name, email, phone, passwordRecord, emailVerified = false }) {
+  const available = await ensureCustomerIdentityAvailable(env, email, phone);
+  if (available.error) return { error: available.error, status: available.status };
   const id = crypto.randomUUID();
-  const passwordRecord = await buildCustomerPasswordRecord(password);
   const now = new Date().toISOString();
-  const user = { id, name, email, phone, phoneVerified: false, ...passwordRecord, createdAt: now, updatedAt: now };
+  const user = {
+    id, name, email, phone,
+    phoneVerified: false,
+    emailVerified: !!emailVerified,
+    authVersion: 1,
+    ...passwordRecord,
+    createdAt: now,
+    updatedAt: now
+  };
   const data = defaultCustomerData(name);
   await Promise.all([
     env.CALLFOCUS_CONFIG.put(customerUserKey(id), JSON.stringify(user)),
-    env.CALLFOCUS_CONFIG.put(emailKey, id),
-    env.CALLFOCUS_CONFIG.put(phoneKey, id),
+    env.CALLFOCUS_CONFIG.put(available.emailKey, id),
+    env.CALLFOCUS_CONFIG.put(available.phoneKey, id),
     env.CALLFOCUS_CONFIG.put(customerDataKey(id), JSON.stringify(data))
   ]);
-  const token = await createCustomerSession(env, id);
+  const token = await createCustomerSession(env, user);
+  return { ok: true, token, user, data };
+}
+
+async function handleCustomerSignup(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is not connected. Re-deploy with the CALLFOCUS_CONFIG KV binding from wrangler.jsonc.', code: 'account_storage_unavailable' }, 503);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const fields = validateCustomerSignupBody(body);
+  if (fields.error) return json({ error: fields.error }, 400);
+  const passwordRecord = await buildCustomerPasswordRecord(fields.password);
+  const created = await createCustomerAccount(env, { ...fields, passwordRecord, emailVerified: false });
+  if (!created.ok) return json({ error: created.error }, created.status || 400);
+  return json({ ok: true, token: created.token, user: publicCustomerUser(created.user), data: created.data, emailVerificationConfigured: callFocusEmailConfigured(env) });
+}
+
+async function handleCustomerSignupRequest(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is not connected. Re-deploy with the CALLFOCUS_CONFIG KV binding from wrangler.jsonc.', code: 'account_storage_unavailable' }, 503);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const fields = validateCustomerSignupBody(body);
+  if (fields.error) return json({ error: fields.error }, 400);
+
+  // Recover gracefully if an earlier deployment created the account in KV but
+  // the browser never received its session token. The same password proves
+  // ownership and lets the customer continue without creating a duplicate.
+  const existingUser = await readCustomerUserByEmail(env, fields.email);
+  if (existingUser) {
+    if (await verifyCustomerPassword(existingUser, fields.password)) {
+      const token = await createCustomerSession(env, existingUser);
+      const data = (await env.CALLFOCUS_CONFIG.get(customerDataKey(existingUser.id), { type: 'json' })) || defaultCustomerData(existingUser.name);
+      return json({ ok: true, verificationRequired: false, recoveredExisting: true, token, user: publicCustomerUser(existingUser), data, notice: 'Existing account recovered and signed in.' });
+    }
+    return json({ error: 'An account with that email already exists. Sign in or use Forgot password.', code: 'account_exists' }, 409);
+  }
+
+  const available = await ensureCustomerIdentityAvailable(env, fields.email, fields.phone);
+  if (available.error) return json({ error: available.error }, available.status || 400);
+
+  const passwordRecord = await buildCustomerPasswordRecord(fields.password);
+  if (!callFocusEmailConfigured(env)) {
+    const created = await createCustomerAccount(env, { ...fields, passwordRecord, emailVerified: false });
+    if (!created.ok) return json({ error: created.error }, created.status || 400);
+    return json({
+      ok: true,
+      verificationRequired: false,
+      emailVerificationConfigured: false,
+      token: created.token,
+      user: publicCustomerUser(created.user),
+      data: created.data,
+      notice: 'Account created. Email verification will turn on automatically after the CallFocus email sender is configured.'
+    });
+  }
+
+  const code = makeSixDigitCode();
+  const pending = {
+    name: fields.name,
+    email: fields.email,
+    phone: fields.phone,
+    passwordRecord,
+    codeHash: await customerCodeHash(fields.email, code, 'signup'),
+    createdAt: new Date().toISOString()
+  };
+  const key = await pendingSignupKey(fields.email);
+  await env.CALLFOCUS_CONFIG.put(key, JSON.stringify(pending), { expirationTtl: CUSTOMER_EMAIL_CODE_TTL });
+  try {
+    await sendCallFocusEmail(env, {
+      to: fields.email,
+      subject: 'Your CallFocus verification code',
+      text: `Your CallFocus verification code is ${code}. It expires in 10 minutes.`,
+      html: callFocusEmailShell({
+        preheader: `Your CallFocus code is ${code}`,
+        title: 'Verify your email',
+        body: `<p style="margin:0 0 8px;">Hi ${escapeHtml(fields.name)},</p><p style="margin:0;">Use the code below to finish creating your CallFocus account. Your callers, recent-call threads and account data will then follow you across devices.</p>`,
+        code,
+        footer: 'This code expires in 10 minutes. If you did not create a CallFocus account, you can ignore this email.'
+      })
+    });
+  } catch (error) {
+    await env.CALLFOCUS_CONFIG.delete(key);
+    return json({ error: error?.message || 'The verification email could not be sent.', code: error?.code || 'email_send_failed' }, 502);
+  }
+  return json({ ok: true, verificationRequired: true, email: fields.email, expiresIn: CUSTOMER_EMAIL_CODE_TTL });
+}
+
+async function handleCustomerSignupVerify(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is not connected.', code: 'account_storage_unavailable' }, 503);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const email = normalizeCustomerEmail(body?.email);
+  const code = String(body?.code || '').replace(/\D/g, '').slice(0, 6);
+  if (!email || code.length !== 6) return json({ error: 'Enter the 6-digit verification code.' }, 400);
+  const key = await pendingSignupKey(email);
+  const pending = await env.CALLFOCUS_CONFIG.get(key, { type: 'json' });
+  if (!pending) return json({ error: 'That verification code expired. Request a new one.', code: 'verification_expired' }, 410);
+  if ((await customerCodeHash(email, code, 'signup')) !== pending.codeHash) return json({ error: 'That verification code is incorrect.', code: 'verification_incorrect' }, 401);
+  const created = await createCustomerAccount(env, { ...pending, passwordRecord: pending.passwordRecord, emailVerified: true });
+  if (!created.ok) return json({ error: created.error }, created.status || 400);
+  await env.CALLFOCUS_CONFIG.delete(key);
+  return json({ ok: true, token: created.token, user: publicCustomerUser(created.user), data: created.data });
+}
+
+async function handlePasswordResetRequest(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is not connected.', code: 'account_storage_unavailable' }, 503);
+  if (!callFocusEmailConfigured(env)) return json({ error: 'Password reset email is not configured yet. Add the CallFocus email sender in Cloudflare first.', code: 'email_not_configured' }, 503);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const email = normalizeCustomerEmail(body?.email);
+  if (!email) return json({ error: 'Enter your account email address.' }, 400);
+  const user = await readCustomerUserByEmail(env, email);
+  if (!user) return json({ ok: true, sent: true });
+  const code = makeSixDigitCode();
+  const key = await passwordResetKey(email);
+  await env.CALLFOCUS_CONFIG.put(key, JSON.stringify({ email, userId: user.id, codeHash: await customerCodeHash(email, code, 'reset'), createdAt: new Date().toISOString() }), { expirationTtl: CUSTOMER_EMAIL_CODE_TTL });
+  try {
+    await sendCallFocusEmail(env, {
+      to: email,
+      subject: 'Reset your CallFocus password',
+      text: `Your CallFocus password reset code is ${code}. It expires in 10 minutes.`,
+      html: callFocusEmailShell({
+        preheader: `Your CallFocus password reset code is ${code}`,
+        eyebrow: 'CALLFOCUS SECURITY',
+        title: 'Reset your password',
+        body: `<p style="margin:0 0 8px;">Hi ${escapeHtml(user.name || 'there')},</p><p style="margin:0;">Use the code below to choose a new password for your CallFocus account.</p>`,
+        code,
+        footer: 'If you did not request a password reset, you can ignore this email and keep using your existing password.'
+      })
+    });
+  } catch (error) {
+    await env.CALLFOCUS_CONFIG.delete(key);
+    return json({ error: error?.message || 'The reset email could not be sent.', code: error?.code || 'email_send_failed' }, 502);
+  }
+  return json({ ok: true, sent: true });
+}
+
+async function handlePasswordResetVerify(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is not connected.', code: 'account_storage_unavailable' }, 503);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const email = normalizeCustomerEmail(body?.email);
+  const code = String(body?.code || '').replace(/\D/g, '').slice(0, 6);
+  const password = String(body?.password || '');
+  if (!email || code.length !== 6) return json({ error: 'Enter the 6-digit reset code.' }, 400);
+  if (password.length < 8) return json({ error: 'Use at least 8 characters for your new password.' }, 400);
+  const key = await passwordResetKey(email);
+  const pending = await env.CALLFOCUS_CONFIG.get(key, { type: 'json' });
+  if (!pending) return json({ error: 'That reset code expired. Request a new one.', code: 'reset_expired' }, 410);
+  if ((await customerCodeHash(email, code, 'reset')) !== pending.codeHash) return json({ error: 'That reset code is incorrect.', code: 'reset_incorrect' }, 401);
+  const user = await readCustomerUserByEmail(env, email);
+  if (!user || user.id !== pending.userId) return json({ error: 'Account not found.', code: 'account_not_found' }, 404);
+  const passwordRecord = await buildCustomerPasswordRecord(password);
+  Object.assign(user, passwordRecord, { authVersion: Number(user.authVersion || 1) + 1, updatedAt: new Date().toISOString() });
+  await env.CALLFOCUS_CONFIG.put(customerUserKey(user.id), JSON.stringify(user));
+  await env.CALLFOCUS_CONFIG.delete(key);
+  const token = await createCustomerSession(env, user);
+  const data = (await env.CALLFOCUS_CONFIG.get(customerDataKey(user.id), { type: 'json' })) || defaultCustomerData(user.name);
   return json({ ok: true, token, user: publicCustomerUser(user), data });
 }
 
@@ -283,7 +547,7 @@ async function handleCustomerSignin(request, env) {
   const user = await readCustomerUserByEmail(env, email);
   if (!user) return json({ error: 'Account not found.', code: 'account_not_found' }, 404);
   if (!(await verifyCustomerPassword(user, password))) return json({ error: 'Incorrect password.', code: 'incorrect_password' }, 401);
-  const token = await createCustomerSession(env, user.id);
+  const token = await createCustomerSession(env, user);
   const data = (await env.CALLFOCUS_CONFIG.get(customerDataKey(user.id), { type: 'json' })) || defaultCustomerData(user.name);
   return json({ ok: true, token, user: publicCustomerUser(user), data });
 }
@@ -380,6 +644,8 @@ async function handleCustomerMigration(request, env) {
       email,
       phone,
       phoneVerified: !!legacy.phoneVerified,
+      emailVerified: !!legacy.emailVerified,
+      authVersion: Number(legacy.authVersion || 1),
       passwordVersion: legacy.passwordVersion === 2 ? 2 : 1,
       passwordSalt: String(legacy.passwordSalt || ''),
       passwordIterations: Number(legacy.passwordIterations || 120000),
@@ -398,7 +664,7 @@ async function handleCustomerMigration(request, env) {
       env.CALLFOCUS_CONFIG.put(customerDataKey(id), JSON.stringify(data))
     ]);
   }
-  const token = await createCustomerSession(env, user.id);
+  const token = await createCustomerSession(env, user);
   return json({ ok: true, migrated: true, token, user: publicCustomerUser(user), data });
 }
 
@@ -861,6 +1127,10 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/api/auth/signup') return handleCustomerSignup(request, env);
+    if (url.pathname === '/api/auth/signup/request') return handleCustomerSignupRequest(request, env);
+    if (url.pathname === '/api/auth/signup/verify') return handleCustomerSignupVerify(request, env);
+    if (url.pathname === '/api/auth/password-reset/request') return handlePasswordResetRequest(request, env);
+    if (url.pathname === '/api/auth/password-reset/verify') return handlePasswordResetVerify(request, env);
     if (url.pathname === '/api/auth/signin') return handleCustomerSignin(request, env);
     if (url.pathname === '/api/auth/session') return handleCustomerSession(request, env);
     if (url.pathname === '/api/auth/signout') return handleCustomerSignout(request, env);

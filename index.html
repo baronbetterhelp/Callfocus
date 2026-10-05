@@ -33,6 +33,7 @@
   <link rel="stylesheet" href="./v11.14-patch.css?v=11.14" />
   <link rel="stylesheet" href="./v11.16-patch.css?v=11.16" />
   <link rel="stylesheet" href="./v11.17-patch.css?v=11.17" />
+  <link rel="stylesheet" href="./v11.18-patch.css?v=11.18" />
 </head>
 <body>
   <div class="app-root home-page" id="pageRoot">
@@ -414,19 +415,45 @@
       <form class="auth-form" id="signupForm">
         <label>Full name<input id="signupName" autocomplete="name" placeholder="Your name" /></label>
         <label>Email address<input id="signupEmail" type="email" autocomplete="email" placeholder="you@example.com" /></label>
-        <label>Mobile number<input id="signupPhone" type="tel" autocomplete="tel" inputmode="tel" placeholder="e.g. +234 803 000 0000" /><small class="field-help">Used for SMS verification and the 1:30 starter call credit.</small></label>
-        <label>Password<input id="signupPassword" type="password" autocomplete="new-password" placeholder="At least 8 characters" /></label>
-        <label>Confirm password<input id="signupConfirm" type="password" autocomplete="new-password" placeholder="Repeat password" /></label>
-        <button class="btn btn-primary full" type="submit">Create account</button>
+        <label>Mobile number<input id="signupPhone" type="tel" autocomplete="tel" inputmode="tel" placeholder="e.g. +234 803 000 0000" /><small class="field-help">Used for account security and future SMS verification. Starter call credit is attached to your account.</small></label>
+        <label>Password<div class="password-input-shell"><input id="signupPassword" type="password" autocomplete="new-password" placeholder="At least 8 characters" /><button class="password-eye" type="button" data-password-target="signupPassword" aria-label="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg></button></div></label>
+        <label>Confirm password<div class="password-input-shell"><input id="signupConfirm" type="password" autocomplete="new-password" placeholder="Repeat password" /><button class="password-eye" type="button" data-password-target="signupConfirm" aria-label="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg></button></div></label>
+        <button class="btn btn-primary full" type="submit" id="signupSubmitBtn">Create account</button>
       </form>
       <form class="auth-form hidden" id="signinForm">
         <label>Email address<input id="signinEmail" type="email" autocomplete="email" placeholder="you@example.com" /></label>
-        <label>Password<input id="signinPassword" type="password" autocomplete="current-password" placeholder="Your password" /></label>
+        <label>Password<div class="password-input-shell"><input id="signinPassword" type="password" autocomplete="current-password" placeholder="Your password" /><button class="password-eye" type="button" data-password-target="signinPassword" aria-label="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg></button></div></label>
+        <button class="auth-inline-link" id="forgotPasswordBtn" type="button">Forgot password?</button>
         <button class="btn btn-primary full" type="submit">Sign in</button>
       </form>
-      <button class="btn btn-ghost full legacy-transfer-btn hidden" id="transferLegacyAccountBtn" type="button">Transfer my old Workers.dev account</button>
-      <p class="legacy-transfer-note hidden" id="legacyTransferNote">Used CallFocus before the custom domain? This securely moves the account and saved callers from the old Workers.dev address.</p>
-      <p class="modal-footnote">Your CallFocus account and saved call data are synced securely so the same account can be used on your custom domain and other devices.</p>
+      <p class="modal-footnote">Your CallFocus account and saved call data are synced securely so the same account can be used on callfocus.link and other devices.</p>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="emailVerifyModal">
+    <div class="modal small-modal verification-modal">
+      <div class="modal-head"><div><span class="section-eyebrow">Email verification</span><h2>Check your email</h2><p>We sent a 6-digit CallFocus verification code to <strong id="verificationEmailDisplay">your email</strong>.</p></div><button class="modal-close" data-close="emailVerifyModal">×</button></div>
+      <label>Verification code<input id="signupVerificationCode" class="verification-code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" /></label>
+      <button class="btn btn-primary full" id="verifySignupCodeBtn" type="button">Verify & create account</button>
+      <button class="auth-inline-link centered" id="resendSignupCodeBtn" type="button">Resend code</button>
+      <p class="modal-footnote">The code expires after 10 minutes. CallFocus never emails your password.</p>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="passwordResetModal">
+    <div class="modal small-modal password-reset-modal">
+      <div class="modal-head"><div><span class="section-eyebrow">Account recovery</span><h2 id="passwordResetTitle">Reset your password</h2><p id="passwordResetCopy">Enter the email address on your CallFocus account.</p></div><button class="modal-close" data-close="passwordResetModal">×</button></div>
+      <div id="passwordResetRequestStep">
+        <label>Email address<input id="passwordResetEmail" type="email" autocomplete="email" placeholder="you@example.com" /></label>
+        <button class="btn btn-primary full" id="sendPasswordResetBtn" type="button">Send reset code</button>
+      </div>
+      <div class="hidden" id="passwordResetVerifyStep">
+        <label>6-digit code<input id="passwordResetCode" class="verification-code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" /></label>
+        <label>New password<div class="password-input-shell"><input id="passwordResetNew" type="password" autocomplete="new-password" placeholder="At least 8 characters" /><button class="password-eye" type="button" data-password-target="passwordResetNew" aria-label="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg></button></div></label>
+        <label>Confirm new password<div class="password-input-shell"><input id="passwordResetConfirm" type="password" autocomplete="new-password" placeholder="Repeat new password" /><button class="password-eye" type="button" data-password-target="passwordResetConfirm" aria-label="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg></button></div></label>
+        <button class="btn btn-primary full" id="completePasswordResetBtn" type="button">Set new password</button>
+        <button class="auth-inline-link centered" id="resendPasswordResetBtn" type="button">Send another code</button>
+      </div>
     </div>
   </div>
 
@@ -582,5 +609,6 @@
   <script src="./v11.12-patch.js?v=11.14"></script>
   <script src="./v11.16-patch.js?v=11.16"></script>
   <script src="./v11.17-patch.js?v=11.17"></script>
+  <script src="./v11.18-patch.js?v=11.18"></script>
 </body>
 </html>
