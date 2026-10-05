@@ -1,9 +1,9 @@
-CallFocus V11.8 Update
+CallFocus V11.9
 
-Files changed in this update:
+Changes in this update:
+- Removed the extra blank gap between the hero proof section and the “Your workspace” section on mobile.
+- Tightened the mobile hero bottom spacing.
+- Pulled the customer workspace section upward so the panels align more cleanly.
+
+Main file changed:
 - v11.5-patch.css
-
-What changed:
-- Reduced the size of the home-page call-credit panel on mobile.
-- Kept it right-aligned near the edge while making the card more compact.
-- Reduced icon, text, button, padding, and overall width for a cleaner fit.
