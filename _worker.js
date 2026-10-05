@@ -598,13 +598,25 @@ async function handleCustomerData(request, env) {
   const incoming = body?.data;
   if (!validCustomerDataShape(incoming)) return json({ error: 'Invalid account data.' }, 400);
 
-  // V11.20: Paystack can credit the wallet while an older browser tab is still
+  // V11.22: Paystack can update the wallet while an older browser tab is still
   // open. Never let a stale full-account sync overwrite a newer server wallet.
+  // Also protect against an equal-revision race: if the server wallet contains a
+  // Paystack purchase reference that the incoming browser wallet is missing, the
+  // server wallet wins. Legitimate usage deductions retain purchase references.
   const currentServerData = (await env.CALLFOCUS_CONFIG.get(customerDataKey(auth.user.id), { type: 'json' })) || null;
   if (validCustomerDataShape(currentServerData) && currentServerData.wallet) {
     const serverRevision = Math.max(0, Number(currentServerData.wallet?.revision) || 0);
     const incomingRevision = Math.max(0, Number(incoming.wallet?.revision) || 0);
-    if (serverRevision > incomingRevision) incoming.wallet = currentServerData.wallet;
+    const paystackRefs = wallet => new Set((Array.isArray(wallet?.purchases) ? wallet.purchases : [])
+      .filter(p => String(p?.provider || '').toLowerCase() === 'paystack')
+      .map(p => String(p?.reference || p?.id || '').trim())
+      .filter(Boolean));
+    const serverPaystackRefs = paystackRefs(currentServerData.wallet);
+    const incomingPaystackRefs = paystackRefs(incoming.wallet);
+    const incomingMissingServerPurchase = [...serverPaystackRefs].some(ref => !incomingPaystackRefs.has(ref));
+    if (serverRevision > incomingRevision || (serverRevision === incomingRevision && incomingMissingServerPurchase)) {
+      incoming.wallet = currentServerData.wallet;
+    }
   }
   if (incoming.wallet) incoming.wallet = normalizeServerWallet(incoming.wallet);
 
@@ -1306,6 +1318,83 @@ async function resolvePaystackUserId(env, transaction = {}) {
   return { userId: '', pending: null };
 }
 
+async function reconcileProcessedPaystackTransaction(env, transaction = {}, processed = {}) {
+  const reference = String(transaction?.reference || '').trim();
+  const userId = String(processed?.userId || '').trim();
+  if (!reference || !userId) return { credited: false, duplicate: true, reason: 'processed_marker_invalid', record: processed || null };
+
+  const user = await env.CALLFOCUS_CONFIG.get(customerUserKey(userId), { type: 'json' });
+  if (!user) return { credited: false, duplicate: true, reason: 'processed_customer_not_found', record: processed || null };
+
+  const data = await getCustomerDataForUpdate(env, user.id, user.name);
+  const wallet = normalizeServerWallet(data.wallet);
+  const existingPurchase = wallet.purchases.find(p => String(p?.reference || p?.id || '') === reference);
+  if (existingPurchase) {
+    return { credited: false, duplicate: true, reason: 'already_in_wallet', record: processed || null, wallet };
+  }
+
+  // A wallet with 250 stored purchases may have legitimately pruned an old
+  // purchase record. Do not auto-repair in that edge case because the balance
+  // could already include it. Recovery only auto-repairs when the ledger has room.
+  if (wallet.purchases.length >= 250) {
+    return { credited: false, duplicate: true, reason: 'processed_marker_missing_purchase_ledger_full', record: processed || null, wallet };
+  }
+
+  const currency = String(transaction?.currency || 'NGN').toUpperCase();
+  const amountKobo = Math.max(0, Math.floor(Number(transaction?.amount) || 0));
+  const amountNaira = amountKobo / 100;
+  if (String(transaction?.status || '').toLowerCase() !== 'success' || currency !== 'NGN' || amountNaira <= 0) {
+    return { credited: false, duplicate: true, reason: 'processed_transaction_not_successful', record: processed || null, wallet };
+  }
+
+  const markerCredits = Math.max(0, Number(processed?.credits) || 0);
+  const amountCredits = Math.max(0, amountNaira / PAYSTACK_NAIRA_PER_CREDIT);
+  const credits = markerCredits > 0 && Math.abs((markerCredits * PAYSTACK_NAIRA_PER_CREDIT) - amountNaira) < 0.01
+    ? markerCredits
+    : amountCredits;
+  const markerSeconds = Math.max(0, Math.floor(Number(processed?.secondsAdded) || 0));
+  const secondsAdded = markerSeconds > 0 && Math.abs(markerSeconds - purchaseSecondsForCredits(credits)) <= 1
+    ? markerSeconds
+    : purchaseSecondsForCredits(credits);
+  if (credits <= 0 || secondsAdded <= 0) {
+    return { credited: false, duplicate: true, reason: 'processed_invalid_amount', record: processed || null, wallet };
+  }
+
+  const now = new Date().toISOString();
+  wallet.balanceSeconds = Math.max(0, Math.floor(Number(wallet.balanceSeconds) || 0)) + secondsAdded;
+  wallet.revision = Math.max(0, Number(wallet.revision) || 0) + 1;
+  wallet.purchases.unshift({
+    id: reference,
+    reference,
+    provider: 'paystack',
+    channel: String(transaction?.channel || transaction?.authorization?.channel || 'paystack'),
+    amountNaira,
+    credits: Math.round(credits * 10) / 10,
+    seconds: secondsAdded,
+    createdAt: transaction?.paid_at || transaction?.paidAt || processed?.at || now,
+    reconciledAt: now
+  });
+  wallet.purchases = wallet.purchases.slice(0, 250);
+  data.wallet = wallet;
+
+  const record = {
+    ...processed,
+    userId: user.id,
+    reference,
+    credits: Math.round(credits * 10) / 10,
+    secondsAdded,
+    amountNaira,
+    at: processed?.at || now,
+    reconciled: true,
+    reconciledAt: now,
+    walletRevisionAfter: wallet.revision
+  };
+  await env.CALLFOCUS_CONFIG.put(customerDataKey(user.id), JSON.stringify(data));
+  await env.CALLFOCUS_CONFIG.put(paystackProcessedKey(reference), JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 365 });
+  await env.CALLFOCUS_CONFIG.delete(paystackPendingKey(reference));
+  return { credited: true, reconciled: true, record, wallet };
+}
+
 async function creditVerifiedPaystackTransaction(env, transaction = {}) {
   if (!env.CALLFOCUS_CONFIG) throw new Error('Account storage is unavailable.');
   const reference = String(transaction?.reference || '').trim();
@@ -1317,7 +1406,13 @@ async function creditVerifiedPaystackTransaction(env, transaction = {}) {
   }
 
   const already = await env.CALLFOCUS_CONFIG.get(paystackProcessedKey(reference), { type: 'json' });
-  if (already?.userId) return { credited: false, duplicate: true, record: already };
+  if (already?.userId) {
+    // V11.22 reconciliation: a processed marker must agree with the wallet
+    // ledger. If an earlier race left the marker behind but the wallet lost the
+    // purchase, restore the verified payment once instead of permanently
+    // treating the transaction as a duplicate.
+    return reconcileProcessedPaystackTransaction(env, transaction, already);
+  }
 
   const resolved = await resolvePaystackUserId(env, transaction);
   if (!resolved.userId) return { credited: false, reason: 'customer_not_mapped' };
@@ -1483,10 +1578,29 @@ async function listRecentSuccessfulPaystackTransactions(env, user) {
     customerId = String(customer?.data?.id || '');
   } catch {}
 
-  const params = new URLSearchParams({ status: 'success', perPage: '100', page: '1', from });
-  if (customerId) params.set('customer', customerId);
-  const payload = await paystackRequest(env, `/transaction?${params.toString()}`);
-  return Array.isArray(payload?.data) ? payload.data : [];
+  const base = { status: 'success', perPage: '100', page: '1', from };
+  const merged = new Map();
+  const collect = payload => {
+    for (const tx of (Array.isArray(payload?.data) ? payload.data : [])) {
+      const ref = String(tx?.reference || '').trim();
+      if (ref) merged.set(ref, tx);
+    }
+  };
+
+  // First use Paystack's customer filter when available.
+  if (customerId) {
+    const filtered = new URLSearchParams(base);
+    filtered.set('customer', customerId);
+    try { collect(await paystackRequest(env, `/transaction?${filtered.toString()}`)); } catch {}
+  }
+
+  // V11.22 fallback: some Paystack transaction-list responses can omit or
+  // behave differently with customer filtering. Also inspect the recent
+  // successful page and apply CallFocus's own strict account matching before
+  // verifying any candidate.
+  const unfiltered = new URLSearchParams(base);
+  collect(await paystackRequest(env, `/transaction?${unfiltered.toString()}`));
+  return [...merged.values()];
 }
 
 async function handlePaystackRecover(request, env) {
@@ -1512,12 +1626,6 @@ async function handlePaystackRecover(request, env) {
     for (const candidate of candidates.slice(0, PAYSTACK_RECOVERY_MAX_VERIFY)) {
       const reference = String(candidate?.reference || '').trim();
       if (!reference) continue;
-
-      const processed = await env.CALLFOCUS_CONFIG.get(paystackProcessedKey(reference), { type: 'json' });
-      if (processed?.userId) {
-        checked.push({ reference, status: 'already_processed' });
-        continue;
-      }
 
       const verifiedPayload = await paystackRequest(env, `/transaction/verify/${encodeURIComponent(reference)}`);
       const transaction = verifiedPayload?.data || {};
@@ -1555,16 +1663,29 @@ async function handlePaystackRecover(request, env) {
       }
 
       const result = await creditVerifiedPaystackTransaction(env, transaction);
-      checked.push({ reference, status: result?.credited ? 'credited' : (result?.duplicate ? 'already_processed' : String(result?.reason || 'not_credited')) });
+      checked.push({
+        reference,
+        status: result?.reconciled ? 'reconciled' : (result?.credited ? 'credited' : (result?.duplicate ? String(result?.reason || 'already_processed') : String(result?.reason || 'not_credited')))
+      });
       if (result?.credited && result?.record) recovered.push(result.record);
     }
 
     const data = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
+    console.log('CallFocus Paystack recovery', JSON.stringify({
+      userId: auth.user.id,
+      listedCount: listed.length,
+      candidateCount: candidates.length,
+      checked,
+      recoveredCount: recovered.length,
+      walletRevision: Number(data?.wallet?.revision || 0),
+      walletBalanceSeconds: Number(data?.wallet?.balanceSeconds || 0)
+    }));
     return json({
       ok: true,
       recoveredCount: recovered.length,
       recovered,
       checkedCount: checked.length,
+      checked,
       wallet: data.wallet,
       testMode: paystackIsTest(env)
     });

@@ -4,6 +4,12 @@
   "main": "./_worker.js",
   "compatibility_date": "2026-10-04",
   "keep_vars": true,
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
+    }
+  },
   "kv_namespaces": [
     {
       "binding": "CALLFOCUS_CONFIG",
