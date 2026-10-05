@@ -65,17 +65,17 @@
             <label>Female voice<select id="adminFemaleVoice"></select></label>
             <button class="btn btn-ghost voice-preview-btn" data-preview="female">Preview female voice</button>
           </div>
-          <label>Realtime model<input id="adminModel" /></label>
-          <div class="admin-recommendation">OpenAI currently recommends <strong>marin</strong> and <strong>cedar</strong> for best Realtime voice quality.</div>
+          <label>Voice engine<input id="adminModel" value="gpt-live-1" readonly /></label>
+          <div class="admin-recommendation">CallFocus V10 uses <strong>GPT-Live 1</strong>, OpenAI’s premier full-duplex conversational voice model. Your selected Male and Female voices are applied to every new call.</div>
           <audio id="voicePreviewAudio" class="hidden" controls></audio>
           <div class="toggle-row"><span>Allow natural interruption / barge-in</span><input id="adminInterruptions" type="checkbox" /></div>
-          <div class="toggle-row"><span>Assistant speaks first when a call connects</span><input id="adminSpeakFirst" type="checkbox" /></div>
+          <div class="toggle-row"><span>Speak first after the customer taps Start Call</span><input id="adminSpeakFirst" type="checkbox" /></div>
         </div>
 
         <div class="premium-panel form-panel">
-          <span class="kicker">Conversation behavior</span><h3>Make calls sound natural</h3>
-          <label>Natural speech style<textarea id="adminSpeechStyle" rows="9" placeholder="Rules that control pacing, tone and how human the conversation feels"></textarea></label>
-          <label>Master call rules<textarea id="adminInstructions" rows="11" placeholder="Global rules for every call"></textarea></label>
+          <span class="kicker">Conversation behavior</span><h3>Make calls listen first</h3>
+          <label>Natural speech style<textarea id="adminSpeechStyle" rows="9" placeholder="Keep this short: pacing, tone, turn length and listening style"></textarea></label>
+          <label>Master call rules<textarea id="adminInstructions" rows="11" placeholder="Your global rules for every call. These are loaded server-side into every new Live session."></textarea></label>
           <label>Default opening behavior<textarea id="adminOpening" rows="5" placeholder="How the first line should begin"></textarea></label>
         </div>
       </div>

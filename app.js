@@ -31,9 +31,9 @@ const ADMIN_DEFAULTS = {
   serverMessage:'Server not active right now. Please try again soon.',
   maleVoice:'cedar',
   femaleVoice:'marin',
-  model:'gpt-realtime-2.1',
-  instructions:'Have a natural live spoken conversation using the supplied context. Do not read system context aloud. Keep replies conversational, appropriately brief, emotionally aware and grounded in the facts provided. Never invent personal history, relationship milestones, promises or sensitive facts that were not supplied or established during the current call.',
-  opening:'Begin naturally as soon as the call connects. Use the relationship, current topic and both callers’ local times when relevant.',
+  model:'gpt-live-1',
+  instructions:'Follow the customer-provided call rules and relationship context closely. Keep the conversation responsive and natural. Do not turn a social call into an interview, support exchange, coaching session, or scripted agenda.',
+  opening:'Use the customer-selected opening for each call. Greet naturally, then pause and let the other person respond before moving further into the topic.',
   speakFirst:true,
   interruptions:true
 };
