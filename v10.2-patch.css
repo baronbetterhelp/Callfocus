@@ -1,0 +1,12 @@
+/* CallFocus V10.2 — retry and setup-return polish */
+.call-failure-actions{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin-top:12px;width:100%}
+.call-retry-btn,.call-back-setup-btn{min-height:42px;border-radius:999px;padding:0 16px;border:1px solid rgba(255,255,255,.14);font:700 12px/1 'DM Sans',system-ui,sans-serif;transition:.18s ease}
+.call-retry-btn{background:#f4f4f2;color:#090909;box-shadow:0 10px 28px rgba(0,0,0,.22)}
+.call-back-setup-btn{background:#171717;color:#dedede}
+.call-retry-btn:active,.call-back-setup-btn:active{transform:scale(.97)}
+@media(max-width:620px){.call-failure-actions{gap:8px}.call-retry-btn,.call-back-setup-btn{min-height:40px;padding:0 14px;font-size:11px}}
+.admin-diagnostics{margin-top:18px;padding:16px;border:1px solid rgba(255,255,255,.09);border-radius:16px;background:#101010;display:grid;gap:10px}
+.admin-diagnostics-row{display:flex;align-items:center;justify-content:space-between;gap:14px;font-size:12px;color:#aaa}.admin-diagnostics-row strong{color:#f4f4f4;text-align:right}.admin-diagnostics-note{font-size:11px;line-height:1.55;color:#888;word-break:break-word}
+.cf-thread-retry-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:13px 14px;margin-bottom:16px;border:1px solid rgba(233,199,125,.26);border-radius:14px;background:rgba(233,199,125,.055)}
+.cf-thread-retry-banner>div{display:grid;gap:3px}.cf-thread-retry-banner strong{font-size:12px;color:#f3f3f3}.cf-thread-retry-banner span{font-size:10px;color:#8f8f8f}.cf-thread-retry-banner button{border:0;border-radius:999px;background:#f2f2f2;color:#080808;font-size:11px;font-weight:850;padding:10px 15px;white-space:nowrap}
+@media(max-width:520px){.cf-thread-retry-banner{align-items:flex-start;flex-direction:column}.cf-thread-retry-banner button{width:100%}}

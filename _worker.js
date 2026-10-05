@@ -127,6 +127,48 @@ async function handleAdminLogin(request, env) {
   return adminAuthorized(request, env) ? json({ ok: true }) : json({ error: 'Incorrect admin passcode.' }, 401);
 }
 
+
+async function recordLiveStatus(env, payload) {
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.put !== 'function') return;
+  try { await env.CALLFOCUS_CONFIG.put('last_live_status', JSON.stringify({ ...payload, at: new Date().toISOString() })); } catch {}
+}
+
+async function handleAdminDiagnostics(request, env) {
+  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  const config = await getConfig(env);
+  let modelAccess = { ok: false, status: 0, code: '', message: '' };
+  if (env.OPENAI_API_KEY) {
+    try {
+      const r = await fetch('https://api.openai.com/v1/models/gpt-live-1', { headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` } });
+      const txt = await r.text();
+      let parsed = {}; try { parsed = JSON.parse(txt); } catch {}
+      modelAccess = {
+        ok: r.ok,
+        status: r.status,
+        code: parsed?.error?.code || parsed?.error?.type || '',
+        message: r.ok ? 'GPT-Live 1 is accessible to this API project.' : (parsed?.error?.message || 'GPT-Live 1 access check failed.')
+      };
+    } catch {
+      modelAccess = { ok: false, status: 0, code: 'network_error', message: 'Could not reach the OpenAI model-access check.' };
+    }
+  } else {
+    modelAccess = { ok: false, status: 0, code: 'missing_api_key', message: 'OPENAI_API_KEY is not configured.' };
+  }
+  let lastLiveStatus = null;
+  if (env.CALLFOCUS_CONFIG && typeof env.CALLFOCUS_CONFIG.get === 'function') {
+    try { lastLiveStatus = await env.CALLFOCUS_CONFIG.get('last_live_status', { type: 'json' }); } catch {}
+  }
+  return json({
+    openaiKeyConfigured: !!env.OPENAI_API_KEY,
+    kvConnected: !!env.CALLFOCUS_CONFIG,
+    adminPasscodeConfigured: !!env.CALLFOCUS_ADMIN_PASSCODE,
+    serverOnline: config.serverOnline !== false,
+    engine: 'gpt-live-1',
+    modelAccess,
+    lastLiveStatus
+  });
+}
+
 async function handleVoicePreview(request, env) {
   if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (!env.OPENAI_API_KEY) return json({ error: 'OpenAI API key is not configured.' }, 503);
@@ -211,18 +253,32 @@ async function handleSession(request, env) {
   const responseText = await openai.text();
   if (!openai.ok) {
     let code = '';
-    try { code = JSON.parse(responseText)?.error?.code || ''; } catch {}
-    const quota = openai.status === 429 || code === 'credit_balance_exhausted' || code === 'insufficient_quota';
+    let type = '';
+    let message = '';
+    try {
+      const parsed = JSON.parse(responseText);
+      code = parsed?.error?.code || '';
+      type = parsed?.error?.type || '';
+      message = parsed?.error?.message || '';
+    } catch {}
+    const reason = code || type || `http_${openai.status}`;
+    console.error('CallFocus GPT-Live create failed', { status: openai.status, reason, message: message.slice(0, 500) });
+    await recordLiveStatus(env, { ok: false, status: openai.status, code: reason, message: message.slice(0, 500) || 'GPT-Live session creation failed.' });
+    const quota = openai.status === 429 || code === 'credit_balance_exhausted' || code === 'insufficient_quota' || code === 'project_spend_limit_exceeded' || code === 'organization_spend_limit_exceeded';
     return new Response(quota ? 'Server not active. Try again soon.' : 'Server unavailable. Try again soon.', {
       status: quota ? 503 : openai.status,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' }
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-CallFocus-Error-Code': reason }
     });
   }
 
   let created;
   try { created = JSON.parse(responseText); } catch { return new Response('Server unavailable. Try again soon.', { status: 502 }); }
   const answerSdp = created?.transport?.sdp;
-  if (!answerSdp) return new Response('Server unavailable. Try again soon.', { status: 502 });
+  if (!answerSdp) {
+    await recordLiveStatus(env, { ok: false, status: 502, code: 'missing_sdp_answer', message: 'OpenAI Live response did not include transport.sdp.' });
+    return new Response('Server unavailable. Try again soon.', { status: 502, headers: { 'X-CallFocus-Error-Code': 'missing_sdp_answer' } });
+  }
+  await recordLiveStatus(env, { ok: true, status: 201, code: 'ok', message: 'GPT-Live session created successfully.' });
 
   const headers = new Headers({
     'Content-Type': 'application/sdp',
@@ -242,6 +298,7 @@ export default {
     if (url.pathname === '/api/admin/login' && request.method === 'POST') return handleAdminLogin(request, env);
     if (url.pathname === '/api/admin/config') return handleAdminConfig(request, env);
     if (url.pathname === '/api/admin/voice-preview' && request.method === 'POST') return handleVoicePreview(request, env);
+    if (url.pathname === '/api/admin/diagnostics' && request.method === 'GET') return handleAdminDiagnostics(request, env);
     if (url.pathname === '/api/session') {
       if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
       return handleSession(request, env);
