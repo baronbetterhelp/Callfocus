@@ -1,10 +1,12 @@
-# CallFocus V11 Update
+# CallFocus V11.1
 
-Upload these files over V10.9:
-- index.html
-- v11-patch.css
-- v11-patch.js
+Shared credit update.
 
-Your existing Worker, OpenAI key, permanent KV binding, Admin settings and previous patch files remain in place.
+- Live calls and generated voice notes use the same wallet.
+- 50 credits = 1 minute of either live-call time or generated voice-note audio.
+- Voice notes deduct credits using their generated audio duration, and generation is length-constrained to the remaining shared balance when possible.
+- Starter 75 credits / 1:30 can be spent across either feature.
+- Voice-note history records credits used.
+- Existing permanent KV binding and Admin configuration are preserved.
 
-This update adds the credit UI and prototype local wallet. Real-money payment and SMS verification are intentionally not faked: they require a payment/SMS provider and server-side account storage before production launch.
+This is still a browser-local prototype wallet. Move balances and usage accounting to Supabase/D1 before enabling real payments.

@@ -60,7 +60,7 @@
                 <strong id="dropdownName">User</strong>
                 <small id="dropdownEmail">user@example.com</small>
               </div>
-              <button data-account-route="credits">Call credits</button>
+              <button data-account-route="credits">Call & voice credits</button>
               <button data-account-route="settings">Account settings</button>
               <button data-account-route="profile">My profile</button>
               <button id="dropdownSignOutBtn">Sign out</button>
@@ -77,7 +77,7 @@
             <button data-mobile-route="home"><span class="menu-icon">⌂</span><span>Home<small>CallFocus overview</small></span></button>
             <button data-mobile-route="callers"><span class="menu-icon">◉</span><span>My Callers<small>Saved people and caller context</small></span></button>
             <button data-mobile-route="recent"><span class="menu-icon">◷</span><span>Recent Calls<small>Continue previous call threads</small></span></button>
-            <button data-mobile-route="credits"><span class="menu-icon">◌</span><span>Call Credits<small>Balance, pricing and top-ups</small></span></button>
+            <button data-mobile-route="credits"><span class="menu-icon">◌</span><span>Call & Voice Credits<small>Shared balance, pricing and top-ups</small></span></button>
             <button data-mobile-route="profile"><span class="menu-icon">◎</span><span>My Profile<small>Your reusable information</small></span></button>
           </div>
           <div class="mobile-recent-shell">
@@ -101,7 +101,7 @@
                 <svg viewBox="0 0 24 24" fill="none"><path d="M7.4 4.8c.8-1 2.3-1.1 3.2-.2l1.1 1.1c.6.6.7 1.5.3 2.2l-1 1.8c-.2.4-.2.8.1 1.1l2.1 2.1c.3.3.8.4 1.1.1l1.8-1c.7-.4 1.6-.3 2.2.3l1.1 1.1c.9.9.8 2.4-.2 3.2l-1.2 1c-1.1.9-2.6 1.2-4 .8-2.5-.7-4.8-2.2-6.8-4.1s-3.4-4.3-4.1-6.8c-.4-1.4-.1-2.9.8-4l1.1-1.3Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </div>
               <div class="credit-dock-copy">
-                <span id="creditDockLabel">Starter call credit</span>
+                <span id="creditDockLabel">Starter call & voice credit</span>
                 <strong id="creditDockBalance">1:30 free after mobile verification</strong>
               </div>
               <button class="credit-dock-action" id="creditDockAction" type="button">View credits</button>
@@ -269,7 +269,12 @@
                   <button class="voice-note-generate" id="voiceNoteGenerateBtn" type="button"><span class="voice-note-generate-icon">✦</span><span>Generate</span></button>
                 </div>
               </div>
-              <div class="voice-note-status" id="voiceNoteStatus">Your current Admin speech settings are applied automatically.</div>
+              <div class="voice-note-credit-meter" aria-live="polite">
+                <div><span>Shared credit balance</span><strong id="voiceNoteCreditBalance">—</strong></div>
+                <small id="voiceNoteCreditRate">Shared with live calls · 50 credits = 1 minute</small>
+                <button type="button" data-route="credits">Buy credits</button>
+              </div>
+              <div class="voice-note-status" id="voiceNoteStatus">Your current Admin speech settings are applied automatically. Voice notes use the same per-minute credit balance as calls.</div>
             </div>
           </div>
 
@@ -287,17 +292,17 @@
         <div class="container credit-page-shell">
           <div class="credit-page-head">
             <button class="credit-back-btn" id="creditBackBtn" type="button" aria-label="Back to home">‹</button>
-            <div><span class="section-eyebrow">Call credits</span><h1>Minutes that stay in your control.</h1><p>Buy call credit in simple blocks. Your balance only reduces while a live call is actually running.</p></div>
+            <div><span class="section-eyebrow">Call credits</span><h1>Minutes that stay in your control.</h1><p>Buy shared credit in simple blocks. The same balance is used by live calls and generated voice notes, charged by actual audio time.</p></div>
           </div>
 
           <div class="credit-balance-hero">
-            <div><span>Available balance</span><strong id="creditPageBalance">0 credits</strong><small id="creditPageTime">0:00 call time</small></div>
+            <div><span>Available balance</span><strong id="creditPageBalance">0 credits</strong><small id="creditPageTime">0:00 shared audio time</small></div>
             <div class="credit-rate-card"><span>Standard rate</span><strong>50 credits = 1 minute</strong><small>100 credits = ₦1,000 = 2 minutes</small></div>
           </div>
 
           <div class="credit-starter-note">
             <div class="credit-starter-icon">01</div>
-            <div><strong>New-user starter call</strong><p>Each new account receives <b>1 minute 30 seconds</b> of starter call time (75 credits). Before public launch, this grant will be tied to successful SMS verification of the mobile number.</p></div>
+            <div><strong>New-user starter credit</strong><p>Each new account receives <b>1 minute 30 seconds</b> of shared audio time (75 credits), usable for either live calls or voice notes. Before public launch, this grant will be tied to successful SMS verification of the mobile number.</p></div>
           </div>
 
           <section class="credit-purchase-section">
@@ -367,7 +372,7 @@
             <div class="settings-row"><div><strong>Name</strong><span id="settingsName">—</span></div><button class="btn btn-ghost" id="settingsEditProfileBtn">Edit profile</button></div>
             <div class="settings-row"><div><strong>Email</strong><span id="settingsEmail">—</span></div></div>
             <div class="settings-row"><div><strong>Mobile</strong><span id="settingsPhone">—</span></div></div>
-            <div class="settings-row"><div><strong>Call credit</strong><span id="settingsCreditBalance">—</span></div><button class="btn btn-ghost" type="button" data-route="credits">Buy credits</button></div>
+            <div class="settings-row"><div><strong>Call & voice credit</strong><span id="settingsCreditBalance">—</span></div><button class="btn btn-ghost" type="button" data-route="credits">Buy credits</button></div>
             <div class="settings-row"><div><strong>Account created</strong><span id="settingsCreated">—</span></div></div>
           </div>
           <div class="danger-card">

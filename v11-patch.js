@@ -69,6 +69,56 @@
 
   function currentBalanceSeconds(){ return ensureWallet(true)?.balanceSeconds||0; }
 
+  // Shared wallet API used by live calls and generated voice notes.
+  // One wallet second equals one second of either live-call time or generated voice-note audio.
+  function deductUsageSeconds(seconds, meta={}){
+    if(!account||!data) return {ok:false, reason:'account'};
+    const wallet=ensureWallet(true);
+    const requested=Math.max(0,Math.ceil(Number(seconds)||0));
+    if(!requested) return {ok:true, deductedSeconds:0, balanceSeconds:wallet.balanceSeconds};
+    const before=Math.max(0,Math.floor(Number(wallet.balanceSeconds)||0));
+    const deducted=Math.min(before,requested);
+    wallet.balanceSeconds=Math.max(0,before-deducted);
+    wallet.usage ||= [];
+    wallet.usage.unshift({
+      id:uuid(),
+      type:String(meta.type||'usage'),
+      seconds:deducted,
+      credits:Math.round(creditsForSeconds(deducted)*10)/10,
+      referenceId:meta.referenceId||null,
+      createdAt:new Date().toISOString()
+    });
+    wallet.usage=wallet.usage.slice(0,250);
+    saveData();
+    renderCreditDock(); renderLiveCredit(); renderCreditPage(); renderSettingsCredit(); renderVoiceCredit();
+    return {ok:deducted>=requested,deductedSeconds:deducted,balanceSeconds:wallet.balanceSeconds,requestedSeconds:requested};
+  }
+
+  function renderVoiceCredit(){
+    const root=$('voiceNoteCreditBalance');
+    const sub=$('voiceNoteCreditRate');
+    if(!root) return;
+    if(!account||!data){
+      root.textContent='Sign in to use shared credits';
+      if(sub) sub.textContent='50 credits = 1 minute';
+      return;
+    }
+    const seconds=currentBalanceSeconds();
+    root.textContent=`${formatCredits(creditsForSeconds(seconds))} credits · ${humanTime(seconds)} available`;
+    if(sub) sub.textContent='Shared with live calls · 50 credits = 1 minute';
+  }
+
+  window.CallFocusCredits={
+    currentBalanceSeconds,
+    creditsForSeconds,
+    secondsForCredits,
+    formatCredits,
+    humanTime,
+    deductUsageSeconds,
+    render:()=>{renderCreditDock();renderLiveCredit();renderCreditPage();renderSettingsCredit();renderVoiceCredit();},
+    rules:CREDIT_RULES
+  };
+
   function renderCreditDock(){
     const label=$('creditDockLabel'), balance=$('creditDockBalance'), action=$('creditDockAction');
     if(!label||!balance||!action) return;
@@ -154,7 +204,7 @@
   renderWorkspace=function(){
     priorRenderWorkspaceV11();
     if(account&&data) ensureWallet(true);
-    renderCreditDock(); renderLiveCredit(); renderHomeSavedCallersV11(); renderSettingsCredit();
+    renderCreditDock(); renderLiveCredit(); renderHomeSavedCallersV11(); renderSettingsCredit(); renderVoiceCredit(); renderVoiceCredit();
   };
 
   const priorShowViewV11=showView;
@@ -165,6 +215,7 @@
     }
     priorShowViewV11(view,scroll);
     if(view==='credits') renderCreditPage();
+    if(view==='voice-notes') renderVoiceCredit();
   };
 
   function updateCreditCheckoutSummary(){
@@ -290,6 +341,6 @@
 
   // Initial migration for current prototype accounts: one starter balance so V11 can be tested immediately.
   if(account&&data) ensureWallet(true);
-  renderCreditDock(); renderLiveCredit(); renderHomeSavedCallersV11(); renderSettingsCredit();
+  renderCreditDock(); renderLiveCredit(); renderHomeSavedCallersV11(); renderSettingsCredit(); renderVoiceCredit();
   if(account&&data) renderWorkspace();
 })();

@@ -227,6 +227,9 @@ async function handleVoiceNote(request, env) {
   const prompt = String(body?.prompt || '').trim();
   if (!prompt) return json({ error: 'Type what you want the voice note to say.' }, 400);
   if (prompt.length > 2200) return json({ error: 'Keep the voice note prompt under 2,200 characters.' }, 400);
+  const requestedMaxSeconds = Math.max(0, Math.min(600, Math.floor(Number(body?.maxSeconds) || 0)));
+  if (requestedMaxSeconds > 0 && requestedMaxSeconds < 5) return json({ error: 'Not enough CallFocus credit to generate a voice note.' }, 402);
+  const targetMaxWords = requestedMaxSeconds > 0 ? Math.max(8, Math.floor(requestedMaxSeconds * 1.7)) : 0;
 
   const config = await getConfig(env);
   const gender = body?.voiceGender === 'female' ? 'female' : 'male';
@@ -245,6 +248,7 @@ VOICE-NOTE BEHAVIOR
 - If the user supplies exact wording, preserve the meaning and lightly polish only when useful.
 - If a greeting is appropriate, make it brief and natural.
 - This is a one-way voice note, not a live conversation. Do not write a line that expects an immediate reply and then continue as if a reply happened.
+${targetMaxWords ? `- HARD LENGTH LIMIT: Keep the complete spoken message at or below about ${targetMaxWords} words so it fits within the user's remaining ${requestedMaxSeconds} seconds of shared CallFocus credit. Prefer ending naturally early rather than exceeding this limit.` : ''}
 
 OWNER SPEECH STYLE
 ${String(config.speechStyle || DEFAULT_CONFIG.speechStyle)}
