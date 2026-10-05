@@ -1,4 +1,5 @@
-const VOICES = ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
+const LIVE_VOICES = ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar','ripple','vesper','stone','meridian','beacon','cinder','tempo','quartz','willow','gleam','bossa','delta'];
+const TTS_VOICES = ['alloy','ash','ballad','coral','echo','fable','nova','onyx','sage','shimmer','verse','marin','cedar'];
 
 const CALL_LANGUAGES = ['English','Spanish','French','Italian','German','Portuguese','Dutch','Arabic','Hindi','Mandarin Chinese','Cantonese','Japanese','Korean','Russian','Turkish','Vietnamese','Polish','Ukrainian','Greek','Hebrew','Indonesian','Malay','Thai','Swahili','Filipino','Romanian','Czech','Hungarian','Swedish','Norwegian','Danish','Finnish'];
 function normalizeCallLanguage(value){ const raw=String(value||'').trim(); return CALL_LANGUAGES.includes(raw)?raw:'English'; }
@@ -77,7 +78,7 @@ async function getConfig(env) {
 }
 
 function sanitizeConfig(input = {}) {
-  const voice = v => VOICES.includes(v) ? v : null;
+  const voice = v => LIVE_VOICES.includes(v) ? v : null;
   const unlimitedCreditEmails = [...new Set((Array.isArray(input.unlimitedCreditEmails) ? input.unlimitedCreditEmails : [])
     .map(v => String(v || '').trim().toLowerCase())
     .filter(v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)))]
@@ -113,6 +114,8 @@ async function handlePublicConfig(env) {
     serverMessage: c.serverMessage,
     maleVoice: c.maleVoice,
     femaleVoice: c.femaleVoice,
+    voiceNoteMaleVoice: TTS_VOICES.includes(c.maleVoice) ? c.maleVoice : 'cedar',
+    voiceNoteFemaleVoice: TTS_VOICES.includes(c.femaleVoice) ? c.femaleVoice : 'marin',
     model: 'gpt-live-1',
     siteTheme: c.siteTheme || DEFAULT_CONFIG.siteTheme,
     opening: c.opening,
@@ -232,7 +235,8 @@ async function handleVoicePreview(request, env) {
   if (!env.OPENAI_API_KEY) return json({ error: 'OpenAI API key is not configured.' }, 503);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
-  const voice = VOICES.includes(body?.voice) ? body.voice : 'marin';
+  const voice = LIVE_VOICES.includes(body?.voice) ? body.voice : 'marin';
+  if (!TTS_VOICES.includes(voice)) return json({ error: 'This is a GPT-Live-only voice. Save it, then place a short test call to hear it.' }, 409);
   const input = String(body?.text || 'Hi. This is a quick CallFocus voice preview.').slice(0, 500);
   const config = await getConfig(env);
   const speech = await fetch('https://api.openai.com/v1/audio/speech', {
@@ -283,7 +287,8 @@ async function handleVoiceNote(request, env) {
 
   const config = await getConfig(env);
   const gender = body?.voiceGender === 'female' ? 'female' : 'male';
-  const voice = gender === 'female' ? config.femaleVoice : config.maleVoice;
+  const selectedVoice = gender === 'female' ? config.femaleVoice : config.maleVoice;
+  const voice = TTS_VOICES.includes(selectedVoice) ? selectedVoice : (gender === 'female' ? 'marin' : 'cedar');
 
   const writerInstructions = `You write the exact spoken words for one private voice note.
 

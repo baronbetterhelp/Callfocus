@@ -118,8 +118,8 @@
 
   function syncVoiceLabels(){
     const admin=loadAdmin();
-    if($('voiceNoteMaleLabel')) $('voiceNoteMaleLabel').textContent=admin.maleVoice || 'cedar';
-    if($('voiceNoteFemaleLabel')) $('voiceNoteFemaleLabel').textContent=admin.femaleVoice || 'marin';
+    if($('voiceNoteMaleLabel')) $('voiceNoteMaleLabel').textContent=admin.voiceNoteMaleVoice || admin.maleVoice || 'cedar';
+    if($('voiceNoteFemaleLabel')) $('voiceNoteFemaleLabel').textContent=admin.voiceNoteFemaleVoice || admin.femaleVoice || 'marin';
   }
 
   function renderVoiceNoteResult(note){

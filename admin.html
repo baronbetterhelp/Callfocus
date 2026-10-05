@@ -81,7 +81,7 @@
       <div class="admin-grid-v3">
         <div class="premium-panel form-panel">
           <span class="kicker">Voice engine</span><h3>Customer voice pair</h3>
-          <p class="admin-panel-copy">Customers only choose Male or Female. The actual voices selected here become the two voices across CallFocus.</p>
+          <p class="admin-panel-copy">Customers only choose Male or Female. You can now use the expanded GPT-Live voice set for live calls. For a more grounded masculine character, audition Meridian, Vesper, Stone or Cinder. Live-only voices are tested by placing a short call.</p>
           <div class="voice-admin-card">
             <label>Male voice<select id="adminMaleVoice"></select></label>
             <button class="btn btn-ghost voice-preview-btn" data-preview="male">Preview male voice</button>
@@ -91,7 +91,7 @@
             <button class="btn btn-ghost voice-preview-btn" data-preview="female">Preview female voice</button>
           </div>
           <label>Voice engine<input id="adminModel" value="gpt-live-1" readonly /></label>
-          <div class="admin-recommendation">CallFocus V10 uses <strong>GPT-Live 1</strong>, OpenAI’s premier full-duplex conversational voice model. Your selected Male and Female voices are applied to every new call.</div>
+          <div class="admin-recommendation">CallFocus uses <strong>GPT-Live 1</strong>. Additional regional voices marked <strong>Live only</strong> work on calls but are not available through the separate speech endpoint used for voice notes. If one is selected, voice notes automatically use cedar for Male or marin for Female so they never fail.</div>
           <audio id="voicePreviewAudio" class="hidden" controls></audio>
           <div class="toggle-row"><span>Allow natural interruption / barge-in</span><input id="adminInterruptions" type="checkbox" /></div>
           <div class="toggle-row"><span>Speak first after the customer taps Start Call</span><input id="adminSpeakFirst" type="checkbox" /></div>

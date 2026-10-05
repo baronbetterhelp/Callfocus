@@ -1,7 +1,18 @@
-CallFocus V11.14
+CallFocus V11.15 — Expanded GPT-Live voices
 
-- Fixed selected language not reaching the active GPT-Live session path.
-- Strengthened language-lock instructions for every spoken turn.
-- Opening greetings and natural endings stay in the selected language.
-- Added a Switch language button to Recent Calls / conversation continuation.
-- Changing language there is saved to the thread and used on the next call.
+Changed files:
+- _worker.js
+- admin.js
+- admin.html
+- app.js
+- v10.9-patch.js
+
+Changes:
+- Added additional official GPT-Live masculine voices to the admin male voice selector:
+  Meridian, Vesper, Stone, Ripple, Cinder, Beacon, Tempo.
+- Added additional official feminine GPT-Live voices too:
+  Gleam, Willow, Quartz, Delta, Bossa.
+- Added clearer regional / presentation labels in the admin dropdowns.
+- Live-only voices can be selected for calls without being rejected by CallFocus validation.
+- The existing admin TTS preview now explains when a selected voice is Live-only and should be tested with a short live call.
+- Voice notes remain reliable: if a Live-only call voice is selected, Male voice notes fall back to cedar and Female voice notes fall back to marin.

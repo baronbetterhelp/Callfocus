@@ -6,7 +6,7 @@ const ACCOUNTS_KEY = 'callfocus_accounts_v4';
 const SESSION_KEY = 'callfocus_session_v4';
 const ADMIN_KEY = 'callfocus_admin_global_v4';
 const LEGACY_ADMIN_KEY = 'callfocus_admin_global_v3';
-const VOICES = ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
+const VOICES = ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar','ripple','vesper','stone','meridian','beacon','cinder','tempo','quartz','willow','gleam','bossa','delta'];
 const TIMEZONES = [
   ['Africa/Lagos','Nigeria / West Africa (Lagos)'],['America/Los_Angeles','US Pacific (Los Angeles)'],['America/Denver','US Mountain (Denver)'],['America/Chicago','US Central (Chicago)'],['America/New_York','US Eastern (New York)'],['America/Phoenix','Arizona (Phoenix)'],['America/Toronto','Canada Eastern (Toronto)'],['America/Vancouver','Canada Pacific (Vancouver)'],['Europe/London','United Kingdom (London)'],['Europe/Rome','Italy (Rome)'],['Europe/Paris','France (Paris)'],['Europe/Berlin','Germany (Berlin)'],['Asia/Dubai','UAE (Dubai)'],['Asia/Kolkata','India (Kolkata)'],['Asia/Tokyo','Japan (Tokyo)'],['Asia/Shanghai','China (Shanghai)'],['Australia/Sydney','Australia (Sydney)'],['Pacific/Auckland','New Zealand (Auckland)'],['America/Indiana/Indianapolis','US Eastern (Indiana)'],['Pacific/Honolulu','Hawaii (Honolulu)'],['America/Anchorage','Alaska (Anchorage)']
 ];
@@ -31,6 +31,8 @@ const ADMIN_DEFAULTS = {
   serverMessage:'Server not active right now. Please try again soon.',
   maleVoice:'cedar',
   femaleVoice:'marin',
+  voiceNoteMaleVoice:'cedar',
+  voiceNoteFemaleVoice:'marin',
   model:'gpt-live-1',
   siteTheme:'pearl',
   instructions:'Follow the customer-provided call rules and relationship context closely. Keep the conversation responsive and natural. Do not turn a social call into an interview, support exchange, coaching session, or scripted agenda.',
