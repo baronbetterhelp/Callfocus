@@ -1,6 +1,15 @@
-# CallFocus V11.20
+# CallFocus V11.21
 
 Paystack payment integration built on the V11.19 account-reliability release.
+
+
+## Added in V11.21
+
+- automatic recovery of recent successful Paystack checkout payments when the browser callback/reference was lost
+- recovery queries recent successful Paystack transactions server-side and verifies each exact reference before crediting
+- authenticated-account matching using CallFocus transaction metadata/pending mapping, with an email fallback only for CallFocus-generated `CF-` references
+- existing processed-reference and wallet-purchase checks remain the duplicate-credit protection
+- automatic recovery runs after account restoration, so opening/refreshing CallFocus can repair a missed successful payment without paying again
 
 ## Added in V11.20
 

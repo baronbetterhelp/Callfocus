@@ -1151,7 +1151,7 @@ The entire spoken call must stay in ${callLanguage}. This is a hard CallFocus se
 
 
 // -----------------------------------------------------------------------------
-// V11.20 Paystack payments + dedicated transfer accounts
+// V11.21 Paystack payments + recovery + dedicated transfer accounts
 // PAYSTACK_SECRET_KEY stays server-side in Cloudflare Runtime Secrets.
 // ----------------------------------------------------------------------------
 const PAYSTACK_MIN_CREDITS = 300;
@@ -1438,6 +1438,141 @@ async function handlePaystackWallet(request, env) {
   return json({ ok: true, wallet: data.wallet, testMode: paystackIsTest(env), paystackConfigured: paystackConfigured(env) });
 }
 
+
+// V11.21 recovery: rediscover recent successful CallFocus checkouts when the
+// browser callback/reference was lost and the webhook did not credit the wallet.
+// Every candidate is still verified directly with Paystack before any credit is
+// applied, and creditVerifiedPaystackTransaction remains the idempotency gate.
+const PAYSTACK_RECOVERY_LOOKBACK_DAYS = 14;
+const PAYSTACK_RECOVERY_MAX_VERIFY = 12;
+
+function paystackMetadata(transaction = {}) {
+  if (transaction?.metadata && typeof transaction.metadata === 'object') return transaction.metadata;
+  if (typeof transaction?.metadata === 'string' && transaction.metadata.trim()) {
+    try { return JSON.parse(transaction.metadata); } catch {}
+  }
+  return {};
+}
+
+function paystackTransactionEmail(transaction = {}) {
+  return normalizeCustomerEmail(transaction?.customer?.email || transaction?.email || '');
+}
+
+async function paystackCandidateBelongsToUser(env, user, transaction = {}) {
+  const reference = String(transaction?.reference || '').trim();
+  if (!reference || !reference.startsWith('CF-')) return false;
+
+  const resolved = await resolvePaystackUserId(env, transaction);
+  if (resolved?.userId) return String(resolved.userId) === String(user.id);
+
+  const metadata = paystackMetadata(transaction);
+  if (metadata?.callfocus_user_id) return String(metadata.callfocus_user_id) === String(user.id);
+
+  // Fallback for an older Paystack response that omits metadata from the list
+  // endpoint. CallFocus checkout references are server-generated and the email
+  // must exactly match the authenticated account before the reference is verified.
+  const email = paystackTransactionEmail(transaction);
+  return !!email && email === normalizeCustomerEmail(user.email);
+}
+
+async function listRecentSuccessfulPaystackTransactions(env, user) {
+  const from = new Date(Date.now() - PAYSTACK_RECOVERY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  let customerId = '';
+  try {
+    const customer = await paystackRequest(env, `/customer/${encodeURIComponent(user.email)}`);
+    customerId = String(customer?.data?.id || '');
+  } catch {}
+
+  const params = new URLSearchParams({ status: 'success', perPage: '100', page: '1', from });
+  if (customerId) params.set('customer', customerId);
+  const payload = await paystackRequest(env, `/transaction?${params.toString()}`);
+  return Array.isArray(payload?.data) ? payload.data : [];
+}
+
+async function handlePaystackRecover(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Sign in again to recover the payment.', code: 'session_expired' }, 401);
+  if (!paystackConfigured(env)) return json({ error: 'Paystack is not configured yet.', code: 'paystack_not_configured' }, 503);
+
+  try {
+    const listed = await listRecentSuccessfulPaystackTransactions(env, auth.user);
+    const candidates = [];
+    for (const transaction of listed) {
+      if (await paystackCandidateBelongsToUser(env, auth.user, transaction)) candidates.push(transaction);
+    }
+    candidates.sort((a, b) => {
+      const ta = Date.parse(a?.paid_at || a?.paidAt || a?.created_at || 0) || 0;
+      const tb = Date.parse(b?.paid_at || b?.paidAt || b?.created_at || 0) || 0;
+      return tb - ta;
+    });
+
+    const recovered = [];
+    const checked = [];
+    for (const candidate of candidates.slice(0, PAYSTACK_RECOVERY_MAX_VERIFY)) {
+      const reference = String(candidate?.reference || '').trim();
+      if (!reference) continue;
+
+      const processed = await env.CALLFOCUS_CONFIG.get(paystackProcessedKey(reference), { type: 'json' });
+      if (processed?.userId) {
+        checked.push({ reference, status: 'already_processed' });
+        continue;
+      }
+
+      const verifiedPayload = await paystackRequest(env, `/transaction/verify/${encodeURIComponent(reference)}`);
+      const transaction = verifiedPayload?.data || {};
+      if (String(transaction?.status || '').toLowerCase() !== 'success') {
+        checked.push({ reference, status: String(transaction?.status || 'not_successful') });
+        continue;
+      }
+
+      let resolved = await resolvePaystackUserId(env, transaction);
+      if (!resolved?.userId) {
+        const verifiedEmail = paystackTransactionEmail(transaction);
+        const metadata = paystackMetadata(transaction);
+        const metadataUser = String(metadata?.callfocus_user_id || '');
+        const exactAccountMatch = metadataUser === String(auth.user.id) || (
+          !metadataUser &&
+          reference.startsWith('CF-') &&
+          verifiedEmail &&
+          verifiedEmail === normalizeCustomerEmail(auth.user.email)
+        );
+        if (exactAccountMatch) {
+          await env.CALLFOCUS_CONFIG.put(paystackPendingKey(reference), JSON.stringify({
+            userId: auth.user.id,
+            credits: Number(metadata?.callfocus_credits || 0),
+            amountNaira: Math.max(0, Number(transaction?.amount || 0)) / 100,
+            recoveredAt: new Date().toISOString(),
+            recovery: true
+          }), { expirationTtl: PAYSTACK_PENDING_TTL });
+          resolved = { userId: auth.user.id };
+        }
+      }
+
+      if (String(resolved?.userId || '') !== String(auth.user.id)) {
+        checked.push({ reference, status: 'account_mismatch' });
+        continue;
+      }
+
+      const result = await creditVerifiedPaystackTransaction(env, transaction);
+      checked.push({ reference, status: result?.credited ? 'credited' : (result?.duplicate ? 'already_processed' : String(result?.reason || 'not_credited')) });
+      if (result?.credited && result?.record) recovered.push(result.record);
+    }
+
+    const data = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
+    return json({
+      ok: true,
+      recoveredCount: recovered.length,
+      recovered,
+      checkedCount: checked.length,
+      wallet: data.wallet,
+      testMode: paystackIsTest(env)
+    });
+  } catch (error) {
+    return json({ error: error?.message || 'Could not recover recent Paystack payments.', code: error?.code || 'paystack_recovery_failed' }, error?.status || 502);
+  }
+}
+
 async function ensurePaystackCustomer(env, user) {
   let code = await env.CALLFOCUS_CONFIG.get(paystackUserCustomerKey(user.id));
   if (code) {
@@ -1616,6 +1751,7 @@ export default {
     if (url.pathname === '/api/paystack/initialize') return safeCustomerRoute('paystack-initialize', () => handlePaystackInitialize(request, env));
     if (url.pathname === '/api/paystack/verify') return safeCustomerRoute('paystack-verify', () => handlePaystackVerify(request, env));
     if (url.pathname === '/api/paystack/wallet') return safeCustomerRoute('paystack-wallet', () => handlePaystackWallet(request, env));
+    if (url.pathname === '/api/paystack/recover') return safeCustomerRoute('paystack-recover', () => handlePaystackRecover(request, env));
     if (url.pathname === '/api/paystack/dva') return safeCustomerRoute('paystack-dva', () => handlePaystackDva(request, env));
     if (url.pathname === '/api/paystack/webhook') return handlePaystackWebhook(request, env);
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
