@@ -140,14 +140,23 @@
           </details>
 
           <details class="thread-edit-details cf-thread-edit-card">
-            <summary>Edit last-used location, time zone or voice <span>Optional</span></summary>
+            <summary>Edit last-used location or time zone <span>Optional</span></summary>
             <div class="form-grid two"><div class="location-card"><strong>Caller A</strong><label>Location<input id="repeatARegion" value="${esc(t.callerA?.region||'')}" /></label><label>Time zone<select id="repeatATimezone">${timezoneOptions(t.callerA?.timezone)}</select></label></div><div class="location-card"><strong>Caller B</strong><label>Location<input id="repeatBRegion" value="${esc(t.callerB?.region||'')}" /></label><label>Time zone<select id="repeatBTimezone">${timezoneOptions(t.callerB?.timezone)}</select></label></div></div>
-            <label>Voice<select id="repeatVoiceGender"><option value="male" ${t.voiceGender!=='female'?'selected':''}>Male · ${esc(admin.maleVoice)}</option><option value="female" ${t.voiceGender==='female'?'selected':''}>Female · ${esc(admin.femaleVoice)}</option></select></label>
           </details>
 
           <section class="cf-next-call-composer">
             <div class="cf-composer-title"><div><span>Continue this conversation</span><h3>What is new for today’s call?</h3></div><small>You normally only need to add this.</small></div>
             <label class="cf-topic-label">New conversation details<textarea id="repeatTopic" rows="5" placeholder="What do you want to discuss on this call?"></textarea></label>
+
+            <div class="cf-repeat-voice">
+              <div class="cf-repeat-opening-head"><strong>Voice for this call</strong><span>Change anytime</span></div>
+              <div class="cf-repeat-voice-choice">
+                <button type="button" class="cf-repeat-voice-option ${t.voiceGender!=='female'?'active':''}" data-repeat-voice="male"><span>Male</span><small>${esc(admin.maleVoice)}</small></button>
+                <button type="button" class="cf-repeat-voice-option ${t.voiceGender==='female'?'active':''}" data-repeat-voice="female"><span>Female</span><small>${esc(admin.femaleVoice)}</small></button>
+              </div>
+              <input type="hidden" id="repeatVoiceGender" value="${esc(t.voiceGender||'male')}" />
+              <div class="cf-repeat-voice-note">This changes only the next call in this conversation. Your saved caller details stay the same.</div>
+            </div>
 
             <div class="cf-repeat-opening">
               <div class="cf-repeat-opening-head"><strong>Call opening</strong><span>Optional</span></div>
@@ -219,6 +228,13 @@
   }
 
   document.addEventListener('click',e=>{
+    const voiceBtn=e.target.closest('[data-repeat-voice]');
+    if(voiceBtn){
+      const value=voiceBtn.dataset.repeatVoice==='female'?'female':'male';
+      const hidden=$('repeatVoiceGender'); if(hidden) hidden.value=value;
+      document.querySelectorAll('.cf-repeat-voice-option').forEach(btn=>btn.classList.toggle('active',btn===voiceBtn));
+      return;
+    }
     if(e.target.closest('[data-v9-open-conversations]')){ openConversationDrawer(); return; }
     if(e.target.closest('[data-select-thread]')) closeConversationDrawer();
   });
