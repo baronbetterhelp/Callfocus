@@ -1,3 +1,21 @@
+# CallFocus V11.23
+
+Compact Recent Calls history update built on the stable V11.22 Paystack reconciliation release.
+
+## Changed in V11.23
+
+- call history now uses a compact ChatGPT-style recent list
+- full conversation prompts are no longer exposed in the history view
+- each call shows only a brief call detail, call date, call time, duration, and call number
+- newest calls appear first
+- internal-looking placeholders such as `CALLFOCUS_CONFIG` are hidden from the visible history and shown generically as `Call session`
+- per-call copy functionality remains available through the small copy icon
+- no payment, realtime voice, credit, admin, or backend behavior was changed
+
+## Base
+
+V11.23 includes all V11.22 Paystack reconciliation and Observability fixes.
+
 # CallFocus V11.22
 
 Targeted Paystack wallet reconciliation release built directly on V11.21.
