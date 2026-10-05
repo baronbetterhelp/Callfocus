@@ -5,8 +5,9 @@
 
   function applyEntitlementUi(){
     document.documentElement.dataset.creditAccess=state.unlimited?'unlimited':'metered';
+    // Refresh credit-related UI only. Re-rendering the whole workspace here would
+    // rebuild the Recent Calls composer and erase text the user is typing/pasting.
     try{window.CallFocusCredits?.render?.();}catch{}
-    try{renderWorkspace();}catch{}
   }
 
   async function refreshEntitlement(){

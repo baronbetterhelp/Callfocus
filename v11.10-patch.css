@@ -1,0 +1,44 @@
+/* CallFocus V11.10 — stable recent-call composer + remove dead footer gap */
+
+/* The mobile recent-call thread should flow as one page instead of sitting inside
+   a fixed-height nested scroller. This removes the large empty strip above footer. */
+@media(max-width:1000px){
+  #page-recent{padding-bottom:14px!important;}
+  #page-recent .recent-layout{
+    height:auto!important;
+    min-height:0!important;
+    overflow:visible!important;
+    margin-bottom:0!important;
+  }
+  #page-recent .thread-detail-panel{
+    height:auto!important;
+    min-height:0!important;
+    overflow:visible!important;
+  }
+  #page-recent .cf-chat-thread{
+    height:auto!important;
+    min-height:0!important;
+  }
+  #page-recent .cf-chat-scroll{
+    overflow:visible!important;
+    min-height:0!important;
+    padding-bottom:12px!important;
+  }
+  /* Keep the conversation picker behaving like a drawer even though the thread
+     itself now uses normal page scrolling. */
+  #page-recent .recent-list-panel{
+    position:fixed!important;
+    left:0!important;
+    top:74px!important;
+    bottom:0!important;
+    height:auto!important;
+    max-height:none!important;
+  }
+}
+
+@media(max-width:620px){
+  #page-recent{padding-bottom:8px!important;}
+  #page-recent .recent-layout{border-radius:18px!important;}
+  #page-recent .cf-chat-scroll{padding-bottom:6px!important;}
+  #page-recent .cf-next-call-composer.cf-primary-composer{margin-bottom:6px!important;}
+}
