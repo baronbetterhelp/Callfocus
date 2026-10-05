@@ -1,0 +1,29 @@
+/* CallFocus V11.29 — compact Recent Calls list, matching the approved V11.23 pattern */
+.cf-history-section{max-width:780px!important;margin:22px auto 0!important}
+.cf-history-section .cf-timeline-heading{display:flex!important;align-items:flex-end!important;justify-content:space-between!important;gap:12px!important;margin:0 0 10px!important;padding:0 3px!important}
+.cf-history-section .cf-timeline-heading span{font:800 12px/1.2 'DM Sans',sans-serif!important;letter-spacing:.12em!important;text-transform:uppercase!important;color:#356d65!important}
+.cf-history-section .cf-timeline-heading small{font:400 11px/1.35 'DM Sans',sans-serif!important;color:#8a9995!important}
+.cf-history-section .cf-call-timeline.cf-recents-list-v1129{display:block!important;margin:0 0 28px!important;padding:0!important;border:1px solid #dfe7e3!important;border-radius:0!important;overflow:hidden!important;background:rgba(255,255,255,.92)!important;box-shadow:none!important}
+.cf-recents-row-v1129{display:grid!important;grid-template-columns:minmax(0,1fr) 38px!important;align-items:center!important;gap:14px!important;min-height:112px!important;padding:18px 18px!important;margin:0!important;border:0!important;border-bottom:1px solid #e3e9e6!important;border-radius:0!important;background:#fff!important;box-shadow:none!important}
+.cf-recents-row-v1129:last-child{border-bottom:0!important}
+.cf-recents-copy-v1129{min-width:0!important}
+.cf-recents-title-v1129{display:-webkit-box!important;-webkit-box-orient:vertical!important;-webkit-line-clamp:2!important;overflow:hidden!important;margin:0!important;color:#17312e!important;font:700 17px/1.38 'DM Sans',sans-serif!important;letter-spacing:0!important;word-break:break-word!important}
+.cf-recents-number-v1129{display:block!important;margin-top:7px!important;color:#84928e!important;font:800 10px/1.2 'DM Sans',sans-serif!important;letter-spacing:.12em!important;text-transform:uppercase!important}
+.cf-recents-meta-v1129{display:flex!important;align-items:center!important;flex-wrap:wrap!important;gap:0!important;margin-top:10px!important;color:#7f8d89!important;font:400 13px/1.4 'DM Sans',sans-serif!important}
+.cf-recents-meta-v1129 span{display:inline-flex!important;align-items:center!important;white-space:nowrap!important}
+.cf-recents-meta-v1129 span+span::before{content:'·'!important;margin:0 10px!important;color:#adb8b4!important}
+.cf-recents-copy-btn-v1129{position:relative!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;width:36px!important;height:36px!important;min-width:36px!important;min-height:36px!important;padding:0!important;margin:0!important;border:0!important;border-radius:9px!important;background:transparent!important;color:#5a756f!important;font:500 18px/1 system-ui!important;box-shadow:none!important;cursor:pointer!important}
+.cf-recents-copy-btn-v1129:hover,.cf-recents-copy-btn-v1129:focus-visible{background:#eef5f2!important;color:#285e56!important;outline:none!important}
+.cf-recents-copy-label-v1129{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+
+@media(max-width:620px){
+  .cf-history-section{margin-top:18px!important}
+  .cf-history-section .cf-timeline-heading{align-items:flex-start!important;flex-direction:column!important;gap:5px!important;padding:0!important}
+  .cf-history-section .cf-call-timeline.cf-recents-list-v1129{border-left:1px solid #dfe7e3!important;border-right:1px solid #dfe7e3!important}
+  .cf-recents-row-v1129{grid-template-columns:minmax(0,1fr) 34px!important;min-height:102px!important;gap:9px!important;padding:15px 14px!important}
+  .cf-recents-title-v1129{font-size:15px!important;line-height:1.4!important}
+  .cf-recents-number-v1129{margin-top:6px!important;font-size:9px!important}
+  .cf-recents-meta-v1129{margin-top:8px!important;font-size:12px!important}
+  .cf-recents-meta-v1129 span+span::before{margin:0 7px!important}
+  .cf-recents-copy-btn-v1129{width:32px!important;height:32px!important;min-width:32px!important;min-height:32px!important;font-size:16px!important}
+}
