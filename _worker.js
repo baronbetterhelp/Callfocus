@@ -39,6 +39,7 @@ const DEFAULT_CONFIG = {
   maleVoice: 'cedar',
   femaleVoice: 'marin',
   model: 'gpt-live-1',
+  speakingPace: 'relaxed',
   instructions: 'Follow the customer-provided call rules and relationship context closely. Keep the conversation responsive and natural. Do not turn a social phone call into an interview, coaching session, support exchange, or scripted agenda.',
   speechStyle: 'Warm, grounded, natural phone-call delivery. Moderate pace. Leave space between turns. Prefer concise replies and genuine reactions over explanations. Let the other person lead when appropriate.',
   opening: 'Use the customer-selected opening for each call. Greet naturally, then pause and let the other person respond before moving further into the topic.',
@@ -78,6 +79,7 @@ function sanitizeConfig(input = {}) {
     maleVoice: voice(input.maleVoice) || DEFAULT_CONFIG.maleVoice,
     femaleVoice: voice(input.femaleVoice) || DEFAULT_CONFIG.femaleVoice,
     model: 'gpt-live-1',
+    speakingPace: ['relaxed','normal','brisk'].includes(input.speakingPace) ? input.speakingPace : DEFAULT_CONFIG.speakingPace,
     instructions: String(input.instructions || DEFAULT_CONFIG.instructions).slice(0, 16000),
     speechStyle: String(input.speechStyle || DEFAULT_CONFIG.speechStyle).slice(0, 8000),
     opening: String(input.opening || DEFAULT_CONFIG.opening).slice(0, 4000),
@@ -180,6 +182,7 @@ async function handleVoicePreview(request, env) {
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
   const voice = VOICES.includes(body?.voice) ? body.voice : 'marin';
   const input = String(body?.text || 'Hi. This is a quick CallFocus voice preview.').slice(0, 500);
+  const config = await getConfig(env);
   const speech = await fetch('https://api.openai.com/v1/audio/speech', {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
@@ -187,7 +190,7 @@ async function handleVoicePreview(request, env) {
       model: 'gpt-4o-mini-tts',
       voice,
       input,
-      instructions: 'Natural relaxed phone voice. Grounded, conversational, understated, moderate pace. Do not sound like an announcer or customer-service bot.',
+      instructions: `Natural phone voice. Grounded, conversational, understated. ${paceInstruction(config.speakingPace)} Do not sound like an announcer or customer-service bot.`,
       response_format: 'mp3'
     })
   });
@@ -196,6 +199,12 @@ async function handleVoicePreview(request, env) {
     return json({ error: text.includes('credit') || speech.status === 429 ? 'Voice preview unavailable because API credit is not available.' : 'Voice preview is unavailable right now.' }, speech.status);
   }
   return new Response(speech.body, { status: 200, headers: { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store' } });
+}
+
+function paceInstruction(pace) {
+  if (pace === 'brisk') return 'Speak at a normal-to-brisk everyday phone pace, but never rush. Keep articulation clear and leave a brief pause after each complete thought.';
+  if (pace === 'normal') return 'Speak at a natural everyday phone pace. Do not hurry, clip words, or run sentences together. Leave small natural pauses between thoughts.';
+  return 'Speak at a relaxed, unhurried everyday phone pace. Slow down slightly compared with a typical assistant voice. Do not rush, compress phrases, or run sentences together. Use short phrases with small natural pauses, and finish one thought before moving to the next.';
 }
 
 async function handleSession(request, env) {
@@ -216,6 +225,7 @@ async function handleSession(request, env) {
   const speechStyle = String(config.speechStyle || '').trim();
   const liveInstructions = [
     CORE_LIVE_PROMPT,
+    `# Speaking pace\n${paceInstruction(config.speakingPace)}`,
     speechStyle ? `# Owner speech preferences\n${speechStyle}` : '',
     ownerRules ? `# Owner/admin call rules\n${ownerRules}` : ''
   ].filter(Boolean).join('\n\n');

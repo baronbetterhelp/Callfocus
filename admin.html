@@ -54,22 +54,6 @@
         <label class="admin-maintenance-message">Offline message<input id="adminServerMessage" maxlength="240" placeholder="Server not active right now. Please try again soon." /></label>
       </div>
 
-      <div class="premium-panel admin-diagnostic-panel" id="adminDiagnosticPanel">
-        <div>
-          <span class="kicker">Live engine diagnostic</span>
-          <h3>Connection health</h3>
-          <p class="admin-panel-copy">Checks whether this Worker can access GPT-Live 1 and shows the last server-side Live session result. Customers never see these technical details.</p>
-        </div>
-        <div class="admin-diagnostic-status" id="adminDiagnosticStatus">Not checked yet.</div>
-        <div class="admin-diagnostic-grid hidden" id="adminDiagnosticGrid">
-          <div><span>API key</span><strong id="diagApiKey">—</strong></div>
-          <div><span>GPT-Live access</span><strong id="diagModelAccess">—</strong></div>
-          <div><span>Admin server switch</span><strong id="diagServerSwitch">—</strong></div>
-          <div><span>Last call-session result</span><strong id="diagLastResult">—</strong></div>
-        </div>
-        <button class="btn btn-ghost" id="runDiagnosticBtn" type="button">Run connection check</button>
-      </div>
-
       <div class="admin-grid-v3">
         <div class="premium-panel form-panel">
           <span class="kicker">Voice engine</span><h3>Customer voice pair</h3>
@@ -91,7 +75,9 @@
 
         <div class="premium-panel form-panel">
           <span class="kicker">Conversation behavior</span><h3>Make calls listen first</h3>
-          <label>Natural speech style<textarea id="adminSpeechStyle" rows="9" placeholder="Keep this short: pacing, tone, turn length and listening style"></textarea></label>
+          <label>Speaking pace<select id="adminSpeakingPace"><option value="relaxed">Relaxed — recommended</option><option value="normal">Normal</option><option value="brisk">Brisk</option></select></label>
+          <div class="admin-recommendation">For a natural phone-call feel, use <strong>Relaxed</strong>. This changes GPT-Live's speaking-style instructions for every new call.</div>
+          <label>Natural speech style<textarea id="adminSpeechStyle" rows="9" placeholder="Keep this short: tone, turn length, listening style and emotional delivery"></textarea></label>
           <label>Master call rules<textarea id="adminInstructions" rows="11" placeholder="Your global rules for every call. These are loaded server-side into every new Live session."></textarea></label>
           <label>Default opening behavior<textarea id="adminOpening" rows="5" placeholder="How the first line should begin"></textarea></label>
         </div>
