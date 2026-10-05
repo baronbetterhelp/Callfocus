@@ -1,14 +1,15 @@
 CallFocus V11.11
 
-Request End improvements:
-- The Request end button now produces a longer, more natural call ending.
-- The ending uses the current call conversation as context.
-- It acknowledges the most recent part of the conversation when appropriate.
-- It gives a conversational reason for needing to leave.
-- If no real reason exists in the call context, it uses a non-specific natural reason rather than inventing a specific event.
-- The ending is typically 2–4 short sentences instead of an abrupt “bye” or “talk soon.”
-- The graceful-close safety timeout was extended so the longer ending is not cut off.
-- The same behavior also applies when low credit automatically triggers Request end.
+Natural call-ending update:
+- Renames “Request end” to “End naturally”.
+- The button now asks GPT-Live for a fuller, context-aware closing instead of a bare goodbye.
+- The ending must include a believable everyday reason for leaving.
+- The tone adapts to romantic, friendship, family, supportive, business, client, formal, dating, casual, or custom dynamics.
+- “Dear”/affectionate wording is only allowed when the relationship makes it natural.
+- Concrete emergencies or invented obligations are explicitly prohibited unless already established in the live conversation.
+- Uses the current call topic, caller name, relationship dynamics, and live conversation context to shape the ending.
+- The call closes automatically after the spoken ending.
 
-Main changed file:
-- v10.4-patch.js
+Changed files:
+- index.html
+- v11.11-patch.js
