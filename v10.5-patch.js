@@ -1,5 +1,7 @@
 /* CallFocus V10.5 — composer-first Recent Calls + per-call copy details */
 (()=>{
+  const CF_CALL_LANGUAGES_V114=[['English','English'],['Spanish','Spanish / Español'],['French','French / Français'],['Italian','Italian / Italiano'],['German','German / Deutsch'],['Portuguese','Portuguese / Português'],['Dutch','Dutch / Nederlands'],['Arabic','Arabic / العربية'],['Hindi','Hindi / हिन्दी'],['Mandarin Chinese','Mandarin Chinese / 中文'],['Cantonese','Cantonese / 粵語'],['Japanese','Japanese / 日本語'],['Korean','Korean / 한국어'],['Russian','Russian / Русский'],['Turkish','Turkish / Türkçe'],['Vietnamese','Vietnamese / Tiếng Việt'],['Polish','Polish / Polski'],['Ukrainian','Ukrainian / Українська'],['Greek','Greek / Ελληνικά'],['Hebrew','Hebrew / עברית'],['Indonesian','Indonesian / Bahasa Indonesia'],['Malay','Malay / Bahasa Melayu'],['Thai','Thai / ไทย'],['Swahili','Swahili / Kiswahili'],['Filipino','Filipino / Tagalog'],['Romanian','Romanian / Română'],['Czech','Czech / Čeština'],['Hungarian','Hungarian / Magyar'],['Swedish','Swedish / Svenska'],['Norwegian','Norwegian / Norsk'],['Danish','Danish / Dansk'],['Finnish','Finnish / Suomi']];
+  function languageOptionsV114(selected){return CF_CALL_LANGUAGES_V114.map(([v,l])=>`<option value="${esc(v)}" ${v===(selected||'English')?'selected':''}>${esc(l)}</option>`).join('')}
   function localHourV105(tz){
     try{
       const parts=new Intl.DateTimeFormat('en-US',{timeZone:tz,hour:'numeric',hour12:false}).formatToParts(new Date());
@@ -106,6 +108,16 @@
               <div class="cf-repeat-voice-note">This changes only the next call. Your saved caller information stays intact.</div>
             </div>
 
+            <div class="cf-repeat-language">
+              <div class="cf-repeat-opening-head"><strong>Call language</strong><span>Saved to this thread</span></div>
+              <div class="cf-repeat-language-current"><span>Current language</span><strong id="repeatLanguageCurrent">${esc(t.callLanguage||'English')}</strong></div>
+              <button type="button" class="cf-language-switch-button" data-language-switch-toggle>Switch language</button>
+              <div class="cf-language-switch-panel hidden" id="repeatLanguageSwitchPanel">
+                <label>Language<select id="repeatCallLanguage">${languageOptionsV114(t.callLanguage||'English')}</select></label>
+                <div class="opening-preview">The next call will stay in this language for the full conversation, even if the other person changes language or has a different accent.</div>
+              </div>
+            </div>
+
             <div class="cf-repeat-opening">
               <div class="cf-repeat-opening-head"><strong>Call opening</strong><span>Optional</span></div>
               <label>Opening style<select id="repeatOpeningMode">${openingOptionsV105(openingMode)}</select></label>
@@ -149,6 +161,20 @@
       setTimeout(()=>{btn.classList.remove('copied');if(span)span.textContent=old},1400);
       toast('Call details copied');
     }catch{toast('Could not copy call details')}
+  });
+
+  document.addEventListener('click',e=>{
+    const toggle=e.target.closest('[data-language-switch-toggle]');
+    if(!toggle)return;
+    const panel=document.getElementById('repeatLanguageSwitchPanel');
+    panel?.classList.toggle('hidden');
+    toggle.textContent=panel?.classList.contains('hidden')?'Switch language':'Hide language options';
+  });
+
+  document.addEventListener('change',e=>{
+    if(e.target?.id!=='repeatCallLanguage')return;
+    const current=document.getElementById('repeatLanguageCurrent');
+    if(current)current.textContent=e.target.value||'English';
   });
 
   // If the public theme has already loaded before this patch, keep it applied.

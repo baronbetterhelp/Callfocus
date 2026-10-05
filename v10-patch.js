@@ -24,11 +24,12 @@
     const greeting=greetingFor(c?.callerB?.timezone||'America/New_York');
     const mode=c?.openingMode||'auto';
     const custom=String(c?.openingCustom||'').trim();
-    if(mode==='wait') return '';
-    if(mode==='custom'&&custom) return `Open now using this customer-requested opening naturally: “${custom}” Then STOP and wait for the other person. Do not add an assistant-style introduction before or after it.`;
-    if(mode==='name') return `Open now with a simple natural greeting in the style of “Hey ${name}.” Keep the entire first turn to one short sentence, then STOP and wait for the other person.`;
-    if(mode==='time') return `Open now with a natural local-time greeting such as “${greeting}, ${name}.” Keep the entire first turn to one short sentence, then STOP and wait for the other person.`;
-    return `Open the phone call now with one short, natural greeting appropriate to the relationship and Caller B’s local time. A suitable greeting is “Hey ${name}” or “${greeting}, ${name}.” Do not say “dear,” “nice to connect,” “how can I help,” or any service-style phrase. Do not mention the agenda yet unless it naturally belongs in the first sentence. After the greeting, STOP and wait for Caller B.`;
+    const language=c?.callLanguage||'English';
+    if(mode==='wait') return `The call language is ${language}. When Caller B speaks, respond only in ${language}. Do not mirror another language or accent.`;
+    if(mode==='custom'&&custom) return `The call language is ${language}. Speak only in ${language}. Render this customer-requested opening naturally in ${language}, preserving its meaning even if the supplied words are in another language: “${custom}” Then STOP and wait for the other person. Do not add an assistant-style introduction before or after it.`;
+    if(mode==='name') return `The call language is ${language}. Speak only in ${language}. Open with the natural ${language} equivalent of a simple greeting in the style of “Hey ${name}.” Keep the entire first turn to one short sentence, then STOP and wait for the other person.`;
+    if(mode==='time') return `The call language is ${language}. Speak only in ${language}. Open with the natural ${language} equivalent of a local-time greeting such as “${greeting}, ${name}.” Keep the entire first turn to one short sentence, then STOP and wait for the other person.`;
+    return `The call language is ${language}. Speak the opening and every later response only in ${language}. Open the phone call now with one short, natural greeting in ${language} appropriate to the relationship and Caller B’s local time. Use the natural ${language} equivalent of “Hey ${name}” or “${greeting}, ${name}.” Do not say “dear,” “nice to connect,” “how can I help,” or any service-style phrase. Do not mention the agenda yet unless it naturally belongs in the first sentence. After the greeting, STOP and wait for Caller B. If Caller B speaks another language, continue replying only in ${language}.`;
   }
 
   // Context only. Conversation behavior is now enforced server-side from the latest Admin rules.

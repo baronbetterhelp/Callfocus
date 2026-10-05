@@ -151,7 +151,7 @@
       dc.onmessage=e=>handleRealtimeEvent(e.data); dc.onerror=()=>{$('liveCaption').textContent='Voice connection error.'};
 
       const offer=await pc.createOffer(); await pc.setLocalDescription(offer); await waitForIce(pc);
-      const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,contextInstructions:buildInstructions(call)}})});
+      const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,callLanguage:call.callLanguage||'English',contextInstructions:buildInstructions(call)}})});
       const text=await res.text();
       if(!res.ok){const reason=res.headers.get('X-CallFocus-Error-Code')||`http_${res.status}`;throw Object.assign(new Error(text||'Live session failed'),{callFocusReason:reason})}
       call.speakFirst=res.headers.get('X-CallFocus-Speak-First')!=='0'; call.engine=res.headers.get('X-CallFocus-Engine')||'gpt-live-1'; call.configUpdatedAt=res.headers.get('X-CallFocus-Config-Updated')||'';

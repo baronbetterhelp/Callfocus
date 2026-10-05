@@ -1,0 +1,12 @@
+/* CallFocus V11.14 — Recent Call language switch */
+.cf-repeat-language{margin-top:20px;padding-top:20px;border-top:1px solid var(--line)}
+.cf-repeat-language-current{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:12px 0;padding:14px 16px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.54)}
+.cf-repeat-language-current span{font-size:12px;color:var(--muted);font-weight:700}
+.cf-repeat-language-current strong{font-size:14px;color:var(--ink);text-align:right}
+.cf-language-switch-button{width:100%;min-height:48px;border-radius:16px;border:1px solid var(--line);background:transparent;color:var(--ink);font:700 14px/1 Manrope,DM Sans,sans-serif;cursor:pointer}
+.cf-language-switch-button:active{transform:scale(.99)}
+.cf-language-switch-panel{margin-top:12px;padding:14px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.54)}
+.cf-language-switch-panel label{display:grid;gap:8px;font-weight:700;color:var(--ink)}
+.cf-language-switch-panel select{width:100%}
+html[data-theme="black"] .cf-repeat-language-current,html[data-theme="black"] .cf-language-switch-panel{background:#141414}
+@media(max-width:620px){.cf-repeat-language{margin-top:18px;padding-top:18px}.cf-repeat-language-current{padding:12px 14px}.cf-language-switch-panel{padding:12px}}

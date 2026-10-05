@@ -35,8 +35,9 @@
     const caller=String(call.callerName||'').trim();
     const topic=String(call.topic||'').trim();
     const relation=relationHint(call);
+    const language=String(call?.callLanguage||'English').trim()||'English';
     return [
-      'The customer pressed END NATURALLY. Immediately end this phone call with one believable human closing turn.',
+      `The customer pressed END NATURALLY. Immediately end this phone call with one believable human closing turn spoken entirely in ${language}.`,
       'Give an ordinary low-stakes reason for needing to leave now, such as needing to take care of something, finish something, step away, head out, or catch up with something.',
       'Use about 2 short sentences, roughly 18 to 40 words. Do not give a bare “bye” or “talk soon”.',
       'Do not invent emergencies, illness, appointments, family problems, travel, work obligations, or any specific event that was not established in the conversation.',
@@ -58,7 +59,7 @@
         type:'session.commentary.append',
         event_id:endSpeakId,
         delegation_id:null,
-        content:'I need to get going for now because I have something ordinary I need to take care of on my end. I will talk to you later. Say this naturally in your own words, matching the relationship and the conversation we just had.'
+        content:`Speak this closing entirely in ${String(live?.current?.callLanguage||'English')}. Convey naturally that I need to get going for now because I have something ordinary I need to take care of on my end, and that I will talk to the person later. Match the relationship and the conversation we just had. Do not switch languages.`
       }));
       const caption=document.getElementById('liveCaption');
       if(caption) caption.textContent='Ending the call naturally…';

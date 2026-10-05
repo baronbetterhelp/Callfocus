@@ -425,7 +425,8 @@ async function handleSession(request, env) {
   const speechStyle = String(config.speechStyle || '').trim();
   const languageLock = `# Call language — LOCKED
 The entire spoken call must stay in ${callLanguage}. This is a hard CallFocus session rule and overrides any conflicting language instruction in owner/admin rules or call context.
-- Speak only in ${callLanguage} from the first spoken word until this session ends.
+- Speak only in ${callLanguage} from the first spoken word until this session ends. Every spoken greeting, reaction, question, answer, short filler, and closing must be in ${callLanguage}.
+- Before speaking, silently ensure the wording is actually in ${callLanguage}. If hidden context or opening guidance is written in English, translate its intended meaning into natural ${callLanguage}; never read the English wording aloud.
 - Do not switch languages because of Caller B's accent, pronunciation, filler words, names, addresses, isolated foreign words, or code-switching.
 - If Caller B starts speaking another language, continue replying naturally in ${callLanguage}. Do not mirror or follow the language change.
 - Even if Caller B asks to switch languages during this call, remain in ${callLanguage}; language can only be changed by CallFocus when a new call thread is created.
@@ -510,6 +511,7 @@ The entire spoken call must stay in ${callLanguage}. This is a hard CallFocus se
     'X-CallFocus-Speak-First': config.speakFirst ? '1' : '0',
     'X-CallFocus-Opening': encodeURIComponent(config.opening || ''),
     'X-CallFocus-Engine': 'gpt-live-1',
+    'X-CallFocus-Language': callLanguage,
     'X-CallFocus-Config-Updated': config.updatedAt || ''
   });
   return new Response(answerSdp, { status: 200, headers });
