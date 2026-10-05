@@ -4,6 +4,30 @@
   const SERVER_TOKEN_KEY='callfocus_server_session_v1';
   let pendingSignup=null;
   let resetEmail='';
+  const POST_SIGNUP_HOME_KEY='callfocus_post_signup_home_v1';
+
+  // V11.34: a newly-created account must land at the top of the main Home hero,
+  // never halfway down on the signed-in workspace section. This flag survives only
+  // the signup navigation and is consumed immediately on the new page load.
+  let postSignupHome=false;
+  try{
+    postSignupHome=sessionStorage.getItem(POST_SIGNUP_HOME_KEY)==='1';
+    if(postSignupHome)sessionStorage.removeItem(POST_SIGNUP_HOME_KEY);
+  }catch{}
+  function forcePostSignupHome(){
+    if(!postSignupHome)return;
+    try{history.scrollRestoration='manual';}catch{}
+    try{history.replaceState({callfocus:true},'', '/');}catch{}
+    try{if(typeof showView==='function')showView('home',false);}catch{}
+    try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0);}catch{}}
+  }
+  if(postSignupHome){
+    forcePostSignupHome();
+    requestAnimationFrame(forcePostSignupHome);
+    setTimeout(forcePostSignupHome,80);
+    setTimeout(forcePostSignupHome,350);
+    window.addEventListener('load',()=>{forcePostSignupHome();setTimeout(forcePostSignupHome,120);},{once:true});
+  }
 
   function setBusy(button,busy,label){
     if(!button)return;
@@ -32,10 +56,14 @@
     line.classList.toggle('hidden',!message);
   }
 
-  function storeSessionAndReload(token,message='Account ready'){
+  function storeSessionAndReload(token,message='Account ready',goHome=false){
     if(!token){toast?.('Account created, but the session could not be started.');return;}
     localStorage.setItem(SERVER_TOKEN_KEY,token);
-    try{sessionStorage.setItem('callfocus_post_auth_notice',message);}catch{}
+    try{
+      sessionStorage.setItem('callfocus_post_auth_notice',message);
+      if(goHome)sessionStorage.setItem(POST_SIGNUP_HOME_KEY,'1');
+    }catch{}
+    if(goHome){location.replace('/');return;}
     location.reload();
   }
 
@@ -93,7 +121,7 @@
         return;
       }
       if(payload.token){
-        storeSessionAndReload(payload.token,payload.notice||'Account created');
+        storeSessionAndReload(payload.token,payload.notice||'Account created',true);
         return;
       }
       const msg='The account service returned an incomplete response. Please try again.';
@@ -126,7 +154,7 @@
         const msg=payload?.error||'Could not verify that code.';
         authStatus(msg,'error','emailVerifyModal');toast(msg);return;
       }
-      storeSessionAndReload(payload.token,'Email verified · account created');
+      storeSessionAndReload(payload.token,'Email verified · account created',true);
     }catch{
       const msg='Could not reach the verification service. Try again.';
       authStatus(msg,'error','emailVerifyModal');toast(msg);
