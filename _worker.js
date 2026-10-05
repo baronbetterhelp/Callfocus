@@ -204,6 +204,142 @@ async function handleVoicePreview(request, env) {
   return new Response(speech.body, { status: 200, headers: { 'Content-Type': 'audio/mpeg', 'Cache-Control': 'no-store' } });
 }
 
+
+function speechSpeedForPace(pace) {
+  if (pace === 'brisk') return 1.06;
+  if (pace === 'normal') return 0.98;
+  return 0.90;
+}
+
+function extractChatText(payload) {
+  const content = payload?.choices?.[0]?.message?.content;
+  if (typeof content === 'string') return content.trim();
+  if (Array.isArray(content)) return content.map(part => part?.text || part?.content || '').join('').trim();
+  return '';
+}
+
+async function handleVoiceNote(request, env) {
+  if (!env.OPENAI_API_KEY) return json({ error: 'Voice notes are unavailable right now. Please try again soon.' }, 503);
+
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+
+  const prompt = String(body?.prompt || '').trim();
+  if (!prompt) return json({ error: 'Type what you want the voice note to say.' }, 400);
+  if (prompt.length > 2200) return json({ error: 'Keep the voice note prompt under 2,200 characters.' }, 400);
+
+  const config = await getConfig(env);
+  const gender = body?.voiceGender === 'female' ? 'female' : 'male';
+  const voice = gender === 'female' ? config.femaleVoice : config.maleVoice;
+
+  const writerInstructions = `You write the exact spoken words for one private voice note.
+
+The user gives you an intent or rough prompt. Turn it into a natural human-sounding voice note. Output only the words that should be spoken, with no labels, notes, quotation marks, stage directions, or explanation.
+
+VOICE-NOTE BEHAVIOR
+- Sound like a real person recording a private voice note, not an assistant, presenter, narrator, customer-service agent, or script reader.
+- Keep the wording conversational and emotionally natural.
+- Prefer a concise message. Usually 2 to 6 spoken sentences unless the user clearly asks for something longer.
+- Do not ask yourself questions or answer your own questions.
+- Do not invent personal facts, events, promises, relationship history, or information not provided by the user or the owner rules.
+- If the user supplies exact wording, preserve the meaning and lightly polish only when useful.
+- If a greeting is appropriate, make it brief and natural.
+- This is a one-way voice note, not a live conversation. Do not write a line that expects an immediate reply and then continue as if a reply happened.
+
+OWNER SPEECH STYLE
+${String(config.speechStyle || DEFAULT_CONFIG.speechStyle)}
+
+OWNER MASTER RULES
+${String(config.instructions || DEFAULT_CONFIG.instructions)}
+
+DEFAULT OPENING BEHAVIOR
+${String(config.opening || DEFAULT_CONFIG.opening)}
+
+Return only the final spoken voice-note text.`;
+
+  let script = '';
+  try {
+    const drafted = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: writerInstructions },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.72,
+        max_tokens: 420
+      })
+    });
+    const raw = await drafted.text();
+    let parsed = {};
+    try { parsed = JSON.parse(raw); } catch {}
+    if (!drafted.ok) {
+      const code = parsed?.error?.code || parsed?.error?.type || '';
+      const quota = drafted.status === 429 || code === 'credit_balance_exhausted' || code === 'insufficient_quota';
+      return json({ error: quota ? 'Voice notes are temporarily unavailable. Please try again soon.' : 'Could not prepare the voice note right now. Please try again.' }, quota ? 503 : drafted.status);
+    }
+    script = extractChatText(parsed);
+  } catch {
+    return json({ error: 'Could not prepare the voice note right now. Please try again.' }, 502);
+  }
+
+  if (!script) return json({ error: 'Could not prepare the voice note right now. Please try again.' }, 502);
+  script = script.slice(0, 3200);
+
+  const ttsInstructions = [
+    'Render this as a realistic private voice note recorded on a phone.',
+    'Do not sound like an announcer, virtual assistant, audiobook narrator, presenter, or customer-service voice.',
+    paceInstruction(config.speakingPace),
+    String(config.speechStyle || '').trim(),
+    'Use natural phrasing, gentle variations in intonation, and small pauses where a real person would breathe. Keep the delivery grounded and understated.'
+  ].filter(Boolean).join(' ');
+
+  let speech;
+  try {
+    speech = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini-tts',
+        voice,
+        input: script,
+        instructions: ttsInstructions.slice(0, 4000),
+        speed: speechSpeedForPace(config.speakingPace),
+        response_format: 'mp3'
+      })
+    });
+  } catch {
+    return json({ error: 'Could not generate the voice note right now. Please try again.' }, 502);
+  }
+
+  if (!speech.ok) {
+    const raw = await speech.text();
+    let parsed = {};
+    try { parsed = JSON.parse(raw); } catch {}
+    const code = parsed?.error?.code || parsed?.error?.type || '';
+    const quota = speech.status === 429 || code === 'credit_balance_exhausted' || code === 'insufficient_quota';
+    return json({ error: quota ? 'Voice notes are temporarily unavailable. Please try again soon.' : 'Could not generate the voice note right now. Please try again.' }, quota ? 503 : speech.status);
+  }
+
+  const audio = await speech.arrayBuffer();
+  const headers = new Headers({
+    'Content-Type': 'audio/mpeg',
+    'Cache-Control': 'no-store',
+    'X-CallFocus-Voice-Gender': gender,
+    'X-CallFocus-Voice': voice,
+    'X-CallFocus-Script': encodeURIComponent(script)
+  });
+  return new Response(audio, { status: 200, headers });
+}
+
 function paceInstruction(pace) {
   if (pace === 'brisk') return 'Speak at a normal-to-brisk everyday phone pace, but never rush. Keep articulation clear and leave a brief pause after each complete thought.';
   if (pace === 'normal') return 'Speak at a natural everyday phone pace. Do not hurry, clip words, or run sentences together. Leave small natural pauses between thoughts.';
@@ -316,6 +452,7 @@ export default {
     if (url.pathname === '/api/admin/config') return handleAdminConfig(request, env);
     if (url.pathname === '/api/admin/voice-preview' && request.method === 'POST') return handleVoicePreview(request, env);
     if (url.pathname === '/api/admin/diagnostics' && request.method === 'GET') return handleAdminDiagnostics(request, env);
+    if (url.pathname === '/api/voice-note' && request.method === 'POST') return handleVoiceNote(request, env);
     if (url.pathname === '/api/session') {
       if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
       return handleSession(request, env);
