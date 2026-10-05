@@ -1,0 +1,4 @@
+/* CallFocus V11.28 — responsive route back controls only. No V11.23 page visuals are changed. */
+.cf-route-back{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;min-width:44px;border:1px solid rgba(99,125,118,.22);border-radius:50%;background:rgba(255,255,255,.72);color:#285e56;font:500 30px/1 system-ui;cursor:pointer;margin-right:12px}
+.cf-route-back:hover{background:rgba(255,255,255,.95)}
+@media(max-width:620px){.cf-route-back{width:40px;height:40px;min-width:40px;margin-right:9px}}

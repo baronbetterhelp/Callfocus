@@ -1890,17 +1890,9 @@ export default {
     if (url.pathname === '/admin' || url.pathname === '/admin/') {
       return env.ASSETS.fetch(new Request(new URL('/admin.html', url.origin), request));
     }
-
-    // V11.27: primary CallFocus screens are real, refresh-safe browser routes.
-    // Serve the shared app shell while preserving the requested URL in the browser.
-    if (request.method === 'GET') {
-      const appRoutes = new Set([
-        '/', '/home', '/voice-notes', '/credits', '/callers',
-        '/recent-calls', '/profile', '/settings'
-      ]);
-      if (appRoutes.has(url.pathname) || /^\/recent-calls\/[^/]+\/?$/.test(url.pathname)) {
-        return env.ASSETS.fetch(new Request(new URL('/index.html', url.origin), request));
-      }
+    const appRoutes = new Set(['/', '/voice-notes', '/credits', '/callers', '/recent-calls', '/profile', '/settings']);
+    if (request.method === 'GET' && appRoutes.has(url.pathname.replace(/\/+$/, '') || '/')) {
+      return env.ASSETS.fetch(new Request(new URL('/index.html', url.origin), request));
     }
     return env.ASSETS.fetch(request);
   }
