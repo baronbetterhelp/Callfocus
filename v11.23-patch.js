@@ -72,23 +72,14 @@
     renderThreadDetail=function(id){
       previousRenderThreadDetail(id);
       const thread=(typeof data!=='undefined'&&data?.threads||[]).find(t=>t.id===id);
-      requestAnimationFrame(()=>{
-        // Only compact the call history inside the dedicated ChatGPT-style viewer.
-        // The normal Recent Calls management page must keep the full next-call
-        // composer, saved caller context, edit controls and original history.
-        if(document.body.classList.contains('cf-chat-screen-open')){
-          renderCompactHistoryV1123(thread);
-        }
-      });
+      requestAnimationFrame(()=>renderCompactHistoryV1123(thread));
     };
 
     // If a thread was already on screen before this patch loaded, compact it as well.
     requestAnimationFrame(()=>{
       if(typeof selectedThreadId!=='undefined'&&selectedThreadId){
         const thread=(typeof data!=='undefined'&&data?.threads||[]).find(t=>t.id===selectedThreadId);
-        if(document.body.classList.contains('cf-chat-screen-open')){
-          renderCompactHistoryV1123(thread);
-        }
+        renderCompactHistoryV1123(thread);
       }
     });
   }

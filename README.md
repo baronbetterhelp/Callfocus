@@ -1,33 +1,51 @@
-# CallFocus V11.27 Multi-Route
+# CallFocus V11.23
 
-Built on the V11.26 feature set, preserving the V11.22 Paystack reconciliation fixes and the V11.23–V11.26 Recent Calls viewer/navigation work.
+Compact Recent Calls history update built on the stable V11.22 Paystack reconciliation release.
 
-## Navigation fix
+## Changed in V11.23
 
-CallFocus no longer keeps every workspace screen on the same browser URL.
+- call history now uses a compact ChatGPT-style recent list
+- full conversation prompts are no longer exposed in the history view
+- each call shows only a brief call detail, call date, call time, duration, and call number
+- newest calls appear first
+- internal-looking placeholders such as `CALLFOCUS_CONFIG` are hidden from the visible history and shown generically as `Call session`
+- per-call copy functionality remains available through the small copy icon
+- no payment, realtime voice, credit, admin, or backend behavior was changed
 
-Each primary screen now has a stable route:
+## Base
 
-- `/` — Home
-- `/voice-notes` — Voice Notes
-- `/credits` — Call & Voice Credits
-- `/callers` — My Callers
-- `/recent-calls` — Recent Calls workspace
-- `/recent-calls/<conversation-id>` — dedicated ChatGPT-style call-history viewer
-- `/profile` — My Profile
-- `/settings` — Account Settings
-- `/admin` — existing Admin area
+V11.23 includes all V11.22 Paystack reconciliation and Observability fixes.
 
-## Behavior
+# CallFocus V11.22
 
-- Refreshing a route keeps the user on that same page.
-- Browser Back and Forward work across CallFocus pages.
-- A visible back button is available on workspace pages.
-- Opening a call-history conversation gives that conversation its own URL.
-- Closing the full-screen conversation returns to `/recent-calls` without deleting anything.
-- Recent Calls management selection is retained through a `?thread=` URL without creating duplicate pages.
-- Deep links wait for the server-backed account session to restore before loading private content.
-- A root `<base href="/">` prevents nested conversation URLs from breaking scripts, CSS, icons or service-worker loading.
-- No page markup was duplicated; one responsive page instance exists for each workspace view.
+Targeted Paystack wallet reconciliation release built directly on V11.21.
 
-No Paystack, realtime voice, voice-note generation, admin-rule or account-data behavior was intentionally changed.
+## Fixed in V11.22
+
+- Reconciles a verified Paystack transaction when a `paystack:processed:<reference>` marker exists but the matching purchase is missing from the customer's wallet.
+- Verifies every recovery candidate with Paystack before any reconciliation credit is restored.
+- Keeps reference-based idempotency so an existing wallet purchase is never added twice.
+- Adds a broader recent-successful-transaction fallback when Paystack's customer-filtered transaction listing returns incomplete results.
+- Prevents an equal-wallet-revision browser sync from removing Paystack purchase references already present on the server.
+- Returns recovery diagnostics (`checked`) and writes a concise recovery summary to Cloudflare Observability.
+- Forces one recovery attempt after V11.22 loads, so the existing successful test payment can be repaired without another payment.
+- Persists Cloudflare Worker invocation logging through `wrangler.jsonc` so GitHub deployments do not switch Observability back off.
+
+## Existing payment rules retained
+
+- 50 credits = 1 minute
+- 100 credits = NGN 1,000 = 2 minutes
+- minimum purchase = 300 credits / NGN 3,000
+- purchased credit is shared by live calls and voice notes
+- Paystack/OpenAI secret keys remain server-side
+- Paystack webhook signatures are verified with HMAC-SHA512
+- transaction references remain idempotent
+
+## Existing webhook
+
+`https://callfocus.link/api/paystack/webhook`
+
+Do not create another test payment to validate this recovery. Deploy V11.22, sign into the same CallFocus account, and open/refresh Call & Voice Credits. The build will re-check recent successful Paystack transactions and reconcile the wallet when necessary.
+
+## V11.29 note
+The opened Recent Calls conversation now always uses the compact V11.23-style call-history list. See `README-V11.29.md`.
