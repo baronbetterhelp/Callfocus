@@ -246,6 +246,7 @@
     if(amount<CREDIT_RULES.minimumPurchaseCredits) return toast('The minimum purchase is 300 credits');
     amount=Math.round(amount/50)*50;
     selectedCreditAmount=amount;
+    if(window.CallFocusPaystack?.checkout) return window.CallFocusPaystack.checkout(amount);
     if($('creditPaymentModalSummary')) $('creditPaymentModalSummary').textContent=`${amount.toLocaleString()} credits · ${formatNaira(nairaForCredits(amount))} · ${humanTime(secondsForCredits(amount))} call time`;
     openModal('creditPaymentModal');
   }

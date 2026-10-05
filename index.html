@@ -34,6 +34,7 @@
   <link rel="stylesheet" href="./v11.16-patch.css?v=11.16" />
   <link rel="stylesheet" href="./v11.17-patch.css?v=11.17" />
   <link rel="stylesheet" href="./v11.18-patch.css?v=11.18" />
+  <link rel="stylesheet" href="./v11.20-patch.css?v=11.20" />
 </head>
 <body>
   <div class="app-root home-page" id="pageRoot">
@@ -322,6 +323,25 @@
             <div><strong>New-user starter credit</strong><p>Each new account receives <b>1 minute 30 seconds</b> of shared audio time (75 credits), usable for either live calls or voice notes. Before public launch, this grant will be tied to successful SMS verification of the mobile number.</p></div>
           </div>
 
+          <section class="paystack-transfer-card" id="paystackTransferCard">
+            <div class="paystack-transfer-head">
+              <div><span class="section-eyebrow">Bank transfer</span><h2>Your reusable payment account</h2><p>Use one Paystack virtual account for future CallFocus top-ups. Verified transfers are converted to shared call and voice-note credit automatically.</p></div>
+              <span class="paystack-mode-badge" id="paystackModeBadge">Paystack</span>
+            </div>
+            <div class="paystack-transfer-body" id="paystackTransferEmpty">
+              <div class="paystack-transfer-icon" aria-hidden="true">▦</div>
+              <div class="paystack-transfer-copy"><strong>No transfer account yet</strong><span>Create one once for this CallFocus account. Your name, email and phone are securely sent to Paystack only when you choose to create it.</span></div>
+              <button class="paystack-transfer-create" id="paystackCreateDvaBtn" type="button">Create transfer account</button>
+            </div>
+            <div class="paystack-account hidden" id="paystackTransferReady">
+              <div class="paystack-account-bank"><span>Bank</span><strong id="paystackDvaBank">—</strong></div>
+              <div class="paystack-account-name"><span>Account name</span><strong id="paystackDvaName">—</strong></div>
+              <div class="paystack-account-number"><span>Account number</span><strong id="paystackDvaNumber">—</strong><button id="paystackCopyDvaBtn" type="button">Copy</button></div>
+              <small>Keep this account number for future top-ups. ₦1,000 = 100 credits = 2 minutes.</small>
+            </div>
+            <div class="paystack-transfer-status hidden" id="paystackTransferStatus"></div>
+          </section>
+
           <section class="credit-purchase-section">
             <div class="credit-section-title"><div><span class="section-eyebrow">Buy credits</span><h2>Choose a call-time pack</h2></div><small>Minimum purchase: 300 credits</small></div>
             <div class="credit-package-grid">
@@ -335,7 +355,7 @@
               <div class="credit-custom-summary"><span id="customCreditMinutes">6 minutes</span><strong id="customCreditNaira">₦3,000</strong></div>
             </div>
             <button class="credit-checkout-btn" id="creditCheckoutBtn" type="button"><span>Continue to payment</span><small id="creditCheckoutSummary">300 credits · ₦3,000</small></button>
-            <p class="credit-payment-note">Payment checkout will be connected after you choose a provider. No charge is made in this build.</p>
+            <p class="credit-payment-note">Secure checkout is handled by Paystack. Credits are added only after CallFocus verifies a successful payment on the server.</p>
           </section>
 
           <section class="credit-usage-info">
@@ -541,8 +561,8 @@
 
   <div class="modal-backdrop hidden" id="creditPaymentModal">
     <div class="modal small-modal credit-payment-modal">
-      <div class="modal-head"><div><span class="section-eyebrow">Payment connection</span><h2>Credit checkout is ready for a provider.</h2><p id="creditPaymentModalSummary">300 credits · ₦3,000</p></div><button class="modal-close" data-close="creditPaymentModal">×</button></div>
-      <div class="credit-provider-placeholder"><strong>No payment provider connected yet</strong><p>When Paystack or another provider is connected, this button will create a secure checkout and only add credits after the payment is verified by the server.</p></div>
+      <div class="modal-head"><div><span class="section-eyebrow">Paystack checkout</span><h2>Secure payment connection</h2><p id="creditPaymentModalSummary">300 credits · ₦3,000</p></div><button class="modal-close" data-close="creditPaymentModal">×</button></div>
+      <div class="credit-provider-placeholder"><strong>Paystack is connected</strong><p>CallFocus creates checkout sessions from the server and adds credit only after the transaction is verified.</p></div>
       <div class="form-actions end"><button class="btn btn-primary" type="button" data-close="creditPaymentModal">Close</button></div>
     </div>
   </div>
@@ -611,5 +631,6 @@
   <script src="./v11.17-patch.js?v=11.17"></script>
   <script src="./v11.18-patch.js?v=11.18"></script>
   <script src="v11.19-patch.js?v=11.19"></script>
+  <script src="./v11.20-patch.js?v=11.20"></script>
 </body>
 </html>

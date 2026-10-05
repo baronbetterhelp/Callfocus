@@ -266,7 +266,8 @@ function defaultCustomerData(name = '') {
     callers: [],
     threads: [],
     wallet: {
-      version: 1,
+      version: 2,
+      revision: 0,
       balanceSeconds: 90,
       starterGranted: true,
       starterGrantedAt: now,
@@ -596,6 +597,17 @@ async function handleCustomerData(request, env) {
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
   const incoming = body?.data;
   if (!validCustomerDataShape(incoming)) return json({ error: 'Invalid account data.' }, 400);
+
+  // V11.20: Paystack can credit the wallet while an older browser tab is still
+  // open. Never let a stale full-account sync overwrite a newer server wallet.
+  const currentServerData = (await env.CALLFOCUS_CONFIG.get(customerDataKey(auth.user.id), { type: 'json' })) || null;
+  if (validCustomerDataShape(currentServerData) && currentServerData.wallet) {
+    const serverRevision = Math.max(0, Number(currentServerData.wallet?.revision) || 0);
+    const incomingRevision = Math.max(0, Number(incoming.wallet?.revision) || 0);
+    if (serverRevision > incomingRevision) incoming.wallet = currentServerData.wallet;
+  }
+  if (incoming.wallet) incoming.wallet = normalizeServerWallet(incoming.wallet);
+
   const encoded = JSON.stringify(incoming);
   if (new TextEncoder().encode(encoded).byteLength > CUSTOMER_DATA_MAX_BYTES) return json({ error: 'Account data is too large.' }, 413);
   await env.CALLFOCUS_CONFIG.put(customerDataKey(auth.user.id), encoded);
@@ -1137,6 +1149,440 @@ The entire spoken call must stay in ${callLanguage}. This is a hard CallFocus se
   return new Response(answerSdp, { status: 200, headers });
 }
 
+
+// -----------------------------------------------------------------------------
+// V11.20 Paystack payments + dedicated transfer accounts
+// PAYSTACK_SECRET_KEY stays server-side in Cloudflare Runtime Secrets.
+// ----------------------------------------------------------------------------
+const PAYSTACK_MIN_CREDITS = 300;
+const PAYSTACK_CREDIT_STEP = 50;
+const PAYSTACK_NAIRA_PER_CREDIT = 10;
+const PAYSTACK_SECONDS_PER_CREDIT = 1.2;
+const PAYSTACK_PENDING_TTL = 60 * 60 * 24 * 2;
+
+function paystackConfigured(env) {
+  return !!String(env.PAYSTACK_SECRET_KEY || '').trim();
+}
+
+function paystackIsTest(env) {
+  return String(env.PAYSTACK_SECRET_KEY || '').trim().startsWith('sk_test_');
+}
+
+function paystackHeaders(env) {
+  return {
+    Authorization: `Bearer ${String(env.PAYSTACK_SECRET_KEY || '').trim()}`,
+    'Content-Type': 'application/json'
+  };
+}
+
+function splitPaystackName(name = '') {
+  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return { first_name: 'CallFocus', last_name: 'Customer' };
+  if (parts.length === 1) return { first_name: parts[0], last_name: 'Customer' };
+  return { first_name: parts[0], last_name: parts.slice(1).join(' ') };
+}
+
+function paystackPhone(value = '') {
+  const raw = String(value || '').trim();
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return '';
+  if (raw.startsWith('+')) return `+${digits}`;
+  if (digits.startsWith('234')) return `+${digits}`;
+  if (digits.length === 11 && digits.startsWith('0')) return `+234${digits.slice(1)}`;
+  return `+${digits}`;
+}
+
+function normalizePurchaseCredits(value) {
+  const raw = Math.round(Number(value) || 0);
+  if (raw < PAYSTACK_MIN_CREDITS) return 0;
+  return Math.max(PAYSTACK_MIN_CREDITS, Math.round(raw / PAYSTACK_CREDIT_STEP) * PAYSTACK_CREDIT_STEP);
+}
+
+function purchaseSecondsForCredits(credits) {
+  return Math.round(Math.max(0, Number(credits) || 0) * PAYSTACK_SECONDS_PER_CREDIT);
+}
+
+function paystackPendingKey(reference) { return `paystack:pending:${String(reference || '')}`; }
+function paystackProcessedKey(reference) { return `paystack:processed:${String(reference || '')}`; }
+function paystackCustomerMapKey(code) { return `paystack:customer:${String(code || '')}`; }
+function paystackDvaMapKey(accountNumber) { return `paystack:dva:${String(accountNumber || '').replace(/\D/g, '')}`; }
+function paystackUserCustomerKey(userId) { return `paystack:user-customer:${String(userId || '')}`; }
+
+function normalizeServerWallet(wallet, now = new Date().toISOString()) {
+  const w = wallet && typeof wallet === 'object' && !Array.isArray(wallet) ? { ...wallet } : {};
+  w.version = Math.max(2, Number(w.version || 1));
+  w.balanceSeconds = Math.max(0, Math.floor(Number(w.balanceSeconds) || 0));
+  w.starterGranted = w.starterGranted !== false;
+  w.starterGrantedAt = w.starterGrantedAt || now;
+  w.starterGrantMode = w.starterGrantMode || 'server_account_signup';
+  w.purchases = Array.isArray(w.purchases) ? w.purchases.slice(0, 250) : [];
+  w.usage = Array.isArray(w.usage) ? w.usage.slice(0, 250) : [];
+  w.revision = Math.max(0, Math.floor(Number(w.revision) || 0));
+  if (w.paystackDva && typeof w.paystackDva !== 'object') delete w.paystackDva;
+  return w;
+}
+
+async function paystackRequest(env, path, { method = 'GET', body = null } = {}) {
+  if (!paystackConfigured(env)) {
+    const error = new Error('Paystack is not configured on this server.');
+    error.code = 'paystack_not_configured';
+    error.status = 503;
+    throw error;
+  }
+  let response;
+  try {
+    response = await fetch(`https://api.paystack.co${path}`, {
+      method,
+      headers: paystackHeaders(env),
+      body: body == null ? undefined : JSON.stringify(body)
+    });
+  } catch (cause) {
+    const error = new Error('Could not reach Paystack right now.');
+    error.code = 'paystack_network_error';
+    error.status = 502;
+    error.cause = cause;
+    throw error;
+  }
+  let payload = {};
+  try { payload = await response.json(); } catch {}
+  if (!response.ok || payload?.status === false) {
+    const error = new Error(String(payload?.message || `Paystack request failed (${response.status}).`));
+    error.code = 'paystack_api_error';
+    error.status = response.status || 502;
+    error.payload = payload;
+    throw error;
+  }
+  return payload;
+}
+
+async function hmacSha512Hex(secret, rawBody) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(String(secret || '')),
+    { name: 'HMAC', hash: 'SHA-512' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody));
+  return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function constantTimeHexEqual(a = '', b = '') {
+  const x = String(a || '').toLowerCase();
+  const y = String(b || '').toLowerCase();
+  if (x.length !== y.length || !x.length) return false;
+  let diff = 0;
+  for (let i = 0; i < x.length; i++) diff |= x.charCodeAt(i) ^ y.charCodeAt(i);
+  return diff === 0;
+}
+
+async function getCustomerDataForUpdate(env, userId, fallbackName = '') {
+  const existing = await env.CALLFOCUS_CONFIG.get(customerDataKey(userId), { type: 'json' });
+  const data = validCustomerDataShape(existing) ? existing : defaultCustomerData(fallbackName);
+  data.wallet = normalizeServerWallet(data.wallet);
+  return data;
+}
+
+async function resolvePaystackUserId(env, transaction = {}) {
+  const reference = String(transaction?.reference || '');
+  if (reference) {
+    const pending = await env.CALLFOCUS_CONFIG.get(paystackPendingKey(reference), { type: 'json' });
+    if (pending?.userId) return { userId: pending.userId, pending };
+  }
+  const metadata = typeof transaction?.metadata === 'string'
+    ? (() => { try { return JSON.parse(transaction.metadata); } catch { return {}; } })()
+    : (transaction?.metadata || {});
+  if (metadata?.callfocus_user_id) return { userId: String(metadata.callfocus_user_id), pending: null };
+  const customerCode = String(transaction?.customer?.customer_code || transaction?.customer_code || '');
+  if (customerCode) {
+    const userId = await env.CALLFOCUS_CONFIG.get(paystackCustomerMapKey(customerCode));
+    if (userId) return { userId, pending: null };
+  }
+  const receiver = String(transaction?.authorization?.receiver_bank_account_number || transaction?.receiver_bank_account_number || '').replace(/\D/g, '');
+  if (receiver) {
+    const userId = await env.CALLFOCUS_CONFIG.get(paystackDvaMapKey(receiver));
+    if (userId) return { userId, pending: null };
+  }
+  return { userId: '', pending: null };
+}
+
+async function creditVerifiedPaystackTransaction(env, transaction = {}) {
+  if (!env.CALLFOCUS_CONFIG) throw new Error('Account storage is unavailable.');
+  const reference = String(transaction?.reference || '').trim();
+  const status = String(transaction?.status || '').toLowerCase();
+  const currency = String(transaction?.currency || 'NGN').toUpperCase();
+  const amountKobo = Math.max(0, Math.floor(Number(transaction?.amount) || 0));
+  if (!reference || status !== 'success' || currency !== 'NGN' || amountKobo <= 0) {
+    return { credited: false, reason: 'not_successful' };
+  }
+
+  const already = await env.CALLFOCUS_CONFIG.get(paystackProcessedKey(reference), { type: 'json' });
+  if (already?.userId) return { credited: false, duplicate: true, record: already };
+
+  const resolved = await resolvePaystackUserId(env, transaction);
+  if (!resolved.userId) return { credited: false, reason: 'customer_not_mapped' };
+  const user = await env.CALLFOCUS_CONFIG.get(customerUserKey(resolved.userId), { type: 'json' });
+  if (!user) return { credited: false, reason: 'customer_not_found' };
+
+  const amountNaira = amountKobo / 100;
+  const metadata = typeof transaction?.metadata === 'string'
+    ? (() => { try { return JSON.parse(transaction.metadata); } catch { return {}; } })()
+    : (transaction?.metadata || {});
+  const requestedCredits = Number(resolved.pending?.credits || metadata?.callfocus_credits || 0);
+  const exactCredits = Math.max(0, amountNaira / PAYSTACK_NAIRA_PER_CREDIT);
+  const credits = requestedCredits > 0 && Math.abs((requestedCredits * PAYSTACK_NAIRA_PER_CREDIT) - amountNaira) < 0.01
+    ? requestedCredits
+    : exactCredits;
+  const secondsAdded = purchaseSecondsForCredits(credits);
+  if (credits <= 0 || secondsAdded <= 0) return { credited: false, reason: 'invalid_amount' };
+
+  const data = await getCustomerDataForUpdate(env, user.id, user.name);
+  const wallet = normalizeServerWallet(data.wallet);
+  const existingPurchase = wallet.purchases.find(p => String(p?.reference || p?.id || '') === reference);
+  if (existingPurchase) {
+    const record = { userId: user.id, reference, credits: Number(existingPurchase.credits || credits), secondsAdded: Number(existingPurchase.seconds || secondsAdded), amountNaira, duplicate: true, at: existingPurchase.createdAt || new Date().toISOString() };
+    await env.CALLFOCUS_CONFIG.put(paystackProcessedKey(reference), JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 365 });
+    return { credited: false, duplicate: true, record };
+  }
+
+  const now = new Date().toISOString();
+  wallet.balanceSeconds = Math.max(0, Math.floor(Number(wallet.balanceSeconds) || 0)) + secondsAdded;
+  wallet.revision = Math.max(0, Number(wallet.revision) || 0) + 1;
+  wallet.purchases.unshift({
+    id: reference,
+    reference,
+    provider: 'paystack',
+    channel: String(transaction?.channel || transaction?.authorization?.channel || 'paystack'),
+    amountNaira,
+    credits: Math.round(credits * 10) / 10,
+    seconds: secondsAdded,
+    createdAt: transaction?.paid_at || transaction?.paidAt || now
+  });
+  wallet.purchases = wallet.purchases.slice(0, 250);
+  data.wallet = wallet;
+
+  const record = { userId: user.id, reference, credits: Math.round(credits * 10) / 10, secondsAdded, amountNaira, at: now };
+  // The purchase itself is also stored in the wallet. That makes normal webhook
+  // retries idempotent even if the processed marker is read slightly later.
+  await env.CALLFOCUS_CONFIG.put(customerDataKey(user.id), JSON.stringify(data));
+  await env.CALLFOCUS_CONFIG.put(paystackProcessedKey(reference), JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 365 });
+  if (reference) await env.CALLFOCUS_CONFIG.delete(paystackPendingKey(reference));
+  return { credited: true, record, wallet };
+}
+
+async function handlePaystackInitialize(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Sign in again before purchasing credits.', code: 'session_expired' }, 401);
+  if (!paystackConfigured(env)) return json({ error: 'Paystack is not configured yet.', code: 'paystack_not_configured' }, 503);
+  let body = {};
+  try { body = await request.json(); } catch {}
+  const credits = normalizePurchaseCredits(body?.credits);
+  if (!credits) return json({ error: `The minimum purchase is ${PAYSTACK_MIN_CREDITS} credits.`, code: 'minimum_purchase' }, 400);
+  const amountNaira = credits * PAYSTACK_NAIRA_PER_CREDIT;
+  const amountKobo = Math.round(amountNaira * 100);
+  const reference = `CF-${Date.now()}-${crypto.randomUUID().replace(/-/g, '').slice(0, 14)}`;
+  const origin = new URL(request.url).origin;
+  const callbackUrl = `${origin}/?paystack=return`;
+  const metadata = {
+    callfocus_user_id: auth.user.id,
+    callfocus_credits: credits,
+    callfocus_amount_ngn: amountNaira,
+    product: 'CallFocus shared call and voice-note credits'
+  };
+  await env.CALLFOCUS_CONFIG.put(paystackPendingKey(reference), JSON.stringify({ userId: auth.user.id, credits, amountNaira, amountKobo, createdAt: new Date().toISOString() }), { expirationTtl: PAYSTACK_PENDING_TTL });
+  try {
+    const payload = await paystackRequest(env, '/transaction/initialize', {
+      method: 'POST',
+      body: {
+        email: auth.user.email,
+        amount: String(amountKobo),
+        currency: 'NGN',
+        reference,
+        callback_url: callbackUrl,
+        metadata: JSON.stringify(metadata),
+        channels: ['card', 'bank', 'ussd', 'bank_transfer']
+      }
+    });
+    return json({ ok: true, testMode: paystackIsTest(env), credits, amountNaira, reference: payload?.data?.reference || reference, authorizationUrl: payload?.data?.authorization_url || '', accessCode: payload?.data?.access_code || '' });
+  } catch (error) {
+    await env.CALLFOCUS_CONFIG.delete(paystackPendingKey(reference));
+    return json({ error: error?.message || 'Could not start Paystack checkout.', code: error?.code || 'paystack_initialize_failed' }, error?.status || 502);
+  }
+}
+
+async function handlePaystackVerify(request, env) {
+  if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Sign in again to verify the payment.', code: 'session_expired' }, 401);
+  const reference = String(new URL(request.url).searchParams.get('reference') || '').trim();
+  if (!reference) return json({ error: 'Missing payment reference.' }, 400);
+  try {
+    const payload = await paystackRequest(env, `/transaction/verify/${encodeURIComponent(reference)}`);
+    const transaction = payload?.data || {};
+    const resolved = await resolvePaystackUserId(env, transaction);
+    if (resolved.userId && resolved.userId !== auth.user.id) return json({ error: 'That payment does not belong to this CallFocus account.' }, 403);
+    const result = await creditVerifiedPaystackTransaction(env, transaction);
+    const data = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
+    return json({ ok: true, transactionStatus: transaction?.status || '', credited: !!result?.credited, duplicate: !!result?.duplicate, wallet: data.wallet, record: result?.record || null });
+  } catch (error) {
+    return json({ error: error?.message || 'Could not verify this Paystack payment.', code: error?.code || 'paystack_verify_failed' }, error?.status || 502);
+  }
+}
+
+async function handlePaystackWallet(request, env) {
+  if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Session expired.', code: 'session_expired' }, 401);
+  const data = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
+  return json({ ok: true, wallet: data.wallet, testMode: paystackIsTest(env), paystackConfigured: paystackConfigured(env) });
+}
+
+async function ensurePaystackCustomer(env, user) {
+  let code = await env.CALLFOCUS_CONFIG.get(paystackUserCustomerKey(user.id));
+  if (code) {
+    try {
+      const fetched = await paystackRequest(env, `/customer/${encodeURIComponent(code)}`);
+      if (fetched?.data?.customer_code) return fetched.data;
+    } catch {}
+  }
+  const byEmail = await paystackRequest(env, `/customer/${encodeURIComponent(user.email)}`).catch(() => null);
+  if (byEmail?.data?.customer_code) {
+    code = byEmail.data.customer_code;
+    await env.CALLFOCUS_CONFIG.put(paystackUserCustomerKey(user.id), code);
+    await env.CALLFOCUS_CONFIG.put(paystackCustomerMapKey(code), user.id);
+    return byEmail.data;
+  }
+  const names = splitPaystackName(user.name);
+  const created = await paystackRequest(env, '/customer', {
+    method: 'POST',
+    body: {
+      email: user.email,
+      first_name: names.first_name,
+      last_name: names.last_name,
+      phone: paystackPhone(user.phone),
+      metadata: { callfocus_user_id: user.id }
+    }
+  });
+  const customer = created?.data || {};
+  code = String(customer.customer_code || '');
+  if (!code) throw new Error('Paystack did not return a customer code.');
+  await env.CALLFOCUS_CONFIG.put(paystackUserCustomerKey(user.id), code);
+  await env.CALLFOCUS_CONFIG.put(paystackCustomerMapKey(code), user.id);
+  return customer;
+}
+
+async function handlePaystackDva(request, env) {
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Sign in again to manage your transfer account.', code: 'session_expired' }, 401);
+  if (request.method === 'GET') {
+    const data = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
+    return json({ ok: true, dva: data.wallet?.paystackDva || null, testMode: paystackIsTest(env) });
+  }
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET, POST' } });
+  if (!paystackConfigured(env)) return json({ error: 'Paystack is not configured yet.' }, 503);
+  let body = {};
+  try { body = await request.json(); } catch {}
+  if (body?.consent !== true) return json({ error: 'Confirm consent before creating a Paystack transfer account.', code: 'consent_required' }, 400);
+
+  const data = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
+  if (data.wallet?.paystackDva?.accountNumber) return json({ ok: true, existing: true, dva: data.wallet.paystackDva, testMode: paystackIsTest(env) });
+
+  try {
+    const customer = await ensurePaystackCustomer(env, auth.user);
+    let existingDva = customer?.dedicated_account || null;
+    if (!existingDva) {
+      const created = await paystackRequest(env, '/dedicated_account', {
+        method: 'POST',
+        body: {
+          customer: customer.customer_code,
+          preferred_bank: paystackIsTest(env) ? 'test-bank' : 'titan-paystack',
+          first_name: splitPaystackName(auth.user.name).first_name,
+          last_name: splitPaystackName(auth.user.name).last_name,
+          phone: paystackPhone(auth.user.phone)
+        }
+      });
+      existingDva = created?.data || null;
+    }
+    if (!existingDva?.account_number) return json({ error: 'Paystack has not assigned the transfer account yet. Try again shortly.', code: 'dva_pending' }, 202);
+    const dva = {
+      id: existingDva.id || null,
+      accountName: String(existingDva.account_name || ''),
+      accountNumber: String(existingDva.account_number || ''),
+      bankName: String(existingDva.bank?.name || ''),
+      bankSlug: String(existingDva.bank?.slug || ''),
+      customerCode: String(existingDva.customer?.customer_code || customer.customer_code || ''),
+      currency: String(existingDva.currency || 'NGN'),
+      active: existingDva.active !== false,
+      testMode: paystackIsTest(env),
+      createdAt: existingDva.created_at || existingDva.createdAt || new Date().toISOString()
+    };
+    data.wallet = normalizeServerWallet(data.wallet);
+    data.wallet.paystackDva = dva;
+    data.wallet.revision = Math.max(0, Number(data.wallet.revision) || 0) + 1;
+    await env.CALLFOCUS_CONFIG.put(customerDataKey(auth.user.id), JSON.stringify(data));
+    if (dva.customerCode) await env.CALLFOCUS_CONFIG.put(paystackCustomerMapKey(dva.customerCode), auth.user.id);
+    if (dva.accountNumber) await env.CALLFOCUS_CONFIG.put(paystackDvaMapKey(dva.accountNumber), auth.user.id);
+    return json({ ok: true, dva, wallet: data.wallet, testMode: paystackIsTest(env) });
+  } catch (error) {
+    const msg = String(error?.message || 'Could not create the Paystack transfer account.');
+    const activationHint = /live|business|dedicated|virtual|available|enabled|access/i.test(msg)
+      ? ' Dedicated virtual accounts may remain unavailable until Paystack finishes activating your business.'
+      : '';
+    return json({ error: `${msg}${activationHint}`.trim(), code: error?.code || 'dva_create_failed', testMode: paystackIsTest(env) }, error?.status || 502);
+  }
+}
+
+async function handlePaystackWebhook(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  if (!paystackConfigured(env)) return new Response('Paystack not configured.', { status: 503 });
+  const raw = await request.text();
+  const signature = String(request.headers.get('x-paystack-signature') || '');
+  const expected = await hmacSha512Hex(env.PAYSTACK_SECRET_KEY, raw);
+  if (!constantTimeHexEqual(signature, expected)) return new Response('Invalid signature.', { status: 401 });
+  let event = {};
+  try { event = JSON.parse(raw); } catch { return new Response('Invalid JSON.', { status: 400 }); }
+
+  try {
+    if (event?.event === 'charge.success') {
+      await creditVerifiedPaystackTransaction(env, event.data || {});
+    } else if (event?.event === 'dedicatedaccount.assign.success') {
+      const e = event.data || {};
+      const customerCode = String(e?.customer?.customer_code || e?.customer_code || '');
+      let userId = customerCode ? await env.CALLFOCUS_CONFIG.get(paystackCustomerMapKey(customerCode)) : '';
+      const email = normalizeCustomerEmail(e?.customer?.email || e?.email || '');
+      if (!userId && email) {
+        const user = await readCustomerUserByEmail(env, email);
+        userId = user?.id || '';
+      }
+      const accountNumber = String(e?.account_number || e?.dedicated_account?.account_number || '');
+      if (userId && accountNumber) {
+        const user = await env.CALLFOCUS_CONFIG.get(customerUserKey(userId), { type: 'json' });
+        const data = await getCustomerDataForUpdate(env, userId, user?.name || '');
+        data.wallet.paystackDva = {
+          id: e?.id || e?.dedicated_account?.id || null,
+          accountName: String(e?.account_name || e?.dedicated_account?.account_name || ''),
+          accountNumber,
+          bankName: String(e?.bank?.name || e?.dedicated_account?.bank?.name || ''),
+          bankSlug: String(e?.bank?.slug || e?.dedicated_account?.bank?.slug || ''),
+          customerCode,
+          currency: String(e?.currency || 'NGN'),
+          active: true,
+          testMode: paystackIsTest(env),
+          createdAt: e?.created_at || new Date().toISOString()
+        };
+        data.wallet.revision = Math.max(0, Number(data.wallet.revision) || 0) + 1;
+        await env.CALLFOCUS_CONFIG.put(customerDataKey(userId), JSON.stringify(data));
+        await env.CALLFOCUS_CONFIG.put(paystackDvaMapKey(accountNumber), userId);
+      }
+    }
+  } catch (error) {
+    console.error('CallFocus Paystack webhook processing failed', error?.stack || error?.message || error);
+    return new Response('Webhook processing failed.', { status: 500 });
+  }
+  return new Response('OK', { status: 200, headers: { 'Cache-Control': 'no-store' } });
+}
+
 async function safeCustomerRoute(label, handler) {
   try {
     return await handler();
@@ -1167,6 +1613,11 @@ export default {
     if (url.pathname === '/api/auth/migrate') return handleCustomerMigration(request, env);
     if (url.pathname === '/api/account/data') return handleCustomerData(request, env);
     if (url.pathname === '/api/account' && request.method === 'DELETE') return handleCustomerDelete(request, env);
+    if (url.pathname === '/api/paystack/initialize') return safeCustomerRoute('paystack-initialize', () => handlePaystackInitialize(request, env));
+    if (url.pathname === '/api/paystack/verify') return safeCustomerRoute('paystack-verify', () => handlePaystackVerify(request, env));
+    if (url.pathname === '/api/paystack/wallet') return safeCustomerRoute('paystack-wallet', () => handlePaystackWallet(request, env));
+    if (url.pathname === '/api/paystack/dva') return safeCustomerRoute('paystack-dva', () => handlePaystackDva(request, env));
+    if (url.pathname === '/api/paystack/webhook') return handlePaystackWebhook(request, env);
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
     if (url.pathname === '/api/admin/login' && request.method === 'POST') return handleAdminLogin(request, env);
