@@ -107,7 +107,13 @@
       </div>
 
       <div class="premium-panel admin-save-panel">
-        <div class="info-note">Changes saved here are global. New calls use them immediately. Active calls keep the settings they started with.</div>
+        <div>
+          <div class="info-note">Changes saved here are global. New calls use them immediately. Active calls keep the settings they started with.</div>
+          <div class="admin-backup-row">
+            <span class="admin-backup-status" id="adminBackupStatus">A protected browser backup will also be kept automatically.</span>
+            <button class="btn btn-ghost admin-backup-btn hidden" type="button" id="restoreAdminBackupBtn">Restore protected backup</button>
+          </div>
+        </div>
         <button class="btn btn-primary large" id="saveAdminBtn">Save global settings</button>
       </div>
 
