@@ -23,6 +23,7 @@
   <link rel="stylesheet" href="./v10.5-patch.css" />
   <link rel="stylesheet" href="./v10.8-patch.css" />
   <link rel="stylesheet" href="./v10.9-patch.css" />
+  <link rel="stylesheet" href="./v11-patch.css" />
 </head>
 <body>
   <div class="app-root home-page" id="pageRoot">
@@ -59,6 +60,7 @@
                 <strong id="dropdownName">User</strong>
                 <small id="dropdownEmail">user@example.com</small>
               </div>
+              <button data-account-route="credits">Call credits</button>
               <button data-account-route="settings">Account settings</button>
               <button data-account-route="profile">My profile</button>
               <button id="dropdownSignOutBtn">Sign out</button>
@@ -75,6 +77,7 @@
             <button data-mobile-route="home"><span class="menu-icon">⌂</span><span>Home<small>CallFocus overview</small></span></button>
             <button data-mobile-route="callers"><span class="menu-icon">◉</span><span>My Callers<small>Saved people and caller context</small></span></button>
             <button data-mobile-route="recent"><span class="menu-icon">◷</span><span>Recent Calls<small>Continue previous call threads</small></span></button>
+            <button data-mobile-route="credits"><span class="menu-icon">◌</span><span>Call Credits<small>Balance, pricing and top-ups</small></span></button>
             <button data-mobile-route="profile"><span class="menu-icon">◎</span><span>My Profile<small>Your reusable information</small></span></button>
           </div>
           <div class="mobile-recent-shell">
@@ -91,6 +94,18 @@
           <div class="hero-media" aria-hidden="true">
             <div class="hero-media-overlay"></div>
             <div class="hero-architecture"><span></span><span></span><span></span><span></span></div>
+          </div>
+          <div class="container hero-credit-row">
+            <div class="credit-dock" id="creditDock">
+              <div class="credit-dock-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M7.4 4.8c.8-1 2.3-1.1 3.2-.2l1.1 1.1c.6.6.7 1.5.3 2.2l-1 1.8c-.2.4-.2.8.1 1.1l2.1 2.1c.3.3.8.4 1.1.1l1.8-1c.7-.4 1.6-.3 2.2.3l1.1 1.1c.9.9.8 2.4-.2 3.2l-1.2 1c-1.1.9-2.6 1.2-4 .8-2.5-.7-4.8-2.2-6.8-4.1s-3.4-4.3-4.1-6.8c-.4-1.4-.1-2.9.8-4l1.1-1.3Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <div class="credit-dock-copy">
+                <span id="creditDockLabel">Starter call credit</span>
+                <strong id="creditDockBalance">1:30 free after mobile verification</strong>
+              </div>
+              <button class="credit-dock-action" id="creditDockAction" type="button">View credits</button>
+            </div>
           </div>
           <div class="container premium-hero-inner">
             <div class="hero-copy premium-copy">
@@ -151,6 +166,10 @@
             </div>
             <div class="section-head reveal-card" data-reveal><div><span class="section-eyebrow">Continue</span><h3>Your recent calls</h3></div><button class="text-link" data-route="recent">View all</button></div>
             <div class="thread-preview-list" id="homeRecentThreads"></div>
+            <div class="home-saved-callers-section reveal-card" data-reveal>
+              <div class="section-head compact-home-section-head"><div><span class="section-eyebrow">People</span><h3>Saved callers</h3></div><button class="text-link" data-route="callers">View all</button></div>
+              <div class="home-saved-callers" id="homeSavedCallers"></div>
+            </div>
           </div>
         </section>
 
@@ -264,6 +283,47 @@
         </div>
       </section>
 
+      <section class="page-view app-page credit-page" id="page-credits" data-view="credits">
+        <div class="container credit-page-shell">
+          <div class="credit-page-head">
+            <button class="credit-back-btn" id="creditBackBtn" type="button" aria-label="Back to home">‹</button>
+            <div><span class="section-eyebrow">Call credits</span><h1>Minutes that stay in your control.</h1><p>Buy call credit in simple blocks. Your balance only reduces while a live call is actually running.</p></div>
+          </div>
+
+          <div class="credit-balance-hero">
+            <div><span>Available balance</span><strong id="creditPageBalance">0 credits</strong><small id="creditPageTime">0:00 call time</small></div>
+            <div class="credit-rate-card"><span>Standard rate</span><strong>50 credits = 1 minute</strong><small>100 credits = ₦1,000 = 2 minutes</small></div>
+          </div>
+
+          <div class="credit-starter-note">
+            <div class="credit-starter-icon">01</div>
+            <div><strong>New-user starter call</strong><p>Each new account receives <b>1 minute 30 seconds</b> of starter call time (75 credits). Before public launch, this grant will be tied to successful SMS verification of the mobile number.</p></div>
+          </div>
+
+          <section class="credit-purchase-section">
+            <div class="credit-section-title"><div><span class="section-eyebrow">Buy credits</span><h2>Choose a call-time pack</h2></div><small>Minimum purchase: 300 credits</small></div>
+            <div class="credit-package-grid">
+              <button class="credit-package active" type="button" data-credit-package="300"><span>Starter top-up</span><strong>300 credits</strong><small>6 minutes</small><b>₦3,000</b></button>
+              <button class="credit-package" type="button" data-credit-package="500"><span>More time</span><strong>500 credits</strong><small>10 minutes</small><b>₦5,000</b></button>
+              <button class="credit-package" type="button" data-credit-package="1000"><span>Longer calls</span><strong>1,000 credits</strong><small>20 minutes</small><b>₦10,000</b></button>
+            </div>
+            <div class="credit-custom-card">
+              <div><strong>Custom amount</strong><small>Enter 300 credits or more.</small></div>
+              <label><span>Credits</span><input id="customCreditAmount" type="number" min="300" step="50" value="300" inputmode="numeric" /></label>
+              <div class="credit-custom-summary"><span id="customCreditMinutes">6 minutes</span><strong id="customCreditNaira">₦3,000</strong></div>
+            </div>
+            <button class="credit-checkout-btn" id="creditCheckoutBtn" type="button"><span>Continue to payment</span><small id="creditCheckoutSummary">300 credits · ₦3,000</small></button>
+            <p class="credit-payment-note">Payment checkout will be connected after you choose a provider. No charge is made in this build.</p>
+          </section>
+
+          <section class="credit-usage-info">
+            <article><span>01</span><div><strong>Credits reduce during the live call</strong><p>The balance begins counting down only after the user presses Start Call.</p></div></article>
+            <article><span>02</span><div><strong>Natural low-credit ending</strong><p>At about 12 seconds remaining, CallFocus automatically requests a natural goodbye so the call does not cut off abruptly.</p></div></article>
+            <article><span>03</span><div><strong>Unused seconds stay available</strong><p>If a call ends early, the unused balance remains for the next call.</p></div></article>
+          </section>
+        </div>
+      </section>
+
       <section class="page-view app-page" id="page-callers" data-view="callers">
         <div class="container app-page-inner">
           <div class="app-page-head">
@@ -306,6 +366,8 @@
           <div class="surface-card settings-card">
             <div class="settings-row"><div><strong>Name</strong><span id="settingsName">—</span></div><button class="btn btn-ghost" id="settingsEditProfileBtn">Edit profile</button></div>
             <div class="settings-row"><div><strong>Email</strong><span id="settingsEmail">—</span></div></div>
+            <div class="settings-row"><div><strong>Mobile</strong><span id="settingsPhone">—</span></div></div>
+            <div class="settings-row"><div><strong>Call credit</strong><span id="settingsCreditBalance">—</span></div><button class="btn btn-ghost" type="button" data-route="credits">Buy credits</button></div>
             <div class="settings-row"><div><strong>Account created</strong><span id="settingsCreated">—</span></div></div>
           </div>
           <div class="danger-card">
@@ -331,6 +393,7 @@
       <form class="auth-form" id="signupForm">
         <label>Full name<input id="signupName" autocomplete="name" placeholder="Your name" /></label>
         <label>Email address<input id="signupEmail" type="email" autocomplete="email" placeholder="you@example.com" /></label>
+        <label>Mobile number<input id="signupPhone" type="tel" autocomplete="tel" inputmode="tel" placeholder="e.g. +234 803 000 0000" /><small class="field-help">Used for SMS verification and the 1:30 starter call credit.</small></label>
         <label>Password<input id="signupPassword" type="password" autocomplete="new-password" placeholder="At least 8 characters" /></label>
         <label>Confirm password<input id="signupConfirm" type="password" autocomplete="new-password" placeholder="Repeat password" /></label>
         <button class="btn btn-primary full" type="submit">Create account</button>
@@ -392,6 +455,14 @@
     </div>
   </div>
 
+  <div class="modal-backdrop hidden" id="creditPaymentModal">
+    <div class="modal small-modal credit-payment-modal">
+      <div class="modal-head"><div><span class="section-eyebrow">Payment connection</span><h2>Credit checkout is ready for a provider.</h2><p id="creditPaymentModalSummary">300 credits · ₦3,000</p></div><button class="modal-close" data-close="creditPaymentModal">×</button></div>
+      <div class="credit-provider-placeholder"><strong>No payment provider connected yet</strong><p>When Paystack or another provider is connected, this button will create a secure checkout and only add credits after the payment is verified by the server.</p></div>
+      <div class="form-actions end"><button class="btn btn-primary" type="button" data-close="creditPaymentModal">Close</button></div>
+    </div>
+  </div>
+
   <div class="modal-backdrop hidden" id="deleteAccountModal">
     <div class="modal small-modal">
       <div class="modal-head"><div><span class="section-eyebrow danger-text">Delete account</span><h2>This cannot be undone.</h2><p>Type <strong>DELETE</strong> to remove this account and all locally saved CallFocus data from this browser.</p></div><button class="modal-close" data-close="deleteAccountModal">×</button></div>
@@ -409,6 +480,7 @@
         <div class="live-region" id="liveRegion"></div>
         <div class="live-status" id="liveStatus">Connecting to server…</div>
         <div class="call-timer" id="callTimer">00:00</div>
+        <div class="live-credit-pill" id="liveCreditPill"><span>Call credit</span><strong id="liveCreditBalance">—</strong></div>
         <button class="live-start-call hidden" id="liveStartCallBtn" type="button"><span>▶</span><strong>Start call</strong><small>Server connected · begin when you are ready</small></button>
         <div class="live-transcript" id="liveTranscript">Call context is ready.</div>
         <div class="call-failure-actions hidden" id="callFailureActions">
@@ -428,6 +500,7 @@
         <div><strong>Call details</strong><span id="callMoreTitle">Current call</span></div>
         <div><strong>Connection</strong><span id="callMoreConnection">Connecting</span></div>
         <div><strong>Today</strong><span id="callMoreTopic">No topic supplied</span></div>
+        <div><strong>Call credit</strong><span id="callMoreCredit">—</span></div>
       </div>
       <div class="call-caption" id="liveCaption">Ready to connect.</div>
     </div>
@@ -443,5 +516,6 @@
   <script src="./v10.4-patch.js"></script>
   <script src="./v10.5-patch.js"></script>
   <script src="./v10.9-patch.js"></script>
+  <script src="./v11-patch.js"></script>
 </body>
 </html>

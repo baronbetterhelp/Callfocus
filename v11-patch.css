@@ -1,0 +1,143 @@
+/* CallFocus V11 — premium contact cards + credit wallet */
+
+/* --- hero credit dock --- */
+.hero-credit-row{position:relative;z-index:5;padding-top:18px;margin-bottom:-4px}
+.credit-dock{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:14px;align-items:center;width:min(720px,100%);margin-left:auto;padding:12px 14px;border:1px solid rgba(255,255,255,.10);border-radius:22px;background:rgba(14,15,15,.76);box-shadow:0 14px 40px rgba(0,0,0,.18);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+.credit-dock-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:16px;background:linear-gradient(145deg,rgba(92,190,145,.18),rgba(199,163,107,.10));border:1px solid rgba(255,255,255,.08);color:#78d29b}
+.credit-dock-icon svg{width:26px;height:26px}
+.credit-dock-copy{display:flex;flex-direction:column;min-width:0;gap:2px}
+.credit-dock-copy span{font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#8e9693}
+.credit-dock-copy strong{font:700 15px/1.35 'Manrope',system-ui,sans-serif;color:#f5f7f6;white-space:normal}
+.credit-dock-action{min-height:44px;padding:10px 16px;border:1px solid rgba(255,255,255,.12);border-radius:15px;background:#f4f4f2;color:#101212;font-size:13px;font-weight:800;cursor:pointer}
+.credit-dock-action:active{transform:translateY(1px)}
+
+html[data-theme="pearl"] .credit-dock{background:rgba(255,255,255,.90);border-color:#dce8e3;box-shadow:0 16px 42px rgba(35,75,69,.07)}
+html[data-theme="pearl"] .credit-dock-icon{background:linear-gradient(145deg,#edf7f3,#f8f1e7);border-color:#dce8e3;color:#267269}
+html[data-theme="pearl"] .credit-dock-copy span{color:#6f827d}
+html[data-theme="pearl"] .credit-dock-copy strong{color:#17312e}
+html[data-theme="pearl"] .credit-dock-action{background:linear-gradient(135deg,#2c7d72,#1d6057);border-color:#2a7167;color:#fff;box-shadow:0 10px 24px rgba(31,102,93,.15)}
+
+/* --- recent thread contact icon, no loose initials --- */
+.cf-thread-contact-avatar,.home-saved-caller .cf-contact-icon{display:grid!important;place-items:center!important}
+.cf-contact-icon{display:grid;place-items:center;width:100%;height:100%;border-radius:inherit;color:currentColor}
+.cf-contact-icon svg{width:30px;height:30px}
+.thread-preview-item>.cf-thread-contact-avatar{background:linear-gradient(145deg,#121818,#0d1111)!important;color:#6fd29a!important;border-color:#293634!important}
+html[data-theme="pearl"] .thread-preview-item>.cf-thread-contact-avatar{background:linear-gradient(145deg,#edf7f3,#f7f2e9)!important;color:#347e73!important;border-color:#d3e5df!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.85)}
+
+/* --- saved caller panel directly below Recent Calls --- */
+.home-saved-callers-section{margin-top:30px}
+.compact-home-section-head{margin-bottom:14px!important}
+.home-saved-callers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.home-saved-caller{display:grid;grid-template-columns:52px minmax(0,1fr) 18px;gap:13px;align-items:center;min-height:88px;padding:16px;border:1px solid #272b2a;border-radius:20px;background:#111313;color:#f3f5f4;text-align:left;cursor:pointer;box-shadow:0 12px 30px rgba(0,0,0,.12)}
+.home-saved-caller>.cf-contact-icon{width:52px;height:52px;border:1px solid #2e3735;background:#171b1a;color:#67c991;border-radius:17px}
+.home-saved-caller>.cf-contact-icon svg{width:26px;height:26px}
+.home-saved-caller-copy{display:flex;flex-direction:column;gap:4px;min-width:0}
+.home-saved-caller-copy strong{font:750 15px/1.25 'Manrope',system-ui,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.home-saved-caller-copy small{font-size:12.5px;line-height:1.35;color:#8f9794;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.home-saved-caller-arrow{font-size:22px;color:#87918e}
+.home-saved-empty{grid-column:1/-1;padding:20px;border:1px dashed #2c302f;border-radius:18px;color:#838b88;font-size:14px}
+html[data-theme="pearl"] .home-saved-caller{background:rgba(255,255,255,.94);border-color:#dce7e2;color:#17312e;box-shadow:0 12px 32px rgba(35,75,69,.055)}
+html[data-theme="pearl"] .home-saved-caller>.cf-contact-icon{background:linear-gradient(145deg,#edf7f3,#f8f2e8);border-color:#d6e6e1;color:#2e776d}
+html[data-theme="pearl"] .home-saved-caller-copy small{color:#71827e}
+html[data-theme="pearl"] .home-saved-caller-arrow{color:#4f7a72}
+html[data-theme="pearl"] .home-saved-empty{border-color:#d8e4df;color:#778681;background:rgba(255,255,255,.65)}
+
+/* --- call credit page --- */
+.credit-page-shell{max-width:1040px;padding-top:34px;padding-bottom:90px}
+.credit-page-head{display:grid;grid-template-columns:48px minmax(0,1fr);gap:18px;align-items:start;margin-bottom:24px}
+.credit-back-btn{width:46px;height:46px;border-radius:50%;border:1px solid #2b302f;background:#121414;color:#f4f5f4;font-size:28px;line-height:1;cursor:pointer}
+.credit-page-head h1{margin:5px 0 8px;font:800 clamp(30px,5vw,48px)/1.02 'Manrope',system-ui,sans-serif;letter-spacing:-.045em}
+.credit-page-head p{max-width:720px;margin:0;color:#8d9492;font-size:16px;line-height:1.6}
+.credit-balance-hero{display:grid;grid-template-columns:1.1fr .9fr;gap:16px;margin:26px 0;padding:20px;border:1px solid #292e2d;border-radius:26px;background:linear-gradient(145deg,#111414,#0c0e0e);box-shadow:0 22px 60px rgba(0,0,0,.18)}
+.credit-balance-hero>div{padding:18px;border:1px solid #2b3130;border-radius:20px;background:#151817}
+.credit-balance-hero span,.credit-rate-card span{display:block;margin-bottom:9px;color:#8d9692;font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
+.credit-balance-hero strong{display:block;color:#f4f6f5;font:800 32px/1.1 'Manrope',system-ui,sans-serif}
+.credit-balance-hero small{display:block;margin-top:7px;color:#9da5a2;font-size:14px}
+.credit-rate-card strong{font-size:20px;line-height:1.25}
+.credit-starter-note{display:grid;grid-template-columns:54px minmax(0,1fr);gap:16px;align-items:start;margin:20px 0 34px;padding:20px;border:1px solid rgba(199,163,107,.28);border-radius:22px;background:linear-gradient(135deg,rgba(199,163,107,.10),rgba(63,116,106,.05))}
+.credit-starter-icon{display:grid;place-items:center;width:54px;height:54px;border-radius:17px;background:#171717;border:1px solid #36312a;color:#ddb878;font-size:12px;font-weight:900;letter-spacing:.08em}
+.credit-starter-note strong{display:block;margin:1px 0 6px;font:750 16px/1.3 'Manrope',system-ui,sans-serif}
+.credit-starter-note p{margin:0;color:#969d9a;font-size:14px;line-height:1.6}
+.credit-purchase-section{padding:24px;border:1px solid #292e2d;border-radius:28px;background:#101212}
+.credit-section-title{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin-bottom:18px}
+.credit-section-title h2{margin:4px 0 0;font:800 25px/1.2 'Manrope',system-ui,sans-serif}
+.credit-section-title>small{color:#909894;font-size:12px}
+.credit-package-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.credit-package{display:flex;flex-direction:column;align-items:flex-start;min-height:172px;padding:18px;border:1px solid #2c3230;border-radius:20px;background:#151817;color:#f4f6f5;text-align:left;cursor:pointer;transition:.18s ease}
+.credit-package:hover,.credit-package.active{border-color:#537d73;background:#17201e;box-shadow:0 0 0 3px rgba(65,122,108,.08)}
+.credit-package>span{color:#8f9894;font-size:11px;font-weight:800;letter-spacing:.11em;text-transform:uppercase}
+.credit-package>strong{margin-top:16px;font:800 20px/1.2 'Manrope',system-ui,sans-serif}
+.credit-package>small{margin-top:5px;color:#8e9693;font-size:13px}
+.credit-package>b{margin-top:auto;padding-top:18px;color:#ddb878;font:800 17px/1 'Manrope',system-ui,sans-serif}
+.credit-custom-card{display:grid;grid-template-columns:minmax(0,1fr) 180px 150px;gap:16px;align-items:end;margin-top:16px;padding:18px;border:1px solid #2b302f;border-radius:20px;background:#151817}
+.credit-custom-card>div:first-child strong{display:block;margin-bottom:5px;font-size:15px}.credit-custom-card>div:first-child small{color:#8b9390;font-size:12px}
+.credit-custom-card label{display:flex;flex-direction:column;gap:7px;color:#9aa19e;font-size:12px;font-weight:700}
+.credit-custom-card input{width:100%;min-height:48px;padding:12px 14px;border:1px solid #343a38;border-radius:14px;background:#0f1111;color:#fff;font-size:16px;font-weight:700}
+.credit-custom-summary{display:flex;flex-direction:column;gap:5px;align-items:flex-end}.credit-custom-summary span{color:#929a97;font-size:12px}.credit-custom-summary strong{color:#f0cf92;font-size:18px}
+.credit-checkout-btn{display:flex;align-items:center;justify-content:space-between;gap:18px;width:100%;min-height:62px;margin-top:16px;padding:14px 18px;border:0;border-radius:18px;background:linear-gradient(135deg,#2d7f73,#1c5f56);color:#fff;cursor:pointer;box-shadow:0 16px 36px rgba(31,102,93,.19)}
+.credit-checkout-btn>span{font-size:15px;font-weight:850}.credit-checkout-btn>small{font-size:12px;color:#d7e9e4}
+.credit-payment-note{margin:12px 3px 0;color:#7f8885;font-size:12px;line-height:1.5}
+.credit-usage-info{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:24px}
+.credit-usage-info article{display:grid;grid-template-columns:42px minmax(0,1fr);gap:13px;padding:18px;border:1px solid #292e2d;border-radius:20px;background:#101212}
+.credit-usage-info article>span{display:grid;place-items:center;width:42px;height:42px;border-radius:13px;background:#171817;color:#d5ad6f;border:1px solid #36312b;font-size:11px;font-weight:900}
+.credit-usage-info strong{display:block;margin:1px 0 6px;font-size:14px}.credit-usage-info p{margin:0;color:#8e9693;font-size:12.5px;line-height:1.55}
+.credit-provider-placeholder{padding:18px;border:1px solid #2d3331;border-radius:18px;background:#121514}.credit-provider-placeholder strong{display:block;margin-bottom:7px}.credit-provider-placeholder p{margin:0;color:#8e9693;line-height:1.6}
+
+html[data-theme="pearl"] .credit-back-btn{background:#fff;border-color:#dbe6e1;color:#234f48;box-shadow:0 8px 22px rgba(36,77,70,.06)}
+html[data-theme="pearl"] .credit-page-head h1,html[data-theme="pearl"] .credit-section-title h2{color:#17312e}
+html[data-theme="pearl"] .credit-page-head p{color:#6e807b}
+html[data-theme="pearl"] .credit-balance-hero{background:linear-gradient(135deg,#fdfefc,#eef7f4 62%,#f8f1e8);border-color:#dbe7e2;box-shadow:0 22px 56px rgba(35,75,69,.08)}
+html[data-theme="pearl"] .credit-balance-hero>div{background:rgba(255,255,255,.90);border-color:#dce7e3}
+html[data-theme="pearl"] .credit-balance-hero span,html[data-theme="pearl"] .credit-rate-card span{color:#70837e}
+html[data-theme="pearl"] .credit-balance-hero strong{color:#17312e}
+html[data-theme="pearl"] .credit-balance-hero small{color:#687b76}
+html[data-theme="pearl"] .credit-starter-note{background:linear-gradient(135deg,#fff9ef,#eef7f3);border-color:#e6d5b9;color:#17312e}
+html[data-theme="pearl"] .credit-starter-icon{background:#fff;border-color:#e5d7be;color:#a67b43}
+html[data-theme="pearl"] .credit-starter-note p{color:#687b76}
+html[data-theme="pearl"] .credit-purchase-section{background:rgba(255,255,255,.92);border-color:#dce7e2;box-shadow:0 18px 46px rgba(39,78,72,.055);color:#17312e}
+html[data-theme="pearl"] .credit-section-title>small{color:#71817d}
+html[data-theme="pearl"] .credit-package{background:#fff;border-color:#dce7e2;color:#17312e}
+html[data-theme="pearl"] .credit-package:hover,html[data-theme="pearl"] .credit-package.active{background:linear-gradient(145deg,#f7fbf9,#f9f4ec);border-color:#93b9b1;box-shadow:0 0 0 3px rgba(56,130,119,.07)}
+html[data-theme="pearl"] .credit-package>span,html[data-theme="pearl"] .credit-package>small{color:#74827f}
+html[data-theme="pearl"] .credit-package>b{color:#a87940}
+html[data-theme="pearl"] .credit-custom-card{background:#f8fbf9;border-color:#dce7e2}.credit-custom-card label{color:#687b76}
+html[data-theme="pearl"] .credit-custom-card input{background:#fff;border-color:#dce6e2;color:#17312e}
+html[data-theme="pearl"] .credit-custom-summary span{color:#71817d}html[data-theme="pearl"] .credit-custom-summary strong{color:#a87940}
+html[data-theme="pearl"] .credit-usage-info article{background:rgba(255,255,255,.92);border-color:#dce7e2;color:#17312e}
+html[data-theme="pearl"] .credit-usage-info article>span{background:#f8f2e8;border-color:#e5d8c2;color:#9b733f}
+html[data-theme="pearl"] .credit-usage-info p{color:#6f807c}
+html[data-theme="pearl"] .credit-provider-placeholder{background:#f8fbf9;border-color:#dce7e2;color:#17312e}html[data-theme="pearl"] .credit-provider-placeholder p{color:#687b76}
+
+/* --- live credit indicator --- */
+.live-credit-pill{display:inline-flex;align-items:center;gap:8px;margin-top:9px;padding:7px 11px;border:1px solid rgba(255,255,255,.10);border-radius:999px;background:rgba(255,255,255,.035);color:#8f9895;font-size:11px}
+.live-credit-pill strong{color:#d8dedb;font-weight:800}.live-credit-pill.low-credit{border-color:rgba(217,177,102,.35);background:rgba(199,153,70,.10)}.live-credit-pill.low-credit strong{color:#e4bd7d}
+
+/* Signup phone helper */
+.field-help{display:block;margin-top:7px;color:#7f8885;font-size:11.5px;line-height:1.4}
+html[data-theme="pearl"] .field-help{color:#74827f}
+
+/* Payment modal */
+.credit-payment-modal{max-width:540px}
+
+@media(max-width:760px){
+  .hero-credit-row{padding-top:12px;margin-bottom:4px}
+  .credit-dock{grid-template-columns:42px minmax(0,1fr) auto;gap:10px;padding:10px 11px;border-radius:18px}
+  .credit-dock-icon{width:42px;height:42px;border-radius:14px}.credit-dock-icon svg{width:23px;height:23px}
+  .credit-dock-copy strong{font-size:13px}.credit-dock-copy span{font-size:9.5px}.credit-dock-action{min-height:40px;padding:9px 11px;font-size:11.5px;border-radius:13px}
+  .home-saved-callers{grid-template-columns:1fr}
+  .credit-balance-hero{grid-template-columns:1fr;padding:14px;border-radius:22px}
+  .credit-package-grid{grid-template-columns:1fr}
+  .credit-package{min-height:132px}
+  .credit-custom-card{grid-template-columns:1fr 1fr;align-items:end}.credit-custom-card>div:first-child{grid-column:1/-1}.credit-custom-summary{align-items:flex-end}
+  .credit-usage-info{grid-template-columns:1fr}
+  .credit-page-shell{padding-top:24px}.credit-page-head{grid-template-columns:42px minmax(0,1fr);gap:14px}.credit-back-btn{width:42px;height:42px}.credit-page-head h1{font-size:32px}.credit-page-head p{font-size:15px}
+}
+
+@media(max-width:520px){
+  .credit-dock{grid-template-columns:38px minmax(0,1fr);padding:10px 12px}
+  .credit-dock-icon{width:38px;height:38px}.credit-dock-action{grid-column:1/-1;width:100%;min-height:40px}
+  .credit-dock-copy strong{font-size:13px}
+  .home-saved-caller{grid-template-columns:48px minmax(0,1fr) 16px;padding:14px;min-height:80px}.home-saved-caller>.cf-contact-icon{width:48px;height:48px}
+  .credit-custom-card{grid-template-columns:1fr}.credit-custom-card>div:first-child{grid-column:auto}.credit-custom-summary{align-items:flex-start}
+  .credit-checkout-btn{align-items:flex-start;flex-direction:column;gap:5px}
+}
