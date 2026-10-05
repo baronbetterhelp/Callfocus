@@ -17,6 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./app.css" />
+  <link rel="stylesheet" href="./v8-patch.css" />
 </head>
 <body>
   <div class="app-root home-page" id="pageRoot">
@@ -292,7 +293,20 @@
           <div class="location-card"><strong>Caller A</strong><label>Location<div class="location-autocomplete"><input id="newCallARegion" autocomplete="off" placeholder="Start typing a U.S. city" /><div class="location-suggestions hidden" id="newCallASuggestions"></div></div></label><label class="timezone-label">Time zone<select id="newCallATimezone"></select></label></div>
           <div class="location-card"><strong>Caller B</strong><label>Location<div class="location-autocomplete"><input id="newCallBRegion" autocomplete="off" placeholder="Start typing a U.S. city" /><div class="location-suggestions hidden" id="newCallBSuggestions"></div></div></label><label class="timezone-label">Time zone<select id="newCallBTimezone"></select></label></div>
         </div></div></div>
-        <div class="field-section"><span class="field-number">07</span><div class="field-content"><div class="field-heading"><strong>Voice selection</strong><small>You choose Male or Female. The admin-selected voice behind that choice is used automatically.</small></div><div class="voice-choice"><button type="button" class="voice-option active" data-voice="male"><span>Male</span><small id="maleVoiceLabel">Default male voice</small></button><button type="button" class="voice-option" data-voice="female"><span>Female</span><small id="femaleVoiceLabel">Default female voice</small></button></div><input type="hidden" id="newCallVoiceGender" value="male" /></div></div>
+        <div class="field-section"><span class="field-number">07</span><div class="field-content"><div class="field-heading"><strong>Voice selection</strong><small>You choose Male or Female. The admin-selected voice behind that choice is used automatically.</small></div><div class="voice-choice"><button type="button" class="voice-option active" data-voice="male"><span>Male</span><small id="maleVoiceLabel">Default male voice</small></button><button type="button" class="voice-option" data-voice="female"><span>Female</span><small id="femaleVoiceLabel">Default female voice</small></button></div><input type="hidden" id="newCallVoiceGender" value="male" />
+          <div class="call-opening-box">
+            <div class="field-heading"><strong>Call opening <span class="optional-label">Optional</span></strong><small>Choose how the first few seconds should sound. This is saved with the call thread.</small></div>
+            <label>Opening style<select id="newCallOpeningMode">
+              <option value="auto">Smart natural greeting (Recommended)</option>
+              <option value="name">Hey + caller name</option>
+              <option value="time">Time-based greeting + caller name</option>
+              <option value="custom">Custom opening</option>
+              <option value="wait">Let the other person speak first</option>
+            </select></label>
+            <label id="newCallOpeningCustomWrap" class="hidden">Custom opening<textarea id="newCallOpeningCustom" rows="3" placeholder="Example: Hey David, how’s your evening going?"></textarea></label>
+            <div class="opening-preview" id="newCallOpeningPreview">CallFocus will greet the person naturally, then ease into today’s topic without sounding scripted.</div>
+          </div>
+        </div></div>
         <div class="call-form-footer"><div><strong>After this call</strong><span>This caller and thread will appear in My Callers and Recent Calls automatically.</span></div><button class="btn btn-primary large" type="submit">Start call</button></div>
       </form>
     </div>
@@ -331,6 +345,7 @@
         <div class="live-region" id="liveRegion"></div>
         <div class="live-status" id="liveStatus">Connecting to server…</div>
         <div class="call-timer" id="callTimer">00:00</div>
+        <button class="live-start-call hidden" id="liveStartCallBtn" type="button"><span>▶</span><strong>Start call</strong><small>Server connected · begin when you are ready</small></button>
         <div class="live-transcript" id="liveTranscript">Call context is ready.</div>
       </div>
       <div class="call-controls dial-grid">
@@ -353,5 +368,6 @@
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
   <script src="./app.js"></script>
+  <script src="./v8-patch.js"></script>
 </body>
 </html>

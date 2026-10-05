@@ -1,54 +1,25 @@
-# CallFocus Worker V7
+# CallFocus V8 Update
 
-V7 turns `/admin` into a true global control center instead of a device-only settings page.
+This is an incremental update for the current V7.1 repository.
 
-## New in V7
-- Global Server Online / Offline switch
-- Custom customer-facing maintenance message
-- Global male/female Realtime voice selection
-- Voice preview buttons for every supported CallFocus Realtime voice
-- Global natural-speech style instructions to reduce chatbot-like delivery
-- Global master call rules and opening behavior
-- Admin settings are enforced server-side for every new call
-- Customer pages automatically reflect the selected male/female voices
-- Server-off mode is enforced by the Worker, not just hidden in the UI
+## Upload these files to the existing GitHub repository
+- `index.html` (replace current)
+- `v8-patch.js` (new)
+- `v8-patch.css` (new)
 
-## Required Cloudflare runtime secrets
-Existing:
-- `OPENAI_API_KEY`
+Do not delete the existing `app.js`, `app.css`, `_worker.js`, `admin.js`, `wrangler.jsonc`, icons, manifest, or service worker.
 
-Add:
-- `CALLFOCUS_ADMIN_PASSCODE`
-
-Choose the private passcode you want to use at `/admin` and store it as a Secret.
-
-## Required Cloudflare KV binding
-Create one Workers KV namespace, for example:
-- Namespace name: `callfocus-config`
-
-Bind it to this Worker using the binding/variable name:
-- `CALLFOCUS_CONFIG`
-
-This KV namespace stores the global admin configuration. Without the binding, customer calls still use safe defaults, but the admin panel cannot persist global changes.
-
-## Admin URL
-- `https://YOUR-DOMAIN/admin`
-- Current workers.dev example: `https://callfocus.baronbetterhelp.workers.dev/admin`
-
-## Voice notes
-Realtime voice choices in this build:
-- alloy
-- ash
-- ballad
-- coral
-- echo
-- sage
-- shimmer
-- verse
-- marin
-- cedar
-
-OpenAI currently recommends `marin` or `cedar` for best Realtime voice quality.
-
-## Important
-Voice previews use the OpenAI speech endpoint and consume a small amount of API credit.
+## V8 changes
+- Realtime connection happens first; the conversation does not begin automatically.
+- A prominent **Start Call** button appears after the server is connected.
+- Microphone audio is held until Start Call is pressed.
+- Call timer starts only when Start Call is pressed.
+- New call setup now includes an optional Call Opening selector:
+  - Smart natural greeting
+  - Hey + caller name
+  - Time-based greeting + caller name
+  - Custom opening
+  - Let the other person speak first
+- Opening uses Caller B's selected timezone for morning/afternoon/evening.
+- Explicitly blocks AI/service-style openings such as “hey dear” or “it’s nice to connect with you”.
+- Adds stronger natural-call delivery rules: slower pacing, less scripted agenda dumping, appropriate laughter/reactions, shorter turns, and more human conversational rhythm.
