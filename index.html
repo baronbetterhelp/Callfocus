@@ -25,6 +25,7 @@
   <link rel="stylesheet" href="./v10.9-patch.css" />
   <link rel="stylesheet" href="./v11-patch.css" />
   <link rel="stylesheet" href="./v11.2-patch.css" />
+  <link rel="stylesheet" href="./v11.3-patch.css" />
 </head>
 <body>
   <div class="app-root home-page" id="pageRoot">
@@ -115,9 +116,10 @@
               <p class="hero-enter hero-enter-3">Set the full context once for a new person. On future calls, open the recent call thread, add only what is new today, and continue from where the conversation left off.</p>
               <div class="hero-actions hero-enter hero-enter-4">
                 <button class="btn btn-primary hero-primary" id="heroNewCallBtn">Start a new call</button>
-                <button class="btn btn-ghost voice-note-launch" id="heroHowBtn"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Create a voice note</span></button>
+                <button class="btn btn-ghost voice-note-launch voice-note-launch-main" id="heroCreateVoiceBtn"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Create a voice note</span></button>
+                <button class="btn btn-ghost voice-note-launch" id="heroHowBtn"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Reply with voice note</span></button>
               </div>
-              <div class="hero-proof hero-enter hero-enter-4">
+              <div class="hero-proof hero-enter hero-enter-4 hero-proof-spaced">
                 <div class="avatar-stack"><span>C</span><span>F</span><span>+</span></div>
                 <div><div class="proof-stars">★★★★★</div><small>Your context stays organized around each caller and call thread.</small></div>
               </div>
@@ -232,16 +234,20 @@
             <button class="voice-notes-back" id="voiceNotesBackBtn" type="button" aria-label="Back to home">‹</button>
             <div>
               <span class="section-eyebrow">Voice note studio</span>
-              <h1>New voice note</h1>
-              <p>Tell CallFocus what you want to say. It will shape the wording and deliver it with your Admin speech style, master rules and opening behavior.</p>
+              <h1>Create or reply with a voice note</h1>
+              <p>Use one mode to turn your idea into a natural voice-note reply, or switch to script mode to generate the voice note from the exact words you typed.</p>
             </div>
           </div>
 
           <div class="voice-note-chat">
+            <div class="voice-note-mode-bar" role="tablist" aria-label="Voice note mode">
+              <button class="voice-note-mode-btn active" id="voiceNoteModeScriptBtn" type="button" data-vn-mode="script" aria-selected="true">Create a voice note<small>Use your written script</small></button>
+              <button class="voice-note-mode-btn" id="voiceNoteModeReplyBtn" type="button" data-vn-mode="reply" aria-selected="false">Reply with voice note<small>CallFocus drafts the message</small></button>
+            </div>
             <div class="voice-note-empty" id="voiceNoteEmptyState">
               <div class="voice-note-orb"><span>◉</span></div>
-              <strong>What should this voice note say?</strong>
-              <p>Write the idea naturally, just like you would explain it to someone before recording.</p>
+              <strong id="voiceNoteEmptyTitle">What should this voice note say?</strong>
+              <p id="voiceNoteEmptyCopy">Write the idea naturally, just like you would explain it to someone before recording.</p>
             </div>
 
             <div class="voice-note-result hidden" id="voiceNoteResult">
@@ -251,6 +257,7 @@
                 <span class="ai-voice-pill">AI-generated voice</span>
               </div>
               <p class="voice-note-script" id="voiceNoteResultScript"></p>
+              <small class="voice-note-result-mode" id="voiceNoteResultMode">Created from your script</small>
               <button class="voice-note-play primary" id="voiceNoteResultPlay" type="button" disabled><span class="voice-note-play-icon">▶</span><span>Play voice note</span></button>
             </div>
 
@@ -262,12 +269,13 @@
                   <button type="button" class="voice-note-gender" data-vn-gender="female"><strong>Female</strong><small id="voiceNoteFemaleLabel">marin</small></button>
                 </div>
               </div>
-              <label class="voice-note-prompt-label" for="voiceNotePrompt">Prompt</label>
+              <label class="voice-note-prompt-label" for="voiceNotePrompt" id="voiceNotePromptLabel">Script</label>
+              <div class="voice-note-prompt-hint" id="voiceNotePromptHint">Type the exact words you want the voice note to say.</div>
               <div class="voice-note-input-wrap">
-                <textarea id="voiceNotePrompt" rows="5" maxlength="2200" placeholder="Example: Tell David good evening, ask how his day went, and let him know I just wanted to hear his voice."></textarea>
+                <textarea id="voiceNotePrompt" rows="5" maxlength="2200" placeholder="Example: Hey David, good evening. I just wanted to check on you and hear how your day went."></textarea>
                 <div class="voice-note-composer-foot">
                   <small><span id="voiceNoteCharCount">0</span>/2200</small>
-                  <button class="voice-note-generate" id="voiceNoteGenerateBtn" type="button"><span class="voice-note-generate-icon">✦</span><span>Generate</span></button>
+                  <button class="voice-note-generate" id="voiceNoteGenerateBtn" type="button"><span class="voice-note-generate-icon">✦</span><span id="voiceNoteGenerateLabel">Create voice note</span></button>
                 </div>
               </div>
               <div class="voice-note-credit-meter" aria-live="polite">
@@ -275,13 +283,13 @@
                 <small id="voiceNoteCreditRate">Shared with live calls · 50 credits = 1 minute</small>
                 <button type="button" data-route="credits">Buy credits</button>
               </div>
-              <div class="voice-note-status" id="voiceNoteStatus">Your current Admin speech settings are applied automatically. Voice notes use the same per-minute credit balance as calls.</div>
+              <div class="voice-note-status" id="voiceNoteStatus">Create mode uses your exact written script. Reply mode drafts the message for you. Both use your current Admin speech settings and the same shared credit balance as calls.</div>
             </div>
           </div>
 
           <section class="voice-note-history-section">
             <div class="voice-note-history-head">
-              <div><span class="section-eyebrow">History</span><h2>Voice notes</h2></div>
+              <div><span class="section-eyebrow">History</span><h2>Voice note history</h2></div>
               <small>Most recent first</small>
             </div>
             <div class="voice-note-history" id="voiceNoteHistory"></div>
@@ -523,5 +531,6 @@
   <script src="./v10.5-patch.js"></script>
   <script src="./v10.9-patch.js"></script>
   <script src="./v11-patch.js"></script>
+  <script src="./v11.3-patch.js"></script>
 </body>
 </html>

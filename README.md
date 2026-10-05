@@ -1,7 +1,18 @@
-# CallFocus V11.2 Update
+CallFocus V11.3 Update
 
-Changes:
-- Makes the Call Credit card compact and right-aligned on the home hero.
-- Removes the large Saved callers / Recent threads / Voice pair summary panel from the signed-in workspace.
+Files included:
+- index.html
+- _worker.js
+- v11.3-patch.css
+- v11.3-patch.js
 
-From V11.1, replace `index.html` and add `v11.2-patch.css`.
+What changed:
+1. The voice-note flow now has two modes:
+   - Create a voice note: generates audio from the exact script typed by the user.
+   - Reply with voice note: drafts the spoken reply first, then generates the audio.
+2. The hero area now shows both buttons.
+3. The proof panel below the hero buttons sits slightly lower for better spacing.
+4. Credit pages were tightened with smaller typography, reduced padding, and more compact card spacing.
+
+How to apply:
+- Replace these files in your live Worker project.

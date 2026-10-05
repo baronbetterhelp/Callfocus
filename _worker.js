@@ -230,6 +230,7 @@ async function handleVoiceNote(request, env) {
   const requestedMaxSeconds = Math.max(0, Math.min(600, Math.floor(Number(body?.maxSeconds) || 0)));
   if (requestedMaxSeconds > 0 && requestedMaxSeconds < 5) return json({ error: 'Not enough CallFocus credit to generate a voice note.' }, 402);
   const targetMaxWords = requestedMaxSeconds > 0 ? Math.max(8, Math.floor(requestedMaxSeconds * 1.7)) : 0;
+  const mode = body?.mode === 'reply' ? 'reply' : 'script';
 
   const config = await getConfig(env);
   const gender = body?.voiceGender === 'female' ? 'female' : 'male';
@@ -262,41 +263,47 @@ ${String(config.opening || DEFAULT_CONFIG.opening)}
 Return only the final spoken voice-note text.`;
 
   let script = '';
-  try {
-    const drafted = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: writerInstructions },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.72,
-        max_tokens: 420
-      })
-    });
-    const raw = await drafted.text();
-    let parsed = {};
-    try { parsed = JSON.parse(raw); } catch {}
-    if (!drafted.ok) {
-      const code = parsed?.error?.code || parsed?.error?.type || '';
-      const quota = drafted.status === 429 || code === 'credit_balance_exhausted' || code === 'insufficient_quota';
-      return json({ error: quota ? 'Voice notes are temporarily unavailable. Please try again soon.' : 'Could not prepare the voice note right now. Please try again.' }, quota ? 503 : drafted.status);
+  if (mode === 'reply') {
+    try {
+      const drafted = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: writerInstructions },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.72,
+          max_tokens: 420
+        })
+      });
+      const raw = await drafted.text();
+      let parsed = {};
+      try { parsed = JSON.parse(raw); } catch {}
+      if (!drafted.ok) {
+        const code = parsed?.error?.code || parsed?.error?.type || '';
+        const quota = drafted.status === 429 || code === 'credit_balance_exhausted' || code === 'insufficient_quota';
+        return json({ error: quota ? 'Voice notes are temporarily unavailable. Please try again soon.' : 'Could not prepare the voice note right now. Please try again.' }, quota ? 503 : drafted.status);
+      }
+      script = extractChatText(parsed);
+    } catch {
+      return json({ error: 'Could not prepare the voice note right now. Please try again.' }, 502);
     }
-    script = extractChatText(parsed);
-  } catch {
-    return json({ error: 'Could not prepare the voice note right now. Please try again.' }, 502);
+
+    if (!script) return json({ error: 'Could not prepare the voice note right now. Please try again.' }, 502);
+  } else {
+    script = prompt;
   }
 
-  if (!script) return json({ error: 'Could not prepare the voice note right now. Please try again.' }, 502);
   script = script.slice(0, 3200);
 
   const ttsInstructions = [
-    'Render this as a realistic private voice note recorded on a phone.',
+    mode === 'reply' ? 'Render this as a realistic private reply voice note recorded on a phone.' : 'Render this as a realistic private voice note recorded on a phone.',
+    mode === 'reply' ? 'You may sound gently conversational and reply-like, but never like an assistant or narrator.' : "Read the provided script naturally while preserving the user's wording.",
     'Do not sound like an announcer, virtual assistant, audiobook narrator, presenter, or customer-service voice.',
     paceInstruction(config.speakingPace),
     String(config.speechStyle || '').trim(),

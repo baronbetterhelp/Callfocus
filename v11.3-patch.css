@@ -1,0 +1,94 @@
+/* CallFocus V11.3 — dual voice-note modes + tighter credit pages */
+
+.hero-actions{flex-wrap:wrap}
+.voice-note-launch-main{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.12);color:#f5f5f3}
+.voice-note-launch-main .voice-note-launch-icon{background:rgba(92,190,145,.14);border-color:rgba(92,190,145,.28);color:#7ad49e}
+html[data-theme="pearl"] .voice-note-launch-main{background:#f3faf7;border-color:#d7e7e2;color:#17423d;box-shadow:0 10px 24px rgba(39,78,72,.05)}
+html[data-theme="pearl"] .voice-note-launch-main .voice-note-launch-icon{background:#eaf7f1;border-color:#d1e7df;color:#2d756b}
+.hero-proof-spaced{margin-top:42px}
+
+.voice-note-mode-bar{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;padding:16px 16px 0}
+.voice-note-mode-btn{display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding:14px 16px;border:1px solid rgba(255,255,255,.09);border-radius:18px;background:rgba(255,255,255,.03);color:#f3f5f4;font:700 14px/1.3 'Manrope',system-ui,sans-serif;text-align:left;cursor:pointer;transition:.18s ease}
+.voice-note-mode-btn small{display:block;color:#8f9894;font-size:11px;font-weight:600;line-height:1.45}
+.voice-note-mode-btn.active{background:linear-gradient(145deg,rgba(37,100,91,.30),rgba(18,24,23,.92));border-color:rgba(106,173,162,.34);box-shadow:0 10px 32px rgba(0,0,0,.14)}
+html[data-theme="pearl"] .voice-note-mode-btn{background:rgba(255,255,255,.86);border-color:#dfe7e3;color:#17312e}
+html[data-theme="pearl"] .voice-note-mode-btn small{color:#71817d}
+html[data-theme="pearl"] .voice-note-mode-btn.active{background:linear-gradient(145deg,#f6fbf9,#edf7f3 62%,#faf5ed);border-color:#98bdb5;box-shadow:0 12px 30px rgba(39,78,72,.08)}
+.voice-note-result-mode{display:block;margin-top:10px;color:#8f9894;font-size:11px;line-height:1.45}
+html[data-theme="pearl"] .voice-note-result-mode{color:#6f817c}
+.voice-note-prompt-hint{margin:-4px 0 10px;color:#8c9592;font-size:11.5px;line-height:1.55}
+html[data-theme="pearl"] .voice-note-prompt-hint{color:#70817d}
+.voice-note-history-prompt-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.voice-note-history-mode{display:inline-flex;align-items:center;justify-content:center;padding:0 9px;min-height:24px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);color:#a8b2af;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap}
+html[data-theme="pearl"] .voice-note-history-mode{background:#f4f8f6;border-color:#dde7e3;color:#607570}
+.voice-note-history-note{margin-top:8px;color:#7e8884;font-size:11px;line-height:1.5}
+html[data-theme="pearl"] .voice-note-history-note{color:#72827e}
+
+.credit-page-shell{max-width:960px;padding-top:24px;padding-bottom:76px}
+.credit-page-head{gap:14px;margin-bottom:18px}
+.credit-page-head h1{margin:3px 0 7px;font-size:clamp(26px,4.4vw,42px);letter-spacing:-.04em}
+.credit-page-head p{font-size:14px;line-height:1.55;max-width:660px}
+.credit-balance-hero{gap:14px;margin:20px 0;padding:15px;border-radius:24px}
+.credit-balance-hero>div{padding:16px;border-radius:18px}
+.credit-balance-hero strong{font-size:28px}
+.credit-balance-hero small{margin-top:5px;font-size:13px}
+.credit-rate-card strong{font-size:18px}
+.credit-starter-note{gap:14px;margin:18px 0 26px;padding:18px;border-radius:20px}
+.credit-starter-icon{width:50px;height:50px;border-radius:15px}
+.credit-starter-note strong{font-size:15px}
+.credit-starter-note p{font-size:13px;line-height:1.55}
+.credit-purchase-section{padding:20px;border-radius:24px}
+.credit-section-title{margin-bottom:14px;align-items:center}
+.credit-section-title h2{font-size:21px;line-height:1.15}
+.credit-section-title>small{font-size:11.5px}
+.credit-package-grid{gap:10px}
+.credit-package{min-height:148px;padding:16px;border-radius:18px}
+.credit-package>strong{margin-top:12px;font-size:18px}
+.credit-package>small{font-size:12.5px}
+.credit-package>b{padding-top:14px;font-size:16px}
+.credit-custom-card{margin-top:14px;padding:16px;border-radius:18px;gap:14px;grid-template-columns:minmax(0,1fr) 170px 134px}
+.credit-custom-card input{min-height:44px;border-radius:13px;font-size:15px}
+.credit-custom-summary strong{font-size:17px}
+.credit-checkout-btn{min-height:58px;margin-top:14px;padding:13px 17px;border-radius:16px}
+.credit-payment-note{margin-top:10px;font-size:11.5px}
+.credit-usage-info{gap:12px;margin-top:18px}
+.credit-usage-info article{gap:12px;padding:16px;border-radius:18px}
+.credit-usage-info strong{margin:0 0 5px;font-size:13.5px}
+.credit-usage-info p{font-size:12px;line-height:1.5}
+
+@media(max-width:760px){
+  .hero-proof-spaced{margin-top:34px}
+  .voice-note-mode-bar{padding:14px 14px 0;gap:8px}
+  .voice-note-mode-btn{padding:12px 13px;border-radius:16px;font-size:13px}
+  .voice-note-mode-btn small{font-size:10.5px}
+  .credit-page-shell{padding-top:18px;padding-bottom:66px}
+  .credit-page-head p{font-size:13.5px}
+  .credit-balance-hero strong{font-size:24px}
+  .credit-package{min-height:128px}
+}
+
+@media(max-width:620px){
+  .voice-note-mode-bar{grid-template-columns:1fr}
+  .credit-page-head{gap:12px}
+  .credit-page-head h1{font-size:34px}
+  .credit-balance-hero{margin:16px 0;padding:12px}
+  .credit-balance-hero>div{padding:14px}
+  .credit-purchase-section{padding:16px}
+  .credit-section-title{align-items:flex-start;flex-direction:column;gap:7px}
+  .credit-section-title h2{font-size:19px}
+  .credit-custom-card{grid-template-columns:1fr}
+  .credit-custom-card>div:first-child{grid-column:auto}
+  .credit-custom-summary{align-items:flex-start}
+}
+
+@media(max-width:520px){
+  .hero-proof-spaced{margin-top:28px}
+  .credit-page-head h1{font-size:30px}
+  .credit-page-head p{font-size:13px;line-height:1.5}
+  .credit-balance-hero strong{font-size:22px}
+  .credit-rate-card strong{font-size:16px}
+  .credit-starter-note{padding:16px}
+  .credit-package{padding:15px;min-height:118px}
+  .credit-package>strong{font-size:17px}
+  .credit-checkout-btn{align-items:flex-start;flex-direction:column;gap:5px}
+}
