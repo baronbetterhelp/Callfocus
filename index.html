@@ -438,7 +438,41 @@
           <div class="location-card"><strong>Caller A</strong><label>Location<div class="location-autocomplete"><input id="newCallARegion" autocomplete="off" placeholder="Start typing a U.S. city" /><div class="location-suggestions hidden" id="newCallASuggestions"></div></div></label><label class="timezone-label">Time zone<select id="newCallATimezone"></select></label></div>
           <div class="location-card"><strong>Caller B</strong><label>Location<div class="location-autocomplete"><input id="newCallBRegion" autocomplete="off" placeholder="Start typing a U.S. city" /><div class="location-suggestions hidden" id="newCallBSuggestions"></div></div></label><label class="timezone-label">Time zone<select id="newCallBTimezone"></select></label></div>
         </div></div></div>
-        <div class="field-section"><span class="field-number">07</span><div class="field-content"><div class="field-heading"><strong>Voice selection</strong><small>You choose Male or Female. The admin-selected voice behind that choice is used automatically.</small></div><div class="voice-choice"><button type="button" class="voice-option active" data-voice="male"><span>Male</span><small id="maleVoiceLabel">Default male voice</small></button><button type="button" class="voice-option" data-voice="female"><span>Female</span><small id="femaleVoiceLabel">Default female voice</small></button></div><input type="hidden" id="newCallVoiceGender" value="male" />
+        <div class="field-section"><span class="field-number">07</span><div class="field-content"><div class="field-heading"><strong>Call language</strong><small>Choose the language for this caller thread. Future calls in this same thread keep this language automatically.</small></div><label>Language<select id="newCallLanguage">
+          <option value="English" selected>English</option>
+          <option value="Spanish">Spanish / Español</option>
+          <option value="French">French / Français</option>
+          <option value="Italian">Italian / Italiano</option>
+          <option value="German">German / Deutsch</option>
+          <option value="Portuguese">Portuguese / Português</option>
+          <option value="Dutch">Dutch / Nederlands</option>
+          <option value="Arabic">Arabic / العربية</option>
+          <option value="Hindi">Hindi / हिन्दी</option>
+          <option value="Mandarin Chinese">Mandarin Chinese / 中文</option>
+          <option value="Cantonese">Cantonese / 粵語</option>
+          <option value="Japanese">Japanese / 日本語</option>
+          <option value="Korean">Korean / 한국어</option>
+          <option value="Russian">Russian / Русский</option>
+          <option value="Turkish">Turkish / Türkçe</option>
+          <option value="Vietnamese">Vietnamese / Tiếng Việt</option>
+          <option value="Polish">Polish / Polski</option>
+          <option value="Ukrainian">Ukrainian / Українська</option>
+          <option value="Greek">Greek / Ελληνικά</option>
+          <option value="Hebrew">Hebrew / עברית</option>
+          <option value="Indonesian">Indonesian / Bahasa Indonesia</option>
+          <option value="Malay">Malay / Bahasa Melayu</option>
+          <option value="Thai">Thai / ไทย</option>
+          <option value="Swahili">Swahili / Kiswahili</option>
+          <option value="Filipino">Filipino / Tagalog</option>
+          <option value="Romanian">Romanian / Română</option>
+          <option value="Czech">Czech / Čeština</option>
+          <option value="Hungarian">Hungarian / Magyar</option>
+          <option value="Swedish">Swedish / Svenska</option>
+          <option value="Norwegian">Norwegian / Norsk</option>
+          <option value="Danish">Danish / Dansk</option>
+          <option value="Finnish">Finnish / Suomi</option>
+        </select></label><div class="opening-preview">CallFocus will keep the entire call in the language you select here. An accent, isolated foreign words, or the other person changing languages will not make the voice switch languages.</div></div></div>
+        <div class="field-section"><span class="field-number">08</span><div class="field-content"><div class="field-heading"><strong>Voice selection</strong><small>You choose Male or Female. The admin-selected voice behind that choice is used automatically.</small></div><div class="voice-choice"><button type="button" class="voice-option active" data-voice="male"><span>Male</span><small id="maleVoiceLabel">Default male voice</small></button><button type="button" class="voice-option" data-voice="female"><span>Female</span><small id="femaleVoiceLabel">Default female voice</small></button></div><input type="hidden" id="newCallVoiceGender" value="male" />
           <div class="call-opening-box">
             <div class="field-heading"><strong>Call opening <span class="optional-label">Optional</span></strong><small>Choose how the first few seconds should sound. This is saved with the call thread.</small></div>
             <label>Opening style<select id="newCallOpeningMode">

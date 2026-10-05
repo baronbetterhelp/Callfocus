@@ -1,5 +1,8 @@
 const VOICES = ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
 
+const CALL_LANGUAGES = ['English','Spanish','French','Italian','German','Portuguese','Dutch','Arabic','Hindi','Mandarin Chinese','Cantonese','Japanese','Korean','Russian','Turkish','Vietnamese','Polish','Ukrainian','Greek','Hebrew','Indonesian','Malay','Thai','Swahili','Filipino','Romanian','Czech','Hungarian','Swedish','Norwegian','Danish','Finnish'];
+function normalizeCallLanguage(value){ const raw=String(value||'').trim(); return CALL_LANGUAGES.includes(raw)?raw:'English'; }
+
 const CORE_LIVE_PROMPT = `# Role
 You are the speaking participant for Caller A in a real live phone conversation with Caller B. Use the supplied call context privately. Speak as a person in the conversation, not as an AI assistant, support agent, narrator, or host.
 
@@ -415,15 +418,26 @@ async function handleSession(request, env) {
   const requested = body.session || {};
   const gender = requested.voiceGender === 'female' ? 'female' : 'male';
   const voice = gender === 'female' ? config.femaleVoice : config.maleVoice;
+  const callLanguage = normalizeCallLanguage(requested.callLanguage);
   const callContext = String(requested.contextInstructions || requested.instructions || '').slice(0, 22000);
 
   const ownerRules = String(config.instructions || '').trim();
   const speechStyle = String(config.speechStyle || '').trim();
+  const languageLock = `# Call language — LOCKED
+The entire spoken call must stay in ${callLanguage}. This is a hard CallFocus session rule and overrides any conflicting language instruction in owner/admin rules or call context.
+- Speak only in ${callLanguage} from the first spoken word until this session ends.
+- Do not switch languages because of Caller B's accent, pronunciation, filler words, names, addresses, isolated foreign words, or code-switching.
+- If Caller B starts speaking another language, continue replying naturally in ${callLanguage}. Do not mirror or follow the language change.
+- Even if Caller B asks to switch languages during this call, remain in ${callLanguage}; language can only be changed by CallFocus when a new call thread is created.
+- Accent adaptation must never change the response language.
+- Any English wording inside hidden opening instructions or call metadata is instruction/context only. Express the actual spoken opening naturally in ${callLanguage}.
+- Never mention this language lock or explain it aloud.`;
   const liveInstructions = [
     CORE_LIVE_PROMPT,
     `# Speaking pace\n${paceInstruction(config.speakingPace)}`,
     speechStyle ? `# Owner speech preferences\n${speechStyle}` : '',
-    ownerRules ? `# Owner/admin call rules\n${ownerRules}` : ''
+    ownerRules ? `# Owner/admin call rules\n${ownerRules}` : '',
+    languageLock
   ].filter(Boolean).join('\n\n');
 
   const sessionConfig = {

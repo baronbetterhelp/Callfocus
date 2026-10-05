@@ -33,7 +33,7 @@
 
   // Context only. Conversation behavior is now enforced server-side from the latest Admin rules.
   buildInstructions = function(c){
-    return `Call title: ${c.title}\nPerson being called: ${c.callerName}\nAbout Caller A: ${c.aboutSelf}\nAbout Caller B: ${c.aboutCaller}\nConversation dynamics: ${dynamicsText(c.dynamicsMode,c.rawDynamics)}\nToday’s call topic: ${c.topic}\nCaller A location: ${c.callerA.region}\nCaller A timezone: ${c.callerA.timezone}\nCaller A current local time: ${c.callerA.localTime}\nCaller B location: ${c.callerB.region}\nCaller B timezone: ${c.callerB.timezone}\nCaller B current local time: ${c.callerB.localTime}\nCustomer profile call rules: ${data?.profile?.rules||'None supplied'}\nOpening style selected for this call: ${c.openingMode||'auto'}\nCustom opening if any: ${c.openingCustom||'None'}`;
+    return `Call title: ${c.title}\nPerson being called: ${c.callerName}\nAbout Caller A: ${c.aboutSelf}\nAbout Caller B: ${c.aboutCaller}\nConversation dynamics: ${dynamicsText(c.dynamicsMode,c.rawDynamics)}\nToday’s call topic: ${c.topic}\nCaller A location: ${c.callerA.region}\nCaller A timezone: ${c.callerA.timezone}\nCaller A current local time: ${c.callerA.localTime}\nCaller B location: ${c.callerB.region}\nCaller B timezone: ${c.callerB.timezone}\nCaller B current local time: ${c.callerB.localTime}\nCall language: ${c.callLanguage||'English'}\nCustomer profile call rules: ${data?.profile?.rules||'None supplied'}\nOpening style selected for this call: ${c.openingMode||'auto'}\nCustom opening if any: ${c.openingCustom||'None'}`;
   };
 
   function setReadyGate(){
@@ -111,7 +111,7 @@
       await waitForIce(pc);
       const res=await fetch('/api/session',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,contextInstructions:buildInstructions(call)}})
+        body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,callLanguage:call.callLanguage||'English',contextInstructions:buildInstructions(call)}})
       });
       const text=await res.text();
       if(!res.ok) throw new Error(text||'Live session failed');
