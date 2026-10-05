@@ -1,0 +1,141 @@
+/* CallFocus V10.8 — Pearl Recent Calls typography + mobile card composition */
+
+/*
+   Recent call previews use a vertical information hierarchy on compact screens:
+   avatar | title + caller/time | arrow
+          | latest call topic   |
+   This prevents the topic from becoming a narrow competing column.
+*/
+.thread-preview-item{
+  grid-template-columns:64px minmax(0,1fr) 24px!important;
+  grid-template-areas:
+    "avatar identity arrow"
+    "avatar topic arrow"!important;
+  column-gap:16px!important;
+  row-gap:8px!important;
+  align-items:center!important;
+  padding:20px 18px!important;
+  min-height:122px;
+}
+.thread-preview-item>.thread-avatar{
+  grid-area:avatar;
+  width:64px!important;
+  height:64px!important;
+  align-self:center;
+  margin:0!important;
+}
+.thread-preview-item>span:not(.thread-avatar){
+  grid-area:identity;
+  min-width:0;
+  margin:0!important;
+  align-self:end;
+}
+.thread-preview-item>span:not(.thread-avatar)>strong{
+  display:block;
+  margin:0!important;
+  font-family:'Manrope',system-ui,sans-serif!important;
+  font-size:18px!important;
+  font-weight:800!important;
+  line-height:1.25!important;
+  letter-spacing:-.025em;
+}
+.thread-preview-item>span:not(.thread-avatar)>span{
+  display:block;
+  margin:5px 0 0!important;
+  font-size:14px!important;
+  font-weight:500!important;
+  line-height:1.45!important;
+}
+.thread-preview-item>small{
+  grid-area:topic;
+  display:-webkit-box!important;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+  overflow:hidden;
+  min-width:0;
+  margin:0!important;
+  font-size:13.5px!important;
+  font-weight:500!important;
+  line-height:1.55!important;
+  align-self:start;
+}
+.thread-preview-item>.thread-arrow{
+  grid-area:arrow;
+  align-self:center;
+  justify-self:center;
+  margin:0!important;
+  font-size:25px!important;
+  line-height:1!important;
+}
+
+/* Match the calm, readable Pearl Aurora hierarchy used by the process cards. */
+html[data-theme="pearl"] .thread-preview-item{
+  background:rgba(255,255,255,.94)!important;
+  border-color:#dfe7e3!important;
+  box-shadow:0 14px 38px rgba(39,78,72,.055)!important;
+}
+html[data-theme="pearl"] .thread-preview-item:hover{
+  background:#fff!important;
+  border-color:#c9dbd5!important;
+  box-shadow:0 18px 44px rgba(36,79,71,.085)!important;
+}
+html[data-theme="pearl"] .thread-preview-item>span:not(.thread-avatar)>strong{
+  color:#17312e!important;
+}
+html[data-theme="pearl"] .thread-preview-item>span:not(.thread-avatar)>span{
+  color:#60746f!important;
+}
+html[data-theme="pearl"] .thread-preview-item>small{
+  color:#74827f!important;
+}
+html[data-theme="pearl"] .thread-preview-item>.thread-arrow{
+  color:#4f776f!important;
+}
+html[data-theme="pearl"] .thread-avatar{
+  background:#edf6f3!important;
+  border-color:#d7e6e1!important;
+  color:#39776f!important;
+  font-size:16px!important;
+}
+html[data-theme="pearl"] .thread-preview-list{
+  gap:14px!important;
+}
+html[data-theme="pearl"] .section-head h3{
+  color:#17312e!important;
+}
+html[data-theme="pearl"] .section-head .section-eyebrow{
+  color:#39776f!important;
+}
+html[data-theme="pearl"] .section-head .text-link{
+  color:#2d7067!important;
+  opacity:1!important;
+}
+
+@media(max-width:620px){
+  .thread-preview-item{
+    grid-template-columns:58px minmax(0,1fr) 20px!important;
+    column-gap:14px!important;
+    row-gap:7px!important;
+    padding:18px 16px!important;
+    min-height:118px;
+    border-radius:22px!important;
+  }
+  .thread-preview-item>.thread-avatar{
+    width:58px!important;
+    height:58px!important;
+  }
+  .thread-preview-item>span:not(.thread-avatar)>strong{
+    font-size:17px!important;
+    line-height:1.25!important;
+  }
+  .thread-preview-item>span:not(.thread-avatar)>span{
+    font-size:13px!important;
+    line-height:1.45!important;
+  }
+  .thread-preview-item>small{
+    font-size:13px!important;
+    line-height:1.5!important;
+    -webkit-line-clamp:3;
+  }
+  .thread-preview-item>.thread-arrow{font-size:22px!important}
+}
