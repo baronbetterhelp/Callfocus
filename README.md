@@ -1,18 +1,9 @@
-CallFocus V11.3 Update
+# CallFocus V11.4 Update
 
-Files included:
-- index.html
-- _worker.js
-- v11.3-patch.css
-- v11.3-patch.js
+For a current V11.3 installation:
 
-What changed:
-1. The voice-note flow now has two modes:
-   - Create a voice note: generates audio from the exact script typed by the user.
-   - Reply with voice note: drafts the spoken reply first, then generates the audio.
-2. The hero area now shows both buttons.
-3. The proof panel below the hero buttons sits slightly lower for better spacing.
-4. Credit pages were tightened with smaller typography, reduced padding, and more compact card spacing.
+1. Replace `index.html`.
+2. Add `v11.4-patch.css` to the repository root.
+3. Commit and let Cloudflare redeploy.
 
-How to apply:
-- Replace these files in your live Worker project.
+This update tightens the hero spacing, pushes the Call Credit card to the right, and makes Pearl Aurora apply to all customer-facing setup/modals and the live call screen.

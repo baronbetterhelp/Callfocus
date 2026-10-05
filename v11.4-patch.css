@@ -1,0 +1,252 @@
+/* CallFocus V11.4 — tighter hero layout + Pearl Aurora across every customer-facing surface */
+
+/* ---------------------------------------------------------------------
+   Home hero: remove the dead gap and tuck the credit card to the right.
+   --------------------------------------------------------------------- */
+.hero-credit-row{
+  padding-top:8px!important;
+  padding-left:0!important;
+  padding-right:0!important;
+  margin-bottom:0!important;
+}
+.hero-credit-row .credit-dock{
+  margin-left:auto!important;
+  margin-right:0!important;
+}
+.premium-hero-inner{
+  padding-top:34px!important;
+}
+
+@media(max-width:820px){
+  .premium-hero-inner{padding-top:26px!important}
+}
+
+@media(max-width:620px){
+  .hero-credit-row{
+    padding-top:6px!important;
+    padding-left:0!important;
+    padding-right:0!important;
+  }
+  .credit-dock{
+    width:min(258px,67vw)!important;
+    margin-right:0!important;
+  }
+  .premium-hero-inner{
+    padding-top:20px!important;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Pearl Aurora: modals, setup forms and reusable customer-facing panels.
+   --------------------------------------------------------------------- */
+html[data-theme="pearl"] .modal-backdrop{
+  background:rgba(20,59,53,.20)!important;
+  backdrop-filter:blur(12px) saturate(120%)!important;
+  -webkit-backdrop-filter:blur(12px) saturate(120%)!important;
+}
+html[data-theme="pearl"] .modal,
+html[data-theme="pearl"] .call-form-modal{
+  background:
+    radial-gradient(circle at 92% 3%,rgba(87,157,146,.11),transparent 28%),
+    radial-gradient(circle at 4% 88%,rgba(199,163,107,.09),transparent 30%),
+    linear-gradient(180deg,#fdfefc 0%,#f3f8f5 100%)!important;
+  border-color:#d9e5e0!important;
+  color:#17312e!important;
+  box-shadow:0 34px 90px rgba(32,72,66,.18)!important;
+}
+html[data-theme="pearl"] .modal-head h2{color:#17312e!important}
+html[data-theme="pearl"] .modal-head p,
+html[data-theme="pearl"] .call-once-message{color:#6b7d78!important}
+html[data-theme="pearl"] .modal-footnote{color:#7b8b87!important}
+html[data-theme="pearl"] .modal-close{
+  background:#fff!important;
+  color:#315f58!important;
+  border-color:#d9e5e0!important;
+  box-shadow:0 10px 28px rgba(36,77,70,.06)!important;
+}
+
+html[data-theme="pearl"] .field-section{
+  background:rgba(255,255,255,.90)!important;
+  border-color:#dce7e3!important;
+  box-shadow:0 12px 34px rgba(39,78,72,.04)!important;
+}
+html[data-theme="pearl"] .field-number{
+  background:linear-gradient(145deg,#fbf7ef,#f2f8f5)!important;
+  border-color:#dfd7c9!important;
+  color:#9c7138!important;
+}
+html[data-theme="pearl"] .field-content>small,
+html[data-theme="pearl"] .field-heading small{color:#778985!important}
+html[data-theme="pearl"] .field-heading strong{color:#234c46!important}
+
+html[data-theme="pearl"] .dynamics-warning{
+  background:linear-gradient(135deg,#fff9ef,#f8f4ea)!important;
+  border-color:#e5d3b2!important;
+  color:#8a6a39!important;
+}
+html[data-theme="pearl"] .preset-description,
+html[data-theme="pearl"] .info-note{
+  background:#f2f8f5!important;
+  border-color:#dce8e3!important;
+  color:#55716a!important;
+}
+html[data-theme="pearl"] .location-card{
+  background:#f8fbf9!important;
+  border-color:#dce7e3!important;
+  color:#17312e!important;
+}
+html[data-theme="pearl"] .location-card>strong{color:#244e47!important}
+
+html[data-theme="pearl"] .voice-option{
+  background:#fff!important;
+  border-color:#dce6e2!important;
+  color:#17312e!important;
+  box-shadow:0 8px 22px rgba(39,78,72,.035)!important;
+}
+html[data-theme="pearl"] .voice-option small{color:#748681!important}
+html[data-theme="pearl"] .voice-option.active{
+  background:linear-gradient(145deg,#edf7f3,#fff 70%,#faf5ec)!important;
+  border-color:#8fbab2!important;
+  color:#1d6259!important;
+  box-shadow:0 10px 26px rgba(31,102,93,.08)!important;
+}
+html[data-theme="pearl"] .voice-option.active small{color:#55756e!important}
+
+html[data-theme="pearl"] .opening-preview{
+  background:#f2f7f4!important;
+  border-color:#dce7e3!important;
+  color:#526e67!important;
+}
+html[data-theme="pearl"] .call-form-footer{
+  border-top-color:#dfe7e3!important;
+}
+html[data-theme="pearl"] .call-form-footer strong{color:#315b54!important}
+html[data-theme="pearl"] .call-form-footer span{color:#778783!important}
+
+html[data-theme="pearl"] .auth-tabs{
+  background:#edf5f2!important;
+  border-color:#dce6e2!important;
+}
+html[data-theme="pearl"] .auth-tab{color:#6a7e78!important}
+html[data-theme="pearl"] .auth-tab.active{
+  background:#fff!important;
+  color:#1f665d!important;
+  box-shadow:0 5px 16px rgba(39,78,72,.07)!important;
+}
+
+html[data-theme="pearl"] .location-suggestions{
+  background:#fff!important;
+  border-color:#dce6e2!important;
+  box-shadow:0 20px 55px rgba(35,75,69,.14)!important;
+}
+html[data-theme="pearl"] .location-suggestions button{
+  background:#fff!important;
+  color:#17312e!important;
+  border-bottom-color:#e6ece9!important;
+}
+html[data-theme="pearl"] .location-suggestions button:hover,
+html[data-theme="pearl"] .location-suggestions button:focus{
+  background:#eef7f4!important;
+}
+html[data-theme="pearl"] .location-suggestions small{color:#7a8c87!important}
+
+/* Other customer screens that still inherited dark separators/surfaces. */
+html[data-theme="pearl"] .settings-row{border-bottom-color:#e2e9e5!important}
+html[data-theme="pearl"] .settings-row strong{color:#244d47!important}
+html[data-theme="pearl"] .settings-row span{color:#748681!important}
+html[data-theme="pearl"] .caller-dynamics-chip{
+  border-color:#dce7e3!important;
+  background:#f2f8f5!important;
+  color:#55716a!important;
+}
+html[data-theme="pearl"] .empty-state,
+html[data-theme="pearl"] .empty-thread-detail{
+  background:rgba(255,255,255,.64)!important;
+  border-color:#d8e4df!important;
+  color:#738580!important;
+}
+html[data-theme="pearl"] .danger-card{
+  background:#fff6f5!important;
+  border-color:#efd2d2!important;
+}
+html[data-theme="pearl"] .danger-card p{color:#8c6666!important}
+
+/* ---------------------------------------------------------------------
+   Pearl Aurora also reaches the actual customer call screen now.
+   --------------------------------------------------------------------- */
+html[data-theme="pearl"] .call-screen{
+  color-scheme:light!important;
+  color:#17312e!important;
+  background:
+    radial-gradient(circle at 50% 10%,rgba(84,151,142,.17),transparent 32%),
+    radial-gradient(circle at 8% 84%,rgba(199,163,107,.11),transparent 30%),
+    linear-gradient(180deg,#fdfefc 0%,#eff6f3 70%,#fbfaf6 100%)!important;
+}
+html[data-theme="pearl"] .call-shell{
+  background:transparent!important;
+  color:#17312e!important;
+}
+html[data-theme="pearl"] .call-top-btn{
+  background:rgba(255,255,255,.92)!important;
+  border-color:#d9e5e0!important;
+  color:#244e47!important;
+  box-shadow:0 8px 24px rgba(39,78,72,.06)!important;
+}
+html[data-theme="pearl"] .call-mode,
+html[data-theme="pearl"] .live-region,
+html[data-theme="pearl"] .call-timer,
+html[data-theme="pearl"] .call-caption{color:#73847f!important}
+html[data-theme="pearl"] .live-status{color:#315e57!important}
+html[data-theme="pearl"] .call-avatar{
+  background:linear-gradient(145deg,#fff,#eaf4f0)!important;
+  border-color:#cfdfda!important;
+  color:#1f665d!important;
+  box-shadow:0 24px 66px rgba(36,77,70,.13)!important;
+}
+html[data-theme="pearl"] .call-center h2{color:#17312e!important}
+html[data-theme="pearl"] .live-transcript,
+html[data-theme="pearl"] .call-more-panel{
+  background:rgba(255,255,255,.90)!important;
+  border-color:#dce7e3!important;
+  color:#526d66!important;
+  box-shadow:0 12px 34px rgba(39,78,72,.045)!important;
+}
+html[data-theme="pearl"] .call-more-panel>div{border-bottom-color:#e3e9e6!important}
+html[data-theme="pearl"] .call-more-panel strong{color:#748681!important}
+html[data-theme="pearl"] .call-more-panel span{color:#315b54!important}
+html[data-theme="pearl"] .call-control{color:#17312e!important}
+html[data-theme="pearl"] .call-control span{
+  background:rgba(255,255,255,.88)!important;
+  border-color:#d6e3de!important;
+  color:#244e47!important;
+  box-shadow:0 10px 28px rgba(39,78,72,.06)!important;
+}
+html[data-theme="pearl"] .call-control small{color:#647872!important}
+html[data-theme="pearl"] .call-control.active span{
+  background:#1f665d!important;
+  border-color:#1f665d!important;
+  color:#fff!important;
+}
+html[data-theme="pearl"] .call-control.request span{
+  background:#fbf4e8!important;
+  border-color:#ddc28f!important;
+  color:#a4763c!important;
+}
+html[data-theme="pearl"] .call-control.danger span{
+  background:#e84c50!important;
+  border-color:#e84c50!important;
+  color:#fff!important;
+}
+html[data-theme="pearl"] .active-call-bar{
+  background:rgba(255,255,255,.95)!important;
+  border-color:#dce7e3!important;
+  box-shadow:0 22px 64px rgba(36,77,70,.16)!important;
+}
+html[data-theme="pearl"] .active-call-bar>button:first-child{color:#17312e!important}
+html[data-theme="pearl"] .active-call-bar small{color:#71827e!important}
+
+@media(max-width:620px){
+  html[data-theme="pearl"] .call-form-modal{
+    border-radius:22px 22px 0 0!important;
+  }
+}
