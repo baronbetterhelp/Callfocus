@@ -1,0 +1,47 @@
+/* CallFocus V11.27 — navigation and responsive page back controls */
+.cf-route-back{
+  width:52px;height:52px;min-width:52px;border:1px solid rgba(18,84,72,.16);
+  border-radius:50%;display:inline-grid;place-items:center;background:rgba(255,255,255,.72);
+  color:#1d5e53;font:500 38px/1 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  box-shadow:0 10px 26px rgba(29,86,76,.06);cursor:pointer;flex:0 0 auto;
+  -webkit-tap-highlight-color:transparent;
+}
+.cf-route-back:hover{background:#fff;border-color:rgba(18,84,72,.28)}
+.cf-route-back:focus-visible{outline:3px solid rgba(22,137,117,.22);outline-offset:3px}
+
+#page-callers .app-page-head,
+#page-recent .app-page-head,
+#page-profile .app-page-head,
+#page-settings .app-page-head{align-items:flex-start}
+
+#page-callers .app-page-head>.cf-route-back,
+#page-recent .app-page-head>.cf-route-back,
+#page-profile .app-page-head>.cf-route-back,
+#page-settings .app-page-head>.cf-route-back{margin-top:2px}
+
+@media (max-width:760px){
+  .cf-route-back{width:48px;height:48px;min-width:48px;font-size:34px}
+  #page-callers .app-page-head,
+  #page-recent .app-page-head,
+  #page-profile .app-page-head,
+  #page-settings .app-page-head{
+    display:grid;grid-template-columns:48px minmax(0,1fr);gap:14px 14px;align-items:start;
+  }
+  #page-callers .app-page-head>.cf-route-back,
+  #page-recent .app-page-head>.cf-route-back,
+  #page-profile .app-page-head>.cf-route-back,
+  #page-settings .app-page-head>.cf-route-back{grid-column:1;grid-row:1;margin:0}
+  #page-callers .app-page-head>div,
+  #page-recent .app-page-head>div,
+  #page-profile .app-page-head>div,
+  #page-settings .app-page-head>div{grid-column:2;grid-row:1;min-width:0}
+  #page-callers .app-page-head>#addCallerBtn{grid-column:1 / -1;grid-row:2;width:100%}
+}
+
+@media (max-width:390px){
+  #page-callers .app-page-head,
+  #page-recent .app-page-head,
+  #page-profile .app-page-head,
+  #page-settings .app-page-head{grid-template-columns:44px minmax(0,1fr);gap:12px}
+  .cf-route-back{width:44px;height:44px;min-width:44px;font-size:31px}
+}
