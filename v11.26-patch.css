@@ -1,0 +1,9 @@
+/* CallFocus V11.26 — preserve the original Recent Calls management page */
+
+/* The close control belongs only to the dedicated ChatGPT-style history viewer. */
+#page-recent .cf-v1124-chat-close{display:none!important}
+body.cf-chat-screen-open #page-recent .cf-v1124-chat-close{display:inline-flex!important}
+
+/* Compact recent-call rows are viewer-only. The normal Recent Calls page keeps
+   its original composer, saved context, edit controls and detailed call history. */
+body:not(.cf-chat-screen-open) #page-recent .cf-history-section{max-width:none}

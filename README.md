@@ -1,15 +1,13 @@
-# CallFocus V11.25
+# CallFocus V11.26
 
-Mobile full-screen Recent Calls viewer fix built directly on V11.24.
+Built directly on V11.25.
 
-## Fixed in V11.25
+## Fix in this build
 
-- fixes the conversation header sitting underneath the iPhone status bar / Dynamic Island
-- keeps the Close button inside the same top bar instead of wrapping onto a second row
-- hides the destructive Delete Conversation control only inside the read-only full-screen viewer; it remains available on the normal Recent Calls management page
-- makes the call-history area the dedicated vertical scroller on iOS
-- preserves touch scrolling and safe-area spacing at the top and bottom
-- gives the mobile Recents drawer safe-area spacing and independent scrolling
-- resets a newly opened conversation to its true top after the mobile layout finishes
+- restores the normal Recent Calls management page exactly as the working call-continuation page
+- keeps **What is new for today’s call?**, voice, language, opening style, saved caller context, edit controls, delete conversation and the existing call-again workflow
+- the compact ChatGPT-style date/time/duration/brief-details history is now used **only** when a user opens a Recent Call card into the dedicated full-screen history viewer
+- the viewer Close button is hidden from the normal Recent Calls management page
+- keeps the V11.22 Paystack reconciliation fixes, V11.24 conversation drawer and V11.25 iPhone safe-area/scroll fixes unchanged
 
-No changes were made to Paystack V11.22 reconciliation, credits, realtime calling, voice notes, admin rules, account sync, or the Pearl Aurora theme.
+No payment, realtime voice, voice-note, admin or account behavior was redesigned in this release.
