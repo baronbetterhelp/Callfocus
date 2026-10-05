@@ -1,0 +1,80 @@
+/* CallFocus V11.35 — complete Pearl Aurora treatment for home CTA + footer */
+html[data-theme="pearl"] .home-cta{
+  background:
+    radial-gradient(circle at 10% 12%,rgba(199,163,107,.10),transparent 32%),
+    radial-gradient(circle at 88% 72%,rgba(91,157,148,.13),transparent 34%),
+    linear-gradient(180deg,rgba(249,252,250,.72),rgba(244,249,246,.96));
+  border-top:1px solid rgba(45,91,84,.08);
+  color:#17312e;
+}
+
+html[data-theme="pearl"] .home-cta-inner{
+  position:relative;
+  overflow:hidden;
+  background:linear-gradient(145deg,rgba(255,255,255,.97),rgba(241,248,245,.95) 66%,rgba(250,245,236,.94));
+  border-color:#dce6e2;
+  box-shadow:0 20px 58px rgba(39,78,72,.075);
+}
+
+html[data-theme="pearl"] .home-cta-inner::after{
+  content:"";
+  position:absolute;
+  width:230px;
+  height:230px;
+  right:-92px;
+  bottom:-145px;
+  border:1px solid rgba(45,121,110,.10);
+  border-radius:50%;
+  pointer-events:none;
+}
+
+html[data-theme="pearl"] .home-cta h2{
+  color:#17312e;
+}
+
+html[data-theme="pearl"] .home-cta .section-eyebrow{
+  color:#39776f;
+}
+
+html[data-theme="pearl"] .premium-footer{
+  background:
+    radial-gradient(circle at 6% 35%,rgba(91,157,148,.09),transparent 27%),
+    linear-gradient(180deg,#f7faf8 0%,#f3f7f4 100%);
+  border-top:1px solid #dfe7e3;
+  color:#385a54;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.72);
+}
+
+html[data-theme="pearl"] .premium-footer .footer-brand strong{
+  color:#17312e;
+}
+
+html[data-theme="pearl"] .premium-footer .footer-brand span{
+  color:#7b8985;
+}
+
+html[data-theme="pearl"] .premium-footer .footer-links button,
+html[data-theme="pearl"] .premium-footer .footer-links a{
+  color:#4c6d67;
+  transition:color .18s ease,opacity .18s ease;
+}
+
+html[data-theme="pearl"] .premium-footer .footer-links button:hover,
+html[data-theme="pearl"] .premium-footer .footer-links a:hover{
+  color:#1f665d;
+}
+
+@media(max-width:620px){
+  html[data-theme="pearl"] .home-cta{
+    padding:58px 0 68px;
+  }
+  html[data-theme="pearl"] .home-cta-inner{
+    padding:26px 24px;
+  }
+  html[data-theme="pearl"] .home-cta-inner .btn{
+    width:100%;
+  }
+  html[data-theme="pearl"] .premium-footer{
+    padding:30px 0 34px;
+  }
+}
