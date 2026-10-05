@@ -40,7 +40,7 @@ const DEFAULT_CONFIG = {
   femaleVoice: 'marin',
   model: 'gpt-live-1',
   speakingPace: 'relaxed',
-  siteTheme: 'black',
+  siteTheme: 'pearl',
   instructions: 'Follow the customer-provided call rules and relationship context closely. Keep the conversation responsive and natural. Do not turn a social phone call into an interview, coaching session, support exchange, or scripted agenda.',
   speechStyle: 'Warm, grounded, natural phone-call delivery. Moderate pace. Leave space between turns. Prefer concise replies and genuine reactions over explanations. Let the other person lead when appropriate.',
   opening: 'Use the customer-selected opening for each call. Greet naturally, then pause and let the other person respond before moving further into the topic.',

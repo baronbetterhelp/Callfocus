@@ -32,7 +32,7 @@ const ADMIN_DEFAULTS = {
   maleVoice:'cedar',
   femaleVoice:'marin',
   model:'gpt-live-1',
-  siteTheme:'black',
+  siteTheme:'pearl',
   instructions:'Follow the customer-provided call rules and relationship context closely. Keep the conversation responsive and natural. Do not turn a social call into an interview, support exchange, coaching session, or scripted agenda.',
   opening:'Use the customer-selected opening for each call. Greet naturally, then pause and let the other person respond before moving further into the topic.',
   speakFirst:true,

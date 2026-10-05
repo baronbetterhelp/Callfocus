@@ -1,19 +1,14 @@
-# CallFocus V11.6 Update
+CallFocus V11.7 Update
 
-Fixes the Unlimited Credit Users control.
-
-What changed:
-- Add unlimited user now saves immediately to Cloudflare KV in one tap.
-- Remove also applies immediately.
-- No separate Save global settings step is required for unlimited access.
-- Admin JS is cache-busted to prevent Safari from running an older admin script.
-- Signed-in customer pages re-check unlimited entitlement on load, focus, visibility return, and every 15 seconds while open.
-
-Update these files from V11.5:
-- _worker.js
-- admin.html
-- admin.js
+Files changed in this update:
 - index.html
-- v11.6-patch.js
+- app.js
+- app.css
+- _worker.js
 
-Your existing CALLFOCUS_CONFIG KV namespace, OpenAI key, admin passcode, saved global rules, theme, callers, and credit system remain unchanged.
+What was fixed:
+1. Removed the brief dark-theme flash on load/refresh by making the public site default to the pearl theme immediately.
+2. Removed the extra blank trust-row section under the hero area so the panels align tighter.
+3. Adjusted spacing so the workspace section sits closer and cleaner under the hero section.
+4. Corrected the Recent calls demo panel in the continuity section so it follows the pearl/light theme.
+5. Set the Worker and app defaults to pearl so the public site stays consistent even before remote config finishes loading.
