@@ -3,6 +3,13 @@
   "name": "callfocus",
   "main": "./_worker.js",
   "compatibility_date": "2026-10-04",
+  "keep_vars": true,
+  "kv_namespaces": [
+    {
+      "binding": "CALLFOCUS_CONFIG",
+      "id": "772f9544dbb7486480e876df3a7a7d3d"
+    }
+  ],
   "assets": {
     "directory": "./",
     "binding": "ASSETS",
