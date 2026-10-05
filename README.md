@@ -1,15 +1,15 @@
-CallFocus V11.11
+CallFocus V11.12
 
-Natural call-ending update:
-- Renames “Request end” to “End naturally”.
-- The button now asks GPT-Live for a fuller, context-aware closing instead of a bare goodbye.
-- The ending must include a believable everyday reason for leaving.
-- The tone adapts to romantic, friendship, family, supportive, business, client, formal, dating, casual, or custom dynamics.
-- “Dear”/affectionate wording is only allowed when the relationship makes it natural.
-- Concrete emergencies or invented obligations are explicitly prohibited unless already established in the live conversation.
-- Uses the current call topic, caller name, relationship dynamics, and live conversation context to shape the ending.
-- The call closes automatically after the spoken ending.
+Fixes the End naturally control.
 
-Changed files:
-- index.html
-- v11.11-patch.js
+Changes:
+- Removes the unsupported response.create request from the natural-ending flow when using client delegation.
+- Uses GPT-Live session.instructions.append plus session.commentary.append instead.
+- Keeps the ending prompt under the Live append limit.
+- Prevents a recoverable natural-ending client-event error from being shown as “Server unavailable”.
+- Keeps contextual, relationship-aware endings with an ordinary believable reason for leaving.
+- Preserves automatic call closure after the spoken ending.
+
+Update from V11.11:
+- replace index.html
+- add v11.12-patch.js
