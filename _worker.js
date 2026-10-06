@@ -52,6 +52,11 @@ const DEFAULT_CONFIG = {
   speakFirst: true,
   interruptions: true,
   unlimitedCreditEmails: [],
+  manualPaymentsEnabled: false,
+  manualPaymentBankName: '',
+  manualPaymentAccountName: '',
+  manualPaymentAccountNumber: '',
+  manualPaymentNotificationEmail: 'support@callfocus.link',
   updatedAt: null
 };
 
@@ -134,7 +139,7 @@ function callFocusEmailShell({ preheader = '', eyebrow = 'CALLFOCUS ACCOUNT', ti
 </body></html>`;
 }
 
-async function sendCallFocusEmail(env, { to, subject, html, text = '' }) {
+async function sendCallFocusEmail(env, { to, subject, html, text = '', attachments = [] }) {
   if (!callFocusEmailConfigured(env)) {
     const error = new Error('Email verification is not configured yet.');
     error.code = 'email_not_configured';
@@ -151,7 +156,8 @@ async function sendCallFocusEmail(env, { to, subject, html, text = '' }) {
       to: [to],
       subject,
       html,
-      text: text || undefined
+      text: text || undefined,
+      attachments: Array.isArray(attachments) && attachments.length ? attachments : undefined
     })
   });
   if (!response.ok) {
@@ -179,8 +185,10 @@ function customerPhoneKey(value = '') {
 }
 
 function bytesToB64(bytes) {
+  const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || 0);
   let binary = '';
-  for (const b of bytes) binary += String.fromCharCode(b);
+  const chunk = 0x8000;
+  for (let i = 0; i < data.length; i += chunk) binary += String.fromCharCode(...data.subarray(i, i + chunk));
   return btoa(binary);
 }
 
@@ -612,13 +620,13 @@ async function handleCustomerData(request, env) {
   if (validCustomerDataShape(currentServerData) && currentServerData.wallet) {
     const serverRevision = Math.max(0, Number(currentServerData.wallet?.revision) || 0);
     const incomingRevision = Math.max(0, Number(incoming.wallet?.revision) || 0);
-    const paystackRefs = wallet => new Set((Array.isArray(wallet?.purchases) ? wallet.purchases : [])
-      .filter(p => String(p?.provider || '').toLowerCase() === 'paystack')
+    const serverFundingRefs = wallet => new Set((Array.isArray(wallet?.purchases) ? wallet.purchases : [])
+      .filter(p => ['paystack','manual_bank_transfer'].includes(String(p?.provider || '').toLowerCase()))
       .map(p => String(p?.reference || p?.id || '').trim())
       .filter(Boolean));
-    const serverPaystackRefs = paystackRefs(currentServerData.wallet);
-    const incomingPaystackRefs = paystackRefs(incoming.wallet);
-    const incomingMissingServerPurchase = [...serverPaystackRefs].some(ref => !incomingPaystackRefs.has(ref));
+    const currentFundingRefs = serverFundingRefs(currentServerData.wallet);
+    const incomingFundingRefs = serverFundingRefs(incoming.wallet);
+    const incomingMissingServerPurchase = [...currentFundingRefs].some(ref => !incomingFundingRefs.has(ref));
     if (serverRevision > incomingRevision || (serverRevision === incomingRevision && incomingMissingServerPurchase)) {
       incoming.wallet = currentServerData.wallet;
     }
@@ -766,6 +774,9 @@ function sanitizeConfig(input = {}) {
     .map(v => String(v || '').trim().toLowerCase())
     .filter(v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)))]
     .slice(0, 500);
+  const manualPaymentNotificationEmailRaw = normalizeCustomerEmail(input.manualPaymentNotificationEmail || DEFAULT_CONFIG.manualPaymentNotificationEmail);
+  const manualPaymentNotificationEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(manualPaymentNotificationEmailRaw) ? manualPaymentNotificationEmailRaw : DEFAULT_CONFIG.manualPaymentNotificationEmail;
+  const manualPaymentAccountNumber = String(input.manualPaymentAccountNumber || '').replace(/[^0-9]/g, '').slice(0, 32);
   return {
     serverOnline: input.serverOnline !== false,
     serverMessage: String(input.serverMessage || DEFAULT_CONFIG.serverMessage).slice(0, 240),
@@ -781,12 +792,24 @@ function sanitizeConfig(input = {}) {
     speakFirst: input.speakFirst !== false,
     interruptions: input.interruptions !== false,
     unlimitedCreditEmails,
+    manualPaymentsEnabled: input.manualPaymentsEnabled === true,
+    manualPaymentBankName: String(input.manualPaymentBankName || '').trim().slice(0, 120),
+    manualPaymentAccountName: String(input.manualPaymentAccountName || '').trim().slice(0, 160),
+    manualPaymentAccountNumber,
+    manualPaymentNotificationEmail,
     updatedAt: new Date().toISOString()
   };
 }
 
 function callFocusPaymentsEnabled(env) {
   return String(env.CALLFOCUS_PAYMENTS_ENABLED || '').trim().toLowerCase() === 'true';
+}
+
+function manualPaymentReady(config = {}) {
+  return config?.manualPaymentsEnabled === true
+    && !!String(config?.manualPaymentBankName || '').trim()
+    && !!String(config?.manualPaymentAccountName || '').trim()
+    && !!String(config?.manualPaymentAccountNumber || '').trim();
 }
 
 async function callFocusRateLimit(request, env, bucket, limit, windowSeconds) {
@@ -833,7 +856,9 @@ async function handlePublicConfig(env) {
     updatedAt: c.updatedAt || null,
     engine: 'GPT-Live 1',
     paymentsEnabled: callFocusPaymentsEnabled(env),
-    paymentStatus: callFocusPaymentsEnabled(env) ? 'available' : 'awaiting_paystack_activation'
+    paymentStatus: callFocusPaymentsEnabled(env) ? 'available' : 'awaiting_paystack_activation',
+    manualPaymentsEnabled: manualPaymentReady(c),
+    manualPaymentStatus: manualPaymentReady(c) ? 'available' : 'not_configured'
   });
 }
 
@@ -882,7 +907,9 @@ async function handleAdminUnlimitedUser(request, env) {
 
 function adminUserSummary(user, data, unlimitedEmails = []) {
   const wallet = normalizeServerWallet(data?.wallet || {});
-  const purchases = wallet.purchases.filter(p => String(p?.provider || '').toLowerCase() === 'paystack');
+  const purchases = wallet.purchases.filter(p => ['paystack','manual_bank_transfer'].includes(String(p?.provider || '').toLowerCase()));
+  const paystackPurchases = purchases.filter(p => String(p?.provider || '').toLowerCase() === 'paystack');
+  const manualPurchases = purchases.filter(p => String(p?.provider || '').toLowerCase() === 'manual_bank_transfer');
   const paidNaira = purchases.reduce((sum, p) => sum + Math.max(0, Number(p?.amountNaira) || 0), 0);
   const purchasedCredits = purchases.reduce((sum, p) => sum + Math.max(0, Number(p?.credits) || 0), 0);
   const lastPurchaseAt = purchases.map(p => p?.createdAt).filter(Boolean).sort().reverse()[0] || null;
@@ -904,6 +931,8 @@ function adminUserSummary(user, data, unlimitedEmails = []) {
       credits: Math.round((wallet.balanceSeconds / PAYSTACK_SECONDS_PER_CREDIT) * 10) / 10,
       revision: wallet.revision,
       purchaseCount: purchases.length,
+      paystackPurchaseCount: paystackPurchases.length,
+      manualPurchaseCount: manualPurchases.length,
       totalPaidNaira: Math.round(paidNaira * 100) / 100,
       totalPurchasedCredits: Math.round(purchasedCredits * 10) / 10,
       lastPurchaseAt,
@@ -2797,6 +2826,311 @@ async function handleAvatarSession(request, env){
   return json({ ok: true, conversationId, conversationUrl, meetingToken });
 }
 
+
+// -----------------------------------------------------------------------------
+// V12.9 manual bank-transfer fallback
+// Used only while Paystack checkout is unavailable. Receipts are stored privately
+// in CALLFOCUS_CONFIG for admin review and are never exposed to other customers.
+// -----------------------------------------------------------------------------
+const MANUAL_PAYMENT_MIN_CREDITS = 300;
+const MANUAL_PAYMENT_MAX_RECEIPT_BYTES = 5 * 1024 * 1024;
+const MANUAL_PAYMENT_RECORD_TTL = 60 * 60 * 24 * 365;
+const MANUAL_PAYMENT_RECEIPT_TTL = 60 * 60 * 24 * 60;
+const MANUAL_PAYMENT_ALLOWED_TYPES = new Set(['image/jpeg','image/png','image/webp','image/heic','image/heif','application/pdf']);
+
+function manualPaymentKey(id) { return `manual:payment:${String(id || '').trim()}`; }
+function manualPaymentReceiptKey(id) { return `manual:receipt:${String(id || '').trim()}`; }
+function manualPaymentPublic(record = {}) {
+  return {
+    id: record.id || '',
+    status: record.status || 'unknown',
+    credits: Math.max(0, Number(record.credits) || 0),
+    amountNaira: Math.max(0, Number(record.amountNaira) || 0),
+    createdAt: record.createdAt || null,
+    submittedAt: record.submittedAt || null,
+    approvedAt: record.approvedAt || null,
+    rejectedAt: record.rejectedAt || null,
+    cancelledAt: record.cancelledAt || null,
+    rejectionReason: String(record.rejectionReason || '').slice(0, 300),
+    receipt: record.receipt ? { name: record.receipt.name || 'receipt', type: record.receipt.type || '', size: Number(record.receipt.size) || 0 } : null
+  };
+}
+function manualPaymentAdmin(record = {}) {
+  return {
+    ...manualPaymentPublic(record),
+    userId: record.userId || '',
+    customerName: record.customerName || '',
+    customerEmail: record.customerEmail || '',
+    customerPhone: record.customerPhone || '',
+    bankName: record.bankName || '',
+    accountName: record.accountName || '',
+    accountNumber: record.accountNumber || '',
+    notificationSent: record.notificationSent === true,
+    notificationError: String(record.notificationError || '').slice(0, 240),
+    updatedAt: record.updatedAt || null
+  };
+}
+function manualPaymentReference() {
+  const suffix = crypto.randomUUID().replace(/-/g, '').slice(0, 8).toUpperCase();
+  return `CFM-${Date.now()}-${suffix}`;
+}
+async function manualPaymentRecord(env, id) {
+  if (!env.CALLFOCUS_CONFIG || !id) return null;
+  return await env.CALLFOCUS_CONFIG.get(manualPaymentKey(id), { type: 'json' });
+}
+async function putManualPaymentRecord(env, record) {
+  await env.CALLFOCUS_CONFIG.put(manualPaymentKey(record.id), JSON.stringify(record), { expirationTtl: MANUAL_PAYMENT_RECORD_TTL });
+}
+function manualPaymentReceiptFilename(name = 'receipt') {
+  const clean = String(name || 'receipt').replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 120);
+  return clean || 'receipt';
+}
+
+async function handleManualPaymentRequest(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Sign in before requesting bank-transfer details.' }, 401);
+  let body = {}; try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const credits = Math.floor(Number(body?.credits));
+  if (!Number.isFinite(credits) || credits < MANUAL_PAYMENT_MIN_CREDITS) return json({ error: `The minimum purchase is ${MANUAL_PAYMENT_MIN_CREDITS} credits.`, code: 'minimum_purchase' }, 400);
+  if (credits > 1_000_000) return json({ error: 'Enter a smaller credit amount.' }, 400);
+  const config = await getConfig(env);
+  if (!manualPaymentReady(config)) return json({ error: 'Manual bank transfer is not configured right now.', code: 'manual_payment_unavailable' }, 503);
+  const now = new Date().toISOString();
+  const id = manualPaymentReference();
+  const amountNaira = credits * PAYSTACK_NAIRA_PER_CREDIT;
+  const record = {
+    id,
+    userId: auth.user.id,
+    customerName: auth.user.name || '',
+    customerEmail: auth.user.email || '',
+    customerPhone: auth.user.phone || '',
+    credits,
+    amountNaira,
+    bankName: config.manualPaymentBankName,
+    accountName: config.manualPaymentAccountName,
+    accountNumber: config.manualPaymentAccountNumber,
+    status: 'awaiting_transfer',
+    createdAt: now,
+    updatedAt: now
+  };
+  await putManualPaymentRecord(env, record);
+  return json({
+    ok: true,
+    payment: manualPaymentPublic(record),
+    bank: { bankName: record.bankName, accountName: record.accountName, accountNumber: record.accountNumber },
+    rate: { nairaPerCredit: PAYSTACK_NAIRA_PER_CREDIT, minimumCredits: MANUAL_PAYMENT_MIN_CREDITS }
+  });
+}
+
+async function handleManualPaymentSubmit(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Sign in before submitting a payment receipt.' }, 401);
+  let form; try { form = await request.formData(); } catch { return json({ error: 'Could not read the receipt upload.' }, 400); }
+  const id = String(form.get('paymentId') || '').trim();
+  const file = form.get('receipt');
+  if (!id) return json({ error: 'Missing payment reference.' }, 400);
+  const record = await manualPaymentRecord(env, id);
+  if (!record || String(record.userId) !== String(auth.user.id)) return json({ error: 'Payment request not found.' }, 404);
+  if (record.status === 'pending_confirmation') return json({ ok: true, payment: manualPaymentPublic(record), duplicate: true });
+  if (record.status !== 'awaiting_transfer') return json({ error: 'This payment request can no longer accept a receipt.' }, 409);
+  if (!file || typeof file.arrayBuffer !== 'function') return json({ error: 'Upload your payment receipt before continuing.' }, 400);
+  const size = Math.max(0, Number(file.size) || 0);
+  const type = String(file.type || '').toLowerCase();
+  if (!size) return json({ error: 'The uploaded receipt is empty.' }, 400);
+  if (size > MANUAL_PAYMENT_MAX_RECEIPT_BYTES) return json({ error: 'Receipt must be 5 MB or smaller.' }, 413);
+  if (!MANUAL_PAYMENT_ALLOWED_TYPES.has(type)) return json({ error: 'Upload a JPG, PNG, WebP, HEIC or PDF receipt.' }, 415);
+  const buffer = await file.arrayBuffer();
+  const filename = manualPaymentReceiptFilename(file.name || `receipt-${id}`);
+  await env.CALLFOCUS_CONFIG.put(manualPaymentReceiptKey(id), buffer, { expirationTtl: MANUAL_PAYMENT_RECEIPT_TTL });
+  const now = new Date().toISOString();
+  record.status = 'pending_confirmation';
+  record.submittedAt = now;
+  record.updatedAt = now;
+  record.receipt = { name: filename, type, size };
+  record.notificationSent = false;
+  record.notificationError = '';
+  await putManualPaymentRecord(env, record);
+
+  const config = await getConfig(env);
+  const notifyTo = normalizeCustomerEmail(config.manualPaymentNotificationEmail || DEFAULT_CONFIG.manualPaymentNotificationEmail);
+  if (callFocusEmailConfigured(env) && notifyTo) {
+    const safeName = escapeHtml(record.customerName || 'CallFocus customer');
+    const safeEmail = escapeHtml(record.customerEmail || '');
+    const safePhone = escapeHtml(record.customerPhone || '');
+    const safeRef = escapeHtml(record.id);
+    const safeCredits = escapeHtml(Number(record.credits).toLocaleString());
+    const safeAmount = escapeHtml(Number(record.amountNaira).toLocaleString());
+    const submitted = escapeHtml(new Date(record.submittedAt).toLocaleString('en-US', { timeZone: 'UTC', timeZoneName: 'short' }));
+    const html = callFocusEmailShell({
+      preheader: `Manual payment submitted by ${record.customerEmail}`,
+      eyebrow: 'CALLFOCUS MANUAL PAYMENT',
+      title: 'Payment receipt awaiting confirmation',
+      body: `<p><strong>${safeName}</strong> submitted a manual bank-transfer receipt.</p><p><strong>Customer:</strong> ${safeEmail}<br><strong>Phone:</strong> ${safePhone || 'Not provided'}<br><strong>Reference:</strong> ${safeRef}<br><strong>Credits:</strong> ${safeCredits}<br><strong>Expected amount:</strong> ₦${safeAmount}<br><strong>Submitted:</strong> ${submitted}</p><p>The receipt is attached. Confirm the bank transfer, then approve or reject this payment from the CallFocus Admin Portal → Payments.</p>`,
+      footer: 'Do not approve a payment until the funds are visible in your bank account.'
+    });
+    try {
+      await sendCallFocusEmail(env, {
+        to: notifyTo,
+        subject: `CallFocus payment awaiting confirmation · ${record.id}`,
+        html,
+        text: `${record.customerName} (${record.customerEmail}) submitted ₦${record.amountNaira} for ${record.credits} credits. Reference: ${record.id}. Confirm the transfer, then approve it from CallFocus Admin.`,
+        attachments: [{ filename, content: bytesToB64(new Uint8Array(buffer)) }]
+      });
+      record.notificationSent = true;
+    } catch (error) {
+      record.notificationError = String(error?.message || 'Could not send admin notification').slice(0, 240);
+    }
+    record.updatedAt = new Date().toISOString();
+    await putManualPaymentRecord(env, record);
+  }
+  return json({ ok: true, payment: manualPaymentPublic(record), notificationSent: record.notificationSent === true });
+}
+
+async function handleManualPaymentCancel(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Sign in first.' }, 401);
+  let body = {}; try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const id = String(body?.paymentId || '').trim();
+  const record = await manualPaymentRecord(env, id);
+  if (!record || String(record.userId) !== String(auth.user.id)) return json({ error: 'Payment request not found.' }, 404);
+  if (record.status === 'approved') return json({ error: 'An approved payment cannot be cancelled.' }, 409);
+  if (record.status === 'pending_confirmation') return json({ error: 'This receipt has already been submitted for confirmation.' }, 409);
+  if (record.status !== 'cancelled') {
+    record.status = 'cancelled'; record.cancelledAt = new Date().toISOString(); record.updatedAt = record.cancelledAt;
+    await putManualPaymentRecord(env, record);
+    try { await env.CALLFOCUS_CONFIG.delete(manualPaymentReceiptKey(id)); } catch {}
+  }
+  return json({ ok: true, payment: manualPaymentPublic(record) });
+}
+
+async function handleManualPaymentStatus(request, env) {
+  if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Sign in first.' }, 401);
+  const id = String(new URL(request.url).searchParams.get('id') || '').trim();
+  const record = await manualPaymentRecord(env, id);
+  if (!record || String(record.userId) !== String(auth.user.id)) return json({ error: 'Payment request not found.' }, 404);
+  let wallet = null;
+  if (record.status === 'approved') {
+    const data = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
+    wallet = data.wallet;
+  }
+  return json({ ok: true, payment: manualPaymentPublic(record), wallet });
+}
+
+async function handleAdminManualPayments(request, env) {
+  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.list !== 'function') return json({ error: 'Global storage is not connected.' }, 503);
+  const page = await env.CALLFOCUS_CONFIG.list({ prefix: 'manual:payment:', limit: 250 });
+  const rows = await Promise.all((page.keys || []).map(async entry => {
+    try { return await env.CALLFOCUS_CONFIG.get(entry.name, { type: 'json' }); } catch { return null; }
+  }));
+  const payments = rows.filter(Boolean).sort((a,b) => String(b.submittedAt || b.createdAt || '').localeCompare(String(a.submittedAt || a.createdAt || ''))).slice(0, 200).map(manualPaymentAdmin);
+  return json({
+    ok: true,
+    payments,
+    counts: {
+      pending: payments.filter(p => p.status === 'pending_confirmation').length,
+      approved: payments.filter(p => p.status === 'approved').length,
+      rejected: payments.filter(p => p.status === 'rejected').length,
+      awaitingTransfer: payments.filter(p => p.status === 'awaiting_transfer').length
+    }
+  });
+}
+
+async function sendManualPaymentDecisionEmail(env, record, approved) {
+  if (!callFocusEmailConfigured(env) || !record?.customerEmail) return;
+  const statusTitle = approved ? 'Payment approved' : 'Payment needs attention';
+  const body = approved
+    ? `<p>Your manual bank transfer has been confirmed.</p><p><strong>${escapeHtml(Number(record.credits).toLocaleString())} credits</strong> have been added to your CallFocus balance.</p><p>Reference: <strong>${escapeHtml(record.id)}</strong></p>`
+    : `<p>Your manual payment could not be approved${record.rejectionReason ? `: ${escapeHtml(record.rejectionReason)}` : '.'}</p><p>No credits were added. If you believe this is a mistake, contact support@callfocus.link.</p><p>Reference: <strong>${escapeHtml(record.id)}</strong></p>`;
+  const html = callFocusEmailShell({
+    preheader: statusTitle,
+    eyebrow: 'CALLFOCUS PAYMENT',
+    title: statusTitle,
+    body,
+    footer: approved ? 'Your updated balance will also appear automatically in CallFocus.' : 'Keep your transfer receipt until this is resolved.'
+  });
+  try { await sendCallFocusEmail(env, { to: record.customerEmail, subject: `CallFocus · ${statusTitle}`, html, text: approved ? `${record.credits} credits have been added to your CallFocus balance.` : `Your manual payment ${record.id} could not be approved.` }); } catch {}
+}
+
+async function handleAdminManualPaymentAction(request, env) {
+  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  let body = {}; try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const id = String(body?.paymentId || '').trim();
+  const action = String(body?.action || '').trim().toLowerCase();
+  if (!id || !['approve','reject'].includes(action)) return json({ error: 'Invalid payment action.' }, 400);
+  const record = await manualPaymentRecord(env, id);
+  if (!record) return json({ error: 'Manual payment not found.' }, 404);
+  if (action === 'approve' && record.status === 'approved') {
+    const data = await getCustomerDataForUpdate(env, record.userId, record.customerName);
+    return json({ ok: true, duplicate: true, payment: manualPaymentAdmin(record), wallet: data.wallet });
+  }
+  if (record.status !== 'pending_confirmation') return json({ error: 'Only submitted payments awaiting confirmation can be changed.' }, 409);
+  const now = new Date().toISOString();
+  if (action === 'approve') {
+    const user = await env.CALLFOCUS_CONFIG.get(customerUserKey(record.userId), { type: 'json' });
+    if (!user) return json({ error: 'Customer account not found.' }, 404);
+    const data = await getCustomerDataForUpdate(env, user.id, user.name);
+    const wallet = normalizeServerWallet(data.wallet);
+    const existing = wallet.purchases.find(p => String(p?.reference || p?.id || '') === record.id);
+    if (!existing) {
+      const secondsAdded = purchaseSecondsForCredits(record.credits);
+      wallet.balanceSeconds += secondsAdded;
+      wallet.revision = Math.max(0, Number(wallet.revision) || 0) + 1;
+      wallet.purchases.unshift({
+        id: record.id,
+        reference: record.id,
+        provider: 'manual_bank_transfer',
+        channel: 'manual_bank_transfer',
+        amountNaira: Math.max(0, Number(record.amountNaira) || 0),
+        credits: Math.max(0, Number(record.credits) || 0),
+        seconds: secondsAdded,
+        createdAt: record.submittedAt || now,
+        approvedAt: now
+      });
+      wallet.purchases = wallet.purchases.slice(0, 250);
+      data.wallet = wallet;
+      await env.CALLFOCUS_CONFIG.put(customerDataKey(user.id), JSON.stringify(data));
+    }
+    record.status = 'approved'; record.approvedAt = now; record.updatedAt = now; record.rejectionReason = '';
+    await putManualPaymentRecord(env, record);
+    await sendManualPaymentDecisionEmail(env, record, true);
+    return json({ ok: true, payment: manualPaymentAdmin(record), wallet });
+  }
+  record.status = 'rejected';
+  record.rejectedAt = now;
+  record.updatedAt = now;
+  record.rejectionReason = String(body?.reason || '').trim().slice(0, 300);
+  await putManualPaymentRecord(env, record);
+  await sendManualPaymentDecisionEmail(env, record, false);
+  return json({ ok: true, payment: manualPaymentAdmin(record) });
+}
+
+async function handleAdminManualPaymentReceipt(request, env) {
+  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
+  const id = String(new URL(request.url).searchParams.get('id') || '').trim();
+  const record = await manualPaymentRecord(env, id);
+  if (!record?.receipt) return json({ error: 'Receipt not found.' }, 404);
+  const buffer = await env.CALLFOCUS_CONFIG.get(manualPaymentReceiptKey(id), { type: 'arrayBuffer' });
+  if (!buffer) return json({ error: 'Receipt is no longer available.' }, 404);
+  const filename = manualPaymentReceiptFilename(record.receipt.name || 'receipt');
+  return new Response(buffer, {
+    status: 200,
+    headers: {
+      'Content-Type': record.receipt.type || 'application/octet-stream',
+      'Content-Disposition': `inline; filename="${filename}"`,
+      'Cache-Control': 'private, no-store'
+    }
+  });
+}
+
 async function handleAvatarEnd(request, env){
   if(request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
   const auth = await authenticatedCustomer(request, env);
@@ -2847,6 +3181,10 @@ export default {
     if (url.pathname === '/api/paystack/recover') return safeCustomerRoute('paystack-recover', () => handlePaystackRecover(request, env));
     if (url.pathname === '/api/paystack/dva') return safeCustomerRoute('paystack-dva', () => handlePaystackDva(request, env));
     if (url.pathname === '/api/paystack/webhook') return handlePaystackWebhook(request, env);
+    if (url.pathname === '/api/manual-payment/request') { const limited = await callFocusRateLimit(request, env, 'manual-payment-request', 12, 900); if (limited) return limited; return safeCustomerRoute('manual-payment-request', () => handleManualPaymentRequest(request, env)); }
+    if (url.pathname === '/api/manual-payment/submit') { const limited = await callFocusRateLimit(request, env, 'manual-payment-submit', 10, 900); if (limited) return limited; return safeCustomerRoute('manual-payment-submit', () => handleManualPaymentSubmit(request, env)); }
+    if (url.pathname === '/api/manual-payment/cancel') return safeCustomerRoute('manual-payment-cancel', () => handleManualPaymentCancel(request, env));
+    if (url.pathname === '/api/manual-payment/status') return safeCustomerRoute('manual-payment-status', () => handleManualPaymentStatus(request, env));
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
     if (url.pathname === '/api/admin/login' && request.method === 'POST') { const limited = await callFocusRateLimit(request, env, 'admin-login', 8, 900); if (limited) return limited; return handleAdminLogin(request, env); }
@@ -2854,6 +3192,9 @@ export default {
     if (url.pathname === '/api/admin/users') return handleAdminUsers(request, env);
     if (url.pathname === '/api/admin/ai-usage') return handleAdminAiUsage(request, env);
     if (url.pathname === '/api/admin/user-action') return handleAdminUserAction(request, env);
+    if (url.pathname === '/api/admin/manual-payments') return handleAdminManualPayments(request, env);
+    if (url.pathname === '/api/admin/manual-payment-action') return handleAdminManualPaymentAction(request, env);
+    if (url.pathname === '/api/admin/manual-payment-receipt') return handleAdminManualPaymentReceipt(request, env);
     if (url.pathname === '/api/admin/unlimited-user') return handleAdminUnlimitedUser(request, env);
     if (url.pathname === '/api/admin/voice-preview' && request.method === 'POST') return handleVoicePreview(request, env);
     if (url.pathname === '/api/admin/custom-voices/access') return handleAdminCustomVoiceAccess(request, env);

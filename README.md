@@ -51,3 +51,7 @@ See README-V12.7.md for the Live AI Avatar integration and TAVUS_API_KEY setup.
 
 ## V12.8 — Stock Avatar Test Mode
 See `README-V12.8.md`. Live AI Avatar now defaults to Tavus stock faces for free-plan testing before enabling paid custom selfie avatars.
+
+
+## V12.9
+Manual bank-transfer fallback with receipt upload, admin approval, Resend notification, and automatic server-wallet crediting. Configure it in Admin → Payments.

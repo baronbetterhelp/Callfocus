@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=12.4" />
+  <link rel="stylesheet" href="/admin.css?v=12.9" />
 </head>
 <body class="admin-page">
   <header class="site-header">
@@ -43,6 +43,7 @@
         <div class="admin-tab-scroll" id="adminTabScroll">
           <button class="admin-tab active" type="button" data-admin-tab="dashboard" aria-selected="true"><span>▦</span>Dashboard</button>
           <button class="admin-tab" type="button" data-admin-tab="customers" aria-selected="false"><span>◎</span>Customers</button>
+          <button class="admin-tab" type="button" data-admin-tab="payments" aria-selected="false"><span>▣</span>Payments</button>
           <button class="admin-tab" type="button" data-admin-tab="ai" aria-selected="false"><span>✦</span>AI usage</button>
           <button class="admin-tab" type="button" data-admin-tab="voice" aria-selected="false"><span>◉</span>Voice</button>
           <button class="admin-tab" type="button" data-admin-tab="behavior" aria-selected="false"><span>≋</span>Behavior</button>
@@ -56,7 +57,8 @@
         <div class="admin-overview-grid">
           <article class="admin-stat-card"><span>Calling service</span><strong id="adminDashServer">Checking…</strong><small id="adminDashStorage">Global settings</small></article>
           <article class="admin-stat-card"><span>Customer accounts</span><strong id="adminDashUsers">0</strong><small id="adminDashUsersNote">Loading users…</small></article>
-          <article class="admin-stat-card"><span>Funded customers</span><strong id="adminDashFunded">0</strong><small>Paystack purchase history</small></article>
+          <article class="admin-stat-card"><span>Funded customers</span><strong id="adminDashFunded">0</strong><small>Verified payment history</small></article>
+          <article class="admin-stat-card"><span>Manual payments</span><strong id="adminDashManualPending">0</strong><small>Awaiting confirmation</small></article>
           <article class="admin-stat-card"><span>AI analyses</span><strong id="adminDashAI">0</strong><small id="adminDashAINote">Conversation dynamics</small></article>
         </div>
 
@@ -93,6 +95,32 @@
           </div>
           <div class="admin-users-list" id="adminUsersList"><div class="admin-users-empty">Customer accounts will appear here.</div></div>
           <button class="btn btn-ghost admin-users-more hidden" type="button" id="adminUsersMoreBtn">Load more users</button>
+        </div>
+      </section>
+
+      <section class="admin-tab-panel" data-admin-panel="payments">
+        <div class="admin-section-heading admin-section-heading-row"><div><span class="kicker">Payment fallback</span><h2>Manual bank transfers</h2><p>Use this while Paystack checkout is unavailable. Customers see your bank account only after requesting a valid purchase of 300 credits or more.</p></div><button class="btn btn-ghost" type="button" id="adminManualPaymentsRefreshBtn">Refresh payments</button></div>
+        <div class="premium-panel form-panel manual-payment-settings-panel">
+          <div class="toggle-row"><span>Enable manual bank-transfer fallback</span><input id="adminManualPaymentsEnabled" type="checkbox" /></div>
+          <div class="admin-recommendation">This fallback is used only when Paystack checkout is unavailable. When Paystack is enabled again, customers automatically return to Paystack.</div>
+          <div class="form-grid two">
+            <label>Bank name<input id="adminManualBankName" maxlength="120" placeholder="e.g. Access Bank" /></label>
+            <label>Account name<input id="adminManualAccountName" maxlength="160" placeholder="Account holder name" /></label>
+          </div>
+          <div class="form-grid two">
+            <label>Account number<input id="adminManualAccountNumber" inputmode="numeric" maxlength="32" placeholder="Account number" /></label>
+            <label>Payment notification email<input id="adminManualPaymentEmail" type="email" autocomplete="email" placeholder="support@callfocus.link" /></label>
+          </div>
+          <p class="admin-panel-copy">Receipt emails are sent through your existing Resend configuration. The uploaded receipt is also available privately from this admin panel for 60 days.</p>
+        </div>
+        <div class="admin-overview-grid manual-payment-stats">
+          <article class="admin-stat-card"><span>Awaiting confirmation</span><strong id="adminManualPending">0</strong><small>Needs your review</small></article>
+          <article class="admin-stat-card"><span>Approved</span><strong id="adminManualApproved">0</strong><small>Credits issued</small></article>
+          <article class="admin-stat-card"><span>Rejected</span><strong id="adminManualRejected">0</strong><small>Not credited</small></article>
+        </div>
+        <div class="premium-panel admin-manual-payments-panel">
+          <div class="admin-users-heading"><div><h3>Manual payment requests</h3><p class="admin-panel-copy">Verify the transfer in your bank before approving. Approval immediately adds the requested credits to that customer’s server wallet.</p></div></div>
+          <div class="admin-manual-payments-list" id="adminManualPaymentsList"><div class="admin-users-empty">No manual payment requests yet.</div></div>
         </div>
       </section>
 

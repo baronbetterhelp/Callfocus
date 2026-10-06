@@ -1976,8 +1976,8 @@ if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.s
 
   function updateCreditCheckoutSummary(){
     const custom=$('customCreditAmount');
-    let amount=Number(custom?.value||selectedCreditAmount||300);
-    amount=Math.max(CREDIT_RULES.minimumPurchaseCredits,Math.round(amount/50)*50);
+    const raw=Math.floor(Number(custom?.value||selectedCreditAmount||0));
+    const amount=Number.isFinite(raw)&&raw>0?raw:0;
     selectedCreditAmount=amount;
     if($('customCreditMinutes')) $('customCreditMinutes').textContent=`${Math.round(secondsForCredits(amount)/60*10)/10} minutes`;
     if($('customCreditNaira')) $('customCreditNaira').textContent=formatNaira(nairaForCredits(amount));
@@ -1990,8 +1990,9 @@ if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.s
     const input=$('customCreditAmount');
     let amount=Number(input?.value||selectedCreditAmount||300);
     if(amount<CREDIT_RULES.minimumPurchaseCredits) return toast('The minimum purchase is 300 credits');
-    amount=Math.round(amount/50)*50;
+    amount=Math.floor(amount);
     selectedCreditAmount=amount;
+    if(window.CallFocusManualPayments?.shouldUseManual?.()) return window.CallFocusManualPayments.start(amount);
     if(window.CallFocusPaystack?.checkout) return window.CallFocusPaystack.checkout(amount);
     if($('creditPaymentModalSummary')) $('creditPaymentModalSummary').textContent=`${amount.toLocaleString()} credits · ${formatNaira(nairaForCredits(amount))} · ${humanTime(secondsForCredits(amount))} call time`;
     openModal('creditPaymentModal');
@@ -4454,21 +4455,36 @@ ${approvedPatterns}
 
 /* ===== v12-stabilization.js ===== */
 
-/* CallFocus V12 stabilization: payment gate + public configuration */
+/* CallFocus V12.9 payment availability: Paystack first, manual bank-transfer fallback second */
 (()=>{
   async function syncPaymentAvailability(){
-    let enabled=false;
+    let paystack=false,manual=false;
     try{
       const res=await fetch('/api/public-config',{cache:'no-store'});
       const cfg=await res.json();
-      enabled=cfg?.paymentsEnabled===true;
+      paystack=cfg?.paymentsEnabled===true;
+      manual=cfg?.manualPaymentsEnabled===true;
     }catch{}
-    document.documentElement.classList.toggle('payments-enabled',enabled);
-    document.documentElement.classList.toggle('payments-disabled',!enabled);
+    const available=paystack||manual;
+    window.CallFocusPaymentAvailability={paystack,manual,available};
+    document.documentElement.classList.toggle('payments-enabled',paystack);
+    document.documentElement.classList.toggle('payments-disabled',!paystack);
+    document.documentElement.classList.toggle('manual-payments-enabled',!paystack&&manual);
+    document.documentElement.classList.toggle('all-payments-unavailable',!available);
+    const amount=Number(document.getElementById('customCreditAmount')?.value||300);
+    const amountValid=Number.isFinite(amount)&&Math.floor(amount)>=300;
     const checkout=document.getElementById('creditCheckoutBtn');
-    if(checkout){checkout.disabled=!enabled;checkout.setAttribute('aria-disabled',String(!enabled));}
-    const dva=document.getElementById('paystackCreateDvaBtn'); if(dva)dva.disabled=!enabled;
+    if(checkout){checkout.disabled=!available||!amountValid;checkout.setAttribute('aria-disabled',String(checkout.disabled));}
+    const label=document.getElementById('creditCheckoutLabel');
+    if(label)label.textContent=paystack?'Continue to payment':manual?'Request account number':'Payments unavailable';
+    const note=document.getElementById('creditPaymentNote');
+    if(note)note.textContent=paystack?'Secure checkout is handled by Paystack. Credits are added only after CallFocus verifies a successful payment on the server.':manual?'Pay by bank transfer, upload your receipt, and receive credits after manual confirmation.':'Payments are temporarily unavailable while Paystack activation is pending.';
+    const notice=document.getElementById('paymentPendingNotice');
+    if(notice&&!paystack){const strong=notice.querySelector('strong'),span=notice.querySelector('span');if(strong)strong.textContent=manual?'Manual bank transfer available':'Payments are temporarily unavailable';if(span)span.textContent=manual?'Paystack activation is still pending. You can request the CallFocus bank account, transfer the exact amount, upload your receipt, and receive credits after manual confirmation.':'Paystack activation is still pending and the manual bank-transfer fallback has not been enabled yet.';}
+    const dva=document.getElementById('paystackCreateDvaBtn'); if(dva)dva.disabled=!paystack;
+    try{window.CallFocusManualPayments?.validateAmount?.();}catch{}
   }
+  window.CallFocusSyncPaymentAvailability=syncPaymentAvailability;
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',syncPaymentAvailability,{once:true});else syncPaymentAvailability();
   window.addEventListener('pageshow',syncPaymentAvailability);
 })();
@@ -4853,4 +4869,127 @@ ${approvedPatterns}
   if(previousShow){showView=function(view,scroll=true){if(sessionActive&&view!=='avatar')endSession({quiet:true});const result=previousShow(view,scroll);if(view==='avatar')setTimeout(()=>loadStockFaces({quiet:true}),70);return result}}
   window.addEventListener('pagehide',()=>{if(conversationId){try{fetch('/api/avatar/end',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token()}`},body:JSON.stringify({conversationId}),keepalive:true})}catch{}}});
   bindAvatar();if(activeAvatarView())loadStockFaces({quiet:true});window.CallFocusAvatar={refresh:()=>loadStockFaces({force:true}),end:()=>endSession(),faces:()=>faces,selected:()=>selectedFace()};
+})();
+
+
+/* ===== V12.9 — manual bank-transfer fallback ===== */
+(()=>{
+  const TOKEN_KEY='callfocus_server_session_v1';
+  const ACTIVE_KEY='callfocus_manual_payment_active_v129';
+  let payment=null;
+  let bank=null;
+  let pollTimer=null;
+  let busy=false;
+  const $=id=>document.getElementById(id);
+  const token=()=>localStorage.getItem(TOKEN_KEY)||'';
+  const cfFetch=(path,options={})=>{const headers=new Headers(options.headers||{});if(token())headers.set('Authorization',`Bearer ${token()}`);return fetch(path,{...options,headers,cache:'no-store'});};
+  const readJson=async res=>{try{return await res.json()}catch{return {}}};
+  const naira=n=>`₦${Math.max(0,Number(n)||0).toLocaleString(undefined,{maximumFractionDigits:0})}`;
+  const creditsText=n=>`${Math.max(0,Math.floor(Number(n)||0)).toLocaleString()} credits`;
+  const getAmount=()=>Math.floor(Number($('customCreditAmount')?.value||0));
+  const modal=()=>$('manualPaymentModal');
+  const showModal=()=>{modal()?.classList.remove('hidden');document.body.classList.add('modal-open');};
+  const hideModal=()=>{modal()?.classList.add('hidden');document.body.classList.remove('modal-open');};
+  const setStep=name=>{
+    $('manualPaymentAccountStep')?.classList.toggle('hidden',name!=='account');
+    $('manualPaymentReceiptStep')?.classList.toggle('hidden',name!=='receipt');
+    $('manualPaymentWaitingStep')?.classList.toggle('hidden',name!=='waiting');
+  };
+  function shouldUseManual(){const a=window.CallFocusPaymentAvailability||{};return a.paystack!==true&&a.manual===true;}
+  function amountValid(){const n=getAmount();return Number.isFinite(n)&&n>=300;}
+  function validateAmount(){
+    const input=$('customCreditAmount'),err=$('creditAmountError'),card=$('creditCustomCard'),btn=$('creditCheckoutBtn');
+    if(!input)return true;
+    const valid=amountValid();
+    input.classList.toggle('is-invalid',!valid);card?.classList.toggle('has-error',!valid);err?.classList.toggle('hidden',valid);
+    const available=window.CallFocusPaymentAvailability?.available===true;
+    if(btn){btn.disabled=!valid||!available;btn.setAttribute('aria-disabled',String(btn.disabled));}
+    return valid;
+  }
+  function saveActive(id){try{id?localStorage.setItem(ACTIVE_KEY,id):localStorage.removeItem(ACTIVE_KEY)}catch{}}
+  function activeId(){try{return localStorage.getItem(ACTIVE_KEY)||''}catch{return ''}}
+  function updateInline(p){
+    const box=$('manualPaymentInlineStatus');if(!box)return;
+    const pending=p?.status==='pending_confirmation';
+    box.classList.toggle('hidden',!pending);
+    if(pending){$('manualPaymentInlineTitle').textContent='Payment awaiting confirmation';$('manualPaymentInlineCopy').textContent=`${creditsText(p.credits)} · ${naira(p.amountNaira)} · Your balance will update automatically after approval.`;}
+  }
+  function fillBank(){
+    $('manualBankName').textContent=bank?.bankName||'—';$('manualAccountName').textContent=bank?.accountName||'—';$('manualAccountNumber').textContent=bank?.accountNumber||'—';
+    $('manualPaymentSummary').textContent=`${creditsText(payment?.credits)} · ${naira(payment?.amountNaira)}`;$('manualExactAmount').textContent=naira(payment?.amountNaira);
+  }
+  async function start(credits){
+    if(busy)return;if(!token()){window.showAuth?.('signin',null,'Sign in before purchasing CallFocus credits.');return;}
+    const amount=Math.floor(Number(credits));if(!Number.isFinite(amount)||amount<300){validateAmount();window.toast?.('The minimum purchase is 300 credits.');return;}
+    busy=true;const btn=$('creditCheckoutBtn'),old=btn?.innerHTML;if(btn){btn.disabled=true;btn.innerHTML='<span>Requesting account…</span><small>Please wait</small>';}
+    try{
+      const res=await cfFetch('/api/manual-payment/request',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({credits:amount})});const data=await readJson(res);if(!res.ok)throw new Error(data?.error||'Could not request the bank account.');
+      payment=data.payment;bank=data.bank;saveActive(payment.id);fillBank();setStep('account');showModal();
+    }catch(err){window.toast?.(err?.message||'Could not start manual payment.');}
+    finally{busy=false;if(btn&&old){btn.innerHTML=old;try{window.CallFocusSyncPaymentAvailability?.()}catch{}}}
+  }
+  async function cancel(){
+    if(!payment?.id){hideModal();return;}if(busy)return;busy=true;
+    try{const res=await cfFetch('/api/manual-payment/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paymentId:payment.id})});const data=await readJson(res);if(!res.ok)throw new Error(data?.error||'Could not cancel this payment.');saveActive('');payment=null;bank=null;updateInline(null);hideModal();window.toast?.('Payment cancelled');}
+    catch(err){window.toast?.(err?.message||'Could not cancel payment.');}
+    finally{busy=false;}
+  }
+  function chooseReceipt(){
+    const f=$('manualReceiptInput')?.files?.[0];const btn=$('manualSentMoneyBtn');
+    if(!f){$('manualReceiptLabel').textContent='Choose receipt';$('manualReceiptMeta').textContent='No file selected';if(btn)btn.disabled=true;return;}
+    $('manualReceiptLabel').textContent=f.name;$('manualReceiptMeta').textContent=`${(f.size/1024/1024).toFixed(f.size>1024*1024?2:1)} MB · ${f.type||'file'}`;
+    if(btn)btn.disabled=f.size<=0||f.size>5*1024*1024;
+    if(f.size>5*1024*1024)window.toast?.('Receipt must be 5 MB or smaller.');
+  }
+  async function submitReceipt(){
+    const f=$('manualReceiptInput')?.files?.[0];if(!payment?.id||!f)return window.toast?.('Choose your payment receipt first.');if(busy)return;busy=true;
+    const btn=$('manualSentMoneyBtn'),old=btn?.textContent;if(btn){btn.disabled=true;btn.textContent='Sending receipt…';}
+    try{
+      const form=new FormData();form.append('paymentId',payment.id);form.append('receipt',f,f.name);
+      const res=await cfFetch('/api/manual-payment/submit',{method:'POST',body:form});const data=await readJson(res);if(!res.ok)throw new Error(data?.error||'Could not submit the receipt.');
+      payment=data.payment;saveActive(payment.id);showWaiting(payment);startPolling();
+    }catch(err){window.toast?.(err?.message||'Could not submit the receipt.');}
+    finally{busy=false;if(btn){btn.disabled=false;btn.textContent=old||'I’ve sent the money';}}
+  }
+  function showWaiting(p){
+    if(p)payment=p;setStep('waiting');showModal();
+    $('manualWaitingReference').textContent=`Reference ${payment?.id||'—'}`;
+    $('manualWaitingTitle').textContent='Waiting for manual confirmation';
+    $('manualWaitingCopy').textContent='Your receipt has been sent for review. Your CallFocus balance will update automatically as soon as the payment is approved.';
+    updateInline(payment);
+  }
+  function approved(p){
+    clearInterval(pollTimer);pollTimer=null;saveActive('');updateInline(null);
+    $('manualWaitingTitle').textContent='Payment approved';$('manualWaitingCopy').textContent=`${creditsText(p.credits)} have been added to your CallFocus balance.`;
+    $('manualCheckStatusBtn').textContent='Approved';$('manualCheckStatusBtn').disabled=true;
+    try{window.CallFocusPaystack?.refreshWallet?.({quiet:true});}catch{}
+    window.toast?.(`${creditsText(p.credits)} added to your balance`);
+  }
+  function rejected(p){
+    clearInterval(pollTimer);pollTimer=null;saveActive('');updateInline(null);
+    $('manualWaitingTitle').textContent='Payment needs attention';$('manualWaitingCopy').textContent=p.rejectionReason||'This payment was not approved. Contact support if you believe this is a mistake.';window.toast?.('Manual payment was not approved.');
+    $('manualCheckStatusBtn').textContent='Not approved';$('manualCheckStatusBtn').disabled=true;
+  }
+  async function checkStatus({quiet=false,open=false}={}){
+    const id=payment?.id||activeId();if(!id||!token())return null;
+    try{const res=await cfFetch(`/api/manual-payment/status?id=${encodeURIComponent(id)}`);const data=await readJson(res);if(!res.ok)throw new Error(data?.error||'Could not check payment status.');payment=data.payment;if(payment.status==='approved')approved(payment);else if(payment.status==='rejected')rejected(payment);else if(payment.status==='cancelled'){saveActive('');updateInline(null);}else if(payment.status==='pending_confirmation'){updateInline(payment);if(open)showWaiting(payment);}return payment;}
+    catch(err){if(!quiet)window.toast?.(err?.message||'Could not check payment status.');return null;}
+  }
+  function startPolling(){clearInterval(pollTimer);pollTimer=setInterval(()=>{if(document.visibilityState==='visible')checkStatus({quiet:true});},5000);}
+  function backHome(){hideModal();try{window.showView?.('home');}catch{location.href='/';}startPolling();}
+  async function copyAccount(){const value=bank?.accountNumber||$('manualAccountNumber')?.textContent||'';if(!value||value==='—')return;try{await navigator.clipboard.writeText(value);window.toast?.('Account number copied');}catch{window.toast?.('Could not copy account number');}}
+  function viewActive(){if(!payment?.id&&activeId())checkStatus({quiet:false,open:true});else if(payment?.status==='pending_confirmation')showWaiting(payment);}
+  function closeTop(){if(payment?.status==='pending_confirmation'){hideModal();startPolling();}else cancel();}
+
+  $('customCreditAmount')?.addEventListener('input',validateAmount);
+  document.querySelectorAll('[data-credit-package]').forEach(btn=>btn.addEventListener('click',()=>setTimeout(validateAmount,0)));
+  $('manualMadePaymentBtn')?.addEventListener('click',()=>setStep('receipt'));
+  $('manualCancelPaymentBtn')?.addEventListener('click',cancel);$('manualCancelReceiptBtn')?.addEventListener('click',cancel);
+  $('manualReceiptInput')?.addEventListener('change',chooseReceipt);$('manualSentMoneyBtn')?.addEventListener('click',submitReceipt);
+  $('manualCopyAccountBtn')?.addEventListener('click',copyAccount);$('manualCheckStatusBtn')?.addEventListener('click',()=>checkStatus({quiet:false,open:true}));
+  $('manualBackHomeBtn')?.addEventListener('click',backHome);$('manualPaymentViewStatusBtn')?.addEventListener('click',viewActive);$('manualPaymentTopClose')?.addEventListener('click',closeTop);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&activeId())checkStatus({quiet:true});});
+  window.addEventListener('focus',()=>{if(activeId())checkStatus({quiet:true});});
+  window.CallFocusManualPayments={start,shouldUseManual,validateAmount,checkStatus};
+  setTimeout(()=>{validateAmount();if(activeId()){checkStatus({quiet:true}).then(p=>{if(p?.status==='pending_confirmation')startPolling();});}},900);
 })();

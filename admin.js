@@ -30,6 +30,8 @@ let adminAiUsage=null;
 let adminAiUsageLoading=false;
 let customVoices=[];
 let customVoiceAccess=null;
+let adminManualPayments=[];
+let adminManualPaymentsLoading=false;
 function toast(msg){$('toast').textContent=msg;$('toast').classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>$('toast').classList.add('hidden'),2400)}
 function authHeaders(extra={}){return {'X-CallFocus-Admin-Key':adminKey,...extra}}
 function coreVoiceOptions(){return CORE_VOICES.map(v=>`<option value="${v}">${v}${v==='marin'||v==='cedar'?' · recommended':''}</option>`).join('')}
@@ -44,7 +46,7 @@ function populateVoices(){
 function renderServerState(){const online=$('adminServerOnline').checked;$('serverStateBadge').classList.toggle('offline',!online);$('serverStateBadge').querySelector('b').textContent=online?'Online':'Offline';if($('adminDashServer'))$('adminDashServer').textContent=online?'Online':'Offline'}
 function readBackup(){try{return JSON.parse(localStorage.getItem(ADMIN_BACKUP_KEY)||'null')}catch{return null}}
 function saveBackup(config){try{localStorage.setItem(ADMIN_BACKUP_KEY,JSON.stringify({savedAt:new Date().toISOString(),config}));renderBackupStatus()}catch{}}
-function formPayload(){return {customVoices:[...customVoices],unlimitedCreditEmails:[...unlimitedCreditEmails],siteTheme:$('adminSiteTheme').value||'black',serverOnline:$('adminServerOnline').checked,serverMessage:$('adminServerMessage').value.trim(),maleVoice:$('adminMaleVoice').value,femaleVoice:$('adminFemaleVoice').value,model:'gpt-live-1',speakingPace:$('adminSpeakingPace').value,speechStyle:$('adminSpeechStyle').value.trim(),instructions:$('adminInstructions').value.trim(),opening:$('adminOpening').value.trim(),speakFirst:$('adminSpeakFirst').checked,interruptions:$('adminInterruptions').checked}}
+function formPayload(){return {customVoices:[...customVoices],unlimitedCreditEmails:[...unlimitedCreditEmails],siteTheme:$('adminSiteTheme').value||'black',serverOnline:$('adminServerOnline').checked,serverMessage:$('adminServerMessage').value.trim(),maleVoice:$('adminMaleVoice').value,femaleVoice:$('adminFemaleVoice').value,model:'gpt-live-1',speakingPace:$('adminSpeakingPace').value,speechStyle:$('adminSpeechStyle').value.trim(),instructions:$('adminInstructions').value.trim(),opening:$('adminOpening').value.trim(),speakFirst:$('adminSpeakFirst').checked,interruptions:$('adminInterruptions').checked,manualPaymentsEnabled:$('adminManualPaymentsEnabled')?.checked===true,manualPaymentBankName:$('adminManualBankName')?.value.trim()||'',manualPaymentAccountName:$('adminManualAccountName')?.value.trim()||'',manualPaymentAccountNumber:$('adminManualAccountNumber')?.value.replace(/[^0-9]/g,'')||'',manualPaymentNotificationEmail:$('adminManualPaymentEmail')?.value.trim().toLowerCase()||'support@callfocus.link'}}
 function renderBackupStatus(storageConnected=true){const el=$('adminBackupStatus'),btn=$('restoreAdminBackupBtn');if(!el||!btn)return;const b=readBackup();btn.classList.toggle('hidden',!b?.config);if(!b?.config){el.textContent='A protected browser backup will also be kept automatically.';el.className='admin-backup-status';return}const when=b.savedAt?new Date(b.savedAt).toLocaleString():'recently';if(!storageConnected){el.textContent=`KV is disconnected, but your last admin settings are protected on this device (${when}). Reconnect KV, then restore and save.`;el.className='admin-backup-status warn'}else{el.textContent=`Protected browser backup available from ${when}.`;el.className='admin-backup-status good'}}
 function normalizeUnlimitedEmail(value=''){return String(value||'').trim().toLowerCase()}
 function validUnlimitedEmail(value=''){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeUnlimitedEmail(value))}
@@ -74,9 +76,9 @@ async function addUnlimitedUser(){
   if(unlimitedCreditEmails.includes(email))return toast('That email already has unlimited access');
   const ok=await setUnlimitedUser('add',email,btn); if(ok&&input)input.value='';
 }
-function fill(config,storageConnected){currentConfig=config;customVoices=Array.isArray(config.customVoices)?config.customVoices:[];populateVoices();renderCustomVoiceLibrary();unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);if($('adminDashStorage'))$('adminDashStorage').textContent=storageConnected?'Global storage connected':'Storage needs attention';renderServerState();renderBackupStatus(storageConnected)}
+function fill(config,storageConnected){currentConfig=config;customVoices=Array.isArray(config.customVoices)?config.customVoices:[];populateVoices();renderCustomVoiceLibrary();unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;if($('adminManualPaymentsEnabled'))$('adminManualPaymentsEnabled').checked=config.manualPaymentsEnabled===true;if($('adminManualBankName'))$('adminManualBankName').value=config.manualPaymentBankName||'';if($('adminManualAccountName'))$('adminManualAccountName').value=config.manualPaymentAccountName||'';if($('adminManualAccountNumber'))$('adminManualAccountNumber').value=config.manualPaymentAccountNumber||'';if($('adminManualPaymentEmail'))$('adminManualPaymentEmail').value=config.manualPaymentNotificationEmail||'support@callfocus.link';$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);if($('adminDashStorage'))$('adminDashStorage').textContent=storageConnected?'Global storage connected':'Storage needs attention';renderServerState();renderBackupStatus(storageConnected)}
 async function api(path,options={}){const res=await fetch(path,{...options,headers:authHeaders(options.headers||{})});const type=res.headers.get('content-type')||'';const data=type.includes('application/json')?await res.json():await res.text();if(!res.ok)throw new Error(data?.error||data||'Request failed');return data}
-async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{await api('/api/admin/login',{method:'POST'});const result=await api('/api/admin/config');sessionStorage.setItem('callfocus_admin_key',key);$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminUsers(true);loadAdminAiUsage();}catch(err){adminKey='';$('adminGateNote').textContent=err.message;toast(err.message)}}
+async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{await api('/api/admin/login',{method:'POST'});const result=await api('/api/admin/config');sessionStorage.setItem('callfocus_admin_key',key);$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminUsers(true);loadAdminAiUsage();loadAdminManualPayments();}catch(err){adminKey='';$('adminGateNote').textContent=err.message;toast(err.message)}}
 async function saveConfig(){const payload=formPayload();saveBackup(payload);try{const result=await api('/api/admin/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});fill(result.config,true);saveBackup(result.config);toast('Global CallFocus settings saved')}catch(err){renderBackupStatus(false);toast(`${err.message} — your settings are protected on this device`)}}
 function restoreBackup(){const b=readBackup();if(!b?.config)return toast('No protected backup found');fill(b.config,!!currentConfig);toast('Protected settings loaded. Press Save global settings to write them to KV.')}
 function scheduleDraftBackup(){clearTimeout(draftTimer);draftTimer=setTimeout(()=>{try{saveBackup(formPayload())}catch{}},350)}
@@ -133,7 +135,7 @@ populateVoices();
 document.querySelectorAll('[data-site-theme]').forEach(btn=>btn.addEventListener('click',()=>{const value=btn.dataset.siteTheme==='pearl'?'pearl':'black';$('adminSiteTheme').value=value;document.querySelectorAll('[data-site-theme]').forEach(x=>{const on=x===btn;x.classList.toggle('active',on);x.setAttribute('aria-pressed',String(on));});scheduleDraftBackup()}));
 $('adminGateBtn').onclick=login;$('adminPasscode').addEventListener('keydown',e=>{if(e.key==='Enter')login()});$('adminServerOnline').onchange=()=>{renderServerState();scheduleDraftBackup()};$('saveAdminBtn').onclick=saveConfig;$('restoreAdminBackupBtn')?.addEventListener('click',restoreBackup);$('adminLockBtn').onclick=()=>{sessionStorage.removeItem('callfocus_admin_key');location.reload()};document.querySelectorAll('[data-preview]').forEach(btn=>btn.onclick=()=>previewVoice(btn.dataset.preview,btn));
 ['adminServerMessage','adminMaleVoice','adminFemaleVoice','adminSpeakingPace','adminSpeechStyle','adminInstructions','adminOpening','adminSpeakFirst','adminInterruptions'].forEach(id=>$(id)?.addEventListener('input',scheduleDraftBackup));
-const remembered=sessionStorage.getItem('callfocus_admin_key');if(remembered){adminKey=remembered;api('/api/admin/config').then(r=>{$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!r.storageConnected&&backup?.config){fill(backup.config,false)}else{fill(r.config,r.storageConnected);if(r.storageConnected)saveBackup(r.config)}loadAdminUsers(true);loadAdminAiUsage();}).catch(()=>{adminKey='';sessionStorage.removeItem('callfocus_admin_key')})}
+const remembered=sessionStorage.getItem('callfocus_admin_key');if(remembered){adminKey=remembered;api('/api/admin/config').then(r=>{$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!r.storageConnected&&backup?.config){fill(backup.config,false)}else{fill(r.config,r.storageConnected);if(r.storageConnected)saveBackup(r.config)}loadAdminUsers(true);loadAdminAiUsage();loadAdminManualPayments();}).catch(()=>{adminKey='';sessionStorage.removeItem('callfocus_admin_key')})}
 
 
 function esc(value=''){return String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
@@ -154,7 +156,7 @@ function renderAdminUsers(){
     const purchaseCount=Number(u?.wallet?.purchaseCount||0);
     const paid=Number(u?.wallet?.totalPaidNaira||0);
     const created=u.createdAt?new Date(u.createdAt).toLocaleDateString():'—';
-    const lastFunded=u?.wallet?.lastPurchaseAt?new Date(u.wallet.lastPurchaseAt).toLocaleString():'No Paystack funding';
+    const lastFunded=u?.wallet?.lastPurchaseAt?new Date(u.wallet.lastPurchaseAt).toLocaleString():'No verified funding';
     return `<article class="admin-user-card${disabledClass}" data-admin-user="${esc(u.id)}">
       <div class="admin-user-main">
         <div class="admin-user-avatar">${esc((u.name||u.email||'?').trim().charAt(0).toUpperCase()||'?')}</div>
@@ -163,7 +165,7 @@ function renderAdminUsers(){
       </div>
       <div class="admin-user-stats">
         <div><span>Available balance</span><strong>${esc(adminCreditText(u))}</strong></div>
-        <div><span>Paystack funding</span><strong>${purchaseCount} payment${purchaseCount===1?'':'s'} · ₦${paid.toLocaleString(undefined,{maximumFractionDigits:2})}</strong><small>${esc(lastFunded)}</small></div>
+        <div><span>Verified funding</span><strong>${purchaseCount} payment${purchaseCount===1?'':'s'} · ₦${paid.toLocaleString(undefined,{maximumFractionDigits:2})}</strong><small>${esc(lastFunded)}</small></div>
       </div>
       <div class="admin-user-actions">
         <button class="btn btn-ghost" type="button" data-user-action="${u.accountDisabled?'enable_account':'disable_account'}">${u.accountDisabled?'Enable account':'Disable account'}</button>
@@ -193,7 +195,7 @@ async function loadAdminUsers(reset=false){
 function actionPrompt(action,user){
   if(action==='disable_account')return `Disable ${user.email}? They will be signed out and unable to sign in until you enable the account again.`;
   if(action==='enable_account')return `Enable ${user.email} again?`;
-  if(action==='remove_balance')return `Remove the entire available balance from ${user.email}? Their Paystack purchase history will remain recorded, so those payments will not be credited again automatically.`;
+  if(action==='remove_balance')return `Remove the entire available balance from ${user.email}? Their verified payment history will remain recorded, so those payments will not be credited again automatically.`;
   if(action==='grant_unlimited')return `Give ${user.email} unlimited CallFocus access?`;
   if(action==='revoke_unlimited')return `Turn off unlimited access for ${user.email}? Their normal credit balance will remain.`;
   return 'Apply this customer change?';
@@ -214,6 +216,48 @@ $('adminUsersRefreshBtn')?.addEventListener('click',()=>loadAdminUsers(true));
 $('adminUsersMoreBtn')?.addEventListener('click',()=>loadAdminUsers(false));
 $('adminUsersSearch')?.addEventListener('input',renderAdminUsers);
 $('adminUsersList')?.addEventListener('click',e=>{const button=e.target.closest('[data-user-action]');if(!button)return;const card=button.closest('[data-admin-user]');runAdminUserAction(card,button,button.dataset.userAction);});
+
+
+function manualStatusLabel(status=''){
+  const map={pending_confirmation:'Awaiting confirmation',approved:'Approved',rejected:'Rejected',awaiting_transfer:'Transfer not submitted',cancelled:'Cancelled'};return map[status]||status||'Unknown';
+}
+function manualStatusClass(status=''){return status==='approved'?'good':status==='rejected'||status==='cancelled'?'bad':status==='pending_confirmation'?'gold':'';}
+function renderAdminManualPayments(payload={}){
+  adminManualPayments=Array.isArray(payload.payments)?payload.payments:adminManualPayments;const counts=payload.counts||{};
+  if($('adminManualPending'))$('adminManualPending').textContent=String(Number(counts.pending)||adminManualPayments.filter(p=>p.status==='pending_confirmation').length);
+  if($('adminManualApproved'))$('adminManualApproved').textContent=String(Number(counts.approved)||adminManualPayments.filter(p=>p.status==='approved').length);
+  if($('adminManualRejected'))$('adminManualRejected').textContent=String(Number(counts.rejected)||adminManualPayments.filter(p=>p.status==='rejected').length);
+  if($('adminDashManualPending'))$('adminDashManualPending').textContent=String(Number(counts.pending)||adminManualPayments.filter(p=>p.status==='pending_confirmation').length);
+  const root=$('adminManualPaymentsList');if(!root)return;
+  if(!adminManualPayments.length){root.innerHTML='<div class="admin-users-empty">No manual payment requests yet.</div>';return;}
+  root.innerHTML=adminManualPayments.map(p=>{
+    const when=p.submittedAt||p.createdAt;const amount=Number(p.amountNaira||0).toLocaleString();const credits=Number(p.credits||0).toLocaleString();const pending=p.status==='pending_confirmation';
+    return `<article class="admin-manual-payment-card" data-manual-payment="${esc(p.id)}">
+      <div class="admin-manual-payment-head"><div><strong>${esc(p.customerName||'Unnamed customer')}</strong><span>${esc(p.customerEmail||'')}</span><small>${esc(p.customerPhone||'No phone')} · ${when?esc(new Date(when).toLocaleString()):'—'}</small></div><span class="admin-user-badge ${manualStatusClass(p.status)}">${esc(manualStatusLabel(p.status))}</span></div>
+      <div class="admin-manual-payment-grid"><div><span>Amount</span><strong>₦${amount}</strong></div><div><span>Credits</span><strong>${credits}</strong></div><div><span>Reference</span><strong>${esc(p.id)}</strong></div><div><span>Receipt</span><strong>${p.receipt?esc(p.receipt.name):'Not uploaded'}</strong></div></div>
+      ${p.rejectionReason?`<div class="admin-manual-reason">${esc(p.rejectionReason)}</div>`:''}
+      <div class="admin-user-actions">${p.receipt?'<button class="btn btn-ghost" type="button" data-manual-receipt>Open receipt</button>':''}${pending?'<button class="btn btn-primary" type="button" data-manual-action="approve">Approve payment</button><button class="btn admin-danger-btn" type="button" data-manual-action="reject">Reject</button>':''}</div>
+    </article>`;
+  }).join('');
+}
+async function loadAdminManualPayments(){
+  if(adminManualPaymentsLoading)return;adminManualPaymentsLoading=true;const btn=$('adminManualPaymentsRefreshBtn');const old=btn?.textContent||'Refresh payments';if(btn){btn.disabled=true;btn.textContent='Refreshing…';}
+  try{const result=await api('/api/admin/manual-payments');renderAdminManualPayments(result);}catch(err){toast(err.message);}
+  finally{adminManualPaymentsLoading=false;if(btn){btn.disabled=false;btn.textContent=old;}}
+}
+async function openManualReceipt(card){
+  const id=card?.dataset?.manualPayment;if(!id)return;let tab=null;try{tab=window.open('about:blank','_blank');}catch{}
+  try{const res=await fetch(`/api/admin/manual-payment-receipt?id=${encodeURIComponent(id)}`,{headers:authHeaders(),cache:'no-store'});if(!res.ok){let d={};try{d=await res.json()}catch{}throw new Error(d?.error||'Could not open receipt.');}const blob=await res.blob();const url=URL.createObjectURL(blob);if(tab)tab.location.href=url;else{const a=document.createElement('a');a.href=url;a.target='_blank';a.click();}setTimeout(()=>URL.revokeObjectURL(url),120000);}catch(err){if(tab)tab.close();toast(err.message);}
+}
+async function runManualPaymentAction(card,action,button){
+  const id=card?.dataset?.manualPayment;const row=adminManualPayments.find(p=>p.id===id);if(!id||!row)return;
+  let reason='';if(action==='approve'){if(!confirm(`Approve ₦${Number(row.amountNaira||0).toLocaleString()} from ${row.customerEmail} and add ${Number(row.credits||0).toLocaleString()} credits? Confirm only after the money is visible in your bank account.`))return;}else{const entered=prompt('Optional reason for rejecting this payment:','');if(entered===null)return;reason=entered;if(!confirm(`Reject this payment from ${row.customerEmail}? No credits will be added.`))return;}
+  const old=button?.textContent||'';if(button){button.disabled=true;button.textContent=action==='approve'?'Approving…':'Rejecting…';}
+  try{const result=await api('/api/admin/manual-payment-action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paymentId:id,action,reason})});if(result.payment){adminManualPayments=adminManualPayments.map(p=>p.id===id?result.payment:p);renderAdminManualPayments({payments:adminManualPayments});}await Promise.all([loadAdminUsers(true),loadAdminManualPayments()]);toast(action==='approve'?'Payment approved · credits added':'Payment rejected');}catch(err){toast(err.message);if(button){button.disabled=false;button.textContent=old;}}
+}
+$('adminManualPaymentsRefreshBtn')?.addEventListener('click',loadAdminManualPayments);
+$('adminManualPaymentsList')?.addEventListener('click',e=>{const card=e.target.closest('[data-manual-payment]');if(!card)return;const receipt=e.target.closest('[data-manual-receipt]');if(receipt)return openManualReceipt(card);const action=e.target.closest('[data-manual-action]');if(action)runManualPaymentAction(card,action.dataset.manualAction,action);});
+['adminManualPaymentsEnabled','adminManualBankName','adminManualAccountName','adminManualAccountNumber','adminManualPaymentEmail'].forEach(id=>$(id)?.addEventListener('input',scheduleDraftBackup));
 
 async function runDiagnostics(){
   const btn=$('runDiagnosticsBtn');
@@ -290,6 +334,6 @@ async function loadAdminAiUsage(){
 $('aiUsageRefreshBtn')?.addEventListener('click',loadAdminAiUsage);
 $('adminRefreshAllBtn')?.addEventListener('click',async()=>{
   const btn=$('adminRefreshAllBtn');const old=btn?.textContent||'Refresh data';if(btn){btn.disabled=true;btn.textContent='Refreshing…';}
-  try{await Promise.all([loadAdminUsers(true),loadAdminAiUsage()]);toast('Admin data refreshed');}
+  try{await Promise.all([loadAdminUsers(true),loadAdminAiUsage(),loadAdminManualPayments()]);toast('Admin data refreshed');}
   finally{if(btn){btn.disabled=false;btn.textContent=old;}}
 });
