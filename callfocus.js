@@ -7,7 +7,7 @@ const ACCOUNTS_KEY = 'callfocus_accounts_v4';
 const SESSION_KEY = 'callfocus_session_v4';
 // Pricing fallback is only used before /api/public-config returns. The server policy is authoritative.
 const CALLFOCUS_PRICING_FALLBACK = Object.freeze({
-  creditsPerMinute: 50,
+  creditsPerMinute: 100,
   nairaPerCredit: 10,
   minimumPurchaseCredits: 300,
   purchaseStepCredits: 50,

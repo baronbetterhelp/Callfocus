@@ -4,7 +4,7 @@ const TTS_VOICES = ['alloy','ash','ballad','coral','echo','fable','nova','onyx',
 // Single source of truth for CallFocus credit pricing and time conversion.
 // Change creditsPerMinute here and the server + customer UI stay in sync through /api/public-config.
 const CALLFOCUS_CREDIT_POLICY = Object.freeze({
-  creditsPerMinute: 50,
+  creditsPerMinute: 100,
   nairaPerCredit: 10,
   minimumPurchaseCredits: 300,
   purchaseStepCredits: 50,

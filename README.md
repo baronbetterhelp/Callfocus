@@ -1,4 +1,4 @@
-# Latest build: CallFocus V13.6 — Global Credit Rate
+# Latest build: CallFocus V13.7 — 100 Credits Per Minute
 
 CallFocus V13.1 — Compact Credits Screen
 

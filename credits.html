@@ -367,7 +367,7 @@
               </div>
               <div class="voice-note-credit-meter" aria-live="polite">
                 <div><span>Shared credit balance</span><strong id="voiceNoteCreditBalance">—</strong></div>
-                <small id="voiceNoteCreditRate">Shared with live calls · 50 credits = 1 minute</small>
+                <small id="voiceNoteCreditRate">Shared with live calls · 100 credits = 1 minute</small>
                 <button type="button" data-route="credits">Buy credits</button>
               </div>
               <div class="voice-note-status" id="voiceNoteStatus">Create mode uses your exact written script. Reply mode drafts the message for you. Both use your current Admin speech settings and the same shared credit balance as calls.</div>
@@ -393,7 +393,7 @@
 
           <div class="credit-balance-hero">
             <div><span>Available balance</span><strong id="creditPageBalance">0 credits</strong><small id="creditPageTime">0:00 shared audio time</small></div>
-            <div class="credit-rate-card"><span>Standard rate</span><strong>50 credits = 1 minute</strong><small>100 credits = ₦1,000 = 2 minutes</small></div>
+            <div class="credit-rate-card"><span>Standard rate</span><strong>100 credits = 1 minute</strong><small>100 credits = ₦1,000 = 1 minute</small></div>
           </div>
 
           <section class="paystack-transfer-card hidden" id="paystackTransferCard" aria-hidden="true">
@@ -410,7 +410,7 @@
               <div class="paystack-account-bank"><span>Bank</span><strong id="paystackDvaBank">—</strong></div>
               <div class="paystack-account-name"><span>Account name</span><strong id="paystackDvaName">—</strong></div>
               <div class="paystack-account-number"><span>Account number</span><strong id="paystackDvaNumber">—</strong><button id="paystackCopyDvaBtn" type="button">Copy</button></div>
-              <small>Keep this account number for future top-ups. ₦1,000 = 100 credits = 2 minutes.</small>
+              <small>Keep this account number for future top-ups. ₦1,000 = 100 credits = 1 minute.</small>
             </div>
             <div class="paystack-transfer-status hidden" id="paystackTransferStatus"></div>
           </section>
@@ -419,14 +419,14 @@
             <div class="payment-pending-notice" id="paymentPendingNotice"><strong>Bank transfer available</strong><span>Transfer the exact amount, upload your receipt, and your credits will be added after confirmation.</span></div>
             <div class="credit-section-title"><div><span class="section-eyebrow">Buy credits</span><h2>Choose an amount</h2></div><small>300 credits minimum</small></div>
             <div class="credit-package-grid">
-              <button class="credit-package active" type="button" data-credit-package="300"><span>Starter top-up</span><strong>300 credits</strong><small>6 minutes</small><b>₦3,000</b></button>
-              <button class="credit-package" type="button" data-credit-package="500"><span>More time</span><strong>500 credits</strong><small>10 minutes</small><b>₦5,000</b></button>
-              <button class="credit-package" type="button" data-credit-package="1000"><span>Longer calls</span><strong>1,000 credits</strong><small>20 minutes</small><b>₦10,000</b></button>
+              <button class="credit-package active" type="button" data-credit-package="300"><span>Starter top-up</span><strong>300 credits</strong><small>3 minutes</small><b>₦3,000</b></button>
+              <button class="credit-package" type="button" data-credit-package="500"><span>More time</span><strong>500 credits</strong><small>5 minutes</small><b>₦5,000</b></button>
+              <button class="credit-package" type="button" data-credit-package="1000"><span>Longer calls</span><strong>1,000 credits</strong><small>10 minutes</small><b>₦10,000</b></button>
             </div>
             <div class="credit-custom-card" id="creditCustomCard">
               <div><strong>Custom amount</strong><small>Enter 300 credits or more.</small></div>
               <label><span>Credits</span><input id="customCreditAmount" type="number" min="300" step="1" value="300" inputmode="numeric" /><small class="credit-input-error hidden" id="creditAmountError">Minimum purchase is 300 credits.</small></label>
-              <div class="credit-custom-summary"><span id="customCreditMinutes">6 minutes</span><strong id="customCreditNaira">₦3,000</strong></div>
+              <div class="credit-custom-summary"><span id="customCreditMinutes">3 minutes</span><strong id="customCreditNaira">₦3,000</strong></div>
             </div>
             <button class="credit-checkout-btn" id="creditCheckoutBtn" type="button" disabled aria-disabled="true"><span id="creditCheckoutLabel">Continue to payment</span><small id="creditCheckoutSummary">300 credits · ₦3,000</small></button>
             <p class="credit-payment-note" id="creditPaymentNote">Upload your receipt after transfer. Credits are added once payment is confirmed.</p>
@@ -441,7 +441,7 @@
 
           <div class="credit-starter-note">
             <div class="credit-starter-icon">01</div>
-            <div><strong>New-user starter credit</strong><p>Each new account receives <b>75 starter credits</b> (1 minute 30 seconds of shared audio time), usable for either live calls or voice notes.</p></div>
+            <div><strong>New-user starter credit</strong><p>Each new account receives <b>75 starter credits</b> (45 seconds of shared audio time), usable for either live calls or voice notes.</p></div>
           </div>
         </div>
       </section>
@@ -712,6 +712,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=13.6"></script>
+  <script src="/callfocus.js?v=13.7"></script>
 </body>
 </html>
