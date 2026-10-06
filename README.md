@@ -1,3 +1,5 @@
+CallFocus V13.1 — Compact Credits Screen
+
 CallFocus V12.7 Live AI Avatar
 
 CallFocus V12.6 — Customer AI Voice Designer
@@ -59,3 +61,7 @@ Manual bank-transfer fallback with receipt upload, admin approval, Resend notifi
 
 ## V13.0
 See `README-V13.0.md` for compact homepage quick tools and Live Avatar conversation setup.
+
+
+## V13.2
+Floating live two-speaker transcript with English translation for non-English calls.

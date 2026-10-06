@@ -2492,6 +2492,66 @@ ANALYST NOTES\n${joined}`;
 }
 
 
+/* ===== CallFocus V13.2 — Live call translation transcript ===== */
+async function handleLiveTranscriptTranslate(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Sign in to use live call translation.' }, 401);
+  if (!env.OPENAI_API_KEY) return json({ error: 'Live translation is unavailable right now.' }, 503);
+
+  let body = {};
+  try { body = await request.json(); } catch { return json({ error: 'Invalid translation request.' }, 400); }
+  const sourceLanguage = normalizeCallLanguage(body?.sourceLanguage);
+  const rawText = String(body?.text || '').trim();
+  if (!rawText) return json({ ok: true, translation: '', sourceLanguage });
+  if (rawText.length > 4200) return json({ error: 'This transcript segment is too long to translate.' }, 413);
+
+  // English calls need no extra model request. Returning the original text keeps the
+  // transcript fast and avoids unnecessary API usage.
+  if (sourceLanguage === 'English') return json({ ok: true, translation: rawText, sourceLanguage, translated: false });
+
+  const prompt = `Translate the following live phone-call transcript segment from ${sourceLanguage} into natural English.
+Return only the English translation, with no label, quotes, commentary, or explanation.
+Preserve names, numbers, dates, locations, intent, tone, and conversational meaning.
+Do not invent missing words. If the segment is incomplete, translate only what is actually present as naturally as possible.
+If any part is already English, keep that English naturally in the result.
+
+TRANSCRIPT SEGMENT:\n${rawText}`;
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+        'OpenAI-Safety-Identifier': await sha256Hex(`live-translate:${auth.user.id}`)
+      },
+      body: JSON.stringify({
+        model: 'gpt-6-luna',
+        store: false,
+        reasoning: { effort: 'none' },
+        max_output_tokens: 700,
+        input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }] }]
+      })
+    });
+    const raw = await response.text();
+    let payload = {};
+    try { payload = JSON.parse(raw); } catch {}
+    if (!response.ok) {
+      const code = payload?.error?.code || payload?.error?.type || '';
+      const quota = response.status === 429 || code === 'credit_balance_exhausted' || code === 'insufficient_quota';
+      return json({ error: quota ? 'Live translation is temporarily unavailable.' : 'Could not translate this part of the call.' }, quota ? 503 : Math.max(400, response.status || 502));
+    }
+    const translation = extractResponsesText(payload);
+    if (!translation) return json({ error: 'No translation was returned.' }, 502);
+    return json({ ok: true, translation, sourceLanguage, translated: true });
+  } catch (error) {
+    console.error('CallFocus live transcript translation failed', error?.message || error);
+    return json({ error: 'Could not translate this part of the call.' }, 502);
+  }
+}
+
+
 /* ===== CallFocus V12.7 — Live AI Avatar (Tavus CVI) ===== */
 const AVATAR_PROFILE_PREFIX = 'avatar:profile:';
 const AVATAR_MEDIA_PREFIX = 'avatar:media:';
@@ -3211,6 +3271,7 @@ export default {
     if (url.pathname === '/api/avatar/create') { const limited = await callFocusRateLimit(request, env, 'avatar-create', 6, 86400); if (limited) return limited; return safeCustomerRoute('avatar-create', () => handleAvatarCreate(request, env)); }
     if (url.pathname === '/api/avatar/session') { const limited = await callFocusRateLimit(request, env, 'avatar-session', 30, 3600); if (limited) return limited; return safeCustomerRoute('avatar-session', () => handleAvatarSession(request, env)); }
     if (url.pathname === '/api/avatar/end') return safeCustomerRoute('avatar-end', () => handleAvatarEnd(request, env));
+    if (url.pathname === '/api/live-translate') { const limited = await callFocusRateLimit(request, env, 'live-translate', 900, 3600); if (limited) return limited; return safeCustomerRoute('live-translate', () => handleLiveTranscriptTranslate(request, env)); }
     if (url.pathname === '/api/dynamics/analyze') { const limited = await callFocusRateLimit(request, env, 'dynamics-analyze', 40, 900); if (limited) return limited; return safeCustomerRoute('dynamics-analyze', () => handleDynamicsAnalyze(request, env)); }
     if (url.pathname === '/api/session') {
       if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });

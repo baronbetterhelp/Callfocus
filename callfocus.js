@@ -4998,3 +4998,221 @@ ${approvedPatterns}
   window.CallFocusManualPayments={start,shouldUseManual,validateAmount,checkStatus};
   setTimeout(()=>{validateAmount();if(activeId()){checkStatus({quiet:true}).then(p=>{if(p?.status==='pending_confirmation')startPolling();});}},900);
 })();
+
+
+/* ===== CallFocus V13.2 — Floating live translation transcript ===== */
+(()=>{
+  const TOKEN_KEY='callfocus_server_session_v1';
+  const $t=id=>document.getElementById(id);
+  const state={
+    turns:[], active:{live:null,remote:null}, seq:0, open:false,
+    drag:{active:false,id:null,dx:0,dy:0}, positioned:false
+  };
+
+  function token(){ try{return localStorage.getItem(TOKEN_KEY)||''}catch{return ''} }
+  function callerName(){ return String(live?.current?.callerName||'Caller').trim()||'Caller'; }
+  function callLanguage(){ return String(live?.current?.callLanguage||'English').trim()||'English'; }
+  function isEnglish(){ return callLanguage().toLowerCase()==='english'; }
+  function panel(){ return $t('callMorePanel'); }
+  function list(){ return $t('cfLiveTranslationList'); }
+  function status(){ return $t('cfLiveTranslationStatus'); }
+
+  function ensureUi(){
+    const btn=$t('moreBtn'), p=panel();
+    if(!btn||!p||p.dataset.cfTranslationReady==='1') return;
+    p.dataset.cfTranslationReady='1';
+    btn.setAttribute('aria-label','Call translation transcript');
+    btn.setAttribute('aria-expanded','false');
+    btn.innerHTML='<span class="cf-transcript-control-icon" aria-hidden="true">A↔</span><small>Transcript</small>';
+    p.innerHTML=`
+      <div class="cf-live-translation-head" id="cfLiveTranslationDragHandle">
+        <div class="cf-live-translation-title">
+          <strong>Call translation transcript</strong>
+          <span id="cfLiveTranslationStatus">Live transcript</span>
+        </div>
+        <button type="button" class="cf-live-translation-close" id="cfLiveTranslationClose" aria-label="Close transcript">×</button>
+      </div>
+      <div class="cf-live-translation-list" id="cfLiveTranslationList">
+        <div class="cf-live-translation-empty" id="cfLiveTranslationEmpty">Conversation text will appear here when the call starts.</div>
+      </div>
+      <div class="cf-live-translation-foot">Drag the top bar to move this panel anywhere on the call screen.</div>
+      <div class="cf-legacy-call-meta" aria-hidden="true">
+        <span id="callMoreTitle">Current call</span><span id="callMoreConnection">Connecting</span><span id="callMoreTopic">No topic supplied</span><span id="callMoreCredit">—</span>
+      </div>`;
+    bindDrag();
+    $t('cfLiveTranslationClose')?.addEventListener('click',()=>setOpen(false));
+    btn.onclick=()=>setOpen(!state.open);
+    updateHeader();
+  }
+
+  function setOpen(open){
+    ensureUi();
+    state.open=!!open;
+    const p=panel(),btn=$t('moreBtn');
+    p?.classList.toggle('hidden',!state.open);
+    btn?.classList.toggle('active',state.open);
+    btn?.setAttribute('aria-expanded',String(state.open));
+    if(state.open){
+      if(!state.positioned) defaultPosition();
+      requestAnimationFrame(()=>list()?.scrollTo({top:list().scrollHeight,behavior:'smooth'}));
+    }
+  }
+
+  function defaultPosition(){
+    const p=panel(); if(!p)return;
+    p.style.left='50%'; p.style.top='17%'; p.style.right='auto'; p.style.bottom='auto'; p.style.transform='translateX(-50%)';
+    state.positioned=true;
+  }
+
+  function clampPosition(left,top){
+    const p=panel(); if(!p)return {left,top};
+    const rect=p.getBoundingClientRect();
+    const margin=8;
+    const maxLeft=Math.max(margin,window.innerWidth-rect.width-margin);
+    const maxTop=Math.max(margin,window.innerHeight-rect.height-margin);
+    return {left:Math.min(Math.max(margin,left),maxLeft),top:Math.min(Math.max(margin,top),maxTop)};
+  }
+
+  function bindDrag(){
+    const handle=$t('cfLiveTranslationDragHandle'),p=panel(); if(!handle||!p)return;
+    handle.addEventListener('pointerdown',e=>{
+      if(e.target.closest('button'))return;
+      const r=p.getBoundingClientRect();
+      p.style.transform='none'; p.style.left=`${r.left}px`; p.style.top=`${r.top}px`;
+      state.drag={active:true,id:e.pointerId,dx:e.clientX-r.left,dy:e.clientY-r.top};
+      handle.setPointerCapture?.(e.pointerId); p.classList.add('is-dragging'); e.preventDefault();
+    });
+    handle.addEventListener('pointermove',e=>{
+      if(!state.drag.active||state.drag.id!==e.pointerId)return;
+      const pos=clampPosition(e.clientX-state.drag.dx,e.clientY-state.drag.dy);
+      p.style.left=`${pos.left}px`;p.style.top=`${pos.top}px`;e.preventDefault();
+    });
+    const stop=e=>{
+      if(!state.drag.active||state.drag.id!==e.pointerId)return;
+      state.drag.active=false;p.classList.remove('is-dragging');
+      try{handle.releasePointerCapture?.(e.pointerId)}catch{}
+    };
+    handle.addEventListener('pointerup',stop);handle.addEventListener('pointercancel',stop);
+    window.addEventListener('resize',()=>{
+      if(!state.positioned||!state.open)return;
+      const r=p.getBoundingClientRect();const pos=clampPosition(r.left,r.top);p.style.transform='none';p.style.left=`${pos.left}px`;p.style.top=`${pos.top}px`;
+    });
+  }
+
+  function updateHeader(){
+    const s=status(); if(!s)return;
+    s.textContent=isEnglish()?'English · live transcript':`${callLanguage()} → English · live translation`;
+  }
+
+  function resetTranscript(){
+    for(const turn of state.turns){clearTimeout(turn.timer);clearTimeout(turn.hardTimer)}
+    state.turns=[];state.active={live:null,remote:null};state.seq=0;state.positioned=false;
+    const l=list();if(l)l.innerHTML='<div class="cf-live-translation-empty" id="cfLiveTranslationEmpty">Conversation text will appear here when the call starts.</div>';
+    updateHeader();setOpen(false);
+  }
+
+  function speakerLabel(role){ return role==='live'?'Live Caller':callerName(); }
+  function makeTurn(role,startMs){
+    const turn={id:`cftr_${Date.now()}_${++state.seq}`,role,source:'',translation:'',startMs:Number.isFinite(startMs)?startMs:0,endMs:Number.isFinite(startMs)?startMs:0,lastAt:Date.now(),timer:null,hardTimer:null,inFlight:false,lastSent:'',pending:false,error:false};
+    state.turns.push(turn);state.active[role]=turn;
+    if(state.turns.length>80)state.turns.splice(0,state.turns.length-80);
+    renderTurn(turn);return turn;
+  }
+
+  function findOrCreateTurn(role,e){
+    const start=Number(e.start_ms),end=Number(e.end_ms);let turn=state.active[role];
+    const timelineGap=turn&&Number.isFinite(start)&&Number.isFinite(turn.endMs)?start-turn.endMs:0;
+    const wallGap=turn?Date.now()-turn.lastAt:0;
+    if(!turn||timelineGap>1100||wallGap>2200||turn.source.length>1800)turn=makeTurn(role,start);
+    if(Number.isFinite(end))turn.endMs=end;turn.lastAt=Date.now();return turn;
+  }
+
+  function ingest(role,e){
+    const delta=String(e?.delta||'');if(!delta)return;
+    ensureUi();const turn=findOrCreateTurn(role,e);turn.source+=delta;turn.error=false;
+    if(isEnglish()){
+      turn.translation=turn.source;renderTurn(turn);return;
+    }
+    renderTurn(turn);
+    clearTimeout(turn.timer);turn.timer=setTimeout(()=>translateTurn(turn),650);
+    if(!turn.hardTimer)turn.hardTimer=setTimeout(()=>translateTurn(turn),3000);
+  }
+
+  async function translateTurn(turn){
+    clearTimeout(turn.timer);turn.timer=null;clearTimeout(turn.hardTimer);turn.hardTimer=null;
+    const source=turn.source.trim();if(!source||source===turn.lastSent)return;
+    if(turn.inFlight){turn.pending=true;return;}
+    turn.inFlight=true;turn.pending=false;turn.lastSent=source;renderTurn(turn);
+    try{
+      const headers={'Content-Type':'application/json'};const t=token();if(t)headers.Authorization=`Bearer ${t}`;
+      const res=await fetch('/api/live-translate',{method:'POST',headers,cache:'no-store',body:JSON.stringify({text:source,sourceLanguage:callLanguage(),speaker:speakerLabel(turn.role)})});
+      let data={};try{data=await res.json()}catch{}
+      if(!res.ok)throw new Error(data?.error||'Translation unavailable');
+      turn.translation=String(data?.translation||source).trim();turn.error=false;
+    }catch(err){
+      turn.error=true;
+      // Keep the original visible rather than losing the transcript if translation has a temporary issue.
+      if(!turn.translation)turn.translation=source;
+      console.warn('CallFocus live translation',err?.message||err);
+    }finally{
+      turn.inFlight=false;renderTurn(turn);
+      if(turn.pending||turn.source.trim()!==turn.lastSent){turn.pending=false;turn.timer=setTimeout(()=>translateTurn(turn),420)}
+    }
+  }
+
+  function renderTurn(turn){
+    const l=list();if(!l)return;$t('cfLiveTranslationEmpty')?.remove();
+    let row=l.querySelector(`[data-cf-transcript-turn="${turn.id}"]`);
+    if(!row){
+      row=document.createElement('div');row.className='cf-live-translation-turn';row.dataset.cfTranscriptTurn=turn.id;row.dataset.role=turn.role;
+      row.innerHTML='<div class="cf-live-translation-speaker"></div><div class="cf-live-translation-bubble"><p></p><small></small></div>';
+      l.appendChild(row);
+    }
+    row.querySelector('.cf-live-translation-speaker').textContent=speakerLabel(turn.role);
+    const p=row.querySelector('p'),meta=row.querySelector('small');
+    if(isEnglish()){
+      p.textContent=turn.source.trim()||'…';meta.textContent='Live';
+    }else if(turn.translation){
+      p.textContent=turn.translation;meta.textContent=turn.inFlight?'Updating translation…':(turn.error?'Original shown · translation retrying':'Translated to English');
+    }else{
+      p.textContent='Translating…';meta.textContent='Listening live';
+    }
+    if(state.open && l.scrollHeight-l.scrollTop-l.clientHeight<120)l.scrollTop=l.scrollHeight;
+  }
+
+  // Wrap the final call lifecycle so every new call starts with a fresh floating transcript.
+  if(typeof startCall==='function'){
+    const previousStartCall=startCall;
+    startCall=async function(call){ ensureUi();resetTranscript();return previousStartCall(call); };
+  }
+  if(typeof cleanupCall==='function'){
+    const previousCleanupCall=cleanupCall;
+    cleanupCall=function(save=true){ const result=previousCleanupCall(save);setTimeout(()=>resetTranscript(),0);return result; };
+  }
+
+  // GPT-Live provides independent input/output transcript deltas, including timing.
+  // Use them for simultaneous two-speaker captions and translate settled fragments to English.
+  if(typeof handleRealtimeEvent==='function'){
+    const previousHandle=handleRealtimeEvent;
+    handleRealtimeEvent=function(raw){
+      let event=null;try{event=JSON.parse(raw)}catch{}
+      previousHandle(raw);
+      if(!event)return;
+      if(event.type==='session.input_transcript.delta'&&event.delta)ingest('remote',event);
+      if(event.type==='session.output_transcript.delta'&&event.delta)ingest('live',event);
+      if(event.type==='session.started')updateHeader();
+      if(event.type==='session.closed'){
+        for(const turn of state.turns){ if(!isEnglish()&&turn.source.trim()!==turn.lastSent)translateTurn(turn); }
+      }
+    };
+  }
+
+  // Older reset logic still calls this button/panel. Re-apply the transcript behavior after it runs.
+  const oldReset=typeof resetCallControls==='function'?resetCallControls:null;
+  if(oldReset){
+    resetCallControls=function(){oldReset();ensureUi();state.open=false;$t('moreBtn')?.setAttribute('aria-expanded','false');};
+  }
+
+  // The markup exists on every customer route, so initialize once even before a call starts.
+  ensureUi();
+})();

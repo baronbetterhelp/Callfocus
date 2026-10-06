@@ -2068,3 +2068,45 @@ html:not([data-theme="pearl"]) .manual-bank-card,html:not([data-theme="pearl"]) 
   .credit-checkout-btn{flex-direction:column;align-items:flex-start;gap:2px}
   .credit-checkout-btn>small{text-align:left}
 }
+
+
+/* ===== CallFocus V13.2 — Floating live translation transcript ===== */
+#moreBtn .cf-transcript-control-icon{font-size:16px;font-weight:800;letter-spacing:-.08em}
+.call-more-panel[data-cf-translation-ready="1"]{
+  position:fixed!important;z-index:260;width:min(430px,calc(100vw - 28px));max-height:min(48vh,470px);
+  margin:0!important;padding:0!important;display:flex!important;flex-direction:column;gap:0!important;
+  overflow:hidden;border-radius:22px!important;background:rgba(8,13,12,.94)!important;
+  border:1px solid rgba(255,255,255,.15)!important;box-shadow:0 24px 80px rgba(0,0,0,.48)!important;
+  backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);touch-action:auto;
+}
+.call-more-panel[data-cf-translation-ready="1"].hidden{display:none!important}
+.call-more-panel[data-cf-translation-ready="1"].is-dragging{box-shadow:0 30px 95px rgba(0,0,0,.58)!important}
+.cf-live-translation-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 15px 12px;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;border-bottom:1px solid rgba(255,255,255,.10);background:rgba(255,255,255,.035)}
+.is-dragging .cf-live-translation-head{cursor:grabbing}
+.cf-live-translation-title{display:grid;gap:3px;min-width:0}.cf-live-translation-title strong{font-size:11px!important;line-height:1.2!important;letter-spacing:.01em!important;text-transform:none!important;color:#fff!important}.cf-live-translation-title span{font-size:8px!important;line-height:1.2!important;color:#99aaa6!important;text-align:left!important;max-width:none!important}
+.cf-live-translation-close{width:31px;height:31px;flex:0 0 31px;border-radius:50%;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#e8efed;font-size:18px;line-height:1;display:grid;place-items:center}
+.cf-live-translation-list{min-height:150px;max-height:min(36vh,350px);overflow:auto;overscroll-behavior:contain;padding:13px 12px;display:grid;gap:11px;touch-action:pan-y;scrollbar-width:thin}
+.cf-live-translation-empty{padding:32px 20px;text-align:center;font-size:9px;line-height:1.55;color:#81918d;border:1px dashed rgba(255,255,255,.12);border-radius:15px}
+.cf-live-translation-turn{display:grid;gap:5px;max-width:88%}.cf-live-translation-turn[data-role="remote"]{justify-self:end}.cf-live-translation-speaker{font-size:7.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#83b9ad;padding:0 5px}.cf-live-translation-turn[data-role="remote"] .cf-live-translation-speaker{text-align:right;color:#d5b36a}
+.cf-live-translation-bubble{border-radius:16px 16px 16px 5px;padding:10px 11px;background:rgba(39,116,104,.23);border:1px solid rgba(70,160,143,.22)}
+.cf-live-translation-turn[data-role="remote"] .cf-live-translation-bubble{border-radius:16px 16px 5px 16px;background:rgba(212,177,101,.11);border-color:rgba(212,177,101,.20)}
+.cf-live-translation-bubble p{margin:0;color:#f2f6f5;font-size:10.5px;line-height:1.52;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere}.cf-live-translation-bubble small{display:block;margin-top:5px;color:#80918d;font-size:7px;line-height:1.25}.cf-live-translation-turn[data-role="remote"] .cf-live-translation-bubble small{text-align:right;color:#a79b82}
+.cf-live-translation-foot{padding:9px 13px 10px;border-top:1px solid rgba(255,255,255,.08);font-size:7px;line-height:1.35;color:#6f7e7a;text-align:center}
+.cf-legacy-call-meta{display:none!important}
+@media(max-width:620px){.call-more-panel[data-cf-translation-ready="1"]{width:min(390px,calc(100vw - 20px));max-height:46vh;border-radius:19px!important}.cf-live-translation-list{max-height:34vh;padding:11px 10px}.cf-live-translation-head{padding:12px 13px 10px}.cf-live-translation-bubble p{font-size:10px}}
+
+html[data-theme="pearl"] .call-more-panel[data-cf-translation-ready="1"]{background:rgba(250,252,250,.96)!important;border-color:#d5e0dc!important;box-shadow:0 24px 70px rgba(32,65,57,.20)!important;color:#17312e!important}
+html[data-theme="pearl"] .cf-live-translation-head{background:rgba(232,242,238,.65);border-bottom-color:#dce6e2}
+html[data-theme="pearl"] .cf-live-translation-title strong{color:#17312e!important}html[data-theme="pearl"] .cf-live-translation-title span{color:#6c807a!important}
+html[data-theme="pearl"] .cf-live-translation-close{background:#fff;border-color:#d8e2de;color:#315b54}
+html[data-theme="pearl"] .cf-live-translation-empty{color:#73857f;border-color:#d7e2de;background:rgba(255,255,255,.55)}
+html[data-theme="pearl"] .cf-live-translation-speaker{color:#287f72}html[data-theme="pearl"] .cf-live-translation-turn[data-role="remote"] .cf-live-translation-speaker{color:#a77c2e}
+html[data-theme="pearl"] .cf-live-translation-bubble{background:#e9f5f1;border-color:#cee5dd}html[data-theme="pearl"] .cf-live-translation-turn[data-role="remote"] .cf-live-translation-bubble{background:#fbf5e9;border-color:#eadcc0}
+html[data-theme="pearl"] .cf-live-translation-bubble p{color:#17312e}html[data-theme="pearl"] .cf-live-translation-bubble small{color:#728680}html[data-theme="pearl"] .cf-live-translation-turn[data-role="remote"] .cf-live-translation-bubble small{color:#9b8762}
+html[data-theme="pearl"] .cf-live-translation-foot{border-top-color:#dde7e3;color:#81918c}
+
+.call-more-panel[data-cf-translation-ready="1"] > .cf-live-translation-head{display:flex!important;justify-content:space-between!important;gap:14px!important;border-bottom:1px solid rgba(255,255,255,.10)!important;padding:14px 15px 12px!important}
+.call-more-panel[data-cf-translation-ready="1"] > .cf-live-translation-list{display:grid!important;justify-content:stretch!important;gap:11px!important;border-bottom:0!important;padding:13px 12px!important}
+.call-more-panel[data-cf-translation-ready="1"] > .cf-live-translation-foot{display:block!important;border-bottom:0!important;padding:9px 13px 10px!important}
+.call-more-panel[data-cf-translation-ready="1"] > .cf-legacy-call-meta{display:none!important}
+html[data-theme="pearl"] .call-more-panel[data-cf-translation-ready="1"] > .cf-live-translation-head{border-bottom-color:#dce6e2!important}
