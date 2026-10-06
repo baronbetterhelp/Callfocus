@@ -23,6 +23,9 @@ let currentConfig=null;
 let previewUrl='';
 let draftTimer=null;
 let unlimitedCreditEmails=[];
+let adminUsers=[];
+let adminUsersCursor='';
+let adminUsersLoading=false;
 function toast(msg){$('toast').textContent=msg;$('toast').classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>$('toast').classList.add('hidden'),2400)}
 function authHeaders(extra={}){return {'X-CallFocus-Admin-Key':adminKey,...extra}}
 function coreVoiceOptions(){return CORE_VOICES.map(v=>`<option value="${v}">${v}${v==='marin'||v==='cedar'?' · recommended':''}</option>`).join('')}
@@ -66,7 +69,7 @@ async function addUnlimitedUser(){
 }
 function fill(config,storageConnected){currentConfig=config;unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);renderServerState();renderBackupStatus(storageConnected)}
 async function api(path,options={}){const res=await fetch(path,{...options,headers:authHeaders(options.headers||{})});const type=res.headers.get('content-type')||'';const data=type.includes('application/json')?await res.json():await res.text();if(!res.ok)throw new Error(data?.error||data||'Request failed');return data}
-async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{await api('/api/admin/login',{method:'POST'});const result=await api('/api/admin/config');sessionStorage.setItem('callfocus_admin_key',key);$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)} }catch(err){adminKey='';$('adminGateNote').textContent=err.message;toast(err.message)}}
+async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{await api('/api/admin/login',{method:'POST'});const result=await api('/api/admin/config');sessionStorage.setItem('callfocus_admin_key',key);$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminUsers(true);}catch(err){adminKey='';$('adminGateNote').textContent=err.message;toast(err.message)}}
 async function saveConfig(){const payload=formPayload();saveBackup(payload);try{const result=await api('/api/admin/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});fill(result.config,true);saveBackup(result.config);toast('Global CallFocus settings saved')}catch(err){renderBackupStatus(false);toast(`${err.message} — your settings are protected on this device`)}}
 function restoreBackup(){const b=readBackup();if(!b?.config)return toast('No protected backup found');fill(b.config,!!currentConfig);toast('Protected settings loaded. Press Save global settings to write them to KV.')}
 function scheduleDraftBackup(){clearTimeout(draftTimer);draftTimer=setTimeout(()=>{try{saveBackup(formPayload())}catch{}},350)}
@@ -75,10 +78,87 @@ populateVoices();
 document.querySelectorAll('[data-site-theme]').forEach(btn=>btn.addEventListener('click',()=>{const value=btn.dataset.siteTheme==='pearl'?'pearl':'black';$('adminSiteTheme').value=value;document.querySelectorAll('[data-site-theme]').forEach(x=>{const on=x===btn;x.classList.toggle('active',on);x.setAttribute('aria-pressed',String(on));});scheduleDraftBackup()}));
 $('adminGateBtn').onclick=login;$('adminPasscode').addEventListener('keydown',e=>{if(e.key==='Enter')login()});$('adminServerOnline').onchange=()=>{renderServerState();scheduleDraftBackup()};$('saveAdminBtn').onclick=saveConfig;$('restoreAdminBackupBtn')?.addEventListener('click',restoreBackup);$('adminLockBtn').onclick=()=>{sessionStorage.removeItem('callfocus_admin_key');location.reload()};document.querySelectorAll('[data-preview]').forEach(btn=>btn.onclick=()=>previewVoice(btn.dataset.preview,btn));
 ['adminServerMessage','adminMaleVoice','adminFemaleVoice','adminSpeakingPace','adminSpeechStyle','adminInstructions','adminOpening','adminSpeakFirst','adminInterruptions'].forEach(id=>$(id)?.addEventListener('input',scheduleDraftBackup));
-$('adminUnlimitedAddBtn')?.addEventListener('click',addUnlimitedUser);
-$('adminUnlimitedEmail')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addUnlimitedUser();}});
-$('adminUnlimitedList')?.addEventListener('click',async e=>{const btn=e.target.closest('[data-remove-unlimited]');if(!btn)return;const email=normalizeUnlimitedEmail(btn.dataset.removeUnlimited);await setUnlimitedUser('remove',email,btn);});
-const remembered=sessionStorage.getItem('callfocus_admin_key');if(remembered){adminKey=remembered;api('/api/admin/config').then(r=>{$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!r.storageConnected&&backup?.config){fill(backup.config,false)}else{fill(r.config,r.storageConnected);if(r.storageConnected)saveBackup(r.config)}}).catch(()=>{adminKey='';sessionStorage.removeItem('callfocus_admin_key')})}
+const remembered=sessionStorage.getItem('callfocus_admin_key');if(remembered){adminKey=remembered;api('/api/admin/config').then(r=>{$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!r.storageConnected&&backup?.config){fill(backup.config,false)}else{fill(r.config,r.storageConnected);if(r.storageConnected)saveBackup(r.config)}loadAdminUsers(true);}).catch(()=>{adminKey='';sessionStorage.removeItem('callfocus_admin_key')})}
+
+
+function esc(value=''){return String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
+function adminCreditText(user){const credits=Math.max(0,Number(user?.wallet?.credits)||0);const seconds=Math.max(0,Number(user?.wallet?.balanceSeconds)||0);const mins=Math.floor(seconds/60),secs=seconds%60;return `${credits.toLocaleString(undefined,{maximumFractionDigits:1})} credits · ${mins}m ${String(secs).padStart(2,'0')}s`;}
+function filteredAdminUsers(){const q=String($('adminUsersSearch')?.value||'').trim().toLowerCase();if(!q)return adminUsers;return adminUsers.filter(u=>[u.name,u.email,u.phone].some(v=>String(v||'').toLowerCase().includes(q)));}
+function renderAdminUsers(){
+  const root=$('adminUsersList'),summary=$('adminUsersSummary'); if(!root)return;
+  const rows=filteredAdminUsers();
+  const disabled=adminUsers.filter(u=>u.accountDisabled).length;
+  const unlimited=adminUsers.filter(u=>u.unlimited).length;
+  const funded=adminUsers.filter(u=>Number(u?.wallet?.purchaseCount||0)>0).length;
+  if(summary)summary.textContent=`${adminUsers.length} loaded · ${funded} funded · ${unlimited} unlimited · ${disabled} disabled`;
+  if(!rows.length){root.innerHTML='<div class="admin-users-empty">No matching customer accounts.</div>';return;}
+  root.innerHTML=rows.map(u=>{
+    const disabledClass=u.accountDisabled?' is-disabled':'';
+    const status=u.accountDisabled?'Disabled':'Active';
+    const access=u.unlimited?'Unlimited access':'Standard credit';
+    const purchaseCount=Number(u?.wallet?.purchaseCount||0);
+    const paid=Number(u?.wallet?.totalPaidNaira||0);
+    const created=u.createdAt?new Date(u.createdAt).toLocaleDateString():'—';
+    const lastFunded=u?.wallet?.lastPurchaseAt?new Date(u.wallet.lastPurchaseAt).toLocaleString():'No Paystack funding';
+    return `<article class="admin-user-card${disabledClass}" data-admin-user="${esc(u.id)}">
+      <div class="admin-user-main">
+        <div class="admin-user-avatar">${esc((u.name||u.email||'?').trim().charAt(0).toUpperCase()||'?')}</div>
+        <div class="admin-user-identity"><strong>${esc(u.name||'Unnamed user')}</strong><span>${esc(u.email)}</span><small>${esc(u.phone||'No phone')} · Joined ${esc(created)}</small></div>
+        <div class="admin-user-badges"><span class="admin-user-badge ${u.accountDisabled?'bad':'good'}">${status}</span><span class="admin-user-badge ${u.unlimited?'gold':''}">${access}</span></div>
+      </div>
+      <div class="admin-user-stats">
+        <div><span>Available balance</span><strong>${esc(adminCreditText(u))}</strong></div>
+        <div><span>Paystack funding</span><strong>${purchaseCount} payment${purchaseCount===1?'':'s'} · ₦${paid.toLocaleString(undefined,{maximumFractionDigits:2})}</strong><small>${esc(lastFunded)}</small></div>
+      </div>
+      <div class="admin-user-actions">
+        <button class="btn btn-ghost" type="button" data-user-action="${u.accountDisabled?'enable_account':'disable_account'}">${u.accountDisabled?'Enable account':'Disable account'}</button>
+        <button class="btn btn-ghost" type="button" data-user-action="${u.unlimited?'revoke_unlimited':'grant_unlimited'}">${u.unlimited?'Turn off unlimited':'Give unlimited'}</button>
+        <button class="btn admin-danger-btn" type="button" data-user-action="remove_balance" ${Number(u?.wallet?.balanceSeconds||0)<=0?'disabled':''}>Remove balance</button>
+      </div>
+    </article>`;
+  }).join('');
+}
+async function loadAdminUsers(reset=false){
+  if(adminUsersLoading)return; adminUsersLoading=true;
+  const refresh=$('adminUsersRefreshBtn'),more=$('adminUsersMoreBtn');
+  if(reset){adminUsers=[];adminUsersCursor='';if(refresh){refresh.disabled=true;refresh.textContent='Refreshing…';}}
+  if(more){more.disabled=true;more.textContent='Loading…';}
+  try{
+    const qs=new URLSearchParams({limit:'50'}); if(adminUsersCursor)qs.set('cursor',adminUsersCursor);
+    const result=await api(`/api/admin/users?${qs.toString()}`);
+    const incoming=Array.isArray(result.users)?result.users:[];
+    const byId=new Map(adminUsers.map(u=>[u.id,u])); incoming.forEach(u=>byId.set(u.id,u));
+    adminUsers=[...byId.values()].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+    adminUsersCursor=String(result.cursor||'');
+    if(more)more.classList.toggle('hidden',!adminUsersCursor);
+    renderAdminUsers();
+  }catch(err){toast(err.message);if(!adminUsers.length&&$('adminUsersList'))$('adminUsersList').innerHTML='<div class="admin-users-empty">Could not load customer accounts.</div>';}
+  finally{adminUsersLoading=false;if(refresh){refresh.disabled=false;refresh.textContent='Refresh users';}if(more){more.disabled=false;more.textContent='Load more users';}}
+}
+function actionPrompt(action,user){
+  if(action==='disable_account')return `Disable ${user.email}? They will be signed out and unable to sign in until you enable the account again.`;
+  if(action==='enable_account')return `Enable ${user.email} again?`;
+  if(action==='remove_balance')return `Remove the entire available balance from ${user.email}? Their Paystack purchase history will remain recorded, so those payments will not be credited again automatically.`;
+  if(action==='grant_unlimited')return `Give ${user.email} unlimited CallFocus access?`;
+  if(action==='revoke_unlimited')return `Turn off unlimited access for ${user.email}? Their normal credit balance will remain.`;
+  return 'Apply this customer change?';
+}
+async function runAdminUserAction(card,button,action){
+  const userId=card?.dataset?.adminUser; const user=adminUsers.find(u=>u.id===userId); if(!user)return;
+  if(!confirm(actionPrompt(action,user)))return;
+  const old=button.textContent;button.disabled=true;button.textContent='Working…';
+  try{
+    const result=await api('/api/admin/user-action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,action})});
+    if(result.user){adminUsers=adminUsers.map(u=>u.id===result.user.id?result.user:u);renderAdminUsers();}
+    if(Array.isArray(result.unlimitedCreditEmails)){unlimitedCreditEmails=result.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail);saveBackup({...formPayload(),unlimitedCreditEmails:[...unlimitedCreditEmails]});}
+    const messages={disable_account:'Account disabled',enable_account:'Account enabled',remove_balance:'Balance removed',grant_unlimited:'Unlimited access enabled',revoke_unlimited:'Unlimited access removed'};
+    toast(messages[action]||'Customer updated');
+  }catch(err){toast(err.message);button.disabled=false;button.textContent=old;}
+}
+$('adminUsersRefreshBtn')?.addEventListener('click',()=>loadAdminUsers(true));
+$('adminUsersMoreBtn')?.addEventListener('click',()=>loadAdminUsers(false));
+$('adminUsersSearch')?.addEventListener('input',renderAdminUsers);
+$('adminUsersList')?.addEventListener('click',e=>{const button=e.target.closest('[data-user-action]');if(!button)return;const card=button.closest('[data-admin-user]');runAdminUserAction(card,button,button.dataset.userAction);});
 
 async function runDiagnostics(){
   const btn=$('runDiagnosticsBtn');

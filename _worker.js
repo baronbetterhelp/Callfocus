@@ -311,7 +311,7 @@ async function authenticatedCustomer(request, env) {
   const session = await env.CALLFOCUS_CONFIG.get(await customerSessionKey(token), { type: 'json' });
   if (!session?.userId) return null;
   const user = await env.CALLFOCUS_CONFIG.get(customerUserKey(session.userId), { type: 'json' });
-  if (!user) return null;
+  if (!user || user.accountDisabled === true) return null;
   const userAuthVersion = Number(user.authVersion || 1);
   const sessionAuthVersion = Number(session.authVersion || 1);
   if (userAuthVersion !== sessionAuthVersion) return null;
@@ -539,6 +539,7 @@ async function handlePasswordResetVerify(request, env) {
   if ((await customerCodeHash(email, code, 'reset')) !== pending.codeHash) return json({ error: 'That reset code is incorrect.', code: 'reset_incorrect' }, 401);
   const user = await readCustomerUserByEmail(env, email);
   if (!user || user.id !== pending.userId) return json({ error: 'Account not found.', code: 'account_not_found' }, 404);
+  if (user.accountDisabled === true) return json({ error: 'This CallFocus account has been disabled by an administrator.', code: 'account_disabled' }, 403);
   const passwordRecord = await buildCustomerPasswordRecord(password);
   Object.assign(user, passwordRecord, { authVersion: Number(user.authVersion || 1) + 1, updatedAt: new Date().toISOString() });
   await env.CALLFOCUS_CONFIG.put(customerUserKey(user.id), JSON.stringify(user));
@@ -560,6 +561,7 @@ async function handleCustomerSignin(request, env) {
   if (!email || !password) return json({ error: 'Enter your email and password.' }, 400);
   const user = await readCustomerUserByEmail(env, email);
   if (!user) return json({ error: 'Account not found.', code: 'account_not_found' }, 404);
+  if (user.accountDisabled === true) return json({ error: 'This CallFocus account has been disabled by an administrator.', code: 'account_disabled' }, 403);
   if (user?.passwordVersion === 2 && Number(user?.passwordIterations || 0) > CUSTOMER_LEGACY_MAX_SAFE_ITERATIONS) {
     return json({ error: 'This older account needs a password reset before it can sign in on the new domain.', code: 'password_upgrade_required' }, 409);
   }
@@ -667,6 +669,7 @@ async function handleCustomerMigration(request, env) {
   let user;
   let data;
   if (existing) {
+    if (existing.accountDisabled === true) return json({ error: 'This CallFocus account has been disabled by an administrator.', code: 'account_disabled' }, 403);
     const samePassword = existing.passwordHash === String(legacy.passwordHash || '') &&
       String(existing.passwordSalt || '') === String(legacy.passwordSalt || '') &&
       Number(existing.passwordIterations || 120000) === Number(legacy.passwordIterations || 120000);
@@ -799,6 +802,8 @@ async function handleCreditEntitlement(request, env) {
   try { body = await request.json(); } catch { return json({ unlimited: false }, 200); }
   const email = String(body?.email || '').trim().toLowerCase();
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ unlimited: false }, 200);
+  const user = await readCustomerUserByEmail(env, email);
+  if (user?.accountDisabled === true) return json({ unlimited: false, email, accountDisabled: true });
   const config = await getConfig(env);
   const list = Array.isArray(config.unlimitedCreditEmails) ? config.unlimitedCreditEmails : [];
   return json({ unlimited: list.includes(email), email });
@@ -830,6 +835,141 @@ async function handleAdminUnlimitedUser(request, env) {
   const config = sanitizeConfig({ ...current, unlimitedCreditEmails: list });
   await env.CALLFOCUS_CONFIG.put('global_config', JSON.stringify(config));
   return json({ ok: true, action, email, unlimitedCreditEmails: config.unlimitedCreditEmails, config });
+}
+
+
+function adminUserSummary(user, data, unlimitedEmails = []) {
+  const wallet = normalizeServerWallet(data?.wallet || {});
+  const purchases = wallet.purchases.filter(p => String(p?.provider || '').toLowerCase() === 'paystack');
+  const paidNaira = purchases.reduce((sum, p) => sum + Math.max(0, Number(p?.amountNaira) || 0), 0);
+  const purchasedCredits = purchases.reduce((sum, p) => sum + Math.max(0, Number(p?.credits) || 0), 0);
+  const lastPurchaseAt = purchases.map(p => p?.createdAt).filter(Boolean).sort().reverse()[0] || null;
+  const email = normalizeCustomerEmail(user?.email);
+  return {
+    id: String(user?.id || ''),
+    name: String(user?.name || ''),
+    email,
+    phone: String(user?.phone || ''),
+    emailVerified: !!user?.emailVerified,
+    phoneVerified: !!user?.phoneVerified,
+    createdAt: user?.createdAt || null,
+    updatedAt: user?.updatedAt || null,
+    accountDisabled: user?.accountDisabled === true,
+    accountDisabledAt: user?.accountDisabledAt || null,
+    unlimited: unlimitedEmails.includes(email),
+    wallet: {
+      balanceSeconds: wallet.balanceSeconds,
+      credits: Math.round((wallet.balanceSeconds / PAYSTACK_SECONDS_PER_CREDIT) * 10) / 10,
+      revision: wallet.revision,
+      purchaseCount: purchases.length,
+      totalPaidNaira: Math.round(paidNaira * 100) / 100,
+      totalPurchasedCredits: Math.round(purchasedCredits * 10) / 10,
+      lastPurchaseAt,
+      starterGranted: wallet.starterGranted !== false
+    }
+  };
+}
+
+async function handleAdminUsers(request, env) {
+  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.list !== 'function') {
+    return json({ error: 'Global account storage is not connected.' }, 503);
+  }
+  const url = new URL(request.url);
+  const requestedLimit = Math.max(1, Math.min(75, Number(url.searchParams.get('limit')) || 50));
+  const cursor = String(url.searchParams.get('cursor') || '').trim();
+  let page;
+  try {
+    page = await env.CALLFOCUS_CONFIG.list({ prefix: 'customer:user:', limit: requestedLimit, ...(cursor ? { cursor } : {}) });
+  } catch (error) {
+    return json({ error: 'Could not list customer accounts.', detail: String(error?.message || '').slice(0, 180) }, 500);
+  }
+  const config = await getConfig(env);
+  const unlimitedEmails = Array.isArray(config.unlimitedCreditEmails)
+    ? config.unlimitedCreditEmails.map(v => normalizeCustomerEmail(v)).filter(Boolean)
+    : [];
+  const users = await Promise.all((page.keys || []).map(async entry => {
+    try {
+      const user = await env.CALLFOCUS_CONFIG.get(entry.name, { type: 'json' });
+      if (!user?.id) return null;
+      const data = (await env.CALLFOCUS_CONFIG.get(customerDataKey(user.id), { type: 'json' })) || defaultCustomerData(user.name);
+      return adminUserSummary(user, data, unlimitedEmails);
+    } catch { return null; }
+  }));
+  return json({
+    ok: true,
+    users: users.filter(Boolean),
+    cursor: page.list_complete ? '' : String(page.cursor || ''),
+    listComplete: !!page.list_complete,
+    paystackMode: paystackIsTest(env) ? 'test' : 'live'
+  });
+}
+
+async function handleAdminUserAction(request, env) {
+  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.put !== 'function') return json({ error: 'Global account storage is not connected.' }, 503);
+  let body = {};
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const userId = String(body?.userId || '').trim();
+  const action = String(body?.action || '').trim().toLowerCase();
+  const allowed = ['disable_account','enable_account','remove_balance','grant_unlimited','revoke_unlimited'];
+  if (!userId || !allowed.includes(action)) return json({ error: 'Invalid customer action.' }, 400);
+  const user = await env.CALLFOCUS_CONFIG.get(customerUserKey(userId), { type: 'json' });
+  if (!user?.id) return json({ error: 'Customer account not found.' }, 404);
+  const now = new Date().toISOString();
+  const data = await getCustomerDataForUpdate(env, user.id, user.name);
+  let config = await getConfig(env);
+
+  if (action === 'disable_account') {
+    user.accountDisabled = true;
+    user.accountDisabledAt = now;
+    user.authVersion = Number(user.authVersion || 1) + 1;
+    user.updatedAt = now;
+    await env.CALLFOCUS_CONFIG.put(customerUserKey(user.id), JSON.stringify(user));
+  }
+
+  if (action === 'enable_account') {
+    user.accountDisabled = false;
+    user.accountDisabledAt = null;
+    user.authVersion = Number(user.authVersion || 1) + 1;
+    user.updatedAt = now;
+    await env.CALLFOCUS_CONFIG.put(customerUserKey(user.id), JSON.stringify(user));
+  }
+
+  if (action === 'remove_balance') {
+    const wallet = normalizeServerWallet(data.wallet);
+    const removedSeconds = Math.max(0, Math.floor(Number(wallet.balanceSeconds) || 0));
+    wallet.balanceSeconds = 0;
+    wallet.revision = Math.max(0, Number(wallet.revision) || 0) + 1;
+    wallet.usage.unshift({
+      id: `admin-balance-reset-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`,
+      type: 'admin_balance_reset',
+      seconds: -removedSeconds,
+      createdAt: now,
+      note: 'Balance removed by CallFocus admin'
+    });
+    wallet.usage = wallet.usage.slice(0, 250);
+    data.wallet = wallet;
+    await env.CALLFOCUS_CONFIG.put(customerDataKey(user.id), JSON.stringify(data));
+  }
+
+  if (action === 'grant_unlimited' || action === 'revoke_unlimited') {
+    const email = normalizeCustomerEmail(user.email);
+    let list = Array.isArray(config.unlimitedCreditEmails) ? config.unlimitedCreditEmails.map(normalizeCustomerEmail).filter(Boolean) : [];
+    list = [...new Set(list)];
+    if (action === 'grant_unlimited' && !list.includes(email)) list.push(email);
+    if (action === 'revoke_unlimited') list = list.filter(v => v !== email);
+    config = sanitizeConfig({ ...config, unlimitedCreditEmails: list });
+    await env.CALLFOCUS_CONFIG.put('global_config', JSON.stringify(config));
+  }
+
+  const refreshedUser = await env.CALLFOCUS_CONFIG.get(customerUserKey(user.id), { type: 'json' }) || user;
+  const refreshedData = (await env.CALLFOCUS_CONFIG.get(customerDataKey(user.id), { type: 'json' })) || data;
+  const refreshedConfig = await getConfig(env);
+  const unlimitedEmails = Array.isArray(refreshedConfig.unlimitedCreditEmails) ? refreshedConfig.unlimitedCreditEmails.map(normalizeCustomerEmail).filter(Boolean) : [];
+  return json({ ok: true, action, user: adminUserSummary(refreshedUser, refreshedData, unlimitedEmails), unlimitedCreditEmails: unlimitedEmails });
 }
 
 async function handleAdminConfig(request, env) {
@@ -2032,6 +2172,8 @@ export default {
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
     if (url.pathname === '/api/admin/login' && request.method === 'POST') { const limited = await callFocusRateLimit(request, env, 'admin-login', 8, 900); if (limited) return limited; return handleAdminLogin(request, env); }
     if (url.pathname === '/api/admin/config') return handleAdminConfig(request, env);
+    if (url.pathname === '/api/admin/users') return handleAdminUsers(request, env);
+    if (url.pathname === '/api/admin/user-action') return handleAdminUserAction(request, env);
     if (url.pathname === '/api/admin/unlimited-user') return handleAdminUnlimitedUser(request, env);
     if (url.pathname === '/api/admin/voice-preview' && request.method === 'POST') return handleVoicePreview(request, env);
     if (url.pathname === '/api/admin/diagnostics' && request.method === 'GET') return handleAdminDiagnostics(request, env);

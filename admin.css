@@ -516,3 +516,44 @@ html[data-theme="pearl"] .premium-footer .footer-links a:hover{
     padding:30px 0 34px;
   }
 }
+
+
+/* CallFocus V12.1 — customer account management */
+.admin-users-panel{display:grid;gap:18px;}
+.admin-users-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;}
+.admin-users-heading .btn{flex:0 0 auto;}
+.admin-users-tools{display:grid;grid-template-columns:minmax(240px,1fr) auto;gap:14px;align-items:end;}
+.admin-users-search{margin:0;}
+.admin-users-summary{padding:13px 15px;border:1px solid #2a302e;border-radius:14px;background:#111412;color:#909a96;font-size:12px;white-space:nowrap;}
+.admin-users-list{display:grid;gap:12px;}
+.admin-user-card{display:grid;gap:15px;padding:17px;border:1px solid #29302e;border-radius:19px;background:linear-gradient(145deg,#121514,#0e1110);box-shadow:0 12px 28px rgba(0,0,0,.12);}
+.admin-user-card.is-disabled{border-color:rgba(194,86,86,.42);background:linear-gradient(145deg,#171211,#100e0e);}
+.admin-user-main{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:13px;align-items:center;}
+.admin-user-avatar{width:48px;height:48px;border:1px solid #33403c;border-radius:15px;display:grid;place-items:center;background:#18201d;color:#dce8e3;font:800 17px/1 Manrope,sans-serif;}
+.admin-user-identity{display:flex;min-width:0;flex-direction:column;gap:3px;}
+.admin-user-identity strong{overflow:hidden;text-overflow:ellipsis;color:#f2f5f4;font-size:15px;white-space:nowrap;}
+.admin-user-identity span{overflow:hidden;text-overflow:ellipsis;color:#a9b2ae;font-size:12px;white-space:nowrap;}
+.admin-user-identity small{color:#6f7b76;font-size:11px;}
+.admin-user-badges{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;}
+.admin-user-badge{padding:6px 8px;border:1px solid #303936;border-radius:999px;color:#a9b4af;font:700 9px/1 DM Sans,sans-serif;letter-spacing:.05em;text-transform:uppercase;}
+.admin-user-badge.good{border-color:rgba(68,161,130,.35);background:rgba(47,128,103,.09);color:#76c5aa;}
+.admin-user-badge.bad{border-color:rgba(207,85,85,.42);background:rgba(133,45,45,.12);color:#e38d8d;}
+.admin-user-badge.gold{border-color:rgba(199,163,107,.38);background:rgba(199,163,107,.09);color:#d7b87d;}
+.admin-user-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.admin-user-stats>div{display:flex;min-width:0;flex-direction:column;gap:4px;padding:12px 13px;border:1px solid #252c2a;border-radius:14px;background:#0c0f0e;}
+.admin-user-stats span{color:#6f7a76;font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:700;}
+.admin-user-stats strong{color:#e6ece9;font-size:13px;line-height:1.35;}
+.admin-user-stats small{overflow:hidden;text-overflow:ellipsis;color:#78837f;font-size:10px;white-space:nowrap;}
+.admin-user-actions{display:flex;flex-wrap:wrap;gap:8px;}
+.admin-user-actions .btn{min-height:39px;padding:9px 12px;font-size:11px;}
+.admin-danger-btn{border:1px solid rgba(194,82,82,.45);border-radius:12px;background:rgba(123,42,42,.12);color:#df8b8b;font:700 11px/1 DM Sans,sans-serif;cursor:pointer;}
+.admin-danger-btn:hover{background:rgba(123,42,42,.2);}
+.admin-danger-btn:disabled{opacity:.35;cursor:not-allowed;}
+.admin-users-empty{padding:18px;border:1px dashed #303735;border-radius:16px;color:#7d8884;font-size:13px;text-align:center;}
+.admin-users-more{justify-self:center;}
+@media(max-width:760px){
+  .admin-users-heading{flex-direction:column;}.admin-users-heading .btn{width:100%;}
+  .admin-users-tools{grid-template-columns:1fr;}.admin-users-summary{white-space:normal;}
+  .admin-user-main{grid-template-columns:44px minmax(0,1fr);}.admin-user-avatar{width:44px;height:44px;}.admin-user-badges{grid-column:1/-1;justify-content:flex-start;}
+  .admin-user-stats{grid-template-columns:1fr;}.admin-user-actions{display:grid;grid-template-columns:1fr 1fr;}.admin-user-actions .btn,.admin-danger-btn{width:100%;}.admin-user-actions .admin-danger-btn{grid-column:1/-1;min-height:42px;}
+}
