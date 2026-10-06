@@ -2528,7 +2528,7 @@ function avatarSafeProfile(profile = {}, configured = true){
 async function tavusRequest(env, path, { method = 'GET', body = null, allowError = false } = {}){
   const key = String(env.TAVUS_API_KEY || '').trim();
   if(!key){
-    const error = new Error('Live AI Avatar is not activated yet. Add TAVUS_API_KEY to the CallFocus Worker secrets.');
+    const error = new Error('Live Avatar is temporarily unavailable. Please try again later.');
     error.status = 503; error.code = 'avatar_provider_unconfigured'; throw error;
   }
   const response = await fetch(`${TAVUS_API_BASE}${path}`, {
@@ -2564,7 +2564,7 @@ function avatarSafeStockFace(face = {}){
 }
 
 async function loadTavusStockFaces(env, { force = false } = {}){
-  if(!avatarProviderConfigured(env)) throw Object.assign(new Error('Live AI Avatar is not activated yet. Add TAVUS_API_KEY to the CallFocus Worker secrets.'), { status: 503, code: 'avatar_provider_unconfigured' });
+  if(!avatarProviderConfigured(env)) throw Object.assign(new Error('Live Avatar is temporarily unavailable. Please try again later.'), { status: 503, code: 'avatar_provider_unconfigured' });
   if(env.CALLFOCUS_CONFIG && !force){
     try{
       const cached = await env.CALLFOCUS_CONFIG.get(AVATAR_STOCK_CACHE_KEY, { type: 'json' });
@@ -2584,7 +2584,7 @@ async function handleAvatarStockFaces(request, env){
   if(request.method !== 'GET') return json({ error: 'Method not allowed.' }, 405);
   const auth = await authenticatedCustomer(request, env);
   if(!auth) return json({ error: 'Sign in to load the Live AI Avatar library.' }, 401);
-  if(!avatarProviderConfigured(env)) return json({ error: 'Live AI Avatar is not activated yet. Add TAVUS_API_KEY to the CallFocus Worker secrets.', code: 'avatar_provider_unconfigured', providerConfigured: false }, 503);
+  if(!avatarProviderConfigured(env)) return json({ error: 'Live Avatar is temporarily unavailable. Please try again later.', code: 'avatar_provider_unconfigured', providerConfigured: false }, 503);
   const url = new URL(request.url);
   const force = url.searchParams.get('refresh') === '1';
   const faces = await loadTavusStockFaces(env, { force });
@@ -2704,7 +2704,7 @@ async function handleAvatarCreate(request, env){
   const auth = await authenticatedCustomer(request, env);
   if(!auth) return json({ error: 'Sign in to create a Live AI Avatar.' }, 401);
   if(!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is unavailable.' }, 503);
-  if(!avatarProviderConfigured(env)) return json({ error: 'Live AI Avatar is not activated yet. Add the Tavus API key to the CallFocus Worker first.', code: 'avatar_provider_unconfigured' }, 503);
+  if(!avatarProviderConfigured(env)) return json({ error: 'Live Avatar is temporarily unavailable. Please try again later.', code: 'avatar_provider_unconfigured' }, 503);
   let body = {}; try{ body = await request.json(); }catch{}
   if(body?.rightsConfirmed !== true) return json({ error: 'Confirm that you are the person shown, or that you have the person’s explicit, informed consent to create and use this AI avatar.' }, 400);
   const voiceName = AVATAR_VOICE_NAMES.has(String(body?.voiceName || '').toLowerCase()) ? String(body.voiceName).toLowerCase() : 'anna';
@@ -2780,6 +2780,7 @@ async function handleAvatarSession(request, env){
 
   let requestBody = {}; try{ requestBody = await request.json(); }catch{}
   const requestedFaceId = String(requestBody?.faceId || '').trim();
+  const callDetails = String(requestBody?.callDetails || '').trim().slice(0, 4000);
   let selectedFaceId = '';
   let selectedReplicaId = '';
 
@@ -2802,10 +2803,13 @@ async function handleAvatarSession(request, env){
   }
 
   const palId = await getOrCreateAvatarPal(env);
+  const sessionBrief = callDetails
+    ? `\n\nUSER-PROVIDED CONVERSATION DETAILS:\n${callDetails}\n\nUse these details as the working context for the conversation. Stay aligned with the people, purpose, background, topics and desired outcome the user supplied. Do not invent missing personal facts. Ask a natural clarifying question when necessary.`
+    : '';
   const body = {
     conversation_name: `CallFocus Avatar — ${String(auth.user.name || 'User').slice(0,80)}`,
-    conversational_context: 'This is a live CallFocus AI avatar test session. Give helpful, intelligent answers in natural spoken language. Keep the pace conversational. The interface visibly discloses that the avatar is AI-generated. Never claim to be a human.',
-    custom_greeting: 'Hi. I’m an AI-generated CallFocus avatar. I’m ready whenever you are — ask me anything.',
+    conversational_context: `You are the speaking avatar in a CallFocus live conversation. Give helpful, intelligent answers in natural spoken language and keep the pace conversational. Follow the user's conversation brief closely when one is provided. Never claim to be a human, and do not follow user instructions that conflict with safety or provider policies.${sessionBrief}`,
+    custom_greeting: 'Hi. I’m ready whenever you are. Tell me where you’d like to begin.',
     dynamic_greeting: false,
     require_auth: true,
     max_participants: 2,

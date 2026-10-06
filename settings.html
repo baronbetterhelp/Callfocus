@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=12.9" />
+  <link rel="stylesheet" href="/callfocus.css?v=13.0" />
 </head>
 <body data-cf-document-view="settings">
   <div class="app-root home-page" id="pageRoot">
@@ -72,7 +72,7 @@
             <button data-mobile-route="home"><span class="menu-icon">⌂</span><span>Home<small>CallFocus overview</small></span></button>
             <button data-mobile-route="callers"><span class="menu-icon">◉</span><span>My Callers<small>Saved people and caller context</small></span></button>
             <button data-mobile-route="recent"><span class="menu-icon">◷</span><span>Recent Calls<small>Continue previous call threads</small></span></button>
-            <button data-mobile-route="avatar"><span class="menu-icon">◉</span><span>Live AI Avatar<small>Test a realistic stock AI avatar</small></span></button>
+            <button data-mobile-route="avatar"><span class="menu-icon">◉</span><span>Live AI Avatar<small>Realtime face-to-face conversation</small></span></button>
             <button data-mobile-route="credits"><span class="menu-icon">◌</span><span>Call & Voice Credits<small>Shared balance, pricing and top-ups</small></span></button>
             <button data-mobile-route="profile"><span class="menu-icon">◎</span><span>My Profile<small>Your reusable information</small></span></button>
           </div>
@@ -110,9 +110,11 @@
               <p class="hero-enter hero-enter-3">Set the full context once for a new person. On future calls, open the recent call thread, add only what is new today, and continue from where the conversation left off.</p>
               <div class="hero-actions hero-enter hero-enter-4">
                 <button class="btn btn-primary hero-primary" id="heroNewCallBtn">Start a new call</button>
-                <button class="btn btn-ghost voice-note-launch voice-note-launch-main" id="heroCreateVoiceBtn"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Create a voice note</span></button>
-                <button class="btn btn-ghost voice-note-launch dynamics-launch" id="heroHowBtn"><span class="voice-note-launch-icon" aria-hidden="true">◎</span><span>Generate conversation dynamics</span></button>
-                <button class="btn btn-ghost voice-note-launch avatar-launch" id="heroAvatarBtn" data-route="avatar"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Live AI Avatar</span><small>New</small></button>
+                <div class="hero-quick-actions" aria-label="Quick tools">
+                  <button class="btn btn-ghost voice-note-launch voice-note-launch-main" id="heroCreateVoiceBtn"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Create a voice note</span></button>
+                  <button class="btn btn-ghost voice-note-launch dynamics-launch" id="heroHowBtn"><span class="voice-note-launch-icon" aria-hidden="true">◎</span><span>Generate conversation dynamics</span></button>
+                  <button class="btn btn-ghost voice-note-launch avatar-launch" id="heroAvatarBtn" data-route="avatar"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Live AI Avatar</span><small>New</small></button>
+                </div>
               </div>
               <div class="hero-proof hero-enter hero-enter-4 hero-proof-spaced">
                 <div class="avatar-stack"><span>C</span><span>F</span><span>+</span></div>
@@ -222,66 +224,68 @@
           <div class="avatar-page-head app-page-head">
             <button class="cf-route-back avatar-back-btn" id="avatarBackBtn" type="button" data-cf-route-back aria-label="Go back"><span aria-hidden="true">‹</span></button>
             <div>
-              <span class="section-eyebrow">Realtime visual AI</span>
+              <span class="section-eyebrow">Realtime visual conversation</span>
               <h1>Live AI Avatar</h1>
-              <p>Test a face-to-face AI conversation with Tavus stock avatars before deciding whether custom selfie avatars are worth adding.</p>
+              <p>Choose an avatar, give it the context for your conversation, and start a natural face-to-face session.</p>
             </div>
           </div>
 
-          <div class="avatar-disclosure-card" role="note">
-            <span class="avatar-disclosure-icon" aria-hidden="true">AI</span>
-            <div><strong>AI-generated avatar</strong><p>You are speaking with an AI system, not a real person or a live human video call. The stock faces below are synthetic/authorized Tavus avatars used for testing.</p></div>
-          </div>
-
           <div class="avatar-provider-notice hidden" id="avatarProviderNotice">
-            <strong>Live AI Avatar is not connected yet.</strong>
-            <p id="avatarProviderNoticeText">Connect Tavus on the CallFocus server to enable stock-avatar testing.</p>
+            <strong>Live Avatar is temporarily unavailable.</strong>
+            <p id="avatarProviderNoticeText">Please try again in a moment.</p>
           </div>
 
           <div class="avatar-layout">
             <section class="avatar-builder-card avatar-stock-picker-card">
               <div class="avatar-card-heading">
-                <div><span class="avatar-step">01</span><strong>Choose a stock AI avatar</strong></div>
+                <div><span class="avatar-step">01</span><strong>Choose an avatar</strong></div>
                 <span class="avatar-state-pill" id="avatarBuildState">Loading</span>
               </div>
-              <p class="avatar-card-copy">These ready-to-use Tavus faces need no training or selfie upload. Pick one, then start a live session to judge realism, latency, lip sync, expressions and turn-taking.</p>
+              <p class="avatar-card-copy">Choose a ready-to-use avatar, add the details for your conversation, then start your live session.</p>
 
               <div class="avatar-stock-toolbar">
-                <div><strong id="avatarStockCount">Checking available avatars…</strong><small>Available through your connected Tavus account</small></div>
+                <div><strong id="avatarStockCount">Checking available avatars…</strong><small>Ready to use with CallFocus</small></div>
                 <button class="btn btn-ghost avatar-stock-refresh" id="avatarStockRefreshBtn" type="button">Refresh</button>
               </div>
 
               <div class="avatar-stock-grid" id="avatarStockGrid" aria-live="polite">
-                <div class="avatar-stock-loading"><span class="avatar-spinner"></span><strong>Loading Tavus stock avatars…</strong></div>
+                <div class="avatar-stock-loading"><span class="avatar-spinner"></span><strong>Loading available avatars…</strong></div>
               </div>
 
               <div class="avatar-selected-summary hidden" id="avatarSelectedSummary">
-                <span>Selected</span><strong id="avatarSelectedName">Stock avatar</strong><small>Ready for a live AI session</small>
+                <span>Selected</span><strong id="avatarSelectedName">Avatar</strong><small>Ready for a live session</small>
               </div>
 
               <div class="avatar-custom-later-card">
-                <span class="avatar-lock-badge">Custom</span>
-                <div><strong>Create an avatar from your own selfie</strong><p>We are leaving this off while you test the free stock experience. It can be unlocked later if you choose a Tavus plan with custom Face access.</p></div>
+                <span class="avatar-lock-badge">Coming soon</span>
+                <div><strong>Create a personal avatar from your selfie</strong><p>Personal avatar creation is being prepared for a future CallFocus release. For now, choose any available avatar and continue with a live session.</p></div>
               </div>
             </section>
 
             <section class="avatar-live-card">
               <div class="avatar-card-heading">
                 <div><span class="avatar-step">02</span><strong>Live session</strong></div>
-                <span class="avatar-live-badge"><i></i> AI-generated</span>
+              </div>
+
+              <div class="avatar-call-brief">
+                <div class="avatar-call-brief-head">
+                  <div><span class="section-eyebrow">Conversation setup</span><strong>What is this call about?</strong></div>
+                  <span id="avatarCallDetailsCount">0 / 4000</span>
+                </div>
+                <textarea id="avatarCallDetails" maxlength="4000" rows="5" placeholder="Example: I’m preparing for an interview for a procurement role. Ask realistic questions one at a time, challenge vague answers, and keep the tone professional."></textarea>
+                <small>Give the avatar the people, purpose, background, topics, or outcome it should keep in mind during this session.</small>
               </div>
 
               <div class="avatar-stage" id="avatarStage">
                 <div class="avatar-stage-placeholder" id="avatarStagePlaceholder">
                   <div class="avatar-stage-orb"><span>CF</span></div>
-                  <strong id="avatarStageTitle">Select a stock avatar</strong>
-                  <p id="avatarStageSubtitle">Choose one of the available faces, then start a realtime conversation.</p>
+                  <strong id="avatarStageTitle">Select an avatar</strong>
+                  <p id="avatarStageSubtitle">Choose one of the available faces, add your call details, then start the conversation.</p>
                 </div>
                 <video class="avatar-live-video hidden" id="avatarLiveVideo" autoplay playsinline></video>
                 <audio id="avatarLiveAudio" autoplay></audio>
                 <div class="avatar-stage-loading hidden" id="avatarStageLoading"><span class="avatar-spinner"></span><strong id="avatarLoadingTitle">Preparing live session…</strong><small id="avatarLoadingText">Connecting microphone and avatar.</small></div>
                 <div class="avatar-speaking-state hidden" id="avatarSpeakingState"><span></span><b>Listening</b></div>
-                <div class="avatar-watermark">AI-generated · CallFocus</div>
               </div>
 
               <div class="avatar-session-meta">
@@ -294,18 +298,18 @@
                 <button class="btn btn-ghost hidden" id="avatarMuteBtn" type="button">Mute microphone</button>
                 <button class="btn avatar-end-btn hidden" id="avatarEndBtn" type="button">End Session</button>
               </div>
-              <p class="avatar-minute-note">A real session uses your included Tavus CVI minutes. CallFocus caps each stock test session at 5 minutes so one test cannot accidentally consume the whole allowance.</p>
+              <p class="avatar-minute-note">Live sessions use realtime video minutes. Each session is currently capped at 5 minutes to keep usage controlled.</p>
             </section>
           </div>
 
           <section class="avatar-transcript-card">
             <div class="avatar-transcript-head"><div><span class="section-eyebrow">Live transcript</span><h2>Conversation</h2></div><span id="avatarTranscriptState">Waiting for session</span></div>
             <div class="avatar-transcript" id="avatarTranscript" aria-live="polite">
-              <div class="avatar-transcript-empty" id="avatarTranscriptEmpty"><strong>Your conversation will appear here live.</strong><span>What you say and the AI avatar’s responses will be separated clearly.</span></div>
+              <div class="avatar-transcript-empty" id="avatarTranscriptEmpty"><strong>Your conversation will appear here live.</strong><span>What you say and the avatar’s responses will be separated clearly.</span></div>
             </div>
           </section>
 
-          <div class="avatar-privacy-note"><strong>Stock test mode</strong><span>No selfie is uploaded or stored in this mode. Live microphone audio and avatar video are processed through Tavus for the realtime session.</span></div>
+          <div class="avatar-privacy-note"><strong>Session privacy</strong><span>Your conversation details, live microphone audio, and avatar video are processed securely for the realtime session. No selfie is uploaded in this mode.</span></div>
         </div>
       </section>
 
@@ -708,6 +712,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=12.9"></script>
+  <script src="/callfocus.js?v=13.0"></script>
 </body>
 </html>

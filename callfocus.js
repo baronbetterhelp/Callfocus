@@ -4719,7 +4719,7 @@ ${approvedPatterns}
   renderNewCallPicker();renderVoiceNotePicker();
 })();
 
-/* ===== CallFocus V12.8 — Stock Live AI Avatar Test ===== */
+/* ===== CallFocus V13.0 — Live Avatar conversation setup ===== */
 (()=>{
   const $a=id=>document.getElementById(id);
   if(!$a('page-avatar')) return;
@@ -4743,6 +4743,9 @@ ${approvedPatterns}
   const notify=msg=>{try{window.toast?.(msg)}catch{}};
   const rememberFace=id=>{try{if(id)localStorage.setItem(FACE_KEY,id);else localStorage.removeItem(FACE_KEY)}catch{}};
   const rememberedFace=()=>{try{return localStorage.getItem(FACE_KEY)||''}catch{return ''}};
+  function callDetails(){return String($a('avatarCallDetails')?.value||'').trim().slice(0,4000)}
+  function updateCallDetailsCount(){const el=$a('avatarCallDetailsCount');if(el)el.textContent=`${String($a('avatarCallDetails')?.value||'').length} / 4000`}
+  function lockCallDetails(locked){const field=$a('avatarCallDetails');if(field)field.disabled=!!locked}
 
   async function avatarFetch(path,options={}){
     const headers=new Headers(options.headers||{});
@@ -4769,19 +4772,19 @@ ${approvedPatterns}
     const button=document.createElement('button');button.type='button';button.className='avatar-stock-card';button.dataset.faceId=face.faceId;button.setAttribute('aria-pressed',String(face.faceId===selectedFaceId));
     const media=document.createElement('span');media.className='avatar-stock-media';
     if(face.thumbnailVideoUrl){const v=document.createElement('video');v.src=face.thumbnailVideoUrl;v.muted=true;v.loop=true;v.autoplay=true;v.playsInline=true;v.preload='metadata';v.setAttribute('aria-hidden','true');media.appendChild(v)}
-    else{const fallback=document.createElement('span');fallback.className='avatar-stock-fallback';fallback.textContent=(face.faceName||'AI').split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase();media.appendChild(fallback)}
-    const copy=document.createElement('span');copy.className='avatar-stock-copy';const strong=document.createElement('strong');strong.textContent=face.faceName||'Stock AI';const small=document.createElement('small');small.textContent=face.modelName?face.modelName.replace('phoenix-','Phoenix '):'Ready to use';copy.append(strong,small);
+    else{const fallback=document.createElement('span');fallback.className='avatar-stock-fallback';fallback.textContent=(face.faceName||'CF').split(/\s+/).map(x=>x[0]).join('').slice(0,2).toUpperCase();media.appendChild(fallback)}
+    const copy=document.createElement('span');copy.className='avatar-stock-copy';const strong=document.createElement('strong');strong.textContent=face.faceName||'Stock avatar';const small=document.createElement('small');small.textContent=face.modelName?face.modelName.replace('phoenix-','Phoenix '):'Ready to use';copy.append(strong,small);
     const check=document.createElement('span');check.className='avatar-stock-check';check.textContent='✓';button.append(media,copy,check);
     button.addEventListener('click',()=>selectFace(face.faceId));return button;
   }
 
   function renderFaces(){
     const grid=$a('avatarStockGrid');if(!grid)return;grid.innerHTML='';
-    if(!providerConfigured){setBuildState('Setup required','error');grid.innerHTML='<div class="avatar-stock-empty"><strong>Tavus is not connected.</strong><span>Add TAVUS_API_KEY to the CallFocus Worker secrets.</span></div>';updateStartButton();return}
-    if(!faces.length){setBuildState('No faces','error');grid.innerHTML='<div class="avatar-stock-empty"><strong>No stock avatars were returned.</strong><span>Refresh once, then check your Tavus account if this continues.</span></div>';updateStartButton();return}
-    setBuildState('Free stock test','ready');
+    if(!providerConfigured){setBuildState('Setup required','error');grid.innerHTML='<div class="avatar-stock-empty"><strong>Live Avatar is temporarily unavailable.</strong><span>Please try again in a moment.</span></div>';updateStartButton();return}
+    if(!faces.length){setBuildState('No faces','error');grid.innerHTML='<div class="avatar-stock-empty"><strong>No avatars are available right now.</strong><span>Refresh once and try again in a moment.</span></div>';updateStartButton();return}
+    setBuildState('Available','ready');
     faces.forEach(face=>grid.appendChild(faceCard(face)));
-    if($a('avatarStockCount'))$a('avatarStockCount').textContent=`${faces.length} stock avatar${faces.length===1?'':'s'} available`;
+    if($a('avatarStockCount'))$a('avatarStockCount').textContent=`${faces.length} avatar${faces.length===1?'':'s'} available`;
     const face=selectedFace();
     $a('avatarSelectedSummary')?.classList.toggle('hidden',!face);
     if(face&&$a('avatarSelectedName'))$a('avatarSelectedName').textContent=face.faceName||'Stock avatar';
@@ -4791,23 +4794,23 @@ ${approvedPatterns}
   function selectFace(faceId){
     selectedFaceId=String(faceId||'');rememberFace(selectedFaceId);renderFaces();
     const face=selectedFace();
-    if(face){setStage({title:`${face.faceName||'AI avatar'} is ready`,subtitle:'Start a session to test realtime conversation.'});setSessionStatus('Ready to start')}
+    if(face){setStage({title:`${face.faceName||'Avatar'} is ready`,subtitle:'Add your call details, then start the conversation.'});setSessionStatus('Ready to start')}
   }
 
   async function loadStockFaces({quiet=false,force=false}={}){
     if(!token()){
       providerConfigured=true;faces=[];setBuildState('Sign in required');
-      const grid=$a('avatarStockGrid');if(grid)grid.innerHTML='<div class="avatar-stock-empty"><strong>Sign in to load the stock avatar library.</strong><span>Your Tavus API key stays on the CallFocus server.</span></div>';
+      const grid=$a('avatarStockGrid');if(grid)grid.innerHTML='<div class="avatar-stock-empty"><strong>Sign in to load the avatar library.</strong><span>Your available avatars will appear here.</span></div>';
       updateStartButton();return;
     }
     const refresh=$a('avatarStockRefreshBtn');if(refresh){refresh.disabled=true;refresh.textContent='Loading…'}
     try{
       const payload=await avatarFetch(`/api/avatar/stock-faces${force?'?refresh=1':''}`);
       providerConfigured=payload?.providerConfigured!==false;faces=Array.isArray(payload?.faces)?payload.faces:[];
-      setProviderNotice(!providerConfigured,'Tavus is not connected yet. Add TAVUS_API_KEY to the CallFocus Worker secrets.');
+      setProviderNotice(!providerConfigured,'Live Avatar is temporarily unavailable. Please try again later.');
       const keep=rememberedFace();selectedFaceId=(keep&&faces.some(f=>f.faceId===keep)?keep:(faces[0]?.faceId||''));
       renderFaces();
-      const face=selectedFace();if(face){setStage({title:`${face.faceName||'AI avatar'} is ready`,subtitle:'Start a session to test realtime conversation.'});setSessionStatus('Ready to start')}
+      const face=selectedFace();if(face){setStage({title:`${face.faceName||'Avatar'} is ready`,subtitle:'Add your call details, then start the conversation.'});setSessionStatus('Ready to start')}
     }catch(error){
       if(error?.payload?.code==='avatar_provider_unconfigured')providerConfigured=false;
       setProviderNotice(true,error.message);faces=[];renderFaces();if(!quiet)notify(error.message);
@@ -4825,13 +4828,13 @@ ${approvedPatterns}
 
   function renderTranscriptTurn(id,role,text,final){
     if(!text)return;const normalizedRole=String(role||'').toLowerCase()==='user'?'user':'avatar';let turn=transcriptTurns.get(id);if(!turn){turn={id,role:normalizedRole,text:'',final:false,order:++transcriptOrder};transcriptTurns.set(id,turn)}turn.role=normalizedRole;turn.text=text;turn.final=!!final;
-    $a('avatarTranscriptEmpty')?.remove();const list=$a('avatarTranscript');if(!list)return;let row=list.querySelector(`[data-transcript-id="${CSS.escape(String(id))}"]`);if(!row){row=document.createElement('div');row.className='avatar-transcript-row';row.dataset.transcriptId=String(id);const bubble=document.createElement('div');bubble.className='avatar-transcript-bubble';bubble.innerHTML='<small></small><p></p>';row.appendChild(bubble);list.appendChild(row)}row.dataset.role=normalizedRole;const bubble=row.querySelector('.avatar-transcript-bubble');bubble.dataset.final=String(!!final);bubble.querySelector('small').textContent=normalizedRole==='user'?'You':'AI Avatar';bubble.querySelector('p').textContent=text;list.scrollTop=list.scrollHeight;if($a('avatarTranscriptState'))$a('avatarTranscriptState').textContent=final?'Live':'Transcribing…';
+    $a('avatarTranscriptEmpty')?.remove();const list=$a('avatarTranscript');if(!list)return;let row=list.querySelector(`[data-transcript-id="${CSS.escape(String(id))}"]`);if(!row){row=document.createElement('div');row.className='avatar-transcript-row';row.dataset.transcriptId=String(id);const bubble=document.createElement('div');bubble.className='avatar-transcript-bubble';bubble.innerHTML='<small></small><p></p>';row.appendChild(bubble);list.appendChild(row)}row.dataset.role=normalizedRole;const bubble=row.querySelector('.avatar-transcript-bubble');bubble.dataset.final=String(!!final);bubble.querySelector('small').textContent=normalizedRole==='user'?'You':'Avatar';bubble.querySelector('p').textContent=text;list.scrollTop=list.scrollHeight;if($a('avatarTranscriptState'))$a('avatarTranscriptState').textContent=final?'Live':'Transcribing…';
   }
 
   function handleAppMessage(event){
     const data=parseMessageData(event?.data);if(!data)return;const type=String(data.event_type||data.type||'');const props=data.properties||data.payload||{};
     if(type==='conversation.utterance.streaming'||type==='conversation.utterance'){const id=String(props.inference_id||props.utterance_id||`${props.role||'avatar'}_${props.content_index||0}_${Date.now()}`);renderTranscriptTurn(id,props.role,props.text||props.speech||props.content||'',props.final!==false)}
-    else if(type==='conversation.replica.started_speaking'||type==='conversation.pal.started_speaking'||type==='conversation.started_speaking'){const s=$a('avatarSpeakingState');if(s){s.classList.remove('hidden');s.querySelector('b').textContent='AI speaking'}setSessionStatus('Avatar is speaking')}
+    else if(type==='conversation.replica.started_speaking'||type==='conversation.pal.started_speaking'||type==='conversation.started_speaking'){const s=$a('avatarSpeakingState');if(s){s.classList.remove('hidden');s.querySelector('b').textContent='Speaking'}setSessionStatus('Avatar is speaking')}
     else if(type==='conversation.replica.stopped_speaking'||type==='conversation.pal.stopped_speaking'||type==='conversation.stopped_speaking'){const s=$a('avatarSpeakingState');if(s){s.classList.remove('hidden');s.querySelector('b').textContent='Listening'}setSessionStatus('Listening for you')}
     else if(type==='conversation.user.started_speaking'){const s=$a('avatarSpeakingState');if(s){s.classList.remove('hidden');s.querySelector('b').textContent='Listening'}setSessionStatus('Listening to you')}
   }
@@ -4846,21 +4849,23 @@ ${approvedPatterns}
   async function requestMicrophone(){if(!navigator.mediaDevices?.getUserMedia)throw new Error('Microphone access is not supported in this browser.');setMic('','Requesting permission…');const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:false});stream.getTracks().forEach(t=>t.stop());setMic('ready','Permission granted')}
 
   async function startSession(){
-    if(sessionStarting||sessionActive)return;if(!token())return notify('Sign in to start a Live AI Avatar session.');if(!selectedFaceId)return notify('Choose a stock avatar first.');
-    sessionStarting=true;const start=$a('avatarStartBtn');if(start){start.disabled=true;start.textContent='Starting…'}setStage({loading:true});if($a('avatarLoadingTitle'))$a('avatarLoadingTitle').textContent='Preparing live session…';if($a('avatarLoadingText'))$a('avatarLoadingText').textContent='Checking microphone and connecting the selected stock avatar.';setSessionStatus('Preparing session');
+    if(sessionStarting||sessionActive)return;if(!token())return notify('Sign in to start a Live Avatar session.');if(!selectedFaceId)return notify('Choose an avatar first.');
+    sessionStarting=true;const start=$a('avatarStartBtn');if(start){start.disabled=true;start.textContent='Starting…'}setStage({loading:true});if($a('avatarLoadingTitle'))$a('avatarLoadingTitle').textContent='Preparing live session…';if($a('avatarLoadingText'))$a('avatarLoadingText').textContent='Checking microphone and connecting the selected avatar.';setSessionStatus('Preparing session');
     try{
-      await requestMicrophone();const Daily=await ensureDaily();const session=await avatarFetch('/api/avatar/session',{method:'POST',body:JSON.stringify({faceId:selectedFaceId})});conversationId=session.conversationId;
+      lockCallDetails(true);await requestMicrophone();const Daily=await ensureDaily();const session=await avatarFetch('/api/avatar/session',{method:'POST',body:JSON.stringify({faceId:selectedFaceId,callDetails:callDetails()})});conversationId=session.conversationId;
       if($a('avatarLoadingText'))$a('avatarLoadingText').textContent='Joining secure realtime video room…';callObject=Daily.createCallObject({videoSource:false});bindDailyEvents();await callObject.join({url:session.conversationUrl,token:session.meetingToken||undefined,startVideoOff:true,startAudioOff:false});try{callObject.setLocalVideo(false)}catch{}
-    }catch(error){sessionStarting=false;setStage({loading:false});setSessionStatus('Could not start');setMic('','Not connected');notify(error.message);if(start){start.classList.remove('hidden');start.disabled=false;start.textContent='Start Session'}if(conversationId){avatarFetch('/api/avatar/end',{method:'POST',body:JSON.stringify({conversationId})}).catch(()=>{});conversationId=''}if(callObject){try{await callObject.destroy()}catch{}callObject=null}}
+    }catch(error){sessionStarting=false;lockCallDetails(false);setStage({loading:false});setSessionStatus('Could not start');setMic('','Not connected');notify(error.message);if(start){start.classList.remove('hidden');start.disabled=false;start.textContent='Start Session'}if(conversationId){avatarFetch('/api/avatar/end',{method:'POST',body:JSON.stringify({conversationId})}).catch(()=>{});conversationId=''}if(callObject){try{await callObject.destroy()}catch{}callObject=null}}
   }
 
   function cleanupSessionUi(){
-    sessionActive=false;sessionStarting=false;micMuted=false;const video=$a('avatarLiveVideo');if(video){try{video.srcObject=null}catch{}video.classList.add('hidden')}const audio=$a('avatarLiveAudio');if(audio)try{audio.srcObject=null}catch{};$a('avatarStagePlaceholder')?.classList.remove('hidden');$a('avatarStageLoading')?.classList.add('hidden');$a('avatarSpeakingState')?.classList.add('hidden');$a('avatarStartBtn')?.classList.remove('hidden');$a('avatarMuteBtn')?.classList.add('hidden');$a('avatarEndBtn')?.classList.add('hidden');setMic('','Not connected');setSessionStatus(selectedFaceId?'Ready to start':'Choose an avatar first');const start=$a('avatarStartBtn');if(start){start.disabled=!selectedFaceId||!providerConfigured;start.textContent='Start Session'}
+    sessionActive=false;sessionStarting=false;micMuted=false;lockCallDetails(false);const video=$a('avatarLiveVideo');if(video){try{video.srcObject=null}catch{}video.classList.add('hidden')}const audio=$a('avatarLiveAudio');if(audio)try{audio.srcObject=null}catch{};$a('avatarStagePlaceholder')?.classList.remove('hidden');$a('avatarStageLoading')?.classList.add('hidden');$a('avatarSpeakingState')?.classList.add('hidden');$a('avatarStartBtn')?.classList.remove('hidden');$a('avatarMuteBtn')?.classList.add('hidden');$a('avatarEndBtn')?.classList.add('hidden');setMic('','Not connected');setSessionStatus(selectedFaceId?'Ready to start':'Choose an avatar first');const start=$a('avatarStartBtn');if(start){start.disabled=!selectedFaceId||!providerConfigured;start.textContent='Start Session'}
   }
   async function endSession({quiet=false}={}){const id=conversationId;conversationId='';if(callObject){try{await callObject.leave()}catch{}try{await callObject.destroy()}catch{}callObject=null}cleanupSessionUi();if(id){try{await avatarFetch('/api/avatar/end',{method:'POST',body:JSON.stringify({conversationId:id})})}catch(error){if(!quiet)notify(error.message)}}if(!quiet)notify('Avatar session ended.')}
   function toggleMute(){if(!callObject||!sessionActive)return;try{callObject.setLocalAudio(micMuted);micMuted=!micMuted;setTimeout(updateMicFromCall,60)}catch{}}
 
   function bindAvatar(){
+    const details=$a('avatarCallDetails');
+    if(details){updateCallDetailsCount();details.addEventListener('input',updateCallDetailsCount)}
     $a('avatarStockRefreshBtn')?.addEventListener('click',()=>loadStockFaces({force:true}));$a('avatarStartBtn')?.addEventListener('click',startSession);$a('avatarMuteBtn')?.addEventListener('click',toggleMute);$a('avatarEndBtn')?.addEventListener('click',()=>endSession());
   }
 

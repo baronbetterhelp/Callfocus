@@ -55,3 +55,7 @@ See `README-V12.8.md`. Live AI Avatar now defaults to Tavus stock faces for free
 
 ## V12.9
 Manual bank-transfer fallback with receipt upload, admin approval, Resend notification, and automatic server-wallet crediting. Configure it in Admin → Payments.
+
+
+## V13.0
+See `README-V13.0.md` for compact homepage quick tools and Live Avatar conversation setup.
