@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=12.3" />
+  <link rel="stylesheet" href="/admin.css?v=12.4" />
 </head>
 <body class="admin-page">
   <header class="site-header">
@@ -72,6 +72,11 @@
             <label class="server-switch"><input id="adminServerOnline" type="checkbox" checked /><span></span></label>
           </div>
           <label class="admin-maintenance-message">Offline message<input id="adminServerMessage" maxlength="240" placeholder="Server not active right now. Please try again soon." /></label>
+        </div>
+
+        <div class="premium-panel admin-global-settings-panel">
+          <div class="info-note">Voice, behavior, theme and server changes are global. New calls use them immediately after saving.</div>
+          <div class="admin-backup-row"><span class="admin-backup-status" id="adminBackupStatus">A protected browser backup will also be kept automatically.</span><button class="btn btn-ghost admin-backup-btn hidden" type="button" id="restoreAdminBackupBtn">Restore protected backup</button></div>
         </div>
       </section>
 
@@ -155,11 +160,7 @@
         </div>
       </section>
 
-      <div class="admin-save-dock premium-panel">
-        <div>
-          <div class="info-note">Voice, behavior, theme and server changes are global. New calls use them immediately after saving.</div>
-          <div class="admin-backup-row"><span class="admin-backup-status" id="adminBackupStatus">A protected browser backup will also be kept automatically.</span><button class="btn btn-ghost admin-backup-btn hidden" type="button" id="restoreAdminBackupBtn">Restore protected backup</button></div>
-        </div>
+      <div class="admin-save-dock" aria-label="Global settings save action">
         <button class="btn btn-primary large" id="saveAdminBtn">Save global settings</button>
       </div>
     </section>

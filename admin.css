@@ -662,3 +662,29 @@ html[data-theme="pearl"] .premium-footer .footer-links a:hover{
   .admin-theme-choice{grid-template-columns:1fr 1fr}
 }
 @media(max-width:390px){.admin-overview-grid,.ai-token-panel{grid-template-columns:1fr}.admin-head-actions{grid-template-columns:1fr}.admin-theme-choice{grid-template-columns:1fr}}
+
+/* CallFocus V12.4 — compact global save dock */
+.admin-global-settings-panel{display:grid;gap:12px}
+.admin-global-settings-panel .info-note{margin:0}
+.admin-save-dock{
+  position:sticky;
+  bottom:12px;
+  z-index:50;
+  display:flex;
+  justify-content:flex-end;
+  padding:0;
+  background:transparent;
+  border:0;
+  box-shadow:none;
+  pointer-events:none;
+}
+.admin-save-dock .btn-primary{
+  pointer-events:auto;
+  width:min(360px,100%);
+  min-height:58px;
+  box-shadow:0 18px 42px rgba(29,95,85,.18);
+}
+@media(max-width:620px){
+  .admin-save-dock{bottom:8px}
+  .admin-save-dock .btn-primary{width:100%;min-height:56px}
+}
