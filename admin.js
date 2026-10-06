@@ -28,18 +28,23 @@ let adminUsersCursor='';
 let adminUsersLoading=false;
 let adminAiUsage=null;
 let adminAiUsageLoading=false;
+let customVoices=[];
+let customVoiceAccess=null;
 function toast(msg){$('toast').textContent=msg;$('toast').classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>$('toast').classList.add('hidden'),2400)}
 function authHeaders(extra={}){return {'X-CallFocus-Admin-Key':adminKey,...extra}}
 function coreVoiceOptions(){return CORE_VOICES.map(v=>`<option value="${v}">${v}${v==='marin'||v==='cedar'?' · recommended':''}</option>`).join('')}
 function liveVoiceOptions(rows){return rows.map(([id,label])=>`<option value="${id}">${label} · Live only</option>`).join('')}
+function customVoiceOptions(){return customVoices.map(v=>`<option value="${esc(v.id)}">${esc(v.name)} · Custom clone</option>`).join('')}
 function populateVoices(){
-  $('adminMaleVoice').innerHTML=`<optgroup label="Core GPT-Live voices">${coreVoiceOptions()}</optgroup><optgroup label="Additional masculine GPT-Live voices">${liveVoiceOptions(EXTRA_MALE_VOICES)}</optgroup>`;
-  $('adminFemaleVoice').innerHTML=`<optgroup label="Core GPT-Live voices">${coreVoiceOptions()}</optgroup><optgroup label="Additional feminine GPT-Live voices">${liveVoiceOptions(EXTRA_FEMALE_VOICES)}</optgroup>`;
+  const custom=customVoiceOptions();
+  const customGroup=custom?`<optgroup label="CallFocus custom voices">${custom}</optgroup>`:'';
+  $('adminMaleVoice').innerHTML=`${customGroup}<optgroup label="Core GPT-Live voices">${coreVoiceOptions()}</optgroup><optgroup label="Additional masculine GPT-Live voices">${liveVoiceOptions(EXTRA_MALE_VOICES)}</optgroup>`;
+  $('adminFemaleVoice').innerHTML=`${customGroup}<optgroup label="Core GPT-Live voices">${coreVoiceOptions()}</optgroup><optgroup label="Additional feminine GPT-Live voices">${liveVoiceOptions(EXTRA_FEMALE_VOICES)}</optgroup>`;
 }
 function renderServerState(){const online=$('adminServerOnline').checked;$('serverStateBadge').classList.toggle('offline',!online);$('serverStateBadge').querySelector('b').textContent=online?'Online':'Offline';if($('adminDashServer'))$('adminDashServer').textContent=online?'Online':'Offline'}
 function readBackup(){try{return JSON.parse(localStorage.getItem(ADMIN_BACKUP_KEY)||'null')}catch{return null}}
 function saveBackup(config){try{localStorage.setItem(ADMIN_BACKUP_KEY,JSON.stringify({savedAt:new Date().toISOString(),config}));renderBackupStatus()}catch{}}
-function formPayload(){return {unlimitedCreditEmails:[...unlimitedCreditEmails],siteTheme:$('adminSiteTheme').value||'black',serverOnline:$('adminServerOnline').checked,serverMessage:$('adminServerMessage').value.trim(),maleVoice:$('adminMaleVoice').value,femaleVoice:$('adminFemaleVoice').value,model:'gpt-live-1',speakingPace:$('adminSpeakingPace').value,speechStyle:$('adminSpeechStyle').value.trim(),instructions:$('adminInstructions').value.trim(),opening:$('adminOpening').value.trim(),speakFirst:$('adminSpeakFirst').checked,interruptions:$('adminInterruptions').checked}}
+function formPayload(){return {customVoices:[...customVoices],unlimitedCreditEmails:[...unlimitedCreditEmails],siteTheme:$('adminSiteTheme').value||'black',serverOnline:$('adminServerOnline').checked,serverMessage:$('adminServerMessage').value.trim(),maleVoice:$('adminMaleVoice').value,femaleVoice:$('adminFemaleVoice').value,model:'gpt-live-1',speakingPace:$('adminSpeakingPace').value,speechStyle:$('adminSpeechStyle').value.trim(),instructions:$('adminInstructions').value.trim(),opening:$('adminOpening').value.trim(),speakFirst:$('adminSpeakFirst').checked,interruptions:$('adminInterruptions').checked}}
 function renderBackupStatus(storageConnected=true){const el=$('adminBackupStatus'),btn=$('restoreAdminBackupBtn');if(!el||!btn)return;const b=readBackup();btn.classList.toggle('hidden',!b?.config);if(!b?.config){el.textContent='A protected browser backup will also be kept automatically.';el.className='admin-backup-status';return}const when=b.savedAt?new Date(b.savedAt).toLocaleString():'recently';if(!storageConnected){el.textContent=`KV is disconnected, but your last admin settings are protected on this device (${when}). Reconnect KV, then restore and save.`;el.className='admin-backup-status warn'}else{el.textContent=`Protected browser backup available from ${when}.`;el.className='admin-backup-status good'}}
 function normalizeUnlimitedEmail(value=''){return String(value||'').trim().toLowerCase()}
 function validUnlimitedEmail(value=''){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeUnlimitedEmail(value))}
@@ -69,13 +74,61 @@ async function addUnlimitedUser(){
   if(unlimitedCreditEmails.includes(email))return toast('That email already has unlimited access');
   const ok=await setUnlimitedUser('add',email,btn); if(ok&&input)input.value='';
 }
-function fill(config,storageConnected){currentConfig=config;unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);if($('adminDashStorage'))$('adminDashStorage').textContent=storageConnected?'Global storage connected':'Storage needs attention';renderServerState();renderBackupStatus(storageConnected)}
+function fill(config,storageConnected){currentConfig=config;customVoices=Array.isArray(config.customVoices)?config.customVoices:[];populateVoices();renderCustomVoiceLibrary();unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);if($('adminDashStorage'))$('adminDashStorage').textContent=storageConnected?'Global storage connected':'Storage needs attention';renderServerState();renderBackupStatus(storageConnected)}
 async function api(path,options={}){const res=await fetch(path,{...options,headers:authHeaders(options.headers||{})});const type=res.headers.get('content-type')||'';const data=type.includes('application/json')?await res.json():await res.text();if(!res.ok)throw new Error(data?.error||data||'Request failed');return data}
 async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{await api('/api/admin/login',{method:'POST'});const result=await api('/api/admin/config');sessionStorage.setItem('callfocus_admin_key',key);$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminUsers(true);loadAdminAiUsage();}catch(err){adminKey='';$('adminGateNote').textContent=err.message;toast(err.message)}}
 async function saveConfig(){const payload=formPayload();saveBackup(payload);try{const result=await api('/api/admin/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});fill(result.config,true);saveBackup(result.config);toast('Global CallFocus settings saved')}catch(err){renderBackupStatus(false);toast(`${err.message} — your settings are protected on this device`)}}
 function restoreBackup(){const b=readBackup();if(!b?.config)return toast('No protected backup found');fill(b.config,!!currentConfig);toast('Protected settings loaded. Press Save global settings to write them to KV.')}
 function scheduleDraftBackup(){clearTimeout(draftTimer);draftTimer=setTimeout(()=>{try{saveBackup(formPayload())}catch{}},350)}
-async function previewVoice(kind,button){const voice=kind==='female'?$('adminFemaleVoice').value:$('adminMaleVoice').value;if(LIVE_ONLY_VOICES.has(voice))return toast('This is a GPT-Live-only voice. Save it and place a short test call to audition it.');const old=button.textContent;button.disabled=true;button.textContent='Preparing preview…';try{const res=await fetch('/api/admin/voice-preview',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({voice,text:'Hi, this is a CallFocus voice preview. I am checking how natural this voice sounds in a relaxed phone conversation.'})});if(!res.ok){let message='Voice preview unavailable';try{message=(await res.json()).error||message}catch{}throw new Error(message)}const blob=await res.blob();if(previewUrl)URL.revokeObjectURL(previewUrl);previewUrl=URL.createObjectURL(blob);$('voicePreviewAudio').src=previewUrl;$('voicePreviewAudio').classList.remove('hidden');await $('voicePreviewAudio').play();}catch(err){toast(err.message)}finally{button.disabled=false;button.textContent=old}}
+async function previewVoice(kind,button){const voice=kind==='female'?$('adminFemaleVoice').value:$('adminMaleVoice').value;if(LIVE_ONLY_VOICES.has(voice)&&!String(voice).startsWith('voice_'))return toast('This is a GPT-Live-only voice. Save it and place a short test call to audition it.');const old=button.textContent;button.disabled=true;button.textContent='Preparing preview…';try{const res=await fetch('/api/admin/voice-preview',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({voice,text:'Hi, this is a CallFocus voice preview. I am checking how natural this voice sounds in a relaxed phone conversation.'})});if(!res.ok){let message='Voice preview unavailable';try{message=(await res.json()).error||message}catch{}throw new Error(message)}const blob=await res.blob();if(previewUrl)URL.revokeObjectURL(previewUrl);previewUrl=URL.createObjectURL(blob);$('voicePreviewAudio').src=previewUrl;$('voicePreviewAudio').classList.remove('hidden');await $('voicePreviewAudio').play();}catch(err){toast(err.message)}finally{button.disabled=false;button.textContent=old}}
+
+function renderCustomVoiceLibrary(){
+  const root=$('customVoiceLibrary'); if(!root)return;
+  if(!customVoices.length){root.innerHTML='<div class="admin-users-empty">No custom voices created yet.</div>';return;}
+  const male=$('adminMaleVoice')?.value||currentConfig?.maleVoice||'';
+  const female=$('adminFemaleVoice')?.value||currentConfig?.femaleVoice||'';
+  root.innerHTML=customVoices.map(v=>{
+    const assigned=[male===v.id?'Male':'',female===v.id?'Female':''].filter(Boolean).join(' + ');
+    return `<article class="custom-voice-item"><div><strong>${esc(v.name)}</strong><span>${assigned?`Assigned to ${assigned}`:'Available in voice selectors'}${v.createdAt?` · ${esc(new Date(v.createdAt).toLocaleDateString())}`:''}</span></div><button type="button" class="btn btn-ghost custom-voice-preview" data-custom-preview="${esc(v.id)}">Preview</button></article>`;
+  }).join('');
+}
+async function checkCustomVoiceAccess(){
+  const btn=$('checkCustomVoiceAccessBtn'),status=$('customVoiceAccessStatus'); if(!btn||!status)return;
+  const old=btn.textContent;btn.disabled=true;btn.textContent='Checking…';status.textContent='Checking your OpenAI project…';status.className='custom-voice-access';
+  try{
+    const result=await api('/api/admin/custom-voices/access');customVoiceAccess=result;
+    status.textContent=result.enabled?'Custom voice access is enabled. You can create a consent-based clone below.':`${result.message||'Custom voice access is not enabled yet.'}${result.status?` (HTTP ${result.status})`:''}`;
+    status.className=`custom-voice-access ${result.enabled?'good':'warn'}`;
+  }catch(err){status.textContent=err.message;status.className='custom-voice-access warn';}
+  finally{btn.disabled=false;btn.textContent=old;}
+}
+async function createCustomVoice(event){
+  event.preventDefault();
+  const btn=$('createCustomVoiceBtn');
+  const name=$('customVoiceName')?.value.trim()||'';
+  const consent=$('customVoiceConsentFile')?.files?.[0];
+  const sample=$('customVoiceSampleFile')?.files?.[0];
+  if(!name)return toast('Give the custom voice a name');
+  if(!$('customVoiceOwnership')?.checked)return toast('Confirm the speaker owns and consented to this voice');
+  if(!consent||!sample)return toast('Upload both the consent recording and voice sample');
+  if(consent.size>10*1024*1024||sample.size>10*1024*1024)return toast('Each audio file must be 10 MB or smaller');
+  const old=btn.textContent;btn.disabled=true;btn.textContent='Creating voice…';
+  try{
+    const form=new FormData();form.set('name',name);form.set('assignSlot',$('customVoiceAssignSlot')?.value||'none');form.set('ownershipConfirmed','true');form.set('consentRecording',consent,consent.name);form.set('sampleRecording',sample,sample.name);
+    const res=await fetch('/api/admin/custom-voices/create',{method:'POST',headers:authHeaders(),body:form});
+    const data=await res.json().catch(()=>({}));if(!res.ok)throw new Error(data?.error||'Could not create custom voice');
+    fill(data.config,true);saveBackup(data.config);$('customVoiceForm')?.reset();toast(`Custom voice “${data.voice?.name||name}” created`);
+    const status=$('customVoiceAccessStatus');if(status){status.textContent='Custom voice created successfully and added to CallFocus.';status.className='custom-voice-access good';}
+  }catch(err){toast(err.message);const status=$('customVoiceAccessStatus');if(status){status.textContent=err.message;status.className='custom-voice-access warn';}}
+  finally{btn.disabled=false;btn.textContent=old;}
+}
+$('checkCustomVoiceAccessBtn')?.addEventListener('click',checkCustomVoiceAccess);
+$('customVoiceForm')?.addEventListener('submit',createCustomVoice);
+$('customVoiceLibrary')?.addEventListener('click',e=>{const b=e.target.closest('[data-custom-preview]');if(b)previewVoiceById(b.dataset.customPreview,b);});
+async function previewVoiceById(voice,button){const old=button.textContent;button.disabled=true;button.textContent='Preparing…';try{const res=await fetch('/api/admin/voice-preview',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({voice,text:'Hi, this is a CallFocus custom voice preview. I am checking how natural this voice sounds in a relaxed phone conversation.'})});if(!res.ok){const d=await res.json().catch(()=>({}));throw new Error(d.error||'Voice preview unavailable')}const blob=await res.blob();if(previewUrl)URL.revokeObjectURL(previewUrl);previewUrl=URL.createObjectURL(blob);$('voicePreviewAudio').src=previewUrl;$('voicePreviewAudio').classList.remove('hidden');await $('voicePreviewAudio').play();}catch(err){toast(err.message)}finally{button.disabled=false;button.textContent=old}}
+$('adminMaleVoice')?.addEventListener('change',renderCustomVoiceLibrary);
+$('adminFemaleVoice')?.addEventListener('change',renderCustomVoiceLibrary);
+
 populateVoices();
 document.querySelectorAll('[data-site-theme]').forEach(btn=>btn.addEventListener('click',()=>{const value=btn.dataset.siteTheme==='pearl'?'pearl':'black';$('adminSiteTheme').value=value;document.querySelectorAll('[data-site-theme]').forEach(x=>{const on=x===btn;x.classList.toggle('active',on);x.setAttribute('aria-pressed',String(on));});scheduleDraftBackup()}));
 $('adminGateBtn').onclick=login;$('adminPasscode').addEventListener('keydown',e=>{if(e.key==='Enter')login()});$('adminServerOnline').onchange=()=>{renderServerState();scheduleDraftBackup()};$('saveAdminBtn').onclick=saveConfig;$('restoreAdminBackupBtn')?.addEventListener('click',restoreBackup);$('adminLockBtn').onclick=()=>{sessionStorage.removeItem('callfocus_admin_key');location.reload()};document.querySelectorAll('[data-preview]').forEach(btn=>btn.onclick=()=>previewVoice(btn.dataset.preview,btn));
