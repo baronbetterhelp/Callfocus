@@ -21,6 +21,8 @@
     "binding": "ASSETS",
     "run_worker_first": [
       "/api/*",
+      "/manual-payment-review",
+      "/manual-payment-review/",
       "/admin",
       "/admin/",
       "/avatar",
