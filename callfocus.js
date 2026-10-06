@@ -60,6 +60,7 @@ let activeView = 'home';
 let selectedThreadId = null;
 let pendingAction = null;
 let selectedNewCallVoice = 'male';
+let selectedAiVoiceId = '';
 let live = {
   pc:null, dc:null, stream:null, audio:null, timer:null, seconds:0, connected:false,
   muted:false, speakerOn:true, held:false, graceful:false, current:null, transcript:'', gracefulTimer:null, minimized:false, moreOpen:false
@@ -123,9 +124,10 @@ function updateDynamicsUI(scope){
 }
 function applyAdminLabels(){
   const admin = loadAdmin();
-  $('maleVoiceLabel').textContent = admin.maleVoice;
-  $('femaleVoiceLabel').textContent = admin.femaleVoice;
-  if($('homeVoicePair')) $('homeVoicePair').textContent = `${admin.maleVoice} / ${admin.femaleVoice}`;
+  const maleLabel=admin.maleVoiceLabel||admin.maleVoice; const femaleLabel=admin.femaleVoiceLabel||admin.femaleVoice;
+  $('maleVoiceLabel').textContent = maleLabel;
+  $('femaleVoiceLabel').textContent = femaleLabel;
+  if($('homeVoicePair')) $('homeVoicePair').textContent = `${maleLabel} / ${femaleLabel}`;
 }
 
 function motionInit(){
@@ -286,7 +288,7 @@ async function startCall(call){
     call.voice=call.voiceGender==='female'?currentAdmin.femaleVoice:currentAdmin.maleVoice; call.model=currentAdmin.model; call.opening=currentAdmin.opening; call.speakFirst=currentAdmin.speakFirst!==false; call.interruptions=currentAdmin.interruptions!==false;
     if(currentAdmin.serverOnline===false){ const msg=currentAdmin.serverMessage||'Server not active right now. Please try again soon.'; $('liveStatus').textContent='Disconnected from server'; $('liveCaption').textContent=msg; $('liveTranscript').textContent=msg; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected'; toast(msg); return; }
     const stream=await navigator.mediaDevices.getUserMedia({audio:true}); const pc=new RTCPeerConnection(); const dc=pc.createDataChannel('oai-events'); const audio=document.createElement('audio'); audio.autoplay=true;audio.playsInline=true; live.stream=stream;live.pc=pc;live.dc=dc;live.audio=audio; stream.getAudioTracks().forEach(t=>pc.addTrack(t,stream)); pc.ontrack=e=>{audio.srcObject=e.streams[0];audio.play().catch(()=>{})}; dc.onopen=()=>{$('liveCaption').textContent='Voice channel connected.'}; dc.onmessage=e=>handleRealtimeEvent(e.data); dc.onerror=()=>{$('liveCaption').textContent='Voice data channel error.'};
-    const offer=await pc.createOffer(); await pc.setLocalDescription(offer); await waitForIce(pc); const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,contextInstructions:buildInstructions(call)}})}); const text=await res.text(); if(!res.ok)throw new Error(text||'Realtime session failed'); call.speakFirst=res.headers.get('X-CallFocus-Speak-First')!=='0'; try{call.opening=decodeURIComponent(res.headers.get('X-CallFocus-Opening')||call.opening||'')}catch{} await pc.setRemoteDescription({type:'answer',sdp:text});
+    const offer=await pc.createOffer(); await pc.setLocalDescription(offer); await waitForIce(pc); const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,voiceProfile:call.voiceProfile||null,contextInstructions:buildInstructions(call)}})}); const text=await res.text(); if(!res.ok)throw new Error(text||'Realtime session failed'); call.speakFirst=res.headers.get('X-CallFocus-Speak-First')!=='0'; try{call.opening=decodeURIComponent(res.headers.get('X-CallFocus-Opening')||call.opening||'')}catch{} await pc.setRemoteDescription({type:'answer',sdp:text});
   }catch(err){ console.error(err); const raw=String(err?.message||err||'').toLowerCase(); const inactive=raw.includes('server not active')||raw.includes('credit_balance_exhausted')||raw.includes('insufficient_quota')||raw.includes('no credits')||raw.includes('quota'); $('liveStatus').textContent='Disconnected from server'; $('liveCaption').textContent=inactive?'Server not active right now. Please try again soon.':'Server unavailable. Try again soon.'; $('liveTranscript').textContent=inactive?'Server not active right now. Please try again soon.':'We could not connect this call right now. Please try again soon.'; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected'; toast(inactive?'Server not active right now. Please try again soon.':'Server unavailable. Try again soon.'); }
 }
 function waitForIce(pc){ if(pc.iceGatheringState==='complete')return Promise.resolve(); return new Promise(resolve=>{const f=()=>{if(pc.iceGatheringState==='complete'){pc.removeEventListener('icegatheringstatechange',f);resolve();}};pc.addEventListener('icegatheringstatechange',f);setTimeout(resolve,2500);}); }
@@ -887,7 +889,7 @@ if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.s
       await waitForIce(pc);
       const res=await fetch('/api/session',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,callLanguage:call.callLanguage||'English',contextInstructions:buildInstructions(call)}})
+        body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,voiceProfile:call.voiceProfile||null,callLanguage:call.callLanguage||'English',contextInstructions:buildInstructions(call)}})
       });
       const text=await res.text();
       if(!res.ok) throw new Error(text||'Live session failed');
@@ -1167,7 +1169,7 @@ if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.s
       dc.onmessage=e=>handleRealtimeEvent(e.data); dc.onerror=()=>{$('liveCaption').textContent='Voice connection error.'};
 
       const offer=await pc.createOffer(); await pc.setLocalDescription(offer); await waitForIce(pc);
-      const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,callLanguage:call.callLanguage||'English',contextInstructions:buildInstructions(call)}})});
+      const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,voiceProfile:call.voiceProfile||null,callLanguage:call.callLanguage||'English',contextInstructions:buildInstructions(call)}})});
       const text=await res.text();
       if(!res.ok){const reason=res.headers.get('X-CallFocus-Error-Code')||`http_${res.status}`;throw Object.assign(new Error(text||'Live session failed'),{callFocusReason:reason})}
       call.speakFirst=res.headers.get('X-CallFocus-Speak-First')!=='0'; call.engine=res.headers.get('X-CallFocus-Engine')||'gpt-live-1'; call.configUpdatedAt=res.headers.get('X-CallFocus-Config-Updated')||'';
@@ -1662,7 +1664,7 @@ if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.s
       await refreshPublicConfig(); syncVoiceLabels();
       const res=await fetch('/api/voice-note',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({prompt,voiceGender:vnGender,userId:account.id,maxSeconds:window.CallFocusCredits?.currentBalanceSeconds?.()||0})
+        body:JSON.stringify({prompt,voiceGender:vnGender,voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,userId:account.id,maxSeconds:window.CallFocusCredits?.currentBalanceSeconds?.()||0})
       });
       if(!res.ok){
         let msg='Could not generate the voice note right now. Please try again.';
@@ -2376,6 +2378,7 @@ if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.s
           prompt,
           mode:voiceNoteMode,
           voiceGender:gender,
+          voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,
           userId:account.id,
           maxSeconds:window.CallFocusCredits?.currentBalanceSeconds?.() || 0
         })
@@ -4471,3 +4474,231 @@ ${approvedPatterns}
 })();
 
 ;
+
+/* ===== V12.6 — customer AI Voice Designer ===== */
+(() => {
+  const MAX_NAME = 60;
+  let repeatAiVoiceId = '';
+  let voiceNoteAiVoiceId = '';
+  let editingAiVoiceId = '';
+
+  const ACCENTS = {
+    neutral: 'Neutral / international',
+    american: 'General American',
+    british: 'British',
+    australian: 'Australian',
+    nigerian: 'Nigerian English',
+    irish: 'Irish',
+    canadian: 'Canadian',
+    southern_us: 'Southern U.S.',
+    african_english: 'African English',
+    indian: 'Indian English',
+    filipino: 'Filipino English',
+    custom: 'Custom / describe below'
+  };
+  const AGE = { young:'Young adult', adult:'Adult', mature:'Mature' };
+  const WARMTH = { reserved:'Cool / reserved', balanced:'Balanced', warm:'Warm', very_warm:'Very warm' };
+  const ENERGY = { calm:'Calm', balanced:'Balanced', lively:'Energetic / lively' };
+  const SPEED = { relaxed:'Relaxed', natural:'Natural', brisk:'Brisk' };
+  const PRESENCE = { soft:'Soft / gentle', balanced:'Balanced', assertive:'Assertive / confident' };
+
+  function ensureAiVoiceData(){
+    if(!account || !data) return [];
+    if(!Array.isArray(data.aiVoices)) data.aiVoices=[];
+    data.aiVoices=data.aiVoices.filter(v=>v&&v.id&&v.name).slice(0,30);
+    return data.aiVoices;
+  }
+  function cleanProfile(v){
+    if(!v || typeof v!=='object') return null;
+    return {
+      id:String(v.id||''),
+      name:String(v.name||'My AI voice').slice(0,MAX_NAME),
+      gender:v.gender==='female'?'female':'male',
+      accent:ACCENTS[v.accent]?v.accent:'neutral',
+      age:AGE[v.age]?v.age:'adult',
+      warmth:WARMTH[v.warmth]?v.warmth:'balanced',
+      energy:ENERGY[v.energy]?v.energy:'balanced',
+      speed:SPEED[v.speed]?v.speed:'natural',
+      presence:PRESENCE[v.presence]?v.presence:'balanced',
+      description:String(v.description||'').trim().slice(0,600),
+      createdAt:v.createdAt||new Date().toISOString(),
+      updatedAt:v.updatedAt||v.createdAt||new Date().toISOString()
+    };
+  }
+  function profileById(id){ return ensureAiVoiceData().map(cleanProfile).find(v=>v.id===id)||null; }
+  function profileSummary(v){
+    v=cleanProfile(v); if(!v)return '';
+    return [ACCENTS[v.accent],AGE[v.age],WARMTH[v.warmth],ENERGY[v.energy],SPEED[v.speed],PRESENCE[v.presence]].filter(Boolean).join(' · ');
+  }
+  function setBuiltInGender(gender){
+    selectedNewCallVoice=gender==='female'?'female':'male';
+    const hidden=document.getElementById('newCallVoiceGender'); if(hidden)hidden.value=selectedNewCallVoice;
+    document.querySelectorAll('.voice-option').forEach(b=>b.classList.toggle('active',b.dataset.voice===selectedNewCallVoice));
+  }
+
+  function modalMarkup(){
+    return `<div class="modal-backdrop hidden ai-voice-modal" id="aiVoiceModal" aria-hidden="true">
+      <div class="modal-card ai-voice-modal-card" role="dialog" aria-modal="true" aria-labelledby="aiVoiceModalTitle">
+        <button class="modal-close" type="button" id="aiVoiceCloseBtn" aria-label="Close">×</button>
+        <span class="section-eyebrow">AI VOICE DESIGNER</span>
+        <h2 id="aiVoiceModalTitle">Create your own AI voice</h2>
+        <p class="ai-voice-intro">Design how CallFocus should sound. This creates a synthetic voice style profile and does not copy or clone a real person’s voice. Describe qualities rather than asking it to imitate a specific person.</p>
+        <form id="aiVoiceForm" class="ai-voice-form">
+          <label>Voice name<input id="aiVoiceName" maxlength="60" placeholder="Example: Warm London voice" required /></label>
+          <div class="ai-voice-form-grid">
+            <label>Presentation<select id="aiVoiceGender"><option value="male">Male</option><option value="female">Female</option></select></label>
+            <label>Accent<select id="aiVoiceAccent">${Object.entries(ACCENTS).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label>
+            <label>Age impression<select id="aiVoiceAge">${Object.entries(AGE).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label>
+            <label>Warmth<select id="aiVoiceWarmth">${Object.entries(WARMTH).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label>
+            <label>Energy<select id="aiVoiceEnergy">${Object.entries(ENERGY).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label>
+            <label>Speaking speed<select id="aiVoiceSpeed">${Object.entries(SPEED).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label>
+            <label>Softness / assertiveness<select id="aiVoicePresence">${Object.entries(PRESENCE).map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></label>
+          </div>
+          <label>Describe the voice in your own words <span class="optional">Optional</span><textarea id="aiVoiceDescription" rows="4" maxlength="600" placeholder="Example: Smooth, reassuring and slightly playful. Keep the accent light and never exaggerated."></textarea></label>
+          <div class="ai-voice-preview-copy" id="aiVoicePreviewCopy"></div>
+          <button class="btn btn-primary large" type="submit" id="aiVoiceSaveBtn">Create AI voice</button>
+        </form>
+        <div class="ai-voice-library-wrap">
+          <div class="ai-voice-library-head"><div><strong>My AI voices</strong><small>Saved to your CallFocus account and available on your devices.</small></div></div>
+          <div id="aiVoiceLibrary" class="ai-voice-library"></div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  function injectModal(){ if(document.getElementById('aiVoiceModal'))return; document.body.insertAdjacentHTML('beforeend',modalMarkup()); bindModal(); }
+  function openDesigner(editId=''){
+    if(!account || !data){ requireAccount({type:'newcall'},'Create an account or sign in to create and save your own AI voices.'); return; }
+    ensureAiVoiceData(); editingAiVoiceId=editId||'';
+    const p=editingAiVoiceId?profileById(editingAiVoiceId):null;
+    document.getElementById('aiVoiceModalTitle').textContent=p?'Edit AI voice':'Create your own AI voice';
+    document.getElementById('aiVoiceSaveBtn').textContent=p?'Save AI voice':'Create AI voice';
+    document.getElementById('aiVoiceName').value=p?.name||'';
+    document.getElementById('aiVoiceGender').value=p?.gender||'male';
+    document.getElementById('aiVoiceAccent').value=p?.accent||'neutral';
+    document.getElementById('aiVoiceAge').value=p?.age||'adult';
+    document.getElementById('aiVoiceWarmth').value=p?.warmth||'balanced';
+    document.getElementById('aiVoiceEnergy').value=p?.energy||'balanced';
+    document.getElementById('aiVoiceSpeed').value=p?.speed||'natural';
+    document.getElementById('aiVoicePresence').value=p?.presence||'balanced';
+    document.getElementById('aiVoiceDescription').value=p?.description||'';
+    updatePreview(); renderLibrary(); openModal('aiVoiceModal');
+  }
+  function closeDesigner(){ closeModal('aiVoiceModal'); editingAiVoiceId=''; }
+  function formProfile(id=''){
+    return cleanProfile({
+      id:id||uuid(), name:document.getElementById('aiVoiceName').value.trim(),
+      gender:document.getElementById('aiVoiceGender').value, accent:document.getElementById('aiVoiceAccent').value,
+      age:document.getElementById('aiVoiceAge').value, warmth:document.getElementById('aiVoiceWarmth').value,
+      energy:document.getElementById('aiVoiceEnergy').value, speed:document.getElementById('aiVoiceSpeed').value,
+      presence:document.getElementById('aiVoicePresence').value, description:document.getElementById('aiVoiceDescription').value.trim(),
+      createdAt:profileById(id)?.createdAt||new Date().toISOString(), updatedAt:new Date().toISOString()
+    });
+  }
+  function updatePreview(){
+    const p=formProfile(editingAiVoiceId||'preview');
+    const root=document.getElementById('aiVoicePreviewCopy'); if(!root)return;
+    root.innerHTML=`<span>Voice profile</span><strong>${esc(p.name||'Untitled AI voice')}</strong><small>${esc(profileSummary(p))}${p.description?` · ${esc(p.description)}`:''}</small>`;
+  }
+  function saveProfile(e){
+    e.preventDefault(); if(!account||!data)return;
+    const p=formProfile(editingAiVoiceId); if(!p.name)return toast('Give your AI voice a name');
+    const list=ensureAiVoiceData(); const i=list.findIndex(v=>v.id===p.id);
+    if(i>=0) list[i]=p; else list.unshift(p);
+    data.aiVoices=list.slice(0,30); saveData();
+    selectedAiVoiceId=p.id; setBuiltInGender(p.gender); voiceNoteAiVoiceId=p.id;
+    editingAiVoiceId=''; renderLibrary(); renderNewCallPicker(); renderVoiceNotePicker();
+    document.getElementById('aiVoiceModalTitle').textContent='Create your own AI voice';
+    document.getElementById('aiVoiceSaveBtn').textContent='Create AI voice';
+    toast(i>=0?'AI voice updated':'AI voice created');
+  }
+  function deleteProfile(id){
+    if(!account||!data)return; const p=profileById(id); if(!p)return;
+    if(!confirm(`Delete “${p.name}”?`))return;
+    data.aiVoices=ensureAiVoiceData().filter(v=>v.id!==id);
+    if(selectedAiVoiceId===id)selectedAiVoiceId=''; if(repeatAiVoiceId===id)repeatAiVoiceId=''; if(voiceNoteAiVoiceId===id)voiceNoteAiVoiceId='';
+    data.threads?.forEach(t=>{if(t.voiceProfileId===id)t.voiceProfileId='';});
+    saveData(); renderLibrary(); renderNewCallPicker(); renderVoiceNotePicker(); toast('AI voice deleted');
+  }
+  function renderLibrary(){
+    const root=document.getElementById('aiVoiceLibrary'); if(!root)return; const list=ensureAiVoiceData().map(cleanProfile);
+    root.innerHTML=list.length?list.map(v=>`<article class="ai-voice-library-item"><div><strong>${esc(v.name)}</strong><span>${esc(v.gender==='female'?'Female':'Male')} · ${esc(profileSummary(v))}</span></div><div><button type="button" class="btn btn-ghost" data-ai-edit="${esc(v.id)}">Edit</button><button type="button" class="btn btn-ghost danger-text" data-ai-delete="${esc(v.id)}">Delete</button></div></article>`).join(''):'<div class="ai-voice-empty">You have not created an AI voice yet.</div>';
+  }
+  function bindModal(){
+    document.getElementById('aiVoiceCloseBtn')?.addEventListener('click',closeDesigner);
+    document.getElementById('aiVoiceForm')?.addEventListener('submit',saveProfile);
+    ['aiVoiceName','aiVoiceGender','aiVoiceAccent','aiVoiceAge','aiVoiceWarmth','aiVoiceEnergy','aiVoiceSpeed','aiVoicePresence','aiVoiceDescription'].forEach(id=>document.getElementById(id)?.addEventListener('input',updatePreview));
+    document.getElementById('aiVoiceLibrary')?.addEventListener('click',e=>{const edit=e.target.closest('[data-ai-edit]'),del=e.target.closest('[data-ai-delete]');if(edit)openDesigner(edit.dataset.aiEdit);if(del)deleteProfile(del.dataset.aiDelete);});
+  }
+
+  function pickerHtml(scope, selectedId=''){
+    const voices=ensureAiVoiceData().map(cleanProfile);
+    return `<div class="ai-voice-picker" data-ai-scope="${scope}">
+      <div class="ai-voice-picker-head"><div><strong>Create your own AI voice</strong><small>Choose accent, age impression, warmth, energy, speed and presence.</small></div><button type="button" class="btn btn-ghost ai-voice-create-btn" data-ai-create>+ Create voice</button></div>
+      ${voices.length?`<div class="ai-voice-choice-row">${voices.map(v=>`<button type="button" class="ai-voice-chip ${v.id===selectedId?'active':''}" data-ai-select="${esc(v.id)}"><strong>${esc(v.name)}</strong><small>${esc(v.gender==='female'?'Female':'Male')} · ${esc(ACCENTS[v.accent])}</small></button>`).join('')}</div>`:'<div class="ai-voice-picker-empty">No custom AI voice profiles yet. Your normal Male and Female choices still work.</div>'}
+    </div>`;
+  }
+  function renderNewCallPicker(){
+    const voiceChoice=document.querySelector('#newCallModal .voice-choice'); if(!voiceChoice)return;
+    let root=document.getElementById('newCallAiVoicePicker'); if(!root){root=document.createElement('div');root.id='newCallAiVoicePicker';voiceChoice.insertAdjacentElement('afterend',root);}
+    root.innerHTML=pickerHtml('new',selectedAiVoiceId);
+  }
+  function renderRepeatPicker(){
+    const select=document.getElementById('repeatVoiceGender'); if(!select)return;
+    let root=document.getElementById('repeatAiVoicePicker'); if(!root){root=document.createElement('div');root.id='repeatAiVoicePicker';select.closest('label')?.insertAdjacentElement('afterend',root);}
+    root.innerHTML=pickerHtml('repeat',repeatAiVoiceId);
+  }
+  function renderVoiceNotePicker(){
+    const row=document.querySelector('.voice-note-gender-row'); if(!row)return;
+    let root=document.getElementById('voiceNoteAiVoicePicker'); if(!root){root=document.createElement('div');root.id='voiceNoteAiVoicePicker';row.insertAdjacentElement('afterend',root);}
+    root.innerHTML=pickerHtml('note',voiceNoteAiVoiceId);
+  }
+  function handlePickerClick(e){
+    const create=e.target.closest('[data-ai-create]'); if(create){openDesigner();return;}
+    const select=e.target.closest('[data-ai-select]'); if(!select)return;
+    const id=select.dataset.aiSelect,p=profileById(id); if(!p)return;
+    const scope=select.closest('[data-ai-scope]')?.dataset.aiScope;
+    if(scope==='new'){selectedAiVoiceId=id;setBuiltInGender(p.gender);renderNewCallPicker();}
+    else if(scope==='repeat'){repeatAiVoiceId=id;const base=document.getElementById('repeatVoiceGender');if(base)base.value=p.gender;renderRepeatPicker();}
+    else if(scope==='note'){voiceNoteAiVoiceId=id;const b=document.querySelector(`[data-vn-gender="${p.gender}"]`);if(b&&!b.classList.contains('active'))b.click();renderVoiceNotePicker();}
+  }
+
+  // Built-in voice selections intentionally turn off the user-created style.
+  document.addEventListener('click',e=>{
+    if(e.target.closest('.ai-voice-picker')){handlePickerClick(e);return;}
+    const normal=e.target.closest('.voice-option'); if(normal&&document.getElementById('newCallModal')?.contains(normal)){selectedAiVoiceId='';setTimeout(renderNewCallPicker,0);}
+    const vn=e.target.closest('[data-vn-gender]'); if(vn&&!e.target.closest('.ai-voice-picker')){voiceNoteAiVoiceId='';setTimeout(renderVoiceNotePicker,0);}
+  });
+  document.addEventListener('change',e=>{if(e.target?.id==='repeatVoiceGender'){repeatAiVoiceId='';renderRepeatPicker();}});
+
+  const originalReset=resetNewCallForm;
+  resetNewCallForm=function(){selectedAiVoiceId='';originalReset();renderNewCallPicker();};
+  const originalOpen=openNewCall;
+  openNewCall=function(prefill=null){originalOpen(prefill);setTimeout(renderNewCallPicker,0);};
+  const originalPrepareNew=prepareNewCall;
+  prepareNewCall=function(){
+    const result=originalPrepareNew(); if(result?.call){const p=profileById(selectedAiVoiceId);result.call.voiceProfileId=p?.id||'';result.call.voiceProfile=p||null;result.call.voiceGender=p?.gender||result.call.voiceGender;const t=data?.threads?.find(x=>x.id===result.call.threadId);if(t){t.voiceProfileId=p?.id||'';t.voiceProfileName=p?.name||'';}saveData();}return result;
+  };
+  const originalThreadDetail=renderThreadDetail;
+  renderThreadDetail=function(t){originalThreadDetail(t);repeatAiVoiceId=t?.voiceProfileId&&profileById(t.voiceProfileId)?t.voiceProfileId:'';renderRepeatPicker();};
+  const originalPrepareRepeat=prepareRepeatCall;
+  prepareRepeatCall=function(threadId){
+    const t=data?.threads?.find(x=>x.id===threadId); if(!repeatAiVoiceId&&t?.voiceProfileId&&profileById(t.voiceProfileId))repeatAiVoiceId=t.voiceProfileId;
+    const result=originalPrepareRepeat(threadId); if(result?.call){const p=profileById(repeatAiVoiceId);result.call.voiceProfileId=p?.id||'';result.call.voiceProfile=p||null;result.call.voiceGender=p?.gender||result.call.voiceGender;if(t){t.voiceProfileId=p?.id||'';t.voiceProfileName=p?.name||'';}saveData();}return result;
+  };
+  const originalSaveCompleted=saveCompletedCall;
+  saveCompletedCall=function(){
+    const current=live?.current; originalSaveCompleted(); if(!current||!data)return;const t=data.threads?.find(x=>x.id===current.threadId);const last=t?.calls?.[t.calls.length-1];if(last){last.voiceProfileId=current.voiceProfileId||'';last.voiceName=current.voiceProfile?.name||'';saveData();}
+  };
+
+  function currentVoiceNoteProfile(){return profileById(voiceNoteAiVoiceId);}
+  window.CallFocusAiVoice={currentVoiceNoteProfile,profileById,openDesigner,renderNewCallPicker,renderVoiceNotePicker};
+
+  // Keep per-user voice profile data present whenever a server account is restored.
+  const originalRenderWorkspace=renderWorkspace;
+  renderWorkspace=function(){if(account&&data)ensureAiVoiceData();originalRenderWorkspace();renderNewCallPicker();renderVoiceNotePicker();};
+
+  injectModal();
+  if(account&&data)ensureAiVoiceData();
+  renderNewCallPicker();renderVoiceNotePicker();
+})();

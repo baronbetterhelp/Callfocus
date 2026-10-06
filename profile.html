@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=12.0" />
+  <link rel="stylesheet" href="/callfocus.css?v=12.6" />
 </head>
 <body data-cf-document-view="profile">
   <div class="app-root home-page" id="pageRoot">
@@ -135,13 +135,13 @@
               <div class="trust-row-set">
                 <span>Set the full context once</span>
                 <span>Call-specific location & time zone</span>
-                <span>Male or female voice selection</span>
+                <span>Male, female or your own AI voice profile</span>
                 <span>Recent-call continuity</span>
               </div>
               <div class="trust-row-set trust-row-clone" aria-hidden="true">
                 <span>Set the full context once</span>
                 <span>Call-specific location & time zone</span>
-                <span>Male or female voice selection</span>
+                <span>Male, female or your own AI voice profile</span>
                 <span>Recent-call continuity</span>
               </div>
             </div>
@@ -504,7 +504,7 @@
           <option value="Danish">Danish / Dansk</option>
           <option value="Finnish">Finnish / Suomi</option>
         </select></label><div class="opening-preview">CallFocus will keep the entire call in the language you select here. An accent, isolated foreign words, or the other person changing languages will not make the voice switch languages.</div></div></div>
-        <div class="field-section"><span class="field-number">08</span><div class="field-content"><div class="field-heading"><strong>Voice selection</strong><small>You choose Male or Female. The admin-selected voice behind that choice is used automatically.</small></div><div class="voice-choice"><button type="button" class="voice-option active" data-voice="male"><span>Male</span><small id="maleVoiceLabel">Default male voice</small></button><button type="button" class="voice-option" data-voice="female"><span>Female</span><small id="femaleVoiceLabel">Default female voice</small></button></div><input type="hidden" id="newCallVoiceGender" value="male" />
+        <div class="field-section"><span class="field-number">08</span><div class="field-content"><div class="field-heading"><strong>Voice selection</strong><small>Use the standard Male/Female voice or select one of your own saved AI voice profiles below.</small></div><div class="voice-choice"><button type="button" class="voice-option active" data-voice="male"><span>Male</span><small id="maleVoiceLabel">Default male voice</small></button><button type="button" class="voice-option" data-voice="female"><span>Female</span><small id="femaleVoiceLabel">Default female voice</small></button></div><input type="hidden" id="newCallVoiceGender" value="male" />
           <div class="call-opening-box">
             <div class="field-heading"><strong>Call opening <span class="optional-label">Optional</span></strong><small>Choose how the first few seconds should sound. This is saved with the call thread.</small></div>
             <label>Opening style<select id="newCallOpeningMode">
@@ -592,6 +592,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=12.0"></script>
+  <script src="/callfocus.js?v=12.6"></script>
 </body>
 </html>

@@ -117,17 +117,18 @@
       </section>
 
       <section class="admin-tab-panel" data-admin-panel="voice">
-        <div class="admin-section-heading"><span class="kicker">Voice engine</span><h2>Customer voice pair</h2><p>Choose the live-call voices customers hear when they select Male or Female.</p></div>
+        <div class="admin-section-heading"><span class="kicker">Voice engine</span><h2>Customer voice pair</h2><p>Choose the base live-call voices customers hear. Customers can now design their own AI voice style profiles from the New Call screen without uploading recordings.</p></div>
         <div class="premium-panel form-panel">
-          <p class="admin-panel-copy">Use the expanded GPT-Live voice set for live calls. Live-only voices are tested by placing a short call.</p>
+          <p class="admin-panel-copy">These Male and Female selections are the base voices. A customer-created AI voice profile layers accent, age impression, warmth, energy, pace and presence on top of the appropriate base voice.</p>
           <div class="voice-admin-card"><label>Male voice<select id="adminMaleVoice"></select></label><button class="btn btn-ghost voice-preview-btn" data-preview="male">Preview male voice</button></div>
           <div class="voice-admin-card"><label>Female voice<select id="adminFemaleVoice"></select></label><button class="btn btn-ghost voice-preview-btn" data-preview="female">Preview female voice</button></div>
           <label>Voice engine<input id="adminModel" value="gpt-live-1" readonly /></label>
-          <div class="admin-recommendation">CallFocus uses <strong>GPT-Live 1</strong>. Live-only voices work on calls; voice notes fall back to cedar for Male or marin for Female where needed.</div>
+          <div class="admin-recommendation">CallFocus uses <strong>GPT-Live 1</strong>. Customer AI voice profiles work on live calls and generated voice notes without cloning a real person.</div>
           <audio id="voicePreviewAudio" class="hidden" controls></audio>
           <div class="toggle-row"><span>Allow natural interruption / barge-in</span><input id="adminInterruptions" type="checkbox" /></div>
           <div class="toggle-row"><span>Speak first after the customer taps Start Call</span><input id="adminSpeakFirst" type="checkbox" /></div>
         </div>
+
       </section>
 
       <section class="admin-tab-panel" data-admin-panel="behavior">

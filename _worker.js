@@ -42,6 +42,7 @@ const DEFAULT_CONFIG = {
   serverMessage: 'Server not active right now. Please try again soon.',
   maleVoice: 'cedar',
   femaleVoice: 'marin',
+  customVoices: [],
   model: 'gpt-live-1',
   speakingPace: 'relaxed',
   siteTheme: 'pearl',
@@ -711,18 +712,56 @@ async function handleCustomerMigration(request, env) {
   return json({ ok: true, migrated: true, token, user: publicCustomerUser(user), data });
 }
 
+
+function normalizeCustomVoices(input = []) {
+  const seen = new Set();
+  const rows = [];
+  for (const raw of Array.isArray(input) ? input : []) {
+    const id = String(raw?.id || '').trim();
+    const name = String(raw?.name || '').trim().slice(0, 120);
+    if (!/^voice_[A-Za-z0-9_-]{3,220}$/.test(id) || !name || seen.has(id)) continue;
+    seen.add(id);
+    rows.push({
+      id,
+      name,
+      type: raw?.type === 'audio_sample' ? 'audio_sample' : 'audio_sample',
+      createdAt: raw?.createdAt || null
+    });
+    if (rows.length >= 20) break;
+  }
+  return rows;
+}
+
+function customVoiceById(config, id) {
+  const voices = normalizeCustomVoices(config?.customVoices);
+  return voices.find(v => v.id === String(id || '').trim()) || null;
+}
+
+function voiceDisplayName(config, id) {
+  const custom = customVoiceById(config, id);
+  return custom ? `${custom.name} · Custom clone` : String(id || '');
+}
+
+function openAiVoiceValue(config, id) {
+  const custom = customVoiceById(config, id);
+  return custom ? { id: custom.id } : String(id || 'marin');
+}
+
 async function getConfig(env) {
   if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.get !== 'function') return { ...DEFAULT_CONFIG };
   try {
     const saved = await env.CALLFOCUS_CONFIG.get('global_config', { type: 'json' });
-    return { ...DEFAULT_CONFIG, ...(saved || {}), model: 'gpt-live-1' };
+    const merged = { ...DEFAULT_CONFIG, ...(saved || {}), model: 'gpt-live-1' };
+    merged.customVoices = normalizeCustomVoices(merged.customVoices);
+    return merged;
   } catch {
-    return { ...DEFAULT_CONFIG };
+    return { ...DEFAULT_CONFIG, customVoices: [] };
   }
 }
 
 function sanitizeConfig(input = {}) {
-  const voice = v => LIVE_VOICES.includes(v) ? v : null;
+  const customVoices = normalizeCustomVoices(input.customVoices);
+  const voice = v => LIVE_VOICES.includes(v) || customVoices.some(row => row.id === String(v || '').trim()) ? String(v || '').trim() : null;
   const unlimitedCreditEmails = [...new Set((Array.isArray(input.unlimitedCreditEmails) ? input.unlimitedCreditEmails : [])
     .map(v => String(v || '').trim().toLowerCase())
     .filter(v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)))]
@@ -732,6 +771,7 @@ function sanitizeConfig(input = {}) {
     serverMessage: String(input.serverMessage || DEFAULT_CONFIG.serverMessage).slice(0, 240),
     maleVoice: voice(input.maleVoice) || DEFAULT_CONFIG.maleVoice,
     femaleVoice: voice(input.femaleVoice) || DEFAULT_CONFIG.femaleVoice,
+    customVoices,
     model: 'gpt-live-1',
     speakingPace: ['relaxed','normal','brisk'].includes(input.speakingPace) ? input.speakingPace : DEFAULT_CONFIG.speakingPace,
     siteTheme: ['black','pearl'].includes(input.siteTheme) ? input.siteTheme : DEFAULT_CONFIG.siteTheme,
@@ -781,8 +821,10 @@ async function handlePublicConfig(env) {
     serverMessage: c.serverMessage,
     maleVoice: c.maleVoice,
     femaleVoice: c.femaleVoice,
-    voiceNoteMaleVoice: TTS_VOICES.includes(c.maleVoice) ? c.maleVoice : 'cedar',
-    voiceNoteFemaleVoice: TTS_VOICES.includes(c.femaleVoice) ? c.femaleVoice : 'marin',
+    maleVoiceLabel: voiceDisplayName(c, c.maleVoice),
+    femaleVoiceLabel: voiceDisplayName(c, c.femaleVoice),
+    voiceNoteMaleVoice: customVoiceById(c, c.maleVoice) ? voiceDisplayName(c, c.maleVoice) : (TTS_VOICES.includes(c.maleVoice) ? c.maleVoice : 'cedar'),
+    voiceNoteFemaleVoice: customVoiceById(c, c.femaleVoice) ? voiceDisplayName(c, c.femaleVoice) : (TTS_VOICES.includes(c.femaleVoice) ? c.femaleVoice : 'marin'),
     model: 'gpt-live-1',
     siteTheme: c.siteTheme || DEFAULT_CONFIG.siteTheme,
     opening: c.opening,
@@ -984,7 +1026,8 @@ async function handleAdminConfig(request, env) {
   }
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
-  const config = sanitizeConfig(body);
+  const current = await getConfig(env);
+  const config = sanitizeConfig({ ...current, ...body, customVoices: current.customVoices });
   await env.CALLFOCUS_CONFIG.put('global_config', JSON.stringify(config));
   return json({ ok: true, config, engine: 'GPT-Live 1' });
 }
@@ -998,6 +1041,115 @@ async function handleAdminLogin(request, env) {
 async function recordLiveStatus(env, payload) {
   if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.put !== 'function') return;
   try { await env.CALLFOCUS_CONFIG.put('last_live_status', JSON.stringify({ ...payload, at: new Date().toISOString() })); } catch {}
+}
+
+
+async function handleAdminCustomVoiceAccess(request, env) {
+  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
+  if (!env.OPENAI_API_KEY) return json({ enabled: false, status: 0, message: 'OPENAI_API_KEY is not configured.' });
+  try {
+    const r = await fetch('https://api.openai.com/v1/audio/consent_phrases', {
+      headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` }
+    });
+    const raw = await r.text();
+    let payload = {}; try { payload = JSON.parse(raw); } catch {}
+    return json({
+      enabled: r.ok,
+      status: r.status,
+      message: r.ok ? 'Custom voice access is enabled for this OpenAI project.' : (payload?.error?.message || 'Custom voice access is not enabled for this OpenAI project yet.'),
+      phrases: r.ok ? payload : null
+    });
+  } catch {
+    return json({ enabled: false, status: 0, message: 'Could not check OpenAI custom voice access right now.' });
+  }
+}
+
+async function handleAdminCustomVoiceCreate(request, env) {
+  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  if (!env.OPENAI_API_KEY) return json({ error: 'OpenAI API key is not configured.' }, 503);
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.put !== 'function') return json({ error: 'Global admin storage is not connected.' }, 503);
+
+  let form;
+  try { form = await request.formData(); } catch { return json({ error: 'Invalid voice-cloning upload.' }, 400); }
+  const name = String(form.get('name') || '').trim().slice(0, 120);
+  const assignSlot = ['male','female','none'].includes(String(form.get('assignSlot') || 'none')) ? String(form.get('assignSlot') || 'none') : 'none';
+  const confirmed = String(form.get('ownershipConfirmed') || '') === 'true';
+  const consentRecording = form.get('consentRecording');
+  const sampleRecording = form.get('sampleRecording');
+  if (!name) return json({ error: 'Give this cloned voice a name.' }, 400);
+  if (!confirmed) return json({ error: 'Confirm that the speaker owns the voice and explicitly consented to cloning it.' }, 400);
+  if (!(consentRecording instanceof File) || !(sampleRecording instanceof File)) return json({ error: 'Upload both the consent recording and the voice sample.' }, 400);
+
+  const allowedTypes = new Set(['audio/mpeg','audio/wav','audio/x-wav','audio/ogg','audio/aac','audio/flac','audio/webm','audio/mp4','video/mp4']);
+  const validateAudio = (file, label) => {
+    if (file.size <= 0) return `${label} is empty.`;
+    if (file.size > 10 * 1024 * 1024) return `${label} must be 10 MB or smaller.`;
+    const type = String(file.type || '').toLowerCase();
+    if (type && !allowedTypes.has(type)) return `${label} must be MP3, WAV, OGG, AAC, FLAC, WEBM or MP4.`;
+    return '';
+  };
+  const consentError = validateAudio(consentRecording, 'Consent recording');
+  const sampleError = validateAudio(sampleRecording, 'Voice sample');
+  if (consentError || sampleError) return json({ error: consentError || sampleError }, 400);
+
+  const current = await getConfig(env);
+  if (normalizeCustomVoices(current.customVoices).length >= 20) return json({ error: 'This OpenAI organization already has 20 CallFocus custom voices registered. Remove or replace an existing voice before creating another.' }, 409);
+
+  const consentForm = new FormData();
+  consentForm.set('name', `callfocus_${name.replace(/[^a-z0-9_-]+/gi,'_').slice(0,48)}_${Date.now()}`);
+  consentForm.set('language', 'en');
+  consentForm.set('recording', consentRecording, consentRecording.name || 'consent.webm');
+  let consentResponse;
+  try {
+    consentResponse = await fetch('https://api.openai.com/v1/audio/voice_consents', {
+      method: 'POST', headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` }, body: consentForm
+    });
+  } catch { return json({ error: 'Could not upload the consent recording to OpenAI.' }, 502); }
+  const consentRaw = await consentResponse.text();
+  let consentPayload = {}; try { consentPayload = JSON.parse(consentRaw); } catch {}
+  if (!consentResponse.ok) {
+    return json({ error: consentPayload?.error?.message || 'OpenAI rejected the consent recording. Make sure the speaker reads the consent phrase exactly.' }, consentResponse.status);
+  }
+  const consentId = String(consentPayload?.id || '').trim();
+  if (!consentId) return json({ error: 'OpenAI accepted the consent upload but did not return a consent ID.' }, 502);
+
+  const voiceForm = new FormData();
+  voiceForm.set('name', name);
+  voiceForm.set('audio_sample', sampleRecording, sampleRecording.name || 'voice-sample.webm');
+  voiceForm.set('consent', consentId);
+  voiceForm.set('type', 'audio_sample');
+  let voiceResponse;
+  try {
+    voiceResponse = await fetch('https://api.openai.com/v1/audio/voices', {
+      method: 'POST', headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` }, body: voiceForm
+    });
+  } catch {
+    try { await fetch(`https://api.openai.com/v1/audio/voice_consents/${encodeURIComponent(consentId)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` } }); } catch {}
+    return json({ error: 'Could not create the custom voice with OpenAI.' }, 502);
+  }
+  const voiceRaw = await voiceResponse.text();
+  let voicePayload = {}; try { voicePayload = JSON.parse(voiceRaw); } catch {}
+  if (!voiceResponse.ok) {
+    try { await fetch(`https://api.openai.com/v1/audio/voice_consents/${encodeURIComponent(consentId)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` } }); } catch {}
+    return json({ error: voicePayload?.error?.message || 'OpenAI could not create the custom voice. Confirm the consent and sample are from the same speaker.' }, voiceResponse.status);
+  }
+  const voiceId = String(voicePayload?.id || '').trim();
+  if (!voiceId) return json({ error: 'OpenAI created the voice but did not return a voice ID.' }, 502);
+
+  const customVoices = normalizeCustomVoices([
+    { id: voiceId, name, type: 'audio_sample', createdAt: new Date().toISOString() },
+    ...(current.customVoices || [])
+  ]);
+  const next = sanitizeConfig({
+    ...current,
+    customVoices,
+    maleVoice: assignSlot === 'male' ? voiceId : current.maleVoice,
+    femaleVoice: assignSlot === 'female' ? voiceId : current.femaleVoice
+  });
+  await env.CALLFOCUS_CONFIG.put('global_config', JSON.stringify(next));
+  return json({ ok: true, voice: customVoices.find(v => v.id === voiceId), config: next });
 }
 
 async function handleAdminDiagnostics(request, env) {
@@ -1032,6 +1184,7 @@ async function handleAdminDiagnostics(request, env) {
     serverOnline: config.serverOnline !== false,
     engine: 'gpt-live-1',
     modelAccess,
+    customVoiceCount: normalizeCustomVoices(config.customVoices).length,
     lastLiveStatus
   });
 }
@@ -1041,16 +1194,18 @@ async function handleVoicePreview(request, env) {
   if (!env.OPENAI_API_KEY) return json({ error: 'OpenAI API key is not configured.' }, 503);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
-  const voice = LIVE_VOICES.includes(body?.voice) ? body.voice : 'marin';
-  if (!TTS_VOICES.includes(voice)) return json({ error: 'This is a GPT-Live-only voice. Save it, then place a short test call to hear it.' }, 409);
-  const input = String(body?.text || 'Hi. This is a quick CallFocus voice preview.').slice(0, 500);
   const config = await getConfig(env);
+  const requestedVoice = String(body?.voice || '').trim();
+  const customVoice = customVoiceById(config, requestedVoice);
+  const voice = customVoice ? customVoice.id : (LIVE_VOICES.includes(requestedVoice) ? requestedVoice : 'marin');
+  if (!customVoice && !TTS_VOICES.includes(voice)) return json({ error: 'This is a GPT-Live-only voice. Save it, then place a short test call to hear it.' }, 409);
+  const input = String(body?.text || 'Hi. This is a quick CallFocus voice preview.').slice(0, 500);
   const speech = await fetch('https://api.openai.com/v1/audio/speech', {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'gpt-4o-mini-tts',
-      voice,
+      voice: customVoice ? { id: customVoice.id } : voice,
       input,
       instructions: `Natural phone voice. Grounded, conversational, understated. ${paceInstruction(config.speakingPace)} Do not sound like an announcer or customer-service bot.`,
       response_format: 'mp3'
@@ -1077,6 +1232,53 @@ function extractChatText(payload) {
   return '';
 }
 
+
+
+// V12.6 — customer-created AI voice style profiles.
+// These profiles do not clone or imitate a real person's voice. They steer the
+// admin-selected Male/Female base voice using delivery instructions.
+function normalizeUserAiVoiceProfile(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const pick = (value, allowed, fallback) => allowed.includes(String(value || '')) ? String(value) : fallback;
+  const gender = pick(raw.gender, ['male','female'], 'male');
+  const accent = pick(raw.accent, ['neutral','american','british','australian','nigerian','irish','canadian','southern_us','african_english','indian','filipino','custom'], 'neutral');
+  const age = pick(raw.age, ['young','adult','mature'], 'adult');
+  const warmth = pick(raw.warmth, ['reserved','balanced','warm','very_warm'], 'balanced');
+  const energy = pick(raw.energy, ['calm','balanced','lively'], 'balanced');
+  const speed = pick(raw.speed, ['relaxed','natural','brisk'], 'natural');
+  const presence = pick(raw.presence, ['soft','balanced','assertive'], 'balanced');
+  return {
+    id: String(raw.id || '').slice(0, 120),
+    name: String(raw.name || 'AI voice').trim().slice(0, 60),
+    gender, accent, age, warmth, energy, speed, presence,
+    description: String(raw.description || '').trim().slice(0, 600)
+  };
+}
+
+function userAiVoiceInstructions(profile) {
+  const p = normalizeUserAiVoiceProfile(profile);
+  if (!p) return '';
+  const accentMap = {
+    neutral: 'Use a neutral, internationally clear accent with no exaggerated regional markers.',
+    american: 'When speaking English, use a natural General American accent.',
+    british: 'When speaking English, use a natural modern British accent.',
+    australian: 'When speaking English, use a natural Australian accent.',
+    nigerian: 'When speaking English, use a natural Nigerian English accent.',
+    irish: 'When speaking English, use a natural Irish accent.',
+    canadian: 'When speaking English, use a natural Canadian accent.',
+    southern_us: 'When speaking English, use a light natural Southern U.S. accent without caricature.',
+    african_english: 'When speaking English, use a natural African English presentation without exaggerating any one region.',
+    indian: 'When speaking English, use a natural Indian English accent.',
+    filipino: 'When speaking English, use a natural Filipino English accent.',
+    custom: 'Use the custom accent guidance in the user description below when it is clear and appropriate.'
+  };
+  const ageMap = { young:'Give the voice a young-adult vocal impression.', adult:'Give the voice a natural adult vocal impression.', mature:'Give the voice a mature adult vocal impression.' };
+  const warmthMap = { reserved:'Keep the emotional warmth restrained and composed.', balanced:'Use balanced warmth: friendly but not overly soft.', warm:'Sound warm, personable and reassuring.', very_warm:'Sound distinctly warm and affectionate while remaining natural.' };
+  const energyMap = { calm:'Keep energy calm and steady.', balanced:'Use balanced conversational energy.', lively:'Use lively, upbeat energy without sounding hyper or theatrical.' };
+  const speedMap = { relaxed:'Speak at a relaxed, unhurried pace.', natural:'Speak at a normal everyday conversational pace.', brisk:'Speak at a slightly brisk pace while staying clear and natural.' };
+  const presenceMap = { soft:'Use a soft, gentle presence and avoid sounding forceful.', balanced:'Use a balanced presence: clear, calm and natural.', assertive:'Use a confident, assertive presence without sounding aggressive.' };
+  return `# Customer AI voice profile — ${p.name}\nThis is a synthetic style profile, not an imitation of a real person. Keep the chosen vocal character consistent while following the call language and conversation context.\n- Presentation: ${p.gender === 'female' ? 'feminine' : 'masculine'}.\n- ${accentMap[p.accent]}\n- ${ageMap[p.age]}\n- ${warmthMap[p.warmth]}\n- ${energyMap[p.energy]}\n- ${speedMap[p.speed]}\n- ${presenceMap[p.presence]}${p.description ? `\n- Additional user description: ${p.description}` : ''}\nDo not exaggerate the accent or age impression, never let the voice profile change the required response language, and do not imitate or claim to be a specific real person even if the user description names one.`;
+}
 async function handleVoiceNote(request, env) {
   if (!env.OPENAI_API_KEY) return json({ error: 'Voice notes are unavailable right now. Please try again soon.' }, 503);
 
@@ -1092,9 +1294,12 @@ async function handleVoiceNote(request, env) {
   const mode = body?.mode === 'reply' ? 'reply' : 'script';
 
   const config = await getConfig(env);
-  const gender = body?.voiceGender === 'female' ? 'female' : 'male';
+  const userVoiceProfile = normalizeUserAiVoiceProfile(body?.voiceProfile);
+  const gender = userVoiceProfile?.gender || (body?.voiceGender === 'female' ? 'female' : 'male');
   const selectedVoice = gender === 'female' ? config.femaleVoice : config.maleVoice;
-  const voice = TTS_VOICES.includes(selectedVoice) ? selectedVoice : (gender === 'female' ? 'marin' : 'cedar');
+  const customVoice = customVoiceById(config, selectedVoice);
+  const voice = customVoice ? customVoice.id : (TTS_VOICES.includes(selectedVoice) ? selectedVoice : (gender === 'female' ? 'marin' : 'cedar'));
+  const userVoiceStyle = userAiVoiceInstructions(userVoiceProfile);
 
   const writerInstructions = `You write the exact spoken words for one private voice note.
 
@@ -1167,6 +1372,7 @@ Return only the final spoken voice-note text.`;
     'Do not sound like an announcer, virtual assistant, audiobook narrator, presenter, or customer-service voice.',
     paceInstruction(config.speakingPace),
     String(config.speechStyle || '').trim(),
+    userVoiceStyle,
     'Use natural phrasing, gentle variations in intonation, and small pauses where a real person would breathe. Keep the delivery grounded and understated.'
   ].filter(Boolean).join(' ');
 
@@ -1180,10 +1386,10 @@ Return only the final spoken voice-note text.`;
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini-tts',
-        voice,
+        voice: customVoice ? { id: customVoice.id } : voice,
         input: script,
         instructions: ttsInstructions.slice(0, 4000),
-        speed: speechSpeedForPace(config.speakingPace),
+        speed: speechSpeedForPace(userVoiceProfile?.speed === 'natural' ? 'normal' : (userVoiceProfile?.speed || config.speakingPace)),
         response_format: 'mp3'
       })
     });
@@ -1205,7 +1411,9 @@ Return only the final spoken voice-note text.`;
     'Content-Type': 'audio/mpeg',
     'Cache-Control': 'no-store',
     'X-CallFocus-Voice-Gender': gender,
-    'X-CallFocus-Voice': voice,
+    'X-CallFocus-Voice': userVoiceProfile?.name || voice,
+    'X-CallFocus-Base-Voice': voice,
+    'X-CallFocus-AI-Voice': userVoiceProfile ? '1' : '0',
     'X-CallFocus-Script': encodeURIComponent(script)
   });
   return new Response(audio, { status: 200, headers });
@@ -1227,8 +1435,11 @@ async function handleSession(request, env) {
   if (!body?.sdp || typeof body.sdp !== 'string') return new Response('Missing SDP offer.', { status: 400 });
 
   const requested = body.session || {};
-  const gender = requested.voiceGender === 'female' ? 'female' : 'male';
-  const voice = gender === 'female' ? config.femaleVoice : config.maleVoice;
+  const userVoiceProfile = normalizeUserAiVoiceProfile(requested.voiceProfile);
+  const gender = userVoiceProfile?.gender || (requested.voiceGender === 'female' ? 'female' : 'male');
+  const selectedVoice = gender === 'female' ? config.femaleVoice : config.maleVoice;
+  const voice = openAiVoiceValue(config, selectedVoice);
+  const userVoiceStyle = userAiVoiceInstructions(userVoiceProfile);
   const callLanguage = normalizeCallLanguage(requested.callLanguage);
   const callContext = String(requested.contextInstructions || requested.instructions || '').slice(0, 22000);
 
@@ -1249,6 +1460,7 @@ The entire spoken call must stay in ${callLanguage}. This is a hard CallFocus se
     `# Speaking pace\n${paceInstruction(config.speakingPace)}`,
     speechStyle ? `# Owner speech preferences\n${speechStyle}` : '',
     ownerRules ? `# Owner/admin call rules\n${ownerRules}` : '',
+    userVoiceStyle,
     languageLock
   ].filter(Boolean).join('\n\n');
 
@@ -1323,6 +1535,7 @@ The entire spoken call must stay in ${callLanguage}. This is a hard CallFocus se
     'X-CallFocus-Opening': encodeURIComponent(config.opening || ''),
     'X-CallFocus-Engine': 'gpt-live-1',
     'X-CallFocus-Language': callLanguage,
+    'X-CallFocus-AI-Voice': userVoiceProfile?.name || '',
     'X-CallFocus-Config-Updated': config.updatedAt || ''
   });
   return new Response(answerSdp, { status: 200, headers });
@@ -2294,6 +2507,8 @@ export default {
     if (url.pathname === '/api/admin/user-action') return handleAdminUserAction(request, env);
     if (url.pathname === '/api/admin/unlimited-user') return handleAdminUnlimitedUser(request, env);
     if (url.pathname === '/api/admin/voice-preview' && request.method === 'POST') return handleVoicePreview(request, env);
+    if (url.pathname === '/api/admin/custom-voices/access') return handleAdminCustomVoiceAccess(request, env);
+    if (url.pathname === '/api/admin/custom-voices/create') return handleAdminCustomVoiceCreate(request, env);
     if (url.pathname === '/api/admin/diagnostics' && request.method === 'GET') return handleAdminDiagnostics(request, env);
     if (url.pathname === '/api/voice-note' && request.method === 'POST') return handleVoiceNote(request, env);
     if (url.pathname === '/api/dynamics/analyze') { const limited = await callFocusRateLimit(request, env, 'dynamics-analyze', 40, 900); if (limited) return limited; return safeCustomerRoute('dynamics-analyze', () => handleDynamicsAnalyze(request, env)); }
