@@ -2922,10 +2922,74 @@ const MANUAL_PAYMENT_MIN_CREDITS = 300;
 const MANUAL_PAYMENT_MAX_RECEIPT_BYTES = 5 * 1024 * 1024;
 const MANUAL_PAYMENT_RECORD_TTL = 60 * 60 * 24 * 365;
 const MANUAL_PAYMENT_RECEIPT_TTL = 60 * 60 * 24 * 60;
+const MANUAL_PAYMENT_DECISION_TTL = 60 * 60 * 48;
 const MANUAL_PAYMENT_ALLOWED_TYPES = new Set(['image/jpeg','image/png','image/webp','image/heic','image/heif','application/pdf']);
 
 function manualPaymentKey(id) { return `manual:payment:${String(id || '').trim()}`; }
 function manualPaymentReceiptKey(id) { return `manual:receipt:${String(id || '').trim()}`; }
+function manualPaymentDecisionKey(nonce) { return `manual:decision:${String(nonce || '').trim()}`; }
+function manualPaymentDecisionSecret(env) {
+  return String(env.CALLFOCUS_ADMIN_PASSCODE || env.PAYSTACK_SECRET_KEY || env.RESEND_API_KEY || '').trim();
+}
+function asciiToBase64Url(value = '') {
+  return btoa(String(value || '')).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+function base64UrlToAscii(value = '') {
+  const normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+  return atob(padded);
+}
+async function hmacSha256Hex(secret, value) {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(String(secret || '')),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(String(value || '')));
+  return [...new Uint8Array(sig)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function createManualPaymentDecisionToken(env, paymentId, action) {
+  const secret = manualPaymentDecisionSecret(env);
+  if (!secret || !env.CALLFOCUS_CONFIG) throw new Error('Secure payment-email actions are not configured.');
+  const nonce = randomToken(24);
+  const exp = Math.floor(Date.now() / 1000) + MANUAL_PAYMENT_DECISION_TTL;
+  const payload = { v: 1, paymentId: String(paymentId || ''), action: String(action || ''), exp, nonce };
+  const encoded = asciiToBase64Url(JSON.stringify(payload));
+  const signature = await hmacSha256Hex(secret, encoded);
+  await env.CALLFOCUS_CONFIG.put(manualPaymentDecisionKey(nonce), JSON.stringify({
+    paymentId: payload.paymentId, action: payload.action, exp, used: false, createdAt: new Date().toISOString()
+  }), { expirationTtl: MANUAL_PAYMENT_DECISION_TTL });
+  return { token: `${encoded}.${signature}`, nonce, exp };
+}
+async function verifyManualPaymentDecisionToken(env, token) {
+  const raw = String(token || '').trim();
+  const parts = raw.split('.');
+  if (parts.length !== 2) return { ok: false, reason: 'invalid' };
+  const [encoded, signature] = parts;
+  const secret = manualPaymentDecisionSecret(env);
+  if (!secret) return { ok: false, reason: 'unavailable' };
+  const expected = await hmacSha256Hex(secret, encoded);
+  if (!constantTimeHexEqual(signature, expected)) return { ok: false, reason: 'invalid' };
+  let payload = null;
+  try { payload = JSON.parse(base64UrlToAscii(encoded)); } catch { return { ok: false, reason: 'invalid' }; }
+  if (!payload || payload.v !== 1 || !payload.paymentId || !['approve','reject'].includes(payload.action) || !payload.nonce) return { ok: false, reason: 'invalid' };
+  const now = Math.floor(Date.now() / 1000);
+  if (!Number(payload.exp) || Number(payload.exp) < now) return { ok: false, reason: 'expired', payload };
+  const stored = await env.CALLFOCUS_CONFIG.get(manualPaymentDecisionKey(payload.nonce), { type: 'json' });
+  if (!stored || stored.used === true) return { ok: false, reason: 'used', payload };
+  if (String(stored.paymentId) !== String(payload.paymentId) || String(stored.action) !== String(payload.action) || Number(stored.exp) !== Number(payload.exp)) return { ok: false, reason: 'invalid', payload };
+  return { ok: true, payload, stored };
+}
+async function invalidateManualPaymentDecisionTokens(env, record = {}) {
+  const nonces = record?.decisionNonces || {};
+  await Promise.all(['approve','reject'].map(async action => {
+    const nonce = String(nonces?.[action] || '').trim();
+    if (!nonce) return;
+    try { await env.CALLFOCUS_CONFIG.delete(manualPaymentDecisionKey(nonce)); } catch {}
+  }));
+}
 function manualPaymentPublic(record = {}) {
   return {
     id: record.id || '',
@@ -3049,19 +3113,26 @@ async function handleManualPaymentSubmit(request, env) {
     const safeCredits = escapeHtml(Number(record.credits).toLocaleString());
     const safeAmount = escapeHtml(Number(record.amountNaira).toLocaleString());
     const submitted = escapeHtml(new Date(record.submittedAt).toLocaleString('en-US', { timeZone: 'UTC', timeZoneName: 'short' }));
-    const html = callFocusEmailShell({
-      preheader: `Manual payment submitted by ${record.customerEmail}`,
-      eyebrow: 'CALLFOCUS MANUAL PAYMENT',
-      title: 'Payment receipt awaiting confirmation',
-      body: `<p><strong>${safeName}</strong> submitted a manual bank-transfer receipt.</p><p><strong>Customer:</strong> ${safeEmail}<br><strong>Phone:</strong> ${safePhone || 'Not provided'}<br><strong>Reference:</strong> ${safeRef}<br><strong>Credits:</strong> ${safeCredits}<br><strong>Expected amount:</strong> ₦${safeAmount}<br><strong>Submitted:</strong> ${submitted}</p><p>The receipt is attached. Confirm the bank transfer, then approve or reject this payment from the CallFocus Admin Portal → Payments.</p>`,
-      footer: 'Do not approve a payment until the funds are visible in your bank account.'
-    });
     try {
+      const origin = new URL(request.url).origin;
+      const approveDecision = await createManualPaymentDecisionToken(env, record.id, 'approve');
+      const rejectDecision = await createManualPaymentDecisionToken(env, record.id, 'reject');
+      record.decisionNonces = { approve: approveDecision.nonce, reject: rejectDecision.nonce };
+      record.decisionLinksExpireAt = new Date(Math.min(approveDecision.exp, rejectDecision.exp) * 1000).toISOString();
+      const approveUrl = `${origin}/manual-payment-review?token=${encodeURIComponent(approveDecision.token)}`;
+      const rejectUrl = `${origin}/manual-payment-review?token=${encodeURIComponent(rejectDecision.token)}`;
+      const html = callFocusEmailShell({
+        preheader: `Manual payment submitted by ${record.customerEmail}`,
+        eyebrow: 'CALLFOCUS MANUAL PAYMENT',
+        title: 'Payment receipt awaiting confirmation',
+        body: `<p><strong>${safeName}</strong> submitted a manual bank-transfer receipt.</p><p><strong>Customer:</strong> ${safeEmail}<br><strong>Phone:</strong> ${safePhone || 'Not provided'}<br><strong>Reference:</strong> ${safeRef}<br><strong>Credits:</strong> ${safeCredits}<br><strong>Expected amount:</strong> ₦${safeAmount}<br><strong>Submitted:</strong> ${submitted}</p><p>The receipt is attached. Confirm the funds are visible in your bank account, then choose an action below.</p><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:24px 0 12px;"><tr><td style="padding:0 6px 0 0;"><a href="${escapeHtml(approveUrl)}" style="display:block;padding:16px 18px;border-radius:14px;background:#167567;color:#ffffff;text-align:center;font-weight:800;text-decoration:none;">Approve payment</a></td><td style="padding:0 0 0 6px;"><a href="${escapeHtml(rejectUrl)}" style="display:block;padding:16px 18px;border-radius:14px;background:#f5f7f6;border:1px solid #d6e2de;color:#8f3e3e;text-align:center;font-weight:800;text-decoration:none;">Decline payment</a></td></tr></table><p style="font-size:13px;color:#879a95;">For safety, either button opens a confirmation page before anything changes. These links expire in 48 hours and can only be used once.</p>`,
+        footer: 'Do not approve a payment until the funds are visible in your bank account.'
+      });
       await sendCallFocusEmail(env, {
         to: notifyTo,
         subject: `CallFocus payment awaiting confirmation · ${record.id}`,
         html,
-        text: `${record.customerName} (${record.customerEmail}) submitted ₦${record.amountNaira} for ${record.credits} credits. Reference: ${record.id}. Confirm the transfer, then approve it from CallFocus Admin.`,
+        text: `${record.customerName} (${record.customerEmail}) submitted ₦${record.amountNaira} for ${record.credits} credits. Reference: ${record.id}. Review the attached receipt and use the secure Approve payment or Decline payment link in this email.`,
         attachments: [{ filename, content: bytesToB64(new Uint8Array(buffer)) }]
       });
       record.notificationSent = true;
@@ -3144,24 +3215,21 @@ async function sendManualPaymentDecisionEmail(env, record, approved) {
   try { await sendCallFocusEmail(env, { to: record.customerEmail, subject: `CallFocus · ${statusTitle}`, html, text: approved ? `${record.credits} credits have been added to your CallFocus balance.` : `Your manual payment ${record.id} could not be approved.` }); } catch {}
 }
 
-async function handleAdminManualPaymentAction(request, env) {
-  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
-  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
-  let body = {}; try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
-  const id = String(body?.paymentId || '').trim();
-  const action = String(body?.action || '').trim().toLowerCase();
-  if (!id || !['approve','reject'].includes(action)) return json({ error: 'Invalid payment action.' }, 400);
-  const record = await manualPaymentRecord(env, id);
-  if (!record) return json({ error: 'Manual payment not found.' }, 404);
-  if (action === 'approve' && record.status === 'approved') {
+async function applyManualPaymentDecision(env, id, action, reason = '') {
+  const paymentId = String(id || '').trim();
+  const decision = String(action || '').trim().toLowerCase();
+  if (!paymentId || !['approve','reject'].includes(decision)) return { error: 'Invalid payment action.', status: 400 };
+  const record = await manualPaymentRecord(env, paymentId);
+  if (!record) return { error: 'Manual payment not found.', status: 404 };
+  if (decision === 'approve' && record.status === 'approved') {
     const data = await getCustomerDataForUpdate(env, record.userId, record.customerName);
-    return json({ ok: true, duplicate: true, payment: manualPaymentAdmin(record), wallet: data.wallet });
+    return { ok: true, duplicate: true, payment: manualPaymentAdmin(record), wallet: data.wallet };
   }
-  if (record.status !== 'pending_confirmation') return json({ error: 'Only submitted payments awaiting confirmation can be changed.' }, 409);
+  if (record.status !== 'pending_confirmation') return { error: 'Only submitted payments awaiting confirmation can be changed.', status: 409, payment: manualPaymentAdmin(record) };
   const now = new Date().toISOString();
-  if (action === 'approve') {
+  if (decision === 'approve') {
     const user = await env.CALLFOCUS_CONFIG.get(customerUserKey(record.userId), { type: 'json' });
-    if (!user) return json({ error: 'Customer account not found.' }, 404);
+    if (!user) return { error: 'Customer account not found.', status: 404 };
     const data = await getCustomerDataForUpdate(env, user.id, user.name);
     const wallet = normalizeServerWallet(data.wallet);
     const existing = wallet.purchases.find(p => String(p?.reference || p?.id || '') === record.id);
@@ -3186,16 +3254,80 @@ async function handleAdminManualPaymentAction(request, env) {
     }
     record.status = 'approved'; record.approvedAt = now; record.updatedAt = now; record.rejectionReason = '';
     await putManualPaymentRecord(env, record);
+    await invalidateManualPaymentDecisionTokens(env, record);
     await sendManualPaymentDecisionEmail(env, record, true);
-    return json({ ok: true, payment: manualPaymentAdmin(record), wallet });
+    return { ok: true, payment: manualPaymentAdmin(record), wallet };
   }
   record.status = 'rejected';
   record.rejectedAt = now;
   record.updatedAt = now;
-  record.rejectionReason = String(body?.reason || '').trim().slice(0, 300);
+  record.rejectionReason = String(reason || '').trim().slice(0, 300);
   await putManualPaymentRecord(env, record);
+  await invalidateManualPaymentDecisionTokens(env, record);
   await sendManualPaymentDecisionEmail(env, record, false);
-  return json({ ok: true, payment: manualPaymentAdmin(record) });
+  return { ok: true, payment: manualPaymentAdmin(record) };
+}
+
+async function handleAdminManualPaymentAction(request, env) {
+  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  let body = {}; try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const result = await applyManualPaymentDecision(env, body?.paymentId, body?.action, body?.reason);
+  if (result?.error) return json({ error: result.error, payment: result.payment || undefined }, result.status || 400);
+  return json(result);
+}
+
+function manualPaymentReviewPage({ title, eyebrow = 'CALLFOCUS PAYMENT REVIEW', body = '', form = '', tone = 'neutral' }) {
+  const accent = tone === 'approve' ? '#167567' : tone === 'reject' ? '#a64b4b' : '#1f756a';
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="robots" content="noindex,nofollow,noarchive"><title>${escapeHtml(title)} · CallFocus</title></head><body style="margin:0;background:#eef5f2;font-family:Arial,Helvetica,sans-serif;color:#173d37;"><main style="min-height:100vh;display:grid;place-items:center;padding:24px 14px;box-sizing:border-box;"><section style="width:min(560px,100%);background:#fff;border:1px solid #dbe8e3;border-radius:28px;box-shadow:0 18px 60px rgba(21,75,65,.10);overflow:hidden;"><div style="padding:30px 30px 12px;"><div style="font-size:12px;font-weight:800;letter-spacing:.18em;color:${accent};">${escapeHtml(eyebrow)}</div><h1 style="margin:10px 0 0;font-size:32px;line-height:1.12;color:#123c35;">${escapeHtml(title)}</h1></div><div style="padding:4px 30px 30px;font-size:16px;line-height:1.6;color:#5b746f;">${body}${form}</div></section></main></body></html>`;
+}
+
+async function handleManualPaymentReview(request, env) {
+  if (!['GET','POST'].includes(request.method)) return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET, POST' } });
+  let token = '';
+  let reason = '';
+  if (request.method === 'GET') token = String(new URL(request.url).searchParams.get('token') || '').trim();
+  else {
+    let form; try { form = await request.formData(); } catch { return new Response('Invalid request.', { status: 400 }); }
+    token = String(form.get('token') || '').trim();
+    reason = String(form.get('reason') || '').trim().slice(0, 300);
+  }
+  const verified = await verifyManualPaymentDecisionToken(env, token);
+  if (!verified.ok) {
+    const message = verified.reason === 'expired' ? 'This secure payment link has expired.' : verified.reason === 'used' ? 'This payment link has already been used or the payment was already decided.' : 'This secure payment link is invalid or no longer available.';
+    return new Response(manualPaymentReviewPage({ title: 'Link unavailable', body: `<p>${escapeHtml(message)}</p><p>You can still review the payment from the CallFocus Admin Portal.</p>` }), { status: 410, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+  }
+  const { paymentId, action, nonce } = verified.payload;
+  const record = await manualPaymentRecord(env, paymentId);
+  if (!record) return new Response(manualPaymentReviewPage({ title: 'Payment not found', body: '<p>This payment record is no longer available.</p>' }), { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+  if (record.status !== 'pending_confirmation') {
+    const statusLabel = record.status === 'approved' ? 'approved' : record.status === 'rejected' ? 'declined' : escapeHtml(record.status);
+    return new Response(manualPaymentReviewPage({ title: `Payment already ${statusLabel}`, body: `<p><strong>${escapeHtml(record.id)}</strong> is already ${statusLabel}. No further action is required.</p>` }), { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+  }
+  const safeToken = escapeHtml(token);
+  const safeName = escapeHtml(record.customerName || 'CallFocus customer');
+  const safeEmail = escapeHtml(record.customerEmail || '');
+  const safeRef = escapeHtml(record.id);
+  const credits = escapeHtml(Number(record.credits || 0).toLocaleString());
+  const amount = escapeHtml(Number(record.amountNaira || 0).toLocaleString());
+  if (request.method === 'GET') {
+    const approving = action === 'approve';
+    const actionWord = approving ? 'Approve' : 'Decline';
+    const warning = approving ? 'Confirm only after the funds are visible in your bank account.' : 'Declining will not add any credits to the customer balance.';
+    const reasonField = approving ? '' : `<label style="display:block;margin:18px 0 8px;font-weight:700;color:#284d47;">Reason <span style="font-weight:400;color:#879a95;">(optional)</span></label><textarea name="reason" maxlength="300" placeholder="Optional note for the customer" style="width:100%;min-height:96px;box-sizing:border-box;border:1px solid #cfe0db;border-radius:14px;padding:13px;font:inherit;color:#173d37;resize:vertical;"></textarea>`;
+    const body = `<div style="background:#f7faf9;border:1px solid #dce9e5;border-radius:18px;padding:18px;margin:14px 0 18px;"><div><strong>Customer:</strong> ${safeName}</div><div><strong>Email:</strong> ${safeEmail}</div><div><strong>Reference:</strong> ${safeRef}</div><div><strong>Amount:</strong> ₦${amount}</div><div><strong>Credits:</strong> ${credits}</div></div><p>${escapeHtml(warning)}</p>`;
+    const form = `<form method="post" action="/manual-payment-review" style="margin-top:20px;"><input type="hidden" name="token" value="${safeToken}">${reasonField}<button type="submit" style="width:100%;border:0;border-radius:15px;padding:16px 18px;margin-top:18px;background:${approving ? '#167567' : '#a64b4b'};color:#fff;font-size:16px;font-weight:800;">Confirm ${actionWord.toLowerCase()}</button><a href="/" style="display:block;text-align:center;margin-top:14px;color:#52726c;text-decoration:none;font-weight:700;">Cancel and return home</a></form>`;
+    return new Response(manualPaymentReviewPage({ title: `${actionWord} ₦${amount} payment?`, body, form, tone: approving ? 'approve' : 'reject' }), { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } });
+  }
+  const result = await applyManualPaymentDecision(env, paymentId, action, reason);
+  if (result?.error) {
+    return new Response(manualPaymentReviewPage({ title: 'Payment could not be updated', body: `<p>${escapeHtml(result.error)}</p><p>You can review it from the CallFocus Admin Portal.</p>` }), { status: result.status || 400, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+  }
+  try { await env.CALLFOCUS_CONFIG.delete(manualPaymentDecisionKey(nonce)); } catch {}
+  const approved = action === 'approve';
+  const title = approved ? 'Payment approved' : 'Payment declined';
+  const body = approved ? `<p><strong>${credits} credits</strong> have been added to ${safeName}'s CallFocus balance.</p><p>Reference: <strong>${safeRef}</strong></p>` : `<p>No credits were added to ${safeName}'s balance.</p><p>Reference: <strong>${safeRef}</strong></p>`;
+  return new Response(manualPaymentReviewPage({ title, eyebrow: 'CALLFOCUS PAYMENT UPDATED', body: `${body}<a href="/" style="display:block;text-align:center;margin-top:22px;padding:14px 16px;border-radius:14px;background:#f1f6f4;color:#1f675d;text-decoration:none;font-weight:800;">Return to CallFocus</a>`, tone: approved ? 'approve' : 'reject' }), { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } });
 }
 
 async function handleAdminManualPaymentReceipt(request, env) {
@@ -3271,6 +3403,7 @@ export default {
     if (url.pathname === '/api/manual-payment/submit') { const limited = await callFocusRateLimit(request, env, 'manual-payment-submit', 10, 900); if (limited) return limited; return safeCustomerRoute('manual-payment-submit', () => handleManualPaymentSubmit(request, env)); }
     if (url.pathname === '/api/manual-payment/cancel') return safeCustomerRoute('manual-payment-cancel', () => handleManualPaymentCancel(request, env));
     if (url.pathname === '/api/manual-payment/status') return safeCustomerRoute('manual-payment-status', () => handleManualPaymentStatus(request, env));
+    if (url.pathname === '/manual-payment-review') return handleManualPaymentReview(request, env);
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
     if (url.pathname === '/api/admin/login' && request.method === 'POST') { const limited = await callFocusRateLimit(request, env, 'admin-login', 8, 900); if (limited) return limited; return handleAdminLogin(request, env); }
