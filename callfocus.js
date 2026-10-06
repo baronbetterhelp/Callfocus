@@ -4974,6 +4974,12 @@ ${approvedPatterns}
     $('manualCheckStatusBtn').textContent='Approved';$('manualCheckStatusBtn').disabled=true;
     try{window.CallFocusPaystack?.refreshWallet?.({quiet:true});}catch{}
     window.toast?.(`${creditsText(p.credits)} added to your balance`);
+    // Let the customer see the approval confirmation briefly, then return to Home.
+    setTimeout(()=>{
+      hideModal();
+      try{window.showView?.('home');window.scrollTo({top:0,left:0,behavior:'auto'});}
+      catch{location.href='/';}
+    },1400);
   }
   function rejected(p){
     clearInterval(pollTimer);pollTimer=null;saveActive('');updateInline(null);
