@@ -3578,8 +3578,13 @@ ${approvedPatterns}
         }
         if(!payload?.token){ const msg='The account service did not return a session. Please try again.'; showAuthStatus(msg,'error'); window.toast?.(msg); return; }
         localStorage.setItem(SERVER_TOKEN_KEY,payload.token);
-        try{sessionStorage.setItem('callfocus_post_auth_notice','Signed in');}catch{}
-        location.reload();
+        try{
+          sessionStorage.setItem('callfocus_post_auth_notice','Signed in');
+          sessionStorage.setItem(POST_SIGNUP_HOME_KEY,'1');
+        }catch{}
+        // V13.4: every successful sign-in lands on the main front-page hero,
+        // matching the post-signup experience regardless of the route used to sign in.
+        location.replace('/');
       }catch{
         const msg='Could not reach the CallFocus account server. Please try again.';
         showAuthStatus(msg,'error'); window.toast?.(msg);

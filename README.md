@@ -65,3 +65,11 @@ See `README-V13.0.md` for compact homepage quick tools and Live Avatar conversat
 
 ## V13.2
 Floating live two-speaker transcript with English translation for non-English calls.
+
+
+## V13.3
+Moved the new-user starter-credit information to the bottom of the Credits page after the usage guidance cards, while preserving all purchase and payment behavior.
+
+
+## V13.4
+Successful sign-in and verified signup land on the top of the main Home page.
