@@ -47,3 +47,7 @@ This build adds application-level rate limiting. Cloudflare Access/Turnstile can
 
 
 See README-V12.7.md for the Live AI Avatar integration and TAVUS_API_KEY setup.
+
+
+## V12.8 — Stock Avatar Test Mode
+See `README-V12.8.md`. Live AI Avatar now defaults to Tavus stock faces for free-plan testing before enabling paid custom selfie avatars.

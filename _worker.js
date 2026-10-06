@@ -2468,6 +2468,7 @@ const AVATAR_PROFILE_PREFIX = 'avatar:profile:';
 const AVATAR_MEDIA_PREFIX = 'avatar:media:';
 const AVATAR_SESSION_PREFIX = 'avatar:session:';
 const AVATAR_PAL_KEY = 'avatar:tavus:pal:v1';
+const AVATAR_STOCK_CACHE_KEY = 'avatar:tavus:stock_faces:v1';
 const TAVUS_API_BASE = 'https://tavusapi.com/v2';
 const AVATAR_MEDIA_TTL = 60 * 60;
 const AVATAR_SESSION_TTL = 60 * 60 * 3;
@@ -2521,6 +2522,44 @@ async function tavusRequest(env, path, { method = 'GET', body = null, allowError
     throw error;
   }
   return { ok: response.ok, status: response.status, payload };
+}
+
+function avatarSafeStockFace(face = {}){
+  return {
+    faceId: String(face.face_id || face.faceId || face.id || ''),
+    faceName: String(face.face_name || face.faceName || face.name || 'Stock AI'),
+    thumbnailVideoUrl: String(face.thumbnail_video_url || face.thumbnailVideoUrl || ''),
+    modelName: String(face.model_name || face.modelName || ''),
+    status: String(face.status || 'completed')
+  };
+}
+
+async function loadTavusStockFaces(env, { force = false } = {}){
+  if(!avatarProviderConfigured(env)) throw Object.assign(new Error('Live AI Avatar is not activated yet. Add TAVUS_API_KEY to the CallFocus Worker secrets.'), { status: 503, code: 'avatar_provider_unconfigured' });
+  if(env.CALLFOCUS_CONFIG && !force){
+    try{
+      const cached = await env.CALLFOCUS_CONFIG.get(AVATAR_STOCK_CACHE_KEY, { type: 'json' });
+      if(Array.isArray(cached?.faces) && cached.faces.length) return cached.faces;
+    }catch{}
+  }
+  const res = await tavusRequest(env, '/faces?face_type=system&limit=100&verbose=true');
+  const raw = Array.isArray(res.payload?.data) ? res.payload.data : Array.isArray(res.payload?.faces) ? res.payload.faces : [];
+  const faces = raw.map(avatarSafeStockFace).filter(face => face.faceId && String(face.status || 'completed').toLowerCase() !== 'error');
+  if(env.CALLFOCUS_CONFIG && faces.length){
+    try{ await env.CALLFOCUS_CONFIG.put(AVATAR_STOCK_CACHE_KEY, JSON.stringify({ faces, cachedAt: new Date().toISOString() }), { expirationTtl: 600 }); }catch{}
+  }
+  return faces;
+}
+
+async function handleAvatarStockFaces(request, env){
+  if(request.method !== 'GET') return json({ error: 'Method not allowed.' }, 405);
+  const auth = await authenticatedCustomer(request, env);
+  if(!auth) return json({ error: 'Sign in to load the Live AI Avatar library.' }, 401);
+  if(!avatarProviderConfigured(env)) return json({ error: 'Live AI Avatar is not activated yet. Add TAVUS_API_KEY to the CallFocus Worker secrets.', code: 'avatar_provider_unconfigured', providerConfigured: false }, 503);
+  const url = new URL(request.url);
+  const force = url.searchParams.get('refresh') === '1';
+  const faces = await loadTavusStockFaces(env, { force });
+  return json({ ok: true, providerConfigured: true, faces });
 }
 
 function decodeAvatarImageData(imageData){
@@ -2709,29 +2748,44 @@ async function handleAvatarSession(request, env){
   if(!auth) return json({ error: 'Sign in to start a Live AI Avatar session.' }, 401);
   if(!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is unavailable.' }, 503);
   if(!avatarProviderConfigured(env)) return json({ error: 'Live AI Avatar is not activated yet. Add TAVUS_API_KEY to the CallFocus Worker.', code: 'avatar_provider_unconfigured' }, 503);
-  let profile = (await env.CALLFOCUS_CONFIG.get(avatarProfileKey(auth.user.id), { type: 'json' })) || {};
-  if(!profile.avatarId) return json({ error: 'Create your AI avatar from a selfie first.' }, 409);
-  try{ profile = await readTavusAvatarStatus(env, profile); }catch{}
-  await env.CALLFOCUS_CONFIG.put(avatarProfileKey(auth.user.id), JSON.stringify(profile));
-  if(String(profile.status) !== 'completed'){
-    const msg = profile.errorMessage || (profile.status === 'error' ? 'The avatar could not be created. Try another selfie.' : 'Your avatar is still being prepared. Please wait for it to finish.');
-    return json({ error: msg, status: profile.status, trainingProgress: profile.trainingProgress }, 409);
+
+  let requestBody = {}; try{ requestBody = await request.json(); }catch{}
+  const requestedFaceId = String(requestBody?.faceId || '').trim();
+  let selectedFaceId = '';
+  let selectedReplicaId = '';
+
+  if(requestedFaceId){
+    const stockFaces = await loadTavusStockFaces(env);
+    const selected = stockFaces.find(face => String(face.faceId) === requestedFaceId);
+    if(!selected) return json({ error: 'That stock avatar is not available to this Tavus account. Refresh the avatar library and choose another face.' }, 400);
+    selectedFaceId = selected.faceId;
+  }else{
+    let profile = (await env.CALLFOCUS_CONFIG.get(avatarProfileKey(auth.user.id), { type: 'json' })) || {};
+    if(!profile.avatarId) return json({ error: 'Choose a stock avatar first.' }, 409);
+    try{ profile = await readTavusAvatarStatus(env, profile); }catch{}
+    await env.CALLFOCUS_CONFIG.put(avatarProfileKey(auth.user.id), JSON.stringify(profile));
+    if(String(profile.status) !== 'completed'){
+      const msg = profile.errorMessage || (profile.status === 'error' ? 'The avatar could not be created.' : 'Your avatar is still being prepared.');
+      return json({ error: msg, status: profile.status, trainingProgress: profile.trainingProgress }, 409);
+    }
+    if(profile.resourceType === 'replica') selectedReplicaId = profile.avatarId;
+    else selectedFaceId = profile.avatarId;
   }
 
   const palId = await getOrCreateAvatarPal(env);
   const body = {
     conversation_name: `CallFocus Avatar — ${String(auth.user.name || 'User').slice(0,80)}`,
-    conversational_context: 'This is a live CallFocus AI avatar session. Give helpful, intelligent answers in natural spoken language. Keep the pace conversational. The interface visibly discloses that this avatar is AI-generated.',
-    custom_greeting: 'Hi. I’m your AI-generated CallFocus avatar. I’m ready whenever you are — ask me anything.',
+    conversational_context: 'This is a live CallFocus AI avatar test session. Give helpful, intelligent answers in natural spoken language. Keep the pace conversational. The interface visibly discloses that the avatar is AI-generated. Never claim to be a human.',
+    custom_greeting: 'Hi. I’m an AI-generated CallFocus avatar. I’m ready whenever you are — ask me anything.',
     dynamic_greeting: false,
     require_auth: true,
     max_participants: 2,
     properties: {
       enable_closed_captions: true,
-      max_call_duration: 600
+      max_call_duration: 300
     },
     ...(palId ? { pal_id: palId } : {}),
-    ...(profile.resourceType === 'replica' ? { replica_id: profile.avatarId } : { face_id: profile.avatarId })
+    ...(selectedFaceId ? { face_id: selectedFaceId } : { replica_id: selectedReplicaId })
   };
   const res = await tavusRequest(env, '/conversations', { method: 'POST', body });
   const p = res.payload || {};
@@ -2739,7 +2793,7 @@ async function handleAvatarSession(request, env){
   const conversationUrl = String(p.conversation_url || p.url || '');
   const meetingToken = String(p.meeting_token || p.token || '');
   if(!conversationId || !conversationUrl) return json({ error: 'The avatar provider did not return a usable live session.' }, 502);
-  await env.CALLFOCUS_CONFIG.put(avatarSessionKey(conversationId), JSON.stringify({ userId: auth.user.id, createdAt: new Date().toISOString() }), { expirationTtl: AVATAR_SESSION_TTL });
+  await env.CALLFOCUS_CONFIG.put(avatarSessionKey(conversationId), JSON.stringify({ userId: auth.user.id, createdAt: new Date().toISOString(), faceId: selectedFaceId || selectedReplicaId, mode: requestedFaceId ? 'stock' : 'custom' }), { expirationTtl: AVATAR_SESSION_TTL });
   return json({ ok: true, conversationId, conversationUrl, meetingToken });
 }
 
@@ -2807,6 +2861,7 @@ export default {
     if (url.pathname === '/api/admin/diagnostics' && request.method === 'GET') return handleAdminDiagnostics(request, env);
     if (url.pathname === '/api/voice-note' && request.method === 'POST') return handleVoiceNote(request, env);
     if (url.pathname.startsWith('/api/avatar/media/')) return handleAvatarMedia(request, env, decodeURIComponent(url.pathname.slice('/api/avatar/media/'.length)));
+    if (url.pathname === '/api/avatar/stock-faces') { const limited = await callFocusRateLimit(request, env, 'avatar-stock-faces', 60, 3600); if (limited) return limited; return safeCustomerRoute('avatar-stock-faces', () => handleAvatarStockFaces(request, env)); }
     if (url.pathname === '/api/avatar/profile') return safeCustomerRoute('avatar-profile', () => handleAvatarProfile(request, env));
     if (url.pathname === '/api/avatar/create') { const limited = await callFocusRateLimit(request, env, 'avatar-create', 6, 86400); if (limited) return limited; return safeCustomerRoute('avatar-create', () => handleAvatarCreate(request, env)); }
     if (url.pathname === '/api/avatar/session') { const limited = await callFocusRateLimit(request, env, 'avatar-session', 30, 3600); if (limited) return limited; return safeCustomerRoute('avatar-session', () => handleAvatarSession(request, env)); }
