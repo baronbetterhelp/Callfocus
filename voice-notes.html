@@ -11,15 +11,15 @@
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
   <link rel="icon" type="image/png" href="./favicon.png" />
-  <title>CallFocus — Context for every call</title>
+  <title>Voice Notes — CallFocus</title>
   <script>document.documentElement.dataset.theme='pearl';document.documentElement.style.colorScheme='light';</script>
-  <meta name="description" content="Context-aware realtime calling workspace." />
+  <meta name="description" content="Create AI voice notes using your CallFocus context and shared credits." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/callfocus.css?v=12.0" />
 </head>
-<body data-cf-document-view="home">
+<body data-cf-document-view="voice-notes">
   <div class="app-root home-page" id="pageRoot">
     <header class="site-header" id="siteHeader">
       <div class="container header-inner">
@@ -83,7 +83,7 @@
     </header>
 
     <main>
-      <section class="page-view active" id="page-home" data-view="home">
+      <section class="page-view" id="page-home" data-view="home">
         <section class="premium-hero" id="home">
           <div class="hero-media" aria-hidden="true">
             <div class="hero-media-overlay"></div>
@@ -216,7 +216,7 @@
       </section>
 
 
-      <section class="page-view app-page voice-notes-page" id="page-voice-notes" data-view="voice-notes">
+      <section class="page-view app-page voice-notes-page active" id="page-voice-notes" data-view="voice-notes">
         <div class="container voice-notes-shell">
           <div class="voice-notes-head">
             <button class="voice-notes-back" id="voiceNotesBackBtn" type="button" aria-label="Back to home">‹</button>

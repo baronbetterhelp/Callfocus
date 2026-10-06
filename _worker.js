@@ -393,6 +393,8 @@ async function handleCustomerSignup(request, env) {
   if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is not connected. Re-deploy with the CALLFOCUS_CONFIG KV binding from wrangler.jsonc.', code: 'account_storage_unavailable' }, 503);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const botError = callFocusBotTrap(body);
+  if (botError) return json({ error: botError, code: 'bot_rejected' }, 400);
   const fields = validateCustomerSignupBody(body);
   if (fields.error) return json({ error: fields.error }, 400);
   const passwordRecord = await buildCustomerPasswordRecord(fields.password);
@@ -406,6 +408,8 @@ async function handleCustomerSignupRequest(request, env) {
   if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is not connected. Re-deploy with the CALLFOCUS_CONFIG KV binding from wrangler.jsonc.', code: 'account_storage_unavailable' }, 503);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const botError = callFocusBotTrap(body);
+  if (botError) return json({ error: botError, code: 'bot_rejected' }, 400);
   const fields = validateCustomerSignupBody(body);
   if (fields.error) return json({ error: fields.error }, 400);
 
@@ -427,17 +431,7 @@ async function handleCustomerSignupRequest(request, env) {
 
   const passwordRecord = await buildCustomerPasswordRecord(fields.password);
   if (!callFocusEmailConfigured(env)) {
-    const created = await createCustomerAccount(env, { ...fields, passwordRecord, emailVerified: false });
-    if (!created.ok) return json({ error: created.error }, created.status || 400);
-    return json({
-      ok: true,
-      verificationRequired: false,
-      emailVerificationConfigured: false,
-      token: created.token,
-      user: publicCustomerUser(created.user),
-      data: created.data,
-      notice: 'Account created. Email verification will turn on automatically after the CallFocus email sender is configured.'
-    });
+    return json({ error: 'Account email verification is temporarily unavailable. Please try again later.', code: 'email_verification_unavailable' }, 503);
   }
 
   const code = makeSixDigitCode();
@@ -476,6 +470,8 @@ async function handleCustomerSignupVerify(request, env) {
   if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is not connected.', code: 'account_storage_unavailable' }, 503);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const botError = callFocusBotTrap(body);
+  if (botError) return json({ error: botError, code: 'bot_rejected' }, 400);
   const email = normalizeCustomerEmail(body?.email);
   const code = String(body?.code || '').replace(/\D/g, '').slice(0, 6);
   if (!email || code.length !== 6) return json({ error: 'Enter the 6-digit verification code.' }, 400);
@@ -495,6 +491,8 @@ async function handlePasswordResetRequest(request, env) {
   if (!callFocusEmailConfigured(env)) return json({ error: 'Password reset email is not configured yet. Add the CallFocus email sender in Cloudflare first.', code: 'email_not_configured' }, 503);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const botError = callFocusBotTrap(body);
+  if (botError) return json({ error: botError, code: 'bot_rejected' }, 400);
   const email = normalizeCustomerEmail(body?.email);
   if (!email) return json({ error: 'Enter your account email address.' }, 400);
   const user = await readCustomerUserByEmail(env, email);
@@ -528,6 +526,8 @@ async function handlePasswordResetVerify(request, env) {
   if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is not connected.', code: 'account_storage_unavailable' }, 503);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const botError = callFocusBotTrap(body);
+  if (botError) return json({ error: botError, code: 'bot_rejected' }, 400);
   const email = normalizeCustomerEmail(body?.email);
   const code = String(body?.code || '').replace(/\D/g, '').slice(0, 6);
   const password = String(body?.password || '');
@@ -553,6 +553,8 @@ async function handleCustomerSignin(request, env) {
   if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is temporarily unavailable.' }, 503);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const botError = callFocusBotTrap(body);
+  if (botError) return json({ error: botError, code: 'bot_rejected' }, 400);
   const email = normalizeCustomerEmail(body?.email);
   const password = String(body?.password || '');
   if (!email || !password) return json({ error: 'Enter your email and password.' }, 400);
@@ -740,6 +742,29 @@ function sanitizeConfig(input = {}) {
   };
 }
 
+function callFocusPaymentsEnabled(env) {
+  return String(env.CALLFOCUS_PAYMENTS_ENABLED || '').trim().toLowerCase() === 'true';
+}
+
+async function callFocusRateLimit(request, env, bucket, limit, windowSeconds) {
+  if (!env.CALLFOCUS_CONFIG) return null;
+  const ip = String(request.headers.get('CF-Connecting-IP') || request.headers.get('X-Real-IP') || 'unknown').slice(0, 96);
+  const windowId = Math.floor(Date.now() / 1000 / windowSeconds);
+  const digest = await sha256Hex(`${bucket}:${ip}`);
+  const key = `ratelimit:${bucket}:${windowId}:${digest.slice(0, 24)}`;
+  const current = Math.max(0, Number(await env.CALLFOCUS_CONFIG.get(key)) || 0);
+  if (current >= limit) {
+    return new Response(JSON.stringify({ error: 'Too many attempts. Please wait a little and try again.', code: 'rate_limited' }), { status: 429, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Retry-After': String(windowSeconds) } });
+  }
+  await env.CALLFOCUS_CONFIG.put(key, String(current + 1), { expirationTtl: windowSeconds + 60 });
+  return null;
+}
+
+function callFocusBotTrap(body) {
+  if (String(body?.website || '').trim()) return 'Automated submission rejected.';
+  return '';
+}
+
 function adminAuthorized(request, env) {
   const expected = String(env.CALLFOCUS_ADMIN_PASSCODE || '');
   const supplied = String(request.headers.get('X-CallFocus-Admin-Key') || '');
@@ -761,7 +786,9 @@ async function handlePublicConfig(env) {
     speakFirst: c.speakFirst,
     interruptions: c.interruptions,
     updatedAt: c.updatedAt || null,
-    engine: 'GPT-Live 1'
+    engine: 'GPT-Live 1',
+    paymentsEnabled: callFocusPaymentsEnabled(env),
+    paymentStatus: callFocusPaymentsEnabled(env) ? 'available' : 'awaiting_paystack_activation'
   });
 }
 
@@ -1466,6 +1493,7 @@ async function creditVerifiedPaystackTransaction(env, transaction = {}) {
 }
 
 async function handlePaystackInitialize(request, env) {
+  if (!callFocusPaymentsEnabled(env)) return json({ error: 'Payments are temporarily unavailable while Paystack activation is pending.', code: 'payments_disabled' }, 503);
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
   const auth = await authenticatedCustomer(request, env);
   if (!auth) return json({ error: 'Sign in again before purchasing credits.', code: 'session_expired' }, 401);
@@ -1736,6 +1764,7 @@ async function handlePaystackDva(request, env) {
     return json({ ok: true, dva: data.wallet?.paystackDva || null, testMode: paystackIsTest(env) });
   }
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET, POST' } });
+  if (!callFocusPaymentsEnabled(env)) return json({ error: 'Transfer-account creation is temporarily unavailable while Paystack activation is pending.', code: 'payments_disabled' }, 503);
   if (!paystackConfigured(env)) return json({ error: 'Paystack is not configured yet.' }, 503);
   let body = {};
   try { body = await request.json(); } catch {}
@@ -1873,9 +1902,10 @@ async function callOpenAIResponses(env, body) {
   try { payload = JSON.parse(raw); } catch {}
   if (!response.ok) {
     const code = payload?.error?.code || payload?.error?.type || '';
-    const quota = response.status === 429 || code === 'credit_balance_exhausted' || code === 'insufficient_quota';
-    const err = new Error(quota ? 'Conversation analysis is temporarily unavailable because AI credit is not available.' : (payload?.error?.message || 'OpenAI could not analyze these screenshots.'));
-    err.status = quota ? 503 : Math.max(400, response.status || 502);
+    const quota = code === 'credit_balance_exhausted' || code === 'insufficient_quota';
+    const rateLimited = response.status === 429 && !quota;
+    const err = new Error(quota ? 'Conversation analysis is temporarily unavailable because the API balance or spending limit is unavailable.' : (rateLimited ? 'Conversation analysis is busy right now. Please wait a moment and try again.' : (payload?.error?.message || 'OpenAI could not analyze these screenshots.')));
+    err.status = (quota || rateLimited) ? 503 : Math.max(400, response.status || 502);
     throw err;
   }
   const text = extractResponsesText(payload);
@@ -1922,8 +1952,9 @@ Do not infer sensitive traits (health diagnoses, ethnicity, religion, politics, 
 
     try {
       const summary = await callOpenAIResponses(env, {
-        model: 'gpt-4o-mini',
+        model: 'gpt-6-luna',
         store: false,
+        reasoning: { effort: 'none' },
         max_output_tokens: 850,
         input: [{ role: 'user', content }]
       });
@@ -1949,8 +1980,9 @@ ANALYST NOTES\n${joined}`;
 
   try {
     const dynamics = await callOpenAIResponses(env, {
-      model: 'gpt-4o-mini',
+      model: 'gpt-6-luna',
       store: false,
+      reasoning: { effort: 'none' },
       max_output_tokens: 650,
       input: [{ role: 'user', content: [{ type: 'input_text', text: finalPrompt }] }]
     });
@@ -1979,12 +2011,12 @@ export default {
     if (url.pathname === '/api/auth/health' && request.method === 'GET') {
       return json({ ok: true, storageConnected: !!env.CALLFOCUS_CONFIG, passwordHashVersion: 3, passwordIterations: CUSTOMER_PASSWORD_ITERATIONS });
     }
-    if (url.pathname === '/api/auth/signup') return safeCustomerRoute('signup', () => handleCustomerSignup(request, env));
-    if (url.pathname === '/api/auth/signup/request') return safeCustomerRoute('signup-request', () => handleCustomerSignupRequest(request, env));
-    if (url.pathname === '/api/auth/signup/verify') return safeCustomerRoute('signup-verify', () => handleCustomerSignupVerify(request, env));
-    if (url.pathname === '/api/auth/password-reset/request') return safeCustomerRoute('password-reset-request', () => handlePasswordResetRequest(request, env));
-    if (url.pathname === '/api/auth/password-reset/verify') return safeCustomerRoute('password-reset-verify', () => handlePasswordResetVerify(request, env));
-    if (url.pathname === '/api/auth/signin') return safeCustomerRoute('signin', () => handleCustomerSignin(request, env));
+    if (url.pathname === '/api/auth/signup') return json({ error: 'This signup endpoint has been retired. Use the email-verification signup flow.', code: 'legacy_signup_retired' }, 410);
+    if (url.pathname === '/api/auth/signup/request') { const limited = await callFocusRateLimit(request, env, 'signup-request', 8, 900); if (limited) return limited; return safeCustomerRoute('signup-request', () => handleCustomerSignupRequest(request, env)); }
+    if (url.pathname === '/api/auth/signup/verify') { const limited = await callFocusRateLimit(request, env, 'signup-verify', 12, 900); if (limited) return limited; return safeCustomerRoute('signup-verify', () => handleCustomerSignupVerify(request, env)); }
+    if (url.pathname === '/api/auth/password-reset/request') { const limited = await callFocusRateLimit(request, env, 'password-reset-request', 6, 3600); if (limited) return limited; return safeCustomerRoute('password-reset-request', () => handlePasswordResetRequest(request, env)); }
+    if (url.pathname === '/api/auth/password-reset/verify') { const limited = await callFocusRateLimit(request, env, 'password-reset-verify', 12, 900); if (limited) return limited; return safeCustomerRoute('password-reset-verify', () => handlePasswordResetVerify(request, env)); }
+    if (url.pathname === '/api/auth/signin') { const limited = await callFocusRateLimit(request, env, 'signin', 15, 900); if (limited) return limited; return safeCustomerRoute('signin', () => handleCustomerSignin(request, env)); }
     if (url.pathname === '/api/auth/session') return safeCustomerRoute('session', () => handleCustomerSession(request, env));
     if (url.pathname === '/api/auth/signout') return safeCustomerRoute('signout', () => handleCustomerSignout(request, env));
     if (url.pathname === '/api/auth/migrate') return handleCustomerMigration(request, env);
@@ -1998,13 +2030,13 @@ export default {
     if (url.pathname === '/api/paystack/webhook') return handlePaystackWebhook(request, env);
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
-    if (url.pathname === '/api/admin/login' && request.method === 'POST') return handleAdminLogin(request, env);
+    if (url.pathname === '/api/admin/login' && request.method === 'POST') { const limited = await callFocusRateLimit(request, env, 'admin-login', 8, 900); if (limited) return limited; return handleAdminLogin(request, env); }
     if (url.pathname === '/api/admin/config') return handleAdminConfig(request, env);
     if (url.pathname === '/api/admin/unlimited-user') return handleAdminUnlimitedUser(request, env);
     if (url.pathname === '/api/admin/voice-preview' && request.method === 'POST') return handleVoicePreview(request, env);
     if (url.pathname === '/api/admin/diagnostics' && request.method === 'GET') return handleAdminDiagnostics(request, env);
     if (url.pathname === '/api/voice-note' && request.method === 'POST') return handleVoiceNote(request, env);
-    if (url.pathname === '/api/dynamics/analyze') return safeCustomerRoute('dynamics-analyze', () => handleDynamicsAnalyze(request, env));
+    if (url.pathname === '/api/dynamics/analyze') { const limited = await callFocusRateLimit(request, env, 'dynamics-analyze', 40, 900); if (limited) return limited; return safeCustomerRoute('dynamics-analyze', () => handleDynamicsAnalyze(request, env)); }
     if (url.pathname === '/api/session') {
       if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
       return handleSession(request, env);
@@ -2012,9 +2044,21 @@ export default {
     if (url.pathname === '/admin' || url.pathname === '/admin/') {
       return env.ASSETS.fetch(new Request(new URL('/admin.html', url.origin), request));
     }
-    const appRoutes = new Set(['/', '/voice-notes', '/credits', '/callers', '/recent-calls', '/profile', '/settings']);
-    if (request.method === 'GET' && appRoutes.has(url.pathname.replace(/\/+$/, '') || '/')) {
-      return env.ASSETS.fetch(new Request(new URL('/index.html', url.origin), request));
+    const pageMap = {
+      '/': '/index.html',
+      '/voice-notes': '/voice-notes.html',
+      '/credits': '/credits.html',
+      '/callers': '/callers.html',
+      '/recent-calls': '/recent-calls.html',
+      '/profile': '/profile.html',
+      '/settings': '/settings.html',
+      '/privacy': '/privacy.html',
+      '/terms': '/terms.html',
+      '/support': '/support.html'
+    };
+    const cleanPath = url.pathname === '/' ? '/' : url.pathname.replace(/\/+$/, '');
+    if (request.method === 'GET' && pageMap[cleanPath]) {
+      return env.ASSETS.fetch(new Request(new URL(pageMap[cleanPath], url.origin), request));
     }
     return env.ASSETS.fetch(request);
   }

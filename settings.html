@@ -11,15 +11,15 @@
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
   <link rel="icon" type="image/png" href="./favicon.png" />
-  <title>CallFocus — Context for every call</title>
+  <title>Account Settings — CallFocus</title>
   <script>document.documentElement.dataset.theme='pearl';document.documentElement.style.colorScheme='light';</script>
-  <meta name="description" content="Context-aware realtime calling workspace." />
+  <meta name="description" content="Manage your CallFocus account and synced data." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/callfocus.css?v=12.0" />
 </head>
-<body data-cf-document-view="home">
+<body data-cf-document-view="settings">
   <div class="app-root home-page" id="pageRoot">
     <header class="site-header" id="siteHeader">
       <div class="container header-inner">
@@ -83,7 +83,7 @@
     </header>
 
     <main>
-      <section class="page-view active" id="page-home" data-view="home">
+      <section class="page-view" id="page-home" data-view="home">
         <section class="premium-hero" id="home">
           <div class="hero-media" aria-hidden="true">
             <div class="hero-media-overlay"></div>
@@ -382,7 +382,7 @@
         </div>
       </section>
 
-      <section class="page-view app-page" id="page-settings" data-view="settings">
+      <section class="page-view app-page active" id="page-settings" data-view="settings">
         <div class="container app-page-inner narrow-app-page">
           <div class="app-page-head"><div><span class="section-eyebrow">Account</span><h1>Account Settings</h1><p>Manage your CallFocus account and synced saved data.</p></div></div>
           <div class="surface-card settings-card">
