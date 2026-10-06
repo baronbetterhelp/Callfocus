@@ -539,7 +539,7 @@ async function handlePasswordResetVerify(request, env) {
   if ((await customerCodeHash(email, code, 'reset')) !== pending.codeHash) return json({ error: 'That reset code is incorrect.', code: 'reset_incorrect' }, 401);
   const user = await readCustomerUserByEmail(env, email);
   if (!user || user.id !== pending.userId) return json({ error: 'Account not found.', code: 'account_not_found' }, 404);
-  if (user.accountDisabled === true) return json({ error: 'This CallFocus account has been disabled by an administrator.', code: 'account_disabled' }, 403);
+  if (user.accountDisabled === true) return json({ error: 'Login unavailable right now. This account cannot be accessed at the moment. Please contact support@callfocus.link for assistance.', code: 'account_disabled' }, 403);
   const passwordRecord = await buildCustomerPasswordRecord(password);
   Object.assign(user, passwordRecord, { authVersion: Number(user.authVersion || 1) + 1, updatedAt: new Date().toISOString() });
   await env.CALLFOCUS_CONFIG.put(customerUserKey(user.id), JSON.stringify(user));
@@ -561,7 +561,7 @@ async function handleCustomerSignin(request, env) {
   if (!email || !password) return json({ error: 'Enter your email and password.' }, 400);
   const user = await readCustomerUserByEmail(env, email);
   if (!user) return json({ error: 'Account not found.', code: 'account_not_found' }, 404);
-  if (user.accountDisabled === true) return json({ error: 'This CallFocus account has been disabled by an administrator.', code: 'account_disabled' }, 403);
+  if (user.accountDisabled === true) return json({ error: 'Login unavailable right now. This account cannot be accessed at the moment. Please contact support@callfocus.link for assistance.', code: 'account_disabled' }, 403);
   if (user?.passwordVersion === 2 && Number(user?.passwordIterations || 0) > CUSTOMER_LEGACY_MAX_SAFE_ITERATIONS) {
     return json({ error: 'This older account needs a password reset before it can sign in on the new domain.', code: 'password_upgrade_required' }, 409);
   }
@@ -669,7 +669,7 @@ async function handleCustomerMigration(request, env) {
   let user;
   let data;
   if (existing) {
-    if (existing.accountDisabled === true) return json({ error: 'This CallFocus account has been disabled by an administrator.', code: 'account_disabled' }, 403);
+    if (existing.accountDisabled === true) return json({ error: 'Login unavailable right now. This account cannot be accessed at the moment. Please contact support@callfocus.link for assistance.', code: 'account_disabled' }, 403);
     const samePassword = existing.passwordHash === String(legacy.passwordHash || '') &&
       String(existing.passwordSalt || '') === String(legacy.passwordSalt || '') &&
       Number(existing.passwordIterations || 120000) === Number(legacy.passwordIterations || 120000);
