@@ -1931,3 +1931,140 @@ html:not([data-theme="pearl"]) .manual-bank-card,html:not([data-theme="pearl"]) 
   .avatar-call-brief{padding:14px;border-radius:18px}
   .avatar-call-brief-head{align-items:flex-start}.avatar-call-brief-head strong{font-size:14px}
 }
+
+
+/* ===== CallFocus V13.1 — compact, organized credit purchase screen ===== */
+/* Keep the credit page informative without forcing mobile users through oversized cards. */
+.credit-page-head{margin-bottom:12px}
+.credit-balance-hero{
+  grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);
+  gap:10px;
+  margin:14px 0 16px;
+  padding:10px;
+  border-radius:20px;
+}
+.credit-balance-hero>div{padding:12px 14px;border-radius:15px}
+.credit-balance-hero span,.credit-rate-card span{margin-bottom:5px;font-size:9.5px;letter-spacing:.12em}
+.credit-balance-hero strong{font-size:22px}
+.credit-rate-card strong{font-size:15px!important;line-height:1.25}
+.credit-balance-hero small{margin-top:4px;font-size:11.5px}
+
+.credit-purchase-section{padding:16px;border-radius:22px}
+.payment-pending-notice{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  gap:4px 12px;
+  align-items:center;
+  padding:11px 13px;
+  margin:0 0 13px;
+  border-radius:15px;
+}
+.payment-pending-notice strong{font-size:13px;white-space:nowrap}
+.payment-pending-notice span{font-size:11.5px;line-height:1.4}
+.credit-section-title{margin-bottom:10px}
+.credit-section-title h2{font-size:19px}
+.credit-section-title>small{font-size:10.5px}
+
+.credit-package-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.credit-package{
+  min-height:104px;
+  padding:12px;
+  border-radius:15px;
+}
+.credit-package>span{font-size:9px;letter-spacing:.08em}
+.credit-package>strong{margin-top:8px;font-size:15px;line-height:1.15}
+.credit-package>small{margin-top:3px;font-size:11px}
+.credit-package>b{padding-top:9px;font-size:14px}
+
+.credit-custom-card{
+  grid-template-columns:minmax(0,1fr) 132px 112px;
+  gap:10px;
+  align-items:center;
+  margin-top:10px;
+  padding:12px 13px;
+  border-radius:15px;
+}
+.credit-custom-card>div:first-child strong{margin-bottom:2px;font-size:13px}
+.credit-custom-card>div:first-child small{font-size:10.5px}
+.credit-custom-card label{gap:4px;font-size:10.5px}
+.credit-custom-card input{min-height:40px;padding:9px 11px;border-radius:12px;font-size:14px}
+.credit-custom-summary{gap:2px}
+.credit-custom-summary span{font-size:10.5px}
+.credit-custom-summary strong{font-size:15px}
+.credit-checkout-btn{
+  min-height:54px;
+  margin-top:11px;
+  padding:12px 15px;
+  border-radius:15px;
+}
+.credit-checkout-btn>span{font-size:14px}
+.credit-checkout-btn>small{font-size:11px}
+.credit-payment-note{margin:7px 2px 0;font-size:10.5px;line-height:1.4}
+.credit-usage-info{margin-top:14px}
+
+@media(max-width:760px){
+  .credit-page-shell{padding-top:16px}
+  .credit-balance-hero{grid-template-columns:repeat(2,minmax(0,1fr));padding:8px;gap:7px}
+  .credit-balance-hero>div{padding:11px 12px}
+  .credit-balance-hero strong{font-size:19px}
+  .credit-rate-card strong{font-size:13.5px!important}
+  .credit-balance-hero small{font-size:10.5px}
+  .credit-purchase-section{padding:13px}
+  .credit-package-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+  .credit-package{min-height:94px;padding:10px}
+  .credit-package>span{font-size:8px}
+  .credit-package>strong{font-size:13.5px}
+  .credit-package>small{font-size:10px}
+  .credit-package>b{padding-top:7px;font-size:12.5px}
+  .credit-custom-card{grid-template-columns:minmax(0,1fr) 118px 96px;gap:8px;padding:11px}
+}
+
+@media(max-width:620px){
+  .credit-page-head{margin-bottom:8px}
+  .credit-page-head h1{font-size:30px}
+  .credit-page-head p{font-size:12.5px;line-height:1.45}
+  .credit-balance-hero{margin:10px 0 12px;padding:7px;border-radius:17px}
+  .credit-balance-hero>div{padding:10px;border-radius:12px}
+  .credit-balance-hero span,.credit-rate-card span{font-size:8.5px;margin-bottom:4px}
+  .credit-balance-hero strong{font-size:18px}
+  .credit-rate-card strong{font-size:12.5px!important}
+  .credit-balance-hero small{font-size:9.5px;line-height:1.3}
+  .payment-pending-notice{grid-template-columns:1fr;gap:3px;padding:10px 11px;margin-bottom:10px}
+  .payment-pending-notice strong{font-size:12px}
+  .payment-pending-notice span{font-size:10.5px}
+  .credit-section-title{flex-direction:row;align-items:end;justify-content:space-between;gap:8px;margin-bottom:8px}
+  .credit-section-title h2{font-size:17px}
+  .credit-section-title>small{font-size:9.5px;white-space:nowrap}
+  .credit-package{min-height:88px;padding:9px;border-radius:13px}
+  .credit-package>span{display:none}
+  .credit-package>strong{margin-top:0;font-size:13px}
+  .credit-package>small{font-size:9.5px}
+  .credit-package>b{margin-top:auto;padding-top:6px;font-size:12px}
+  .credit-custom-card{grid-template-columns:minmax(0,1fr) 106px;gap:8px;padding:10px}
+  .credit-custom-card>div:first-child{grid-column:auto}
+  .credit-custom-card label{grid-column:2;grid-row:1/3}
+  .credit-custom-summary{grid-column:1;align-items:flex-start}
+  .credit-custom-summary span{display:none}
+  .credit-custom-summary strong{font-size:14px}
+  .credit-checkout-btn{min-height:50px;margin-top:9px;padding:11px 13px;align-items:center;flex-direction:row;gap:10px}
+  .credit-checkout-btn>span{font-size:13px}
+  .credit-checkout-btn>small{font-size:10px;text-align:right}
+}
+
+@media(max-width:430px){
+  .credit-page-head h1{font-size:27px}
+  .credit-balance-hero strong{font-size:16.5px}
+  .credit-rate-card strong{font-size:11.5px!important}
+  .credit-balance-hero small{font-size:8.8px}
+  .credit-package-grid{gap:6px}
+  .credit-package{min-height:82px;padding:8px}
+  .credit-package>strong{font-size:12px}
+  .credit-package>small{font-size:9px}
+  .credit-package>b{font-size:11.5px}
+  .credit-custom-card{grid-template-columns:minmax(0,1fr) 98px}
+  .credit-custom-card>div:first-child strong{font-size:12px}
+  .credit-custom-card>div:first-child small{font-size:9.5px}
+  .credit-custom-card input{min-height:38px;font-size:13px}
+  .credit-checkout-btn{flex-direction:column;align-items:flex-start;gap:2px}
+  .credit-checkout-btn>small{text-align:left}
+}

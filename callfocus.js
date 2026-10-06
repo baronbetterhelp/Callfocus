@@ -4480,7 +4480,7 @@ ${approvedPatterns}
     const note=document.getElementById('creditPaymentNote');
     if(note)note.textContent=paystack?'Secure checkout is handled by Paystack. Credits are added only after CallFocus verifies a successful payment on the server.':manual?'Pay by bank transfer, upload your receipt, and receive credits after manual confirmation.':'Payments are temporarily unavailable while Paystack activation is pending.';
     const notice=document.getElementById('paymentPendingNotice');
-    if(notice&&!paystack){const strong=notice.querySelector('strong'),span=notice.querySelector('span');if(strong)strong.textContent=manual?'Manual bank transfer available':'Payments are temporarily unavailable';if(span)span.textContent=manual?'Paystack activation is still pending. You can request the CallFocus bank account, transfer the exact amount, upload your receipt, and receive credits after manual confirmation.':'Paystack activation is still pending and the manual bank-transfer fallback has not been enabled yet.';}
+    if(notice&&!paystack){const strong=notice.querySelector('strong'),span=notice.querySelector('span');if(strong)strong.textContent=manual?'Bank transfer available':'Payments are temporarily unavailable';if(span)span.textContent=manual?'Transfer the exact amount, upload your receipt, and your credits will be added after confirmation.':'Payments are temporarily unavailable. Please try again later.';}
     const dva=document.getElementById('paystackCreateDvaBtn'); if(dva)dva.disabled=!paystack;
     try{window.CallFocusManualPayments?.validateAmount?.();}catch{}
   }

@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=13.0" />
+  <link rel="stylesheet" href="/callfocus.css?v=13.1" />
 </head>
 <body data-cf-document-view="credits">
   <div class="app-root home-page" id="pageRoot">
@@ -396,11 +396,6 @@
             <div class="credit-rate-card"><span>Standard rate</span><strong>50 credits = 1 minute</strong><small>100 credits = ₦1,000 = 2 minutes</small></div>
           </div>
 
-          <div class="credit-starter-note">
-            <div class="credit-starter-icon">01</div>
-            <div><strong>New-user starter credit</strong><p>Each new account receives <b>75 starter credits</b> (1 minute 30 seconds of shared audio time), usable for either live calls or voice notes.</p></div>
-          </div>
-
           <section class="paystack-transfer-card hidden" id="paystackTransferCard" aria-hidden="true">
             <div class="paystack-transfer-head">
               <div><span class="section-eyebrow">Bank transfer</span><h2>Your reusable payment account</h2><p>Use one Paystack virtual account for future CallFocus top-ups. Verified transfers are converted to shared call and voice-note credit automatically.</p></div>
@@ -421,20 +416,20 @@
           </section>
 
           <section class="credit-purchase-section" id="creditPurchaseSection">
-            <div class="payment-pending-notice" id="paymentPendingNotice"><strong>Manual bank transfer available</strong><span>Paystack activation is still pending. You can request the CallFocus bank account, transfer the exact amount, upload your receipt, and receive credits after manual confirmation.</span></div>
-            <div class="credit-section-title"><div><span class="section-eyebrow">Buy credits</span><h2>Choose your credit amount</h2></div><small>Minimum purchase: 300 credits</small></div>
+            <div class="payment-pending-notice" id="paymentPendingNotice"><strong>Bank transfer available</strong><span>Transfer the exact amount, upload your receipt, and your credits will be added after confirmation.</span></div>
+            <div class="credit-section-title"><div><span class="section-eyebrow">Buy credits</span><h2>Choose an amount</h2></div><small>300 credits minimum</small></div>
             <div class="credit-package-grid">
               <button class="credit-package active" type="button" data-credit-package="300"><span>Starter top-up</span><strong>300 credits</strong><small>6 minutes</small><b>₦3,000</b></button>
               <button class="credit-package" type="button" data-credit-package="500"><span>More time</span><strong>500 credits</strong><small>10 minutes</small><b>₦5,000</b></button>
               <button class="credit-package" type="button" data-credit-package="1000"><span>Longer calls</span><strong>1,000 credits</strong><small>20 minutes</small><b>₦10,000</b></button>
             </div>
             <div class="credit-custom-card" id="creditCustomCard">
-              <div><strong>Custom amount</strong><small>Enter any whole credit amount from 300 upward.</small></div>
+              <div><strong>Custom amount</strong><small>Enter 300 credits or more.</small></div>
               <label><span>Credits</span><input id="customCreditAmount" type="number" min="300" step="1" value="300" inputmode="numeric" /><small class="credit-input-error hidden" id="creditAmountError">Minimum purchase is 300 credits.</small></label>
               <div class="credit-custom-summary"><span id="customCreditMinutes">6 minutes</span><strong id="customCreditNaira">₦3,000</strong></div>
             </div>
             <button class="credit-checkout-btn" id="creditCheckoutBtn" type="button" disabled aria-disabled="true"><span id="creditCheckoutLabel">Continue to payment</span><small id="creditCheckoutSummary">300 credits · ₦3,000</small></button>
-            <p class="credit-payment-note" id="creditPaymentNote">When Paystack is unavailable, CallFocus can use manual bank transfer. Credits are added only after the payment is confirmed by an administrator.</p>
+            <p class="credit-payment-note" id="creditPaymentNote">Upload your receipt after transfer. Credits are added once payment is confirmed.</p>
             <div class="manual-payment-inline-status hidden" id="manualPaymentInlineStatus"><span class="manual-status-dot"></span><div><strong id="manualPaymentInlineTitle">Payment awaiting confirmation</strong><small id="manualPaymentInlineCopy">Your balance will update automatically after approval.</small></div><button type="button" id="manualPaymentViewStatusBtn">View status</button></div>
           </section>
 
@@ -712,6 +707,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=13.0"></script>
+  <script src="/callfocus.js?v=13.1"></script>
 </body>
 </html>
