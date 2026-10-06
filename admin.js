@@ -26,6 +26,8 @@ let unlimitedCreditEmails=[];
 let adminUsers=[];
 let adminUsersCursor='';
 let adminUsersLoading=false;
+let adminAiUsage=null;
+let adminAiUsageLoading=false;
 function toast(msg){$('toast').textContent=msg;$('toast').classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>$('toast').classList.add('hidden'),2400)}
 function authHeaders(extra={}){return {'X-CallFocus-Admin-Key':adminKey,...extra}}
 function coreVoiceOptions(){return CORE_VOICES.map(v=>`<option value="${v}">${v}${v==='marin'||v==='cedar'?' · recommended':''}</option>`).join('')}
@@ -34,7 +36,7 @@ function populateVoices(){
   $('adminMaleVoice').innerHTML=`<optgroup label="Core GPT-Live voices">${coreVoiceOptions()}</optgroup><optgroup label="Additional masculine GPT-Live voices">${liveVoiceOptions(EXTRA_MALE_VOICES)}</optgroup>`;
   $('adminFemaleVoice').innerHTML=`<optgroup label="Core GPT-Live voices">${coreVoiceOptions()}</optgroup><optgroup label="Additional feminine GPT-Live voices">${liveVoiceOptions(EXTRA_FEMALE_VOICES)}</optgroup>`;
 }
-function renderServerState(){const online=$('adminServerOnline').checked;$('serverStateBadge').classList.toggle('offline',!online);$('serverStateBadge').querySelector('b').textContent=online?'Online':'Offline'}
+function renderServerState(){const online=$('adminServerOnline').checked;$('serverStateBadge').classList.toggle('offline',!online);$('serverStateBadge').querySelector('b').textContent=online?'Online':'Offline';if($('adminDashServer'))$('adminDashServer').textContent=online?'Online':'Offline'}
 function readBackup(){try{return JSON.parse(localStorage.getItem(ADMIN_BACKUP_KEY)||'null')}catch{return null}}
 function saveBackup(config){try{localStorage.setItem(ADMIN_BACKUP_KEY,JSON.stringify({savedAt:new Date().toISOString(),config}));renderBackupStatus()}catch{}}
 function formPayload(){return {unlimitedCreditEmails:[...unlimitedCreditEmails],siteTheme:$('adminSiteTheme').value||'black',serverOnline:$('adminServerOnline').checked,serverMessage:$('adminServerMessage').value.trim(),maleVoice:$('adminMaleVoice').value,femaleVoice:$('adminFemaleVoice').value,model:'gpt-live-1',speakingPace:$('adminSpeakingPace').value,speechStyle:$('adminSpeechStyle').value.trim(),instructions:$('adminInstructions').value.trim(),opening:$('adminOpening').value.trim(),speakFirst:$('adminSpeakFirst').checked,interruptions:$('adminInterruptions').checked}}
@@ -67,9 +69,9 @@ async function addUnlimitedUser(){
   if(unlimitedCreditEmails.includes(email))return toast('That email already has unlimited access');
   const ok=await setUnlimitedUser('add',email,btn); if(ok&&input)input.value='';
 }
-function fill(config,storageConnected){currentConfig=config;unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);renderServerState();renderBackupStatus(storageConnected)}
+function fill(config,storageConnected){currentConfig=config;unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);if($('adminDashStorage'))$('adminDashStorage').textContent=storageConnected?'Global storage connected':'Storage needs attention';renderServerState();renderBackupStatus(storageConnected)}
 async function api(path,options={}){const res=await fetch(path,{...options,headers:authHeaders(options.headers||{})});const type=res.headers.get('content-type')||'';const data=type.includes('application/json')?await res.json():await res.text();if(!res.ok)throw new Error(data?.error||data||'Request failed');return data}
-async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{await api('/api/admin/login',{method:'POST'});const result=await api('/api/admin/config');sessionStorage.setItem('callfocus_admin_key',key);$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminUsers(true);}catch(err){adminKey='';$('adminGateNote').textContent=err.message;toast(err.message)}}
+async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{await api('/api/admin/login',{method:'POST'});const result=await api('/api/admin/config');sessionStorage.setItem('callfocus_admin_key',key);$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminUsers(true);loadAdminAiUsage();}catch(err){adminKey='';$('adminGateNote').textContent=err.message;toast(err.message)}}
 async function saveConfig(){const payload=formPayload();saveBackup(payload);try{const result=await api('/api/admin/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});fill(result.config,true);saveBackup(result.config);toast('Global CallFocus settings saved')}catch(err){renderBackupStatus(false);toast(`${err.message} — your settings are protected on this device`)}}
 function restoreBackup(){const b=readBackup();if(!b?.config)return toast('No protected backup found');fill(b.config,!!currentConfig);toast('Protected settings loaded. Press Save global settings to write them to KV.')}
 function scheduleDraftBackup(){clearTimeout(draftTimer);draftTimer=setTimeout(()=>{try{saveBackup(formPayload())}catch{}},350)}
@@ -78,7 +80,7 @@ populateVoices();
 document.querySelectorAll('[data-site-theme]').forEach(btn=>btn.addEventListener('click',()=>{const value=btn.dataset.siteTheme==='pearl'?'pearl':'black';$('adminSiteTheme').value=value;document.querySelectorAll('[data-site-theme]').forEach(x=>{const on=x===btn;x.classList.toggle('active',on);x.setAttribute('aria-pressed',String(on));});scheduleDraftBackup()}));
 $('adminGateBtn').onclick=login;$('adminPasscode').addEventListener('keydown',e=>{if(e.key==='Enter')login()});$('adminServerOnline').onchange=()=>{renderServerState();scheduleDraftBackup()};$('saveAdminBtn').onclick=saveConfig;$('restoreAdminBackupBtn')?.addEventListener('click',restoreBackup);$('adminLockBtn').onclick=()=>{sessionStorage.removeItem('callfocus_admin_key');location.reload()};document.querySelectorAll('[data-preview]').forEach(btn=>btn.onclick=()=>previewVoice(btn.dataset.preview,btn));
 ['adminServerMessage','adminMaleVoice','adminFemaleVoice','adminSpeakingPace','adminSpeechStyle','adminInstructions','adminOpening','adminSpeakFirst','adminInterruptions'].forEach(id=>$(id)?.addEventListener('input',scheduleDraftBackup));
-const remembered=sessionStorage.getItem('callfocus_admin_key');if(remembered){adminKey=remembered;api('/api/admin/config').then(r=>{$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!r.storageConnected&&backup?.config){fill(backup.config,false)}else{fill(r.config,r.storageConnected);if(r.storageConnected)saveBackup(r.config)}loadAdminUsers(true);}).catch(()=>{adminKey='';sessionStorage.removeItem('callfocus_admin_key')})}
+const remembered=sessionStorage.getItem('callfocus_admin_key');if(remembered){adminKey=remembered;api('/api/admin/config').then(r=>{$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!r.storageConnected&&backup?.config){fill(backup.config,false)}else{fill(r.config,r.storageConnected);if(r.storageConnected)saveBackup(r.config)}loadAdminUsers(true);loadAdminAiUsage();}).catch(()=>{adminKey='';sessionStorage.removeItem('callfocus_admin_key')})}
 
 
 function esc(value=''){return String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
@@ -90,7 +92,7 @@ function renderAdminUsers(){
   const disabled=adminUsers.filter(u=>u.accountDisabled).length;
   const unlimited=adminUsers.filter(u=>u.unlimited).length;
   const funded=adminUsers.filter(u=>Number(u?.wallet?.purchaseCount||0)>0).length;
-  if(summary)summary.textContent=`${adminUsers.length} loaded · ${funded} funded · ${unlimited} unlimited · ${disabled} disabled`;
+  if(summary)summary.textContent=`${adminUsers.length} loaded · ${funded} funded · ${unlimited} unlimited · ${disabled} disabled`;if($('adminDashUsers'))$('adminDashUsers').textContent=String(adminUsers.length);if($('adminDashFunded'))$('adminDashFunded').textContent=String(funded);if($('adminDashUsersNote'))$('adminDashUsersNote').textContent=`${disabled} disabled · ${unlimited} unlimited`;
   if(!rows.length){root.innerHTML='<div class="admin-users-empty">No matching customer accounts.</div>';return;}
   root.innerHTML=rows.map(u=>{
     const disabledClass=u.accountDisabled?' is-disabled':'';
@@ -184,3 +186,57 @@ async function runDiagnostics(){
   finally{ btn.disabled=false; btn.textContent=old; }
 }
 $('runDiagnosticsBtn')?.addEventListener('click',runDiagnostics);
+
+
+/* CallFocus V12.3 — organized scrollable admin + AI usage tracker */
+function setAdminTab(name='dashboard'){
+  const target=String(name||'dashboard');
+  document.querySelectorAll('[data-admin-tab]').forEach(btn=>{
+    const on=btn.dataset.adminTab===target;
+    btn.classList.toggle('active',on);btn.setAttribute('aria-selected',String(on));
+    if(on)btn.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+  });
+  document.querySelectorAll('[data-admin-panel]').forEach(panel=>panel.classList.toggle('active',panel.dataset.adminPanel===target));
+  try{history.replaceState(history.state||{},'',`#admin-${target}`);}catch{}
+}
+function initialAdminTab(){const m=String(location.hash||'').match(/^#admin-([a-z-]+)$/);return m?.[1]||'dashboard';}
+document.querySelectorAll('[data-admin-tab]').forEach(btn=>btn.addEventListener('click',()=>setAdminTab(btn.dataset.adminTab)));
+setAdminTab(initialAdminTab());
+
+function fmtInt(value){return Math.max(0,Number(value)||0).toLocaleString();}
+function fmtUsd(value){const n=Math.max(0,Number(value)||0);return n<0.01?`$${n.toFixed(5)}`:`$${n.toFixed(4)}`;}
+function renderAdminAiUsage(payload){
+  adminAiUsage=payload||{};const s=payload?.stats||{};
+  if($('aiUsageAnalyses'))$('aiUsageAnalyses').textContent=fmtInt(s.analyses);
+  if($('aiUsageScreenshots'))$('aiUsageScreenshots').textContent=fmtInt(s.screenshots);
+  if($('aiUsageRequests'))$('aiUsageRequests').textContent=fmtInt(s.requests);
+  if($('aiUsageCost'))$('aiUsageCost').textContent=fmtUsd(s.estimatedCostUsd);
+  if($('aiUsageInputTokens'))$('aiUsageInputTokens').textContent=fmtInt(s.inputTokens);
+  if($('aiUsageCachedTokens'))$('aiUsageCachedTokens').textContent=fmtInt(s.cachedInputTokens);
+  if($('aiUsageOutputTokens'))$('aiUsageOutputTokens').textContent=fmtInt(s.outputTokens);
+  if($('aiUsageLastUpdated'))$('aiUsageLastUpdated').textContent=s.lastUpdatedAt?new Date(s.lastUpdatedAt).toLocaleString():'No usage recorded yet';
+  if($('adminDashAI'))$('adminDashAI').textContent=fmtInt(s.analyses);
+  if($('adminDashAINote'))$('adminDashAINote').textContent=`${fmtInt(s.screenshots)} screenshots · ${fmtUsd(s.estimatedCostUsd)}`;
+  const root=$('aiUsageRecent');if(!root)return;
+  const rows=Array.isArray(payload?.recent)?payload.recent:[];
+  if(!rows.length){root.innerHTML='<div class="admin-users-empty">No AI analyses recorded yet.</div>';return;}
+  root.innerHTML=rows.map(r=>`<article class="ai-usage-item">
+    <div class="ai-usage-user"><strong>${esc(r.userName||'CallFocus user')}</strong><span>${esc(r.userEmail||'Unknown account')} · ${r.completedAt?esc(new Date(r.completedAt).toLocaleString()):'—'}</span></div>
+    <div class="ai-usage-metric"><span>Screenshots</span><strong>${fmtInt(r.imageCount)}</strong></div>
+    <div class="ai-usage-metric"><span>Tokens</span><strong>${fmtInt((Number(r.inputTokens)||0)+(Number(r.outputTokens)||0))}</strong></div>
+    <div class="ai-usage-metric"><span>Est. cost</span><strong>${fmtUsd(r.estimatedCostUsd)}</strong></div>
+  </article>`).join('');
+}
+async function loadAdminAiUsage(){
+  if(adminAiUsageLoading||!adminKey)return;adminAiUsageLoading=true;
+  const btn=$('aiUsageRefreshBtn');if(btn){btn.disabled=true;btn.textContent='Refreshing…';}
+  try{renderAdminAiUsage(await api('/api/admin/ai-usage'));}
+  catch(err){if($('aiUsageRecent'))$('aiUsageRecent').innerHTML='<div class="admin-users-empty">Could not load AI usage.</div>';toast(err.message);}
+  finally{adminAiUsageLoading=false;if(btn){btn.disabled=false;btn.textContent='Refresh usage';}}
+}
+$('aiUsageRefreshBtn')?.addEventListener('click',loadAdminAiUsage);
+$('adminRefreshAllBtn')?.addEventListener('click',async()=>{
+  const btn=$('adminRefreshAllBtn');const old=btn?.textContent||'Refresh data';if(btn){btn.disabled=true;btn.textContent='Refreshing…';}
+  try{await Promise.all([loadAdminUsers(true),loadAdminAiUsage()]);toast('Admin data refreshed');}
+  finally{if(btn){btn.disabled=false;btn.textContent=old;}}
+});

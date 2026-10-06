@@ -1,16 +1,16 @@
 <!doctype html>
-<html lang="en" data-theme="black">
+<html lang="en" data-theme="pearl">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#080808" />
+  <meta name="theme-color" content="#f7f8f5" />
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <title>CallFocus Admin</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=12.1" />
+  <link rel="stylesheet" href="/admin.css?v=12.3" />
 </head>
 <body class="admin-page">
   <header class="site-header">
@@ -25,9 +25,9 @@
 
   <main class="admin-shell">
     <section class="admin-login-card" id="adminGate">
-      <span class="kicker">Admin access</span>
+      <span class="kicker">Private administration</span>
       <h1>Admin sign in</h1>
-      <p>Enter the private CallFocus admin passcode stored in Cloudflare. This controls the live service for every customer.</p>
+      <p>Enter the private CallFocus admin passcode stored in Cloudflare.</p>
       <label>Admin passcode<input id="adminPasscode" type="password" autocomplete="current-password" placeholder="Enter admin passcode" /></label>
       <button class="btn btn-primary full" id="adminGateBtn">Unlock admin</button>
       <div class="admin-gate-note" id="adminGateNote"></div>
@@ -35,112 +35,136 @@
 
     <section class="admin-dashboard hidden" id="adminDashboard">
       <div class="admin-page-head">
-        <div><span class="kicker">System control</span><h1>CallFocus Admin</h1><p>Control live calling, voices and the conversational behavior used across the entire website.</p></div>
-        <button class="btn btn-ghost" id="adminLockBtn">Lock admin</button>
+        <div><span class="kicker">Private administration</span><h1>Admin Portal</h1><p>Operate CallFocus from one organized management workspace.</p></div>
+        <div class="admin-head-actions"><button class="btn btn-ghost" type="button" id="adminRefreshAllBtn">Refresh data</button><button class="btn btn-ghost" id="adminLockBtn">Lock admin</button></div>
       </div>
 
+      <nav class="admin-tab-shell" aria-label="Admin sections">
+        <div class="admin-tab-scroll" id="adminTabScroll">
+          <button class="admin-tab active" type="button" data-admin-tab="dashboard" aria-selected="true"><span>▦</span>Dashboard</button>
+          <button class="admin-tab" type="button" data-admin-tab="customers" aria-selected="false"><span>◎</span>Customers</button>
+          <button class="admin-tab" type="button" data-admin-tab="ai" aria-selected="false"><span>✦</span>AI usage</button>
+          <button class="admin-tab" type="button" data-admin-tab="voice" aria-selected="false"><span>◉</span>Voice</button>
+          <button class="admin-tab" type="button" data-admin-tab="behavior" aria-selected="false"><span>≋</span>Behavior</button>
+          <button class="admin-tab" type="button" data-admin-tab="appearance" aria-selected="false"><span>◌</span>Appearance</button>
+          <button class="admin-tab" type="button" data-admin-tab="diagnostics" aria-selected="false"><span>⚙</span>Diagnostics</button>
+        </div>
+      </nav>
 
-      <div class="premium-panel admin-theme-panel">
-        <div>
-          <span class="kicker">Website appearance</span>
-          <h3>Customer site theme</h3>
-          <p class="admin-panel-copy">Switch the customer website globally. New visitors and refreshed pages use the selected theme immediately.</p>
+      <section class="admin-tab-panel active" data-admin-panel="dashboard">
+        <div class="admin-section-heading"><span class="kicker">CallFocus administration</span><h2>Dashboard</h2><p>A quick overview of the service and items that need your attention.</p></div>
+        <div class="admin-overview-grid">
+          <article class="admin-stat-card"><span>Calling service</span><strong id="adminDashServer">Checking…</strong><small id="adminDashStorage">Global settings</small></article>
+          <article class="admin-stat-card"><span>Customer accounts</span><strong id="adminDashUsers">0</strong><small id="adminDashUsersNote">Loading users…</small></article>
+          <article class="admin-stat-card"><span>Funded customers</span><strong id="adminDashFunded">0</strong><small>Paystack purchase history</small></article>
+          <article class="admin-stat-card"><span>AI analyses</span><strong id="adminDashAI">0</strong><small id="adminDashAINote">Conversation dynamics</small></article>
         </div>
-        <div class="admin-theme-choice" role="radiogroup" aria-label="Customer site theme">
-          <button class="admin-theme-option active" type="button" data-site-theme="black" aria-pressed="true">
-            <span class="admin-theme-preview admin-theme-preview-black"><i></i><b></b><em></em></span>
-            <strong>Midnight Black</strong>
-            <small>Current premium dark theme</small>
-          </button>
-          <button class="admin-theme-option" type="button" data-site-theme="pearl" aria-pressed="false">
-            <span class="admin-theme-preview admin-theme-preview-pearl"><i></i><b></b><em></em></span>
-            <strong>Pearl Aurora</strong>
-            <small>Porcelain pearl, jade, champagne and icy blue</small>
-          </button>
-        </div>
-        <input type="hidden" id="adminSiteTheme" value="black" />
-      </div>
 
-      <div class="premium-panel admin-server-panel">
-        <div class="admin-server-copy">
-          <span class="kicker">Global server switch</span>
-          <h3>Calling availability</h3>
-          <p>Turn calls off instantly for every customer. The website stays online, but Start Call will show your maintenance message.</p>
-          <div class="admin-storage-status" id="adminStorageStatus">Checking global settings storage…</div>
+        <div class="premium-panel admin-server-panel">
+          <div class="admin-server-copy">
+            <span class="kicker">Global server switch</span>
+            <h3>Calling availability</h3>
+            <p>Turn calls off instantly for every customer. The website stays online, but Start Call will show your maintenance message.</p>
+            <div class="admin-storage-status" id="adminStorageStatus">Checking global settings storage…</div>
+          </div>
+          <div class="admin-server-control">
+            <div class="server-state-badge" id="serverStateBadge"><span></span><b>Online</b></div>
+            <label class="server-switch"><input id="adminServerOnline" type="checkbox" checked /><span></span></label>
+          </div>
+          <label class="admin-maintenance-message">Offline message<input id="adminServerMessage" maxlength="240" placeholder="Server not active right now. Please try again soon." /></label>
         </div>
-        <div class="admin-server-control">
-          <div class="server-state-badge" id="serverStateBadge"><span></span><b>Online</b></div>
-          <label class="server-switch"><input id="adminServerOnline" type="checkbox" checked /><span></span></label>
-        </div>
-        <label class="admin-maintenance-message">Offline message<input id="adminServerMessage" maxlength="240" placeholder="Server not active right now. Please try again soon." /></label>
-      </div>
+      </section>
 
-      <div class="admin-grid-v3">
+      <section class="admin-tab-panel" data-admin-panel="customers">
+        <div class="admin-section-heading"><span class="kicker">Customer management</span><h2>All CallFocus users</h2><p>Review every customer, balance, Paystack funding and account access.</p></div>
+        <div class="premium-panel admin-users-panel">
+          <div class="admin-users-heading">
+            <div><h3>Customer accounts</h3><p class="admin-panel-copy">Disable or restore an account, control unlimited access, or remove an available balance without deleting payment history.</p></div>
+            <button class="btn btn-ghost" type="button" id="adminUsersRefreshBtn">Refresh users</button>
+          </div>
+          <div class="admin-users-tools">
+            <label class="admin-users-search">Search users<input id="adminUsersSearch" type="search" autocomplete="off" placeholder="Name, email or phone" /></label>
+            <div class="admin-users-summary" id="adminUsersSummary">Loading customer accounts…</div>
+          </div>
+          <div class="admin-users-list" id="adminUsersList"><div class="admin-users-empty">Customer accounts will appear here.</div></div>
+          <button class="btn btn-ghost admin-users-more hidden" type="button" id="adminUsersMoreBtn">Load more users</button>
+        </div>
+      </section>
+
+      <section class="admin-tab-panel" data-admin-panel="ai">
+        <div class="admin-section-heading admin-section-heading-row"><div><span class="kicker">AI conversation analysis</span><h2>AI usage</h2><p>Track screenshot-analysis volume and the approximate OpenAI API cost generated by CallFocus.</p></div><button class="btn btn-ghost" type="button" id="aiUsageRefreshBtn">Refresh usage</button></div>
+        <div class="admin-overview-grid ai-usage-grid">
+          <article class="admin-stat-card"><span>Completed analyses</span><strong id="aiUsageAnalyses">0</strong><small>Generated dynamics</small></article>
+          <article class="admin-stat-card"><span>Screenshots analyzed</span><strong id="aiUsageScreenshots">0</strong><small>Across completed analyses</small></article>
+          <article class="admin-stat-card"><span>OpenAI requests</span><strong id="aiUsageRequests">0</strong><small>Batch + final requests</small></article>
+          <article class="admin-stat-card"><span>Estimated API cost</span><strong id="aiUsageCost">$0.0000</strong><small>GPT-6 Luna standard pricing</small></article>
+        </div>
+        <div class="premium-panel ai-token-panel">
+          <div class="ai-token-row"><span>Input tokens</span><strong id="aiUsageInputTokens">0</strong></div>
+          <div class="ai-token-row"><span>Cached input tokens</span><strong id="aiUsageCachedTokens">0</strong></div>
+          <div class="ai-token-row"><span>Output tokens</span><strong id="aiUsageOutputTokens">0</strong></div>
+          <div class="ai-token-row"><span>Last updated</span><strong id="aiUsageLastUpdated">No usage recorded yet</strong></div>
+        </div>
+        <div class="premium-panel">
+          <div class="admin-users-heading"><div><h3>Recent analyses</h3><p class="admin-panel-copy">No screenshots are stored here. This log contains only usage metadata such as the customer, screenshot count, token usage and estimated cost.</p></div></div>
+          <div class="ai-usage-recent" id="aiUsageRecent"><div class="admin-users-empty">No AI analyses recorded yet.</div></div>
+        </div>
+      </section>
+
+      <section class="admin-tab-panel" data-admin-panel="voice">
+        <div class="admin-section-heading"><span class="kicker">Voice engine</span><h2>Customer voice pair</h2><p>Choose the live-call voices customers hear when they select Male or Female.</p></div>
         <div class="premium-panel form-panel">
-          <span class="kicker">Voice engine</span><h3>Customer voice pair</h3>
-          <p class="admin-panel-copy">Customers only choose Male or Female. You can now use the expanded GPT-Live voice set for live calls. For a more grounded masculine character, audition Meridian, Vesper, Stone or Cinder. Live-only voices are tested by placing a short call.</p>
-          <div class="voice-admin-card">
-            <label>Male voice<select id="adminMaleVoice"></select></label>
-            <button class="btn btn-ghost voice-preview-btn" data-preview="male">Preview male voice</button>
-          </div>
-          <div class="voice-admin-card">
-            <label>Female voice<select id="adminFemaleVoice"></select></label>
-            <button class="btn btn-ghost voice-preview-btn" data-preview="female">Preview female voice</button>
-          </div>
+          <p class="admin-panel-copy">Use the expanded GPT-Live voice set for live calls. Live-only voices are tested by placing a short call.</p>
+          <div class="voice-admin-card"><label>Male voice<select id="adminMaleVoice"></select></label><button class="btn btn-ghost voice-preview-btn" data-preview="male">Preview male voice</button></div>
+          <div class="voice-admin-card"><label>Female voice<select id="adminFemaleVoice"></select></label><button class="btn btn-ghost voice-preview-btn" data-preview="female">Preview female voice</button></div>
           <label>Voice engine<input id="adminModel" value="gpt-live-1" readonly /></label>
-          <div class="admin-recommendation">CallFocus uses <strong>GPT-Live 1</strong>. Additional regional voices marked <strong>Live only</strong> work on calls but are not available through the separate speech endpoint used for voice notes. If one is selected, voice notes automatically use cedar for Male or marin for Female so they never fail.</div>
+          <div class="admin-recommendation">CallFocus uses <strong>GPT-Live 1</strong>. Live-only voices work on calls; voice notes fall back to cedar for Male or marin for Female where needed.</div>
           <audio id="voicePreviewAudio" class="hidden" controls></audio>
           <div class="toggle-row"><span>Allow natural interruption / barge-in</span><input id="adminInterruptions" type="checkbox" /></div>
           <div class="toggle-row"><span>Speak first after the customer taps Start Call</span><input id="adminSpeakFirst" type="checkbox" /></div>
         </div>
+      </section>
 
+      <section class="admin-tab-panel" data-admin-panel="behavior">
+        <div class="admin-section-heading"><span class="kicker">Conversation behavior</span><h2>Global call behavior</h2><p>Control how new calls listen, respond and open conversations.</p></div>
         <div class="premium-panel form-panel">
-          <span class="kicker">Conversation behavior</span><h3>Make calls listen first</h3>
           <label>Speaking pace<select id="adminSpeakingPace"><option value="relaxed">Relaxed — recommended</option><option value="normal">Normal</option><option value="brisk">Brisk</option></select></label>
-          <div class="admin-recommendation">For a natural phone-call feel, use <strong>Relaxed</strong>. This changes GPT-Live's speaking-style instructions for every new call.</div>
+          <div class="admin-recommendation">For a natural phone-call feel, use <strong>Relaxed</strong>.</div>
           <label>Natural speech style<textarea id="adminSpeechStyle" rows="9" placeholder="Keep this short: tone, turn length, listening style and emotional delivery"></textarea></label>
           <label>Master call rules<textarea id="adminInstructions" rows="11" placeholder="Your global rules for every call. These are loaded server-side into every new Live session."></textarea></label>
           <label>Default opening behavior<textarea id="adminOpening" rows="5" placeholder="How the first line should begin"></textarea></label>
         </div>
-      </div>
+      </section>
 
-      <div class="premium-panel admin-users-panel">
-        <div class="admin-users-heading">
-          <div>
-            <span class="kicker">Customer management</span>
-            <h3>All CallFocus users</h3>
-            <p class="admin-panel-copy">Review every customer account, current balance and Paystack funding. You can disable an account, remove unlimited access, or remove its available balance without deleting the payment history.</p>
+      <section class="admin-tab-panel" data-admin-panel="appearance">
+        <div class="admin-section-heading"><span class="kicker">Website appearance</span><h2>Customer site theme</h2><p>Switch the customer website globally. New visitors and refreshed pages use the selected theme immediately.</p></div>
+        <div class="premium-panel admin-theme-panel">
+          <div class="admin-theme-choice" role="radiogroup" aria-label="Customer site theme">
+            <button class="admin-theme-option" type="button" data-site-theme="black" aria-pressed="false"><span class="admin-theme-preview admin-theme-preview-black"><i></i><b></b><em></em></span><strong>Midnight Black</strong><small>Premium dark theme</small></button>
+            <button class="admin-theme-option active" type="button" data-site-theme="pearl" aria-pressed="true"><span class="admin-theme-preview admin-theme-preview-pearl"><i></i><b></b><em></em></span><strong>Pearl Aurora</strong><small>Porcelain pearl, jade, champagne and icy blue</small></button>
           </div>
-          <button class="btn btn-ghost" type="button" id="adminUsersRefreshBtn">Refresh users</button>
+          <input type="hidden" id="adminSiteTheme" value="pearl" />
         </div>
-        <div class="admin-users-tools">
-          <label class="admin-users-search">Search users<input id="adminUsersSearch" type="search" autocomplete="off" placeholder="Name, email or phone" /></label>
-          <div class="admin-users-summary" id="adminUsersSummary">Loading customer accounts…</div>
-        </div>
-        <div class="admin-users-list" id="adminUsersList"><div class="admin-users-empty">Customer accounts will appear here.</div></div>
-        <button class="btn btn-ghost admin-users-more hidden" type="button" id="adminUsersMoreBtn">Load more users</button>
-      </div>
+      </section>
 
-      <div class="premium-panel admin-save-panel">
+      <section class="admin-tab-panel" data-admin-panel="diagnostics">
+        <div class="admin-section-heading"><span class="kicker">Diagnostics</span><h2>System checks</h2><p>Check GPT-Live access, OpenAI configuration, KV storage and the latest live-session result.</p></div>
+        <div class="premium-panel">
+          <button class="btn btn-ghost" id="runDiagnosticsBtn">Run diagnostics</button>
+          <div class="admin-diagnostics hidden" id="adminDiagnostics"></div>
+        </div>
+      </section>
+
+      <div class="admin-save-dock premium-panel">
         <div>
-          <div class="info-note">Changes saved here are global. New calls use them immediately. Active calls keep the settings they started with.</div>
-          <div class="admin-backup-row">
-            <span class="admin-backup-status" id="adminBackupStatus">A protected browser backup will also be kept automatically.</span>
-            <button class="btn btn-ghost admin-backup-btn hidden" type="button" id="restoreAdminBackupBtn">Restore protected backup</button>
-          </div>
+          <div class="info-note">Voice, behavior, theme and server changes are global. New calls use them immediately after saving.</div>
+          <div class="admin-backup-row"><span class="admin-backup-status" id="adminBackupStatus">A protected browser backup will also be kept automatically.</span><button class="btn btn-ghost admin-backup-btn hidden" type="button" id="restoreAdminBackupBtn">Restore protected backup</button></div>
         </div>
         <button class="btn btn-primary large" id="saveAdminBtn">Save global settings</button>
-      </div>
-
-      <div class="premium-panel">
-        <span class="kicker">Diagnostics</span><h3>Live voice engine check</h3>
-        <p class="admin-panel-copy">Use this if customers see “Server unavailable.” It checks the API key, GPT-Live access, KV binding and the last Live session result without exposing your secret key.</p>
-        <button class="btn btn-ghost" id="runDiagnosticsBtn">Run diagnostics</button>
-        <div class="admin-diagnostics hidden" id="adminDiagnostics"></div>
       </div>
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="./admin.js?v=12.1"></script>
+  <script src="/admin.js?v=12.3"></script>
 </body>
 </html>

@@ -2028,6 +2028,119 @@ function extractResponsesText(payload) {
   return '';
 }
 
+function normalizeOpenAIUsage(payload = {}) {
+  const usage = payload?.usage || {};
+  const inputTokens = Math.max(0, Math.floor(Number(usage?.input_tokens) || 0));
+  const outputTokens = Math.max(0, Math.floor(Number(usage?.output_tokens) || 0));
+  const cachedInputTokens = Math.max(0, Math.min(inputTokens, Math.floor(Number(usage?.input_tokens_details?.cached_tokens) || 0)));
+  return { inputTokens, outputTokens, cachedInputTokens, totalTokens: inputTokens + outputTokens };
+}
+
+function estimateGpt6LunaCost(usage = {}) {
+  const inputTokens = Math.max(0, Number(usage.inputTokens) || 0);
+  const outputTokens = Math.max(0, Number(usage.outputTokens) || 0);
+  const cachedInputTokens = Math.max(0, Math.min(inputTokens, Number(usage.cachedInputTokens) || 0));
+  const uncachedInputTokens = Math.max(0, inputTokens - cachedInputTokens);
+  // Standard GPT-6 Luna rates. Requests above 272K input tokens use the documented
+  // long-context uplift: 2x input/cached and 1.5x output for the entire request.
+  const longContext = inputTokens > 272000;
+  const inputRate = longContext ? 0.20 : 0.10;
+  const cachedRate = longContext ? 0.02 : 0.01;
+  const outputRate = longContext ? 0.75 : 0.50;
+  return (uncachedInputTokens * inputRate + cachedInputTokens * cachedRate + outputTokens * outputRate) / 1_000_000;
+}
+
+const AI_USAGE_GLOBAL_KEY = 'ai_usage:global:v1';
+function aiAnalysisKey(userId, analysisId) { return `ai_usage:analysis:${String(userId || '').slice(0,160)}:${String(analysisId || '').slice(0,96)}`; }
+function aiRecentKey(analysisId, when = Date.now()) { return `ai_usage:recent:${String(9_999_999_999_999 - when).padStart(13,'0')}:${String(analysisId || '').slice(0,96)}`; }
+
+async function recordDynamicsUsage(env, { auth, analysisId, kind, imageCount = 0, usage = {} } = {}) {
+  if (!env.CALLFOCUS_CONFIG || !analysisId || !auth?.user?.id) return;
+  try {
+    const cost = estimateGpt6LunaCost(usage);
+    const now = new Date().toISOString();
+    const aggregateKey = aiAnalysisKey(auth.user.id, analysisId);
+    const aggregate = (await env.CALLFOCUS_CONFIG.get(aggregateKey, { type: 'json' })) || {
+      analysisId,
+      userId: auth.user.id,
+      userName: auth.user.name || '',
+      userEmail: auth.user.email || '',
+      model: 'gpt-6-luna',
+      startedAt: now,
+      requests: 0,
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      estimatedCostUsd: 0,
+      finalized: false,
+      recentKey: ''
+    };
+    aggregate.requests = Math.max(0, Number(aggregate.requests) || 0) + 1;
+    aggregate.inputTokens = Math.max(0, Number(aggregate.inputTokens) || 0) + Math.max(0, Number(usage.inputTokens) || 0);
+    aggregate.cachedInputTokens = Math.max(0, Number(aggregate.cachedInputTokens) || 0) + Math.max(0, Number(usage.cachedInputTokens) || 0);
+    aggregate.outputTokens = Math.max(0, Number(aggregate.outputTokens) || 0) + Math.max(0, Number(usage.outputTokens) || 0);
+    aggregate.estimatedCostUsd = Math.max(0, Number(aggregate.estimatedCostUsd) || 0) + cost;
+    aggregate.updatedAt = now;
+
+    const global = (await env.CALLFOCUS_CONFIG.get(AI_USAGE_GLOBAL_KEY, { type: 'json' })) || {
+      analyses: 0, screenshots: 0, requests: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, estimatedCostUsd: 0
+    };
+    global.requests = Math.max(0, Number(global.requests) || 0) + 1;
+    global.inputTokens = Math.max(0, Number(global.inputTokens) || 0) + Math.max(0, Number(usage.inputTokens) || 0);
+    global.cachedInputTokens = Math.max(0, Number(global.cachedInputTokens) || 0) + Math.max(0, Number(usage.cachedInputTokens) || 0);
+    global.outputTokens = Math.max(0, Number(global.outputTokens) || 0) + Math.max(0, Number(usage.outputTokens) || 0);
+    global.estimatedCostUsd = Math.max(0, Number(global.estimatedCostUsd) || 0) + cost;
+    global.lastUpdatedAt = now;
+
+    if (kind === 'finalize' && aggregate.finalized !== true) {
+      aggregate.finalized = true;
+      aggregate.completedAt = now;
+      aggregate.imageCount = Math.max(1, Math.min(50, Math.floor(Number(imageCount) || 1)));
+      global.analyses = Math.max(0, Number(global.analyses) || 0) + 1;
+      global.screenshots = Math.max(0, Number(global.screenshots) || 0) + aggregate.imageCount;
+      aggregate.recentKey = aggregate.recentKey || aiRecentKey(analysisId, Date.now());
+    }
+
+    await env.CALLFOCUS_CONFIG.put(AI_USAGE_GLOBAL_KEY, JSON.stringify(global));
+    await env.CALLFOCUS_CONFIG.put(aggregateKey, JSON.stringify(aggregate), { expirationTtl: 60 * 60 * 24 });
+    if (kind === 'finalize' && aggregate.finalized) {
+      const recent = {
+        analysisId: aggregate.analysisId,
+        userId: aggregate.userId,
+        userName: aggregate.userName,
+        userEmail: aggregate.userEmail,
+        imageCount: aggregate.imageCount || Math.max(1, Math.floor(Number(imageCount) || 1)),
+        requests: aggregate.requests,
+        inputTokens: aggregate.inputTokens,
+        cachedInputTokens: aggregate.cachedInputTokens,
+        outputTokens: aggregate.outputTokens,
+        estimatedCostUsd: aggregate.estimatedCostUsd,
+        model: aggregate.model,
+        completedAt: aggregate.completedAt || now
+      };
+      await env.CALLFOCUS_CONFIG.put(aggregate.recentKey || aiRecentKey(analysisId), JSON.stringify(recent), { expirationTtl: 60 * 60 * 24 * 90 });
+    }
+  } catch (error) {
+    console.error('CallFocus AI usage tracking failed', error?.message || error);
+  }
+}
+
+async function handleAdminAiUsage(request, env) {
+  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.list !== 'function') return json({ error: 'Global admin storage is not connected.' }, 503);
+  const stats = (await env.CALLFOCUS_CONFIG.get(AI_USAGE_GLOBAL_KEY, { type: 'json' })) || {
+    analyses: 0, screenshots: 0, requests: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, estimatedCostUsd: 0, lastUpdatedAt: null
+  };
+  let recent = [];
+  try {
+    const page = await env.CALLFOCUS_CONFIG.list({ prefix: 'ai_usage:recent:', limit: 30 });
+    recent = (await Promise.all((page.keys || []).map(k => env.CALLFOCUS_CONFIG.get(k.name, { type: 'json' })))).filter(Boolean);
+    recent.sort((a,b) => String(b.completedAt || '').localeCompare(String(a.completedAt || '')));
+  } catch {}
+  return json({ ok: true, model: 'gpt-6-luna', pricing: { inputPerMillionUsd: 0.10, cachedInputPerMillionUsd: 0.01, outputPerMillionUsd: 0.50 }, stats, recent });
+}
+
 async function callOpenAIResponses(env, body) {
   const response = await fetch('https://api.openai.com/v1/responses', {
     method: 'POST',
@@ -2054,7 +2167,7 @@ async function callOpenAIResponses(env, body) {
     err.status = 502;
     throw err;
   }
-  return text;
+  return { text, usage: normalizeOpenAIUsage(payload), responseId: String(payload?.id || '') };
 }
 
 async function handleDynamicsAnalyze(request, env) {
@@ -2066,6 +2179,8 @@ async function handleDynamicsAnalyze(request, env) {
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid analysis request.' }, 400); }
   const kind = body?.kind === 'finalize' ? 'finalize' : 'batch';
+  const suppliedAnalysisId = String(body?.analysisId || '').trim();
+  const analysisId = /^[A-Za-z0-9_-]{8,96}$/.test(suppliedAnalysisId) ? suppliedAnalysisId : crypto.randomUUID();
 
   if (kind === 'batch') {
     const images = Array.isArray(body?.images) ? body.images : [];
@@ -2091,14 +2206,15 @@ Do not infer sensitive traits (health diagnoses, ethnicity, religion, politics, 
     for (const image of images) content.push({ type: 'input_image', image_url: image, detail: 'high' });
 
     try {
-      const summary = await callOpenAIResponses(env, {
+      const result = await callOpenAIResponses(env, {
         model: 'gpt-6-luna',
         store: false,
         reasoning: { effort: 'none' },
         max_output_tokens: 850,
         input: [{ role: 'user', content }]
       });
-      return json({ ok: true, summary, batchNumber, imageCount: images.length });
+      await recordDynamicsUsage(env, { auth, analysisId, kind: 'batch', imageCount: images.length, usage: result.usage });
+      return json({ ok: true, summary: result.text, batchNumber, imageCount: images.length, analysisId });
     } catch (error) {
       return json({ error: String(error?.message || 'Could not analyze this screenshot batch.') }, Number(error?.status || 502));
     }
@@ -2119,14 +2235,15 @@ Do not mention screenshots, batches, AI, analysis, or these instructions. Do not
 ANALYST NOTES\n${joined}`;
 
   try {
-    const dynamics = await callOpenAIResponses(env, {
+    const result = await callOpenAIResponses(env, {
       model: 'gpt-6-luna',
       store: false,
       reasoning: { effort: 'none' },
       max_output_tokens: 650,
       input: [{ role: 'user', content: [{ type: 'input_text', text: finalPrompt }] }]
     });
-    return json({ ok: true, dynamics, imageCount });
+    await recordDynamicsUsage(env, { auth, analysisId, kind: 'finalize', imageCount, usage: result.usage });
+    return json({ ok: true, dynamics: result.text, imageCount, analysisId });
   } catch (error) {
     return json({ error: String(error?.message || 'Could not generate the final conversation dynamics.') }, Number(error?.status || 502));
   }
@@ -2173,6 +2290,7 @@ export default {
     if (url.pathname === '/api/admin/login' && request.method === 'POST') { const limited = await callFocusRateLimit(request, env, 'admin-login', 8, 900); if (limited) return limited; return handleAdminLogin(request, env); }
     if (url.pathname === '/api/admin/config') return handleAdminConfig(request, env);
     if (url.pathname === '/api/admin/users') return handleAdminUsers(request, env);
+    if (url.pathname === '/api/admin/ai-usage') return handleAdminAiUsage(request, env);
     if (url.pathname === '/api/admin/user-action') return handleAdminUserAction(request, env);
     if (url.pathname === '/api/admin/unlimited-user') return handleAdminUnlimitedUser(request, env);
     if (url.pathname === '/api/admin/voice-preview' && request.method === 'POST') return handleVoicePreview(request, env);

@@ -4357,10 +4357,10 @@ ${approvedPatterns}
     return payload;
   }
 
-  async function analyzeBatch(imageData,batchNumber,totalBatches){
+  async function analyzeBatch(imageData,batchNumber,totalBatches,analysisId){
     let lastError;
     for(let attempt=0;attempt<2;attempt++){
-      try{return await api('/api/dynamics/analyze',{kind:'batch',images:imageData,batchNumber,totalBatches});}
+      try{return await api('/api/dynamics/analyze',{kind:'batch',images:imageData,batchNumber,totalBatches,analysisId});}
       catch(error){lastError=error;if(attempt===0) await new Promise(r=>setTimeout(r,650));}
     }
     throw lastError;
@@ -4375,6 +4375,7 @@ ${approvedPatterns}
     $('dynamicsClearBtn').disabled=true;
     const totalBatches=Math.ceil(files.length/BATCH_SIZE);
     const summaries=[];
+    const analysisId=(globalThis.crypto?.randomUUID?.()||`cfai_${Date.now()}_${Math.random().toString(36).slice(2,10)}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,96);
     try{
       for(let b=0;b<totalBatches;b++){
         const start=b*BATCH_SIZE;
@@ -4388,13 +4389,13 @@ ${approvedPatterns}
         }
         const analyzePct=((b+0.45)/(totalBatches+1))*100;
         setProgress(analyzePct,`Analyzing screenshots ${start+1}–${start+group.length} of ${files.length}…`);
-        const payload=await analyzeBatch(prepared,b+1,totalBatches);
+        const payload=await analyzeBatch(prepared,b+1,totalBatches,analysisId);
         if(!payload?.summary) throw new Error('CallFocus did not receive a usable analysis for one screenshot group.');
         summaries.push(payload.summary);
         setProgress(((b+1)/(totalBatches+1))*100,`Analyzed ${start+group.length} of ${files.length} screenshots.`);
       }
       setProgress((totalBatches/(totalBatches+1))*100,'Combining the full conversation into final dynamics…');
-      const final=await api('/api/dynamics/analyze',{kind:'finalize',summaries,imageCount:files.length});
+      const final=await api('/api/dynamics/analyze',{kind:'finalize',summaries,imageCount:files.length,analysisId});
       if(!final?.dynamics) throw new Error('CallFocus could not create the final conversation dynamics.');
       $('dynamicsResultText').value=final.dynamics.trim();
       $('dynamicsResultText').readOnly=true;
