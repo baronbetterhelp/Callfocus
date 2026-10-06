@@ -213,7 +213,7 @@ function timezoneOptions(selected){ return TIMEZONES.map(([v,l])=>`<option value
 function selectThread(id){ if(!account)return; selectedThreadId=id; renderRecentThreads(); }
 
 function showView(view, scroll=true){
-  if(['callers','recent','profile','settings'].includes(view) && !account){ requireAccount({type:'route',route:view},'Create an account or sign in to open your saved CallFocus workspace.'); return; }
+  if(['avatar','callers','recent','profile','settings'].includes(view) && !account){ requireAccount({type:'route',route:view},'Create an account or sign in to open your saved CallFocus workspace.'); return; }
   activeView=view; qsa('.page-view').forEach(p=>p.classList.toggle('active',p.dataset.view===view)); qsa('.nav-anchor').forEach(n=>n.classList.toggle('active',n.dataset.route===view));
   closeMobileMenu(); $('headerAccountDropdown').classList.add('hidden');
   if(view==='recent') renderRecentThreads(); if(view==='profile')renderProfile(); if(view==='settings')renderSettings();
@@ -3974,8 +3974,8 @@ ${approvedPatterns}
 /* ===== v11.28-router.js ===== */
 /* CallFocus V11.28 — multi-route navigation, preserving V11.23 Recent Calls exactly */
 (()=>{
-  const ROUTES={home:'/', 'voice-notes':'/voice-notes', credits:'/credits', callers:'/callers', recent:'/recent-calls', profile:'/profile', settings:'/settings'};
-  const PROTECTED=new Set(['voice-notes','credits','callers','recent','profile','settings']);
+  const ROUTES={home:'/', avatar:'/avatar', 'voice-notes':'/voice-notes', credits:'/credits', callers:'/callers', recent:'/recent-calls', profile:'/profile', settings:'/settings'};
+  const PROTECTED=new Set(['avatar','voice-notes','credits','callers','recent','profile','settings']);
   const SERVER_TOKEN_KEY='callfocus_server_session_v1';
   const oldShow=typeof showView==='function'?showView:null;
   const oldSelect=typeof selectThread==='function'?selectThread:null;
@@ -4701,4 +4701,316 @@ ${approvedPatterns}
   injectModal();
   if(account&&data)ensureAiVoiceData();
   renderNewCallPicker();renderVoiceNotePicker();
+})();
+
+/* ===== CallFocus V12.7 — Live AI Avatar ===== */
+(()=>{
+  const $a=id=>document.getElementById(id);
+  if(!$a('page-avatar')) return;
+  const TOKEN_KEY='callfocus_server_session_v1';
+  const DAILY_SRC='https://unpkg.com/@daily-co/daily-js@0.83.1/dist/daily-iframe.js';
+  let profile=null;
+  let selectedFile=null;
+  let previewUrl='';
+  let profilePoll=null;
+  let callObject=null;
+  let conversationId='';
+  let sessionActive=false;
+  let sessionStarting=false;
+  let micMuted=false;
+  let dailyPromise=null;
+  const transcriptTurns=new Map();
+  let transcriptOrder=0;
+
+  const token=()=>{try{return localStorage.getItem(TOKEN_KEY)||''}catch{return ''}};
+  const activeAvatarView=()=>document.querySelector('#page-avatar')?.classList.contains('active');
+  const notify=msg=>{try{window.toast?.(msg)}catch{} };
+  const delay=ms=>new Promise(r=>setTimeout(r,ms));
+
+  async function avatarFetch(path,options={}){
+    const headers=new Headers(options.headers||{});
+    const t=token(); if(t) headers.set('Authorization',`Bearer ${t}`);
+    if(options.body && !headers.has('Content-Type')) headers.set('Content-Type','application/json');
+    const res=await fetch(path,{...options,headers,cache:'no-store'});
+    let payload={}; try{payload=await res.json()}catch{}
+    if(!res.ok){ const err=new Error(payload?.error||`CallFocus could not complete this avatar request (HTTP ${res.status}).`); err.status=res.status; err.payload=payload; throw err; }
+    return payload;
+  }
+
+  function setProviderNotice(show,message=''){
+    const box=$a('avatarProviderNotice'); if(!box)return;
+    box.classList.toggle('hidden',!show);
+    if(message&&$a('avatarProviderNoticeText')) $a('avatarProviderNoticeText').textContent=message;
+  }
+
+  function setBuildState(text,state=''){
+    const el=$a('avatarBuildState'); if(!el)return; el.textContent=text; el.dataset.state=state;
+  }
+
+  function progressFrom(value){
+    const s=String(value||'').trim();
+    const pair=s.match(/(\d+)\s*\/\s*(\d+)/); if(pair){const a=Number(pair[1]),b=Number(pair[2]);return b?Math.round(a/b*100):0;}
+    const p=s.match(/(\d+(?:\.\d+)?)\s*%/); if(p)return Math.max(0,Math.min(100,Math.round(Number(p[1]))));
+    const n=Number(s); if(Number.isFinite(n)&&n>=0&&n<=100)return Math.round(n);
+    return 0;
+  }
+
+  function setTraining(show,{percent=0,title='',message=''}={}){
+    const wrap=$a('avatarTrainingStatus'); if(!wrap)return; wrap.classList.toggle('hidden',!show); if(!show)return;
+    if($a('avatarTrainingPercent'))$a('avatarTrainingPercent').textContent=percent?`${percent}%`:'Working…';
+    if($a('avatarProgressBar'))$a('avatarProgressBar').style.width=`${Math.max(4,percent||10)}%`;
+    if(title&&$a('avatarTrainingTitle'))$a('avatarTrainingTitle').textContent=title;
+    if(message&&$a('avatarTrainingMessage'))$a('avatarTrainingMessage').textContent=message;
+  }
+
+  function setStage({title,subtitle,loading=false}={}){
+    if(title&&$a('avatarStageTitle'))$a('avatarStageTitle').textContent=title;
+    if(subtitle&&$a('avatarStageSubtitle'))$a('avatarStageSubtitle').textContent=subtitle;
+    $a('avatarStageLoading')?.classList.toggle('hidden',!loading);
+  }
+
+  function setMic(state,label){
+    const box=$a('avatarMicStatus'); if(box)box.dataset.state=state||'';
+    if($a('avatarMicLabel'))$a('avatarMicLabel').textContent=label||'Not connected';
+  }
+
+  function setSessionStatus(text){if($a('avatarSessionStatus'))$a('avatarSessionStatus').textContent=text||''}
+  function updateCreateButton(){
+    const btn=$a('avatarCreateBtn'); if(!btn)return;
+    const configured=profile?.providerConfigured!==false;
+    btn.disabled=!selectedFile||!$a('avatarRightsCheck')?.checked||!configured||sessionStarting;
+  }
+
+  function renderProfile(){
+    const configured=profile?.providerConfigured!==false;
+    setProviderNotice(!configured,'This feature is built and ready, but the Tavus API key still needs to be added to the CallFocus Worker secrets.');
+    const status=String(profile?.status||'none').toLowerCase();
+    const hasAvatar=!!profile?.avatarId;
+    const ready=hasAvatar&&status==='completed';
+    const working=hasAvatar&&['started','training','queued','processing'].includes(status);
+    const failed=hasAvatar&&status==='error';
+    $a('avatarDeleteBtn')?.classList.toggle('hidden',!hasAvatar);
+    if(ready){
+      setBuildState('Avatar ready','ready');
+      setTraining(false);
+      setStage({title:'Your AI avatar is ready',subtitle:'Start a session to talk face-to-face in real time.'});
+    }else if(working){
+      const pct=progressFrom(profile?.trainingProgress);
+      setBuildState('Preparing avatar');
+      setTraining(true,{percent:pct,title:'Creating your AI avatar…',message:'CallFocus is generating natural facial motion from your selfie. This can take a few minutes.'});
+      setStage({title:'Avatar is being prepared',subtitle:pct?`${pct}% complete`:'This usually takes a few minutes.'});
+    }else if(failed){
+      setBuildState('Needs another selfie','error');
+      setTraining(true,{percent:0,title:'Avatar creation needs another try',message:profile?.errorMessage||'Choose a clear, front-facing selfie with good lighting and try again.'});
+      setStage({title:'Avatar could not be created',subtitle:'Choose another selfie and try again.'});
+    }else{
+      setBuildState(configured?'No avatar yet':'Setup required');
+      setTraining(false);
+      setStage({title:'Your avatar will appear here',subtitle:configured?'Upload a selfie to create your AI avatar.':'The video-avatar provider must be connected first.'});
+    }
+    const start=$a('avatarStartBtn'); if(start)start.disabled=!ready||sessionStarting||sessionActive||!configured;
+    updateCreateButton();
+  }
+
+  async function loadProfile({quiet=false}={}){
+    if(!token()){profile={providerConfigured:true,status:'none'};renderProfile();return profile;}
+    try{
+      const payload=await avatarFetch('/api/avatar/profile');
+      profile=payload?.profile||{providerConfigured:true,status:'none'};
+      renderProfile();
+      if(['started','training','queued','processing'].includes(String(profile?.status||'').toLowerCase())) startProfilePolling();
+      return profile;
+    }catch(error){
+      if(!quiet)notify(error.message);
+      setProviderNotice(true,error.message);
+      return null;
+    }
+  }
+
+  function stopProfilePolling(){if(profilePoll){clearInterval(profilePoll);profilePoll=null}}
+  function startProfilePolling(){
+    stopProfilePolling();
+    profilePoll=setInterval(async()=>{
+      if(!activeAvatarView())return;
+      const prev=String(profile?.status||''); await loadProfile({quiet:true});
+      const next=String(profile?.status||'');
+      if(next==='completed'){stopProfilePolling();notify('Your Live AI Avatar is ready.');}
+      if(next==='error'){stopProfilePolling();if(prev!==next)notify(profile?.errorMessage||'Avatar creation needs another selfie.');}
+    },5000);
+  }
+
+  function readFileAsDataURL(file){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||''));r.onerror=()=>reject(new Error('Could not read that selfie.'));r.readAsDataURL(file);})}
+  function imageFrom(src){return new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('Your phone could not prepare that image. Try a JPG or PNG.'));img.src=src;})}
+  async function prepareSelfie(file){
+    const src=await readFileAsDataURL(file); const img=await imageFrom(src);
+    const iw=img.naturalWidth||img.width, ih=img.naturalHeight||img.height; const longest=Math.max(iw,ih); const scale=longest>1600?1600/longest:1;
+    const w=Math.max(1,Math.round(iw*scale)),h=Math.max(1,Math.round(ih*scale)); const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+    const ctx=canvas.getContext('2d',{alpha:false});ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
+    return canvas.toDataURL('image/jpeg',.87);
+  }
+
+  function showSelectedSelfie(file){
+    if(previewUrl)URL.revokeObjectURL(previewUrl); previewUrl=URL.createObjectURL(file);
+    const img=$a('avatarSelfiePreview'); if(img){img.src=previewUrl;img.classList.remove('hidden')}
+    $a('avatarSelfiePlaceholder')?.classList.add('hidden'); $a('avatarSelfieChange')?.classList.remove('hidden'); updateCreateButton();
+  }
+
+  async function createAvatar(){
+    if(!selectedFile||!$a('avatarRightsCheck')?.checked)return;
+    const btn=$a('avatarCreateBtn'); const idle=btn?.textContent||'Create AI avatar';
+    if(btn){btn.disabled=true;btn.textContent='Preparing selfie…'}
+    setTraining(true,{percent:5,title:'Preparing your selfie…',message:'Optimizing the image securely before avatar creation.'});
+    try{
+      const imageData=await prepareSelfie(selectedFile);
+      setTraining(true,{percent:12,title:'Starting avatar creation…',message:'Sending the prepared selfie to the realtime avatar engine.'});
+      if(btn)btn.textContent='Creating avatar…';
+      const payload=await avatarFetch('/api/avatar/create',{method:'POST',body:JSON.stringify({imageData,voiceName:$a('avatarVoiceSelect')?.value||'anna',rightsConfirmed:true})});
+      profile=payload?.profile||profile; renderProfile(); startProfilePolling(); notify('Avatar creation started.');
+    }catch(error){
+      setTraining(true,{percent:0,title:'Could not create avatar',message:error.message}); notify(error.message);
+    }finally{if(btn){btn.textContent=idle;updateCreateButton()}}
+  }
+
+  async function deleteAvatar(){
+    if(sessionActive)await endSession({quiet:true});
+    if(!confirm('Delete this AI avatar? You can create another one from a new selfie later.'))return;
+    try{await avatarFetch('/api/avatar/profile',{method:'DELETE'});profile={providerConfigured:true,status:'none'};selectedFile=null;if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=''};const img=$a('avatarSelfiePreview');if(img){img.src='';img.classList.add('hidden')};$a('avatarSelfiePlaceholder')?.classList.remove('hidden');$a('avatarSelfieChange')?.classList.add('hidden');$a('avatarRightsCheck').checked=false;renderProfile();notify('Avatar deleted.')}catch(error){notify(error.message)}
+  }
+
+  function ensureDaily(){
+    if(window.DailyIframe?.createCallObject)return Promise.resolve(window.DailyIframe);
+    if(dailyPromise)return dailyPromise;
+    dailyPromise=new Promise((resolve,reject)=>{
+      const existing=document.querySelector('script[data-callfocus-daily]');
+      if(existing){existing.addEventListener('load',()=>window.DailyIframe?resolve(window.DailyIframe):reject(new Error('Daily video library did not load.')),{once:true});existing.addEventListener('error',()=>reject(new Error('Could not load the realtime video library.')),{once:true});return;}
+      const script=document.createElement('script');script.src=DAILY_SRC;script.async=true;script.dataset.callfocusDaily='1';script.onload=()=>window.DailyIframe?resolve(window.DailyIframe):reject(new Error('Realtime video library is unavailable.'));script.onerror=()=>reject(new Error('Could not load the realtime video library.'));document.head.appendChild(script);
+    }); return dailyPromise;
+  }
+
+  function attachRemoteTrack(track,kind){
+    if(!track)return;
+    if(kind==='video'){
+      const video=$a('avatarLiveVideo'); if(!video)return; video.srcObject=new MediaStream([track]);video.classList.remove('hidden');$a('avatarStagePlaceholder')?.classList.add('hidden');video.play?.().catch(()=>{});
+    }else if(kind==='audio'){
+      const audio=$a('avatarLiveAudio'); if(!audio)return; audio.srcObject=new MediaStream([track]);audio.play?.().catch(()=>{});
+    }
+  }
+
+  function attachParticipant(p){
+    if(!p||p.local)return;
+    const vt=p?.tracks?.video?.persistentTrack||p?.tracks?.video?.track; const at=p?.tracks?.audio?.persistentTrack||p?.tracks?.audio?.track;
+    if(vt)attachRemoteTrack(vt,'video'); if(at)attachRemoteTrack(at,'audio');
+  }
+
+  function parseMessageData(raw){
+    let data=raw; if(typeof data==='string'){try{data=JSON.parse(data)}catch{return null}}
+    if(data?.data&&typeof data.data==='object'&&data.event_type===undefined)data=data.data;
+    return data&&typeof data==='object'?data:null;
+  }
+
+  function renderTranscriptTurn(id,role,text,final){
+    if(!text)return;
+    const normalizedRole=String(role||'').toLowerCase()==='user'?'user':'avatar';
+    let turn=transcriptTurns.get(id);
+    if(!turn){turn={id,role:normalizedRole,text:'',final:false,order:++transcriptOrder};transcriptTurns.set(id,turn)}
+    turn.role=normalizedRole;turn.text=text;turn.final=!!final;
+    $a('avatarTranscriptEmpty')?.remove();
+    const list=$a('avatarTranscript'); if(!list)return;
+    let row=list.querySelector(`[data-transcript-id="${CSS.escape(String(id))}"]`);
+    if(!row){row=document.createElement('div');row.className='avatar-transcript-row';row.dataset.transcriptId=String(id);const bubble=document.createElement('div');bubble.className='avatar-transcript-bubble';bubble.innerHTML='<small></small><p></p>';row.appendChild(bubble);list.appendChild(row)}
+    row.dataset.role=normalizedRole;const bubble=row.querySelector('.avatar-transcript-bubble');bubble.dataset.final=String(!!final);bubble.querySelector('small').textContent=normalizedRole==='user'?'You':'AI Avatar';bubble.querySelector('p').textContent=text;list.scrollTop=list.scrollHeight;
+    if($a('avatarTranscriptState'))$a('avatarTranscriptState').textContent=final?'Live':'Transcribing…';
+  }
+
+  function handleAppMessage(event){
+    const data=parseMessageData(event?.data); if(!data)return;
+    const type=String(data.event_type||data.type||''); const props=data.properties||data.payload||{};
+    if(type==='conversation.utterance.streaming'){
+      const id=String(props.inference_id||`${props.role||'avatar'}_${props.content_index||0}_${Date.now()}`); renderTranscriptTurn(id,props.role,props.text||props.speech||'',props.final);
+    }else if(type==='conversation.replica.started_speaking'||type==='conversation.pal.started_speaking'){
+      const s=$a('avatarSpeakingState');if(s){s.classList.remove('hidden');s.querySelector('b').textContent='AI speaking'};setSessionStatus('Avatar is speaking');
+    }else if(type==='conversation.replica.stopped_speaking'||type==='conversation.pal.stopped_speaking'){
+      const s=$a('avatarSpeakingState');if(s){s.classList.remove('hidden');s.querySelector('b').textContent='Listening'};setSessionStatus('Listening for you');
+    }else if(type==='conversation.user.started_speaking'){
+      const s=$a('avatarSpeakingState');if(s){s.classList.remove('hidden');s.querySelector('b').textContent='Listening'};setSessionStatus('Listening to you');
+    }
+  }
+
+  function updateMicFromCall(){
+    if(!callObject||!sessionActive){setMic('','Not connected');return}
+    let on=true;try{on=callObject.localAudio()}catch{}
+    micMuted=!on;setMic(on?'live':'muted',on?'Live microphone':'Muted');const btn=$a('avatarMuteBtn');if(btn)btn.textContent=on?'Mute microphone':'Unmute microphone';
+  }
+
+  function bindDailyEvents(){
+    callObject.on('participant-joined',e=>attachParticipant(e?.participant));
+    callObject.on('participant-updated',e=>{attachParticipant(e?.participant);if(e?.participant?.local)updateMicFromCall()});
+    callObject.on('track-started',e=>{if(!e?.participant?.local&&e?.track)attachRemoteTrack(e.track,e.track.kind)});
+    callObject.on('app-message',handleAppMessage);
+    callObject.on('joined-meeting',()=>{sessionActive=true;sessionStarting=false;$a('avatarStageLoading')?.classList.add('hidden');$a('avatarStartBtn')?.classList.add('hidden');$a('avatarMuteBtn')?.classList.remove('hidden');$a('avatarEndBtn')?.classList.remove('hidden');$a('avatarSpeakingState')?.classList.remove('hidden');setSessionStatus('Live · listening');updateMicFromCall();try{Object.values(callObject.participants()||{}).forEach(attachParticipant)}catch{}});
+    callObject.on('left-meeting',()=>cleanupSessionUi());
+    callObject.on('error',e=>{const msg=e?.errorMsg||e?.error?.msg||'The live avatar connection had a problem.';notify(msg);setSessionStatus('Connection issue')});
+  }
+
+  async function requestMicrophone(){
+    if(!navigator.mediaDevices?.getUserMedia)throw new Error('Microphone access is not supported in this browser.');
+    setMic('','Requesting permission…');
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true,video:false}); stream.getTracks().forEach(t=>t.stop()); setMic('ready','Permission granted');
+  }
+
+  async function startSession(){
+    if(sessionStarting||sessionActive)return; if(!token()){try{window.pendingAction={type:'route',route:'avatar'}}catch{};return notify('Sign in to start a Live AI Avatar session.')}
+    sessionStarting=true;const start=$a('avatarStartBtn');if(start){start.disabled=true;start.textContent='Starting…'};setStage({loading:true});if($a('avatarLoadingTitle'))$a('avatarLoadingTitle').textContent='Preparing live session…';if($a('avatarLoadingText'))$a('avatarLoadingText').textContent='Checking microphone and connecting your avatar.';setSessionStatus('Preparing session');
+    try{
+      await requestMicrophone();
+      const Daily=await ensureDaily();
+      const session=await avatarFetch('/api/avatar/session',{method:'POST',body:JSON.stringify({})}); conversationId=session.conversationId;
+      if($a('avatarLoadingText'))$a('avatarLoadingText').textContent='Joining secure realtime video room…';
+      callObject=Daily.createCallObject({videoSource:false}); bindDailyEvents();
+      await callObject.join({url:session.conversationUrl,token:session.meetingToken||undefined,startVideoOff:true,startAudioOff:false});
+      try{callObject.setLocalVideo(false)}catch{}
+    }catch(error){
+      sessionStarting=false;setStage({loading:false});setSessionStatus('Could not start');setMic('','Not connected');notify(error.message);if(start){start.classList.remove('hidden');start.disabled=false;start.textContent='Start Session'};if(conversationId){avatarFetch('/api/avatar/end',{method:'POST',body:JSON.stringify({conversationId})}).catch(()=>{});conversationId=''};if(callObject){try{await callObject.destroy()}catch{};callObject=null}
+    }
+  }
+
+  function cleanupSessionUi(){
+    sessionActive=false;sessionStarting=false;micMuted=false;const video=$a('avatarLiveVideo');if(video){try{video.srcObject=null}catch{};video.classList.add('hidden')};const audio=$a('avatarLiveAudio');if(audio)try{audio.srcObject=null}catch{};$a('avatarStagePlaceholder')?.classList.remove('hidden');$a('avatarStageLoading')?.classList.add('hidden');$a('avatarSpeakingState')?.classList.add('hidden');$a('avatarStartBtn')?.classList.remove('hidden');$a('avatarMuteBtn')?.classList.add('hidden');$a('avatarEndBtn')?.classList.add('hidden');setMic('','Not connected');setSessionStatus(profile?.status==='completed'?'Ready to start':'Session ended');const start=$a('avatarStartBtn');if(start){start.disabled=profile?.status!=='completed';start.textContent='Start Session'};
+  }
+
+  async function endSession({quiet=false}={}){
+    const id=conversationId;conversationId='';
+    if(callObject){try{await callObject.leave()}catch{};try{await callObject.destroy()}catch{};callObject=null}
+    cleanupSessionUi(); if(id){try{await avatarFetch('/api/avatar/end',{method:'POST',body:JSON.stringify({conversationId:id})})}catch(error){if(!quiet)notify(error.message)}} if(!quiet)notify('Avatar session ended.');
+  }
+
+  function toggleMute(){if(!callObject||!sessionActive)return;try{callObject.setLocalAudio(micMuted);micMuted=!micMuted;setTimeout(updateMicFromCall,60)}catch{}}
+
+  function bindAvatar(){
+    $a('avatarSelfieDrop')?.addEventListener('click',()=>$a('avatarSelfieInput')?.click());
+    $a('avatarSelfieInput')?.addEventListener('change',e=>{const file=e.target.files?.[0];if(!file)return;if(!String(file.type||'').startsWith('image/'))return notify('Choose an image file.');selectedFile=file;showSelectedSelfie(file)});
+    $a('avatarRightsCheck')?.addEventListener('change',updateCreateButton);
+    $a('avatarCreateBtn')?.addEventListener('click',createAvatar);
+    $a('avatarDeleteBtn')?.addEventListener('click',deleteAvatar);
+    $a('avatarStartBtn')?.addEventListener('click',startSession);
+    $a('avatarMuteBtn')?.addEventListener('click',toggleMute);
+    $a('avatarEndBtn')?.addEventListener('click',()=>endSession());
+  }
+
+  // Teach the route system about the new first-class page.
+  try{if(window.CallFocusRouter?.routes)window.CallFocusRouter.routes.avatar='/avatar'}catch{}
+  const previousShow=typeof showView==='function'?showView:null;
+  if(previousShow){
+    showView=function(view,scroll=true){
+      if(sessionActive&&view!=='avatar')endSession({quiet:true});
+      const result=previousShow(view,scroll);
+      if(view==='avatar')setTimeout(()=>loadProfile({quiet:true}),70);
+      return result;
+    };
+  }
+
+  window.addEventListener('pagehide',()=>{if(conversationId){try{fetch('/api/avatar/end',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token()}`},body:JSON.stringify({conversationId}),keepalive:true})}catch{}}});
+  bindAvatar();
+  if(activeAvatarView())loadProfile({quiet:true});
+  window.CallFocusAvatar={refresh:()=>loadProfile(),end:()=>endSession(),profile:()=>profile};
 })();

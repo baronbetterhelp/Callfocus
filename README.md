@@ -1,3 +1,5 @@
+CallFocus V12.7 Live AI Avatar
+
 CallFocus V12.6 — Customer AI Voice Designer
 
 See README-V12.6.md for this release.
@@ -42,3 +44,6 @@ Until activation is complete, leave `CALLFOCUS_PAYMENTS_ENABLED` unset or false.
 
 ## Security note
 This build adds application-level rate limiting. Cloudflare Access/Turnstile can be added later as an additional dashboard-level layer without changing the current customer flow.
+
+
+See README-V12.7.md for the Live AI Avatar integration and TAVUS_API_KEY setup.

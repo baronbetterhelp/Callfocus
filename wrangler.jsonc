@@ -23,6 +23,7 @@
       "/api/*",
       "/admin",
       "/admin/",
+      "/avatar",
       "/voice-notes",
       "/credits",
       "/callers",

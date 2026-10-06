@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=12.6" />
+  <link rel="stylesheet" href="/callfocus.css?v=12.7" />
 </head>
 <body data-cf-document-view="settings">
   <div class="app-root home-page" id="pageRoot">
@@ -35,6 +35,7 @@
           <button class="nav-anchor active" data-route="home">Home</button>
           <button class="nav-anchor auth-route" data-route="callers">My Callers</button>
           <button class="nav-anchor auth-route" data-route="recent">Recent Calls</button>
+          <button class="nav-anchor auth-route" data-route="avatar">Live Avatar</button>
           <button class="nav-anchor auth-route" data-route="profile">My Profile</button>
         </nav>
 
@@ -71,6 +72,7 @@
             <button data-mobile-route="home"><span class="menu-icon">⌂</span><span>Home<small>CallFocus overview</small></span></button>
             <button data-mobile-route="callers"><span class="menu-icon">◉</span><span>My Callers<small>Saved people and caller context</small></span></button>
             <button data-mobile-route="recent"><span class="menu-icon">◷</span><span>Recent Calls<small>Continue previous call threads</small></span></button>
+            <button data-mobile-route="avatar"><span class="menu-icon">◉</span><span>Live AI Avatar<small>Talk face-to-face with your AI avatar</small></span></button>
             <button data-mobile-route="credits"><span class="menu-icon">◌</span><span>Call & Voice Credits<small>Shared balance, pricing and top-ups</small></span></button>
             <button data-mobile-route="profile"><span class="menu-icon">◎</span><span>My Profile<small>Your reusable information</small></span></button>
           </div>
@@ -110,6 +112,7 @@
                 <button class="btn btn-primary hero-primary" id="heroNewCallBtn">Start a new call</button>
                 <button class="btn btn-ghost voice-note-launch voice-note-launch-main" id="heroCreateVoiceBtn"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Create a voice note</span></button>
                 <button class="btn btn-ghost voice-note-launch dynamics-launch" id="heroHowBtn"><span class="voice-note-launch-icon" aria-hidden="true">◎</span><span>Generate conversation dynamics</span></button>
+                <button class="btn btn-ghost voice-note-launch avatar-launch" id="heroAvatarBtn" data-route="avatar"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Live AI Avatar</span><small>New</small></button>
               </div>
               <div class="hero-proof hero-enter hero-enter-4 hero-proof-spaced">
                 <div class="avatar-stack"><span>C</span><span>F</span><span>+</span></div>
@@ -214,6 +217,119 @@
           </div>
         </section>
       </section>
+      <section class="page-view app-page avatar-page" id="page-avatar" data-view="avatar">
+        <div class="container avatar-page-shell">
+          <div class="avatar-page-head app-page-head">
+            <button class="cf-route-back avatar-back-btn" id="avatarBackBtn" type="button" data-cf-route-back aria-label="Go back"><span aria-hidden="true">‹</span></button>
+            <div>
+              <span class="section-eyebrow">Realtime visual AI</span>
+              <h1>Live AI Avatar</h1>
+              <p>Turn one selfie into a face-to-face AI conversation that can listen, answer, speak and react in real time.</p>
+            </div>
+          </div>
+
+          <div class="avatar-disclosure-card" role="note">
+            <span class="avatar-disclosure-icon" aria-hidden="true">AI</span>
+            <div><strong>AI-generated avatar</strong><p>This is a synthetic AI experience, not a real person or live video call. Only upload your own selfie or an image whose subject has explicitly consented to this AI-avatar use.</p></div>
+          </div>
+
+          <div class="avatar-provider-notice hidden" id="avatarProviderNotice">
+            <strong>Live AI Avatar is not activated yet.</strong>
+            <p id="avatarProviderNoticeText">Connect the video-avatar provider on the CallFocus server to enable this feature.</p>
+          </div>
+
+          <div class="avatar-layout">
+            <section class="avatar-builder-card">
+              <div class="avatar-card-heading">
+                <div><span class="avatar-step">01</span><strong>Create your avatar</strong></div>
+                <span class="avatar-state-pill" id="avatarBuildState">No avatar yet</span>
+              </div>
+              <p class="avatar-card-copy">Choose a clear, front-facing selfie. CallFocus prepares a realistic AI avatar with natural lip movement, expressions, blinking and subtle head motion.</p>
+
+              <button class="avatar-selfie-drop" id="avatarSelfieDrop" type="button">
+                <span class="avatar-selfie-placeholder" id="avatarSelfiePlaceholder">
+                  <span class="avatar-upload-plus">+</span>
+                  <strong>Upload a selfie</strong>
+                  <small>JPG, PNG, WEBP or any image your phone can open</small>
+                </span>
+                <img class="avatar-selfie-preview hidden" id="avatarSelfiePreview" alt="Selected selfie preview" />
+                <span class="avatar-selfie-change hidden" id="avatarSelfieChange">Change selfie</span>
+              </button>
+              <input class="hidden" id="avatarSelfieInput" type="file" accept="image/*" />
+
+              <div class="avatar-builder-fields">
+                <label>Avatar voice
+                  <select id="avatarVoiceSelect">
+                    <optgroup label="Female voices">
+                      <option value="anna">Anna · natural and clear</option>
+                      <option value="julia">Julia · warm and polished</option>
+                      <option value="ivy">Ivy · bright and expressive</option>
+                    </optgroup>
+                    <optgroup label="Male voices">
+                      <option value="benjamin">Benjamin · calm and grounded</option>
+                      <option value="james">James · natural and confident</option>
+                      <option value="liam">Liam · warm and conversational</option>
+                    </optgroup>
+                  </select>
+                </label>
+                <label class="avatar-rights-check"><input id="avatarRightsCheck" type="checkbox" /><span>I confirm I am the person shown, or I have that person’s explicit, informed consent to create and use this AI avatar.</span></label>
+              </div>
+
+              <div class="avatar-training-status hidden" id="avatarTrainingStatus">
+                <div class="avatar-training-line"><strong id="avatarTrainingTitle">Preparing your avatar…</strong><span id="avatarTrainingPercent">0%</span></div>
+                <div class="avatar-progress-track"><span id="avatarProgressBar"></span></div>
+                <p id="avatarTrainingMessage">This can take a few minutes. You can keep this page open while CallFocus checks progress.</p>
+              </div>
+
+              <div class="avatar-builder-actions">
+                <button class="btn btn-primary avatar-create-btn" id="avatarCreateBtn" type="button" disabled>Create AI avatar</button>
+                <button class="btn btn-ghost avatar-delete-btn hidden" id="avatarDeleteBtn" type="button">Delete avatar</button>
+              </div>
+            </section>
+
+            <section class="avatar-live-card">
+              <div class="avatar-card-heading">
+                <div><span class="avatar-step">02</span><strong>Live session</strong></div>
+                <span class="avatar-live-badge"><i></i> AI-generated</span>
+              </div>
+
+              <div class="avatar-stage" id="avatarStage">
+                <div class="avatar-stage-placeholder" id="avatarStagePlaceholder">
+                  <div class="avatar-stage-orb"><span>CF</span></div>
+                  <strong id="avatarStageTitle">Your avatar will appear here</strong>
+                  <p id="avatarStageSubtitle">Create an avatar first, then start a realtime session.</p>
+                </div>
+                <video class="avatar-live-video hidden" id="avatarLiveVideo" autoplay playsinline></video>
+                <audio id="avatarLiveAudio" autoplay></audio>
+                <div class="avatar-stage-loading hidden" id="avatarStageLoading"><span class="avatar-spinner"></span><strong id="avatarLoadingTitle">Preparing live session…</strong><small id="avatarLoadingText">Connecting microphone and avatar.</small></div>
+                <div class="avatar-speaking-state hidden" id="avatarSpeakingState"><span></span><b>Listening</b></div>
+                <div class="avatar-watermark">AI-generated · CallFocus</div>
+              </div>
+
+              <div class="avatar-session-meta">
+                <div class="avatar-mic-status" id="avatarMicStatus"><span class="avatar-mic-dot"></span><div><small>Microphone</small><strong id="avatarMicLabel">Not connected</strong></div></div>
+                <div class="avatar-session-status"><small>Session</small><strong id="avatarSessionStatus">Ready when avatar is created</strong></div>
+              </div>
+
+              <div class="avatar-session-actions">
+                <button class="btn btn-primary" id="avatarStartBtn" type="button" disabled>Start Session</button>
+                <button class="btn btn-ghost hidden" id="avatarMuteBtn" type="button">Mute microphone</button>
+                <button class="btn avatar-end-btn hidden" id="avatarEndBtn" type="button">End Session</button>
+              </div>
+            </section>
+          </div>
+
+          <section class="avatar-transcript-card">
+            <div class="avatar-transcript-head"><div><span class="section-eyebrow">Live transcript</span><h2>Conversation</h2></div><span id="avatarTranscriptState">Waiting for session</span></div>
+            <div class="avatar-transcript" id="avatarTranscript" aria-live="polite">
+              <div class="avatar-transcript-empty" id="avatarTranscriptEmpty"><strong>Your conversation will appear here live.</strong><span>What you say and the AI avatar’s responses will be separated clearly.</span></div>
+            </div>
+          </section>
+
+          <div class="avatar-privacy-note"><strong>Privacy</strong><span>Your uploaded selfie is used to create the avatar and is not displayed publicly by CallFocus. Live audio and video are processed by the avatar provider during the session.</span></div>
+        </div>
+      </section>
+
 
 
       <section class="page-view app-page voice-notes-page" id="page-voice-notes" data-view="voice-notes">
@@ -592,6 +708,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=12.6"></script>
+  <script src="/callfocus.js?v=12.7"></script>
 </body>
 </html>

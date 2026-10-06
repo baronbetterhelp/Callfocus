@@ -2462,6 +2462,301 @@ ANALYST NOTES\n${joined}`;
   }
 }
 
+
+/* ===== CallFocus V12.7 — Live AI Avatar (Tavus CVI) ===== */
+const AVATAR_PROFILE_PREFIX = 'avatar:profile:';
+const AVATAR_MEDIA_PREFIX = 'avatar:media:';
+const AVATAR_SESSION_PREFIX = 'avatar:session:';
+const AVATAR_PAL_KEY = 'avatar:tavus:pal:v1';
+const TAVUS_API_BASE = 'https://tavusapi.com/v2';
+const AVATAR_MEDIA_TTL = 60 * 60;
+const AVATAR_SESSION_TTL = 60 * 60 * 3;
+const AVATAR_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const AVATAR_VOICE_NAMES = new Set(['anna','julia','ivy','benjamin','james','liam']);
+
+function avatarProfileKey(userId){ return `${AVATAR_PROFILE_PREFIX}${String(userId || '')}`; }
+function avatarMediaKey(token){ return `${AVATAR_MEDIA_PREFIX}${String(token || '')}`; }
+function avatarSessionKey(id){ return `${AVATAR_SESSION_PREFIX}${String(id || '')}`; }
+function avatarProviderConfigured(env){ return !!String(env.TAVUS_API_KEY || '').trim(); }
+
+function avatarSafeProfile(profile = {}, configured = true){
+  return {
+    providerConfigured: !!configured,
+    avatarId: String(profile.avatarId || ''),
+    resourceType: String(profile.resourceType || 'face'),
+    status: String(profile.status || (profile.avatarId ? 'started' : 'none')),
+    trainingProgress: String(profile.trainingProgress || ''),
+    thumbnailVideoUrl: String(profile.thumbnailVideoUrl || ''),
+    voiceName: String(profile.voiceName || 'anna'),
+    createdAt: String(profile.createdAt || ''),
+    updatedAt: String(profile.updatedAt || ''),
+    errorMessage: String(profile.errorMessage || ''),
+    modelName: String(profile.modelName || 'phoenix-4.5')
+  };
+}
+
+async function tavusRequest(env, path, { method = 'GET', body = null, allowError = false } = {}){
+  const key = String(env.TAVUS_API_KEY || '').trim();
+  if(!key){
+    const error = new Error('Live AI Avatar is not activated yet. Add TAVUS_API_KEY to the CallFocus Worker secrets.');
+    error.status = 503; error.code = 'avatar_provider_unconfigured'; throw error;
+  }
+  const response = await fetch(`${TAVUS_API_BASE}${path}`, {
+    method,
+    headers: {
+      'x-api-key': key,
+      ...(body !== null ? { 'Content-Type': 'application/json' } : {})
+    },
+    body: body !== null ? JSON.stringify(body) : undefined
+  });
+  let payload = {};
+  const text = await response.text();
+  if(text){ try{ payload = JSON.parse(text); }catch{ payload = { message: text }; } }
+  if(!response.ok && !allowError){
+    const message = String(payload?.error || payload?.message || payload?.detail || `Avatar provider returned HTTP ${response.status}.`);
+    const error = new Error(message.slice(0, 500));
+    error.status = response.status >= 400 && response.status < 600 ? response.status : 502;
+    error.providerStatus = response.status;
+    error.payload = payload;
+    throw error;
+  }
+  return { ok: response.ok, status: response.status, payload };
+}
+
+function decodeAvatarImageData(imageData){
+  const raw = String(imageData || '');
+  const match = raw.match(/^data:(image\/(?:jpeg|jpg|png|webp));base64,([A-Za-z0-9+/=\s]+)$/i);
+  if(!match) throw Object.assign(new Error('Upload a JPG, PNG or WEBP selfie.'), { status: 400 });
+  const b64 = match[2].replace(/\s+/g,'');
+  const bytes = b64ToBytes(b64);
+  if(!bytes?.byteLength) throw Object.assign(new Error('The selfie file could not be read.'), { status: 400 });
+  if(bytes.byteLength > AVATAR_MAX_IMAGE_BYTES) throw Object.assign(new Error('The prepared selfie is too large. Please choose a smaller image.'), { status: 413 });
+  return { bytes, mime: match[1].toLowerCase() === 'image/jpg' ? 'image/jpeg' : match[1].toLowerCase() };
+}
+
+async function createTavusAvatar(env, publicImageUrl, voiceName, label){
+  const common = {
+    model_name: 'phoenix-4.5',
+    train_image_url: publicImageUrl,
+    voice_name: voiceName,
+    auto_fix_training_image: true
+  };
+  // Tavus is rolling out the Face resource across CVI. Try it first, then fall
+  // back to the compatible Image-to-Replica endpoint for accounts still on it.
+  let first = await tavusRequest(env, '/faces', { method: 'POST', body: { ...common, face_name: label }, allowError: true });
+  if(first.ok){
+    const id = String(first.payload?.face_id || first.payload?.id || '');
+    if(!id) throw Object.assign(new Error('The avatar provider did not return a face ID.'), { status: 502 });
+    return { avatarId: id, resourceType: 'face', status: String(first.payload?.status || 'started'), payload: first.payload };
+  }
+  if(![400,404,405,422].includes(first.status)){
+    const msg = String(first.payload?.error || first.payload?.message || 'Could not create the AI avatar.');
+    throw Object.assign(new Error(msg.slice(0,500)), { status: first.status || 502 });
+  }
+  const second = await tavusRequest(env, '/replicas', { method: 'POST', body: { ...common, replica_name: label } });
+  const id = String(second.payload?.replica_id || second.payload?.id || '');
+  if(!id) throw Object.assign(new Error('The avatar provider did not return an avatar ID.'), { status: 502 });
+  return { avatarId: id, resourceType: 'replica', status: String(second.payload?.status || 'started'), payload: second.payload };
+}
+
+async function readTavusAvatarStatus(env, profile){
+  if(!profile?.avatarId) return profile;
+  const type = profile.resourceType === 'replica' ? 'replicas' : 'faces';
+  const response = await tavusRequest(env, `/${type}/${encodeURIComponent(profile.avatarId)}`, { allowError: true });
+  if(!response.ok){
+    if(response.status === 404) return { ...profile, status: 'error', errorMessage: 'This avatar could not be found at the video provider.' };
+    return profile;
+  }
+  const p = response.payload || {};
+  return {
+    ...profile,
+    status: String(p.status || profile.status || 'started'),
+    trainingProgress: String(p.training_progress || p.trainingProgress || profile.trainingProgress || ''),
+    thumbnailVideoUrl: String(p.thumbnail_video_url || p.thumbnailVideoUrl || p.video_url || profile.thumbnailVideoUrl || ''),
+    errorMessage: String(p.error_message || p.error || profile.errorMessage || ''),
+    modelName: String(p.model_name || profile.modelName || 'phoenix-4.5'),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+async function handleAvatarMedia(request, env, token){
+  if(request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
+  if(!env.CALLFOCUS_CONFIG) return new Response('Not found.', { status: 404 });
+  const safe = String(token || '').replace(/[^A-Za-z0-9_-]/g,'');
+  if(safe.length < 30) return new Response('Not found.', { status: 404 });
+  const media = await env.CALLFOCUS_CONFIG.get(avatarMediaKey(safe), { type: 'json' });
+  if(!media?.data) return new Response('Not found.', { status: 404 });
+  let bytes;
+  try{ bytes = b64ToBytes(String(media.data)); }catch{ return new Response('Not found.', { status: 404 }); }
+  return new Response(bytes, { status: 200, headers: {
+    'Content-Type': String(media.mime || 'image/jpeg'),
+    'Cache-Control': 'private, no-store, max-age=0',
+    'X-Content-Type-Options': 'nosniff'
+  }});
+}
+
+async function handleAvatarProfile(request, env){
+  const auth = await authenticatedCustomer(request, env);
+  if(!auth) return json({ error: 'Sign in to use Live AI Avatar.' }, 401);
+  if(!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is unavailable.' }, 503);
+  const configured = avatarProviderConfigured(env);
+
+  if(request.method === 'GET'){
+    let profile = (await env.CALLFOCUS_CONFIG.get(avatarProfileKey(auth.user.id), { type: 'json' })) || {};
+    if(profile.avatarId && configured && ['started','training','queued','processing','completed'].includes(String(profile.status || 'started'))){
+      try{
+        profile = await readTavusAvatarStatus(env, profile);
+        await env.CALLFOCUS_CONFIG.put(avatarProfileKey(auth.user.id), JSON.stringify(profile));
+        if(profile.status === 'completed' && profile.mediaToken){
+          await env.CALLFOCUS_CONFIG.delete(avatarMediaKey(profile.mediaToken));
+          profile.mediaToken = '';
+          await env.CALLFOCUS_CONFIG.put(avatarProfileKey(auth.user.id), JSON.stringify(profile));
+        }
+      }catch{}
+    }
+    return json({ profile: avatarSafeProfile(profile, configured) });
+  }
+
+  if(request.method === 'DELETE'){
+    const profile = (await env.CALLFOCUS_CONFIG.get(avatarProfileKey(auth.user.id), { type: 'json' })) || {};
+    if(configured && profile.avatarId){
+      const resource = profile.resourceType === 'replica' ? 'replicas' : 'faces';
+      try{ await tavusRequest(env, `/${resource}/${encodeURIComponent(profile.avatarId)}`, { method: 'DELETE', allowError: true }); }catch{}
+    }
+    if(profile.mediaToken) await env.CALLFOCUS_CONFIG.delete(avatarMediaKey(profile.mediaToken));
+    await env.CALLFOCUS_CONFIG.delete(avatarProfileKey(auth.user.id));
+    return json({ ok: true });
+  }
+
+  return json({ error: 'Method not allowed.' }, 405);
+}
+
+async function handleAvatarCreate(request, env){
+  if(request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
+  const auth = await authenticatedCustomer(request, env);
+  if(!auth) return json({ error: 'Sign in to create a Live AI Avatar.' }, 401);
+  if(!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is unavailable.' }, 503);
+  if(!avatarProviderConfigured(env)) return json({ error: 'Live AI Avatar is not activated yet. Add the Tavus API key to the CallFocus Worker first.', code: 'avatar_provider_unconfigured' }, 503);
+  let body = {}; try{ body = await request.json(); }catch{}
+  if(body?.rightsConfirmed !== true) return json({ error: 'Confirm that you are the person shown, or that you have the person’s explicit, informed consent to create and use this AI avatar.' }, 400);
+  const voiceName = AVATAR_VOICE_NAMES.has(String(body?.voiceName || '').toLowerCase()) ? String(body.voiceName).toLowerCase() : 'anna';
+  let decoded;
+  try{ decoded = decodeAvatarImageData(body?.imageData); }catch(error){ return json({ error: error.message }, Number(error.status || 400)); }
+
+  const existing = (await env.CALLFOCUS_CONFIG.get(avatarProfileKey(auth.user.id), { type: 'json' })) || {};
+  if(existing.mediaToken) await env.CALLFOCUS_CONFIG.delete(avatarMediaKey(existing.mediaToken));
+  if(existing.avatarId){
+    const resource = existing.resourceType === 'replica' ? 'replicas' : 'faces';
+    try{ await tavusRequest(env, `/${resource}/${encodeURIComponent(existing.avatarId)}`, { method: 'DELETE', allowError: true }); }catch{}
+  }
+
+  const mediaToken = randomToken(42).replace(/[^A-Za-z0-9_-]/g,'');
+  const base64 = bytesToB64(decoded.bytes);
+  await env.CALLFOCUS_CONFIG.put(avatarMediaKey(mediaToken), JSON.stringify({ data: base64, mime: decoded.mime }), { expirationTtl: AVATAR_MEDIA_TTL });
+  const imageUrl = `${new URL(request.url).origin}/api/avatar/media/${encodeURIComponent(mediaToken)}`;
+  const label = `CallFocus ${String(auth.user.name || 'Avatar').slice(0,60)}`;
+  try{
+    const created = await createTavusAvatar(env, imageUrl, voiceName, label);
+    const profile = {
+      avatarId: created.avatarId,
+      resourceType: created.resourceType,
+      status: created.status || 'started',
+      trainingProgress: '',
+      thumbnailVideoUrl: '',
+      voiceName,
+      mediaToken,
+      modelName: 'phoenix-4.5',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      errorMessage: ''
+    };
+    await env.CALLFOCUS_CONFIG.put(avatarProfileKey(auth.user.id), JSON.stringify(profile));
+    return json({ ok: true, profile: avatarSafeProfile(profile, true) });
+  }catch(error){
+    await env.CALLFOCUS_CONFIG.delete(avatarMediaKey(mediaToken));
+    return json({ error: String(error?.message || 'Could not create the AI avatar.'), code: 'avatar_create_failed' }, Number(error?.status || 502));
+  }
+}
+
+async function getOrCreateAvatarPal(env){
+  if(String(env.TAVUS_PAL_ID || '').trim()) return String(env.TAVUS_PAL_ID).trim();
+  if(!env.CALLFOCUS_CONFIG) return '';
+  const cached = await env.CALLFOCUS_CONFIG.get(AVATAR_PAL_KEY, { type: 'json' });
+  if(cached?.palId) return String(cached.palId);
+  const defaultFace = String(env.TAVUS_DEFAULT_FACE_ID || 'rc9cff32ceba').trim();
+  const body = {
+    pal_name: 'CallFocus Live AI Avatar',
+    pipeline_mode: 'full',
+    system_prompt: 'You are the CallFocus Live AI Avatar, a helpful realtime conversational AI. Answer the user intelligently, naturally, and directly. Be warm, concise, and conversational. Never claim to be a human. Never hide that you are AI. Listen carefully, allow interruptions, and ask a brief follow-up only when it genuinely helps.',
+    default_face_id: defaultFace,
+    disclosure_type: 'always'
+  };
+  let res = await tavusRequest(env, '/pals', { method: 'POST', body, allowError: true });
+  if(!res.ok && res.status === 400){
+    // Compatibility retry for accounts that have not received disclosure_type yet.
+    const retry = { ...body }; delete retry.disclosure_type;
+    res = await tavusRequest(env, '/pals', { method: 'POST', body: retry, allowError: true });
+  }
+  if(!res.ok) return '';
+  const palId = String(res.payload?.pal_id || res.payload?.id || '');
+  if(palId) await env.CALLFOCUS_CONFIG.put(AVATAR_PAL_KEY, JSON.stringify({ palId, createdAt: new Date().toISOString() }));
+  return palId;
+}
+
+async function handleAvatarSession(request, env){
+  if(request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
+  const auth = await authenticatedCustomer(request, env);
+  if(!auth) return json({ error: 'Sign in to start a Live AI Avatar session.' }, 401);
+  if(!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is unavailable.' }, 503);
+  if(!avatarProviderConfigured(env)) return json({ error: 'Live AI Avatar is not activated yet. Add TAVUS_API_KEY to the CallFocus Worker.', code: 'avatar_provider_unconfigured' }, 503);
+  let profile = (await env.CALLFOCUS_CONFIG.get(avatarProfileKey(auth.user.id), { type: 'json' })) || {};
+  if(!profile.avatarId) return json({ error: 'Create your AI avatar from a selfie first.' }, 409);
+  try{ profile = await readTavusAvatarStatus(env, profile); }catch{}
+  await env.CALLFOCUS_CONFIG.put(avatarProfileKey(auth.user.id), JSON.stringify(profile));
+  if(String(profile.status) !== 'completed'){
+    const msg = profile.errorMessage || (profile.status === 'error' ? 'The avatar could not be created. Try another selfie.' : 'Your avatar is still being prepared. Please wait for it to finish.');
+    return json({ error: msg, status: profile.status, trainingProgress: profile.trainingProgress }, 409);
+  }
+
+  const palId = await getOrCreateAvatarPal(env);
+  const body = {
+    conversation_name: `CallFocus Avatar — ${String(auth.user.name || 'User').slice(0,80)}`,
+    conversational_context: 'This is a live CallFocus AI avatar session. Give helpful, intelligent answers in natural spoken language. Keep the pace conversational. The interface visibly discloses that this avatar is AI-generated.',
+    custom_greeting: 'Hi. I’m your AI-generated CallFocus avatar. I’m ready whenever you are — ask me anything.',
+    dynamic_greeting: false,
+    require_auth: true,
+    max_participants: 2,
+    properties: {
+      enable_closed_captions: true,
+      max_call_duration: 600
+    },
+    ...(palId ? { pal_id: palId } : {}),
+    ...(profile.resourceType === 'replica' ? { replica_id: profile.avatarId } : { face_id: profile.avatarId })
+  };
+  const res = await tavusRequest(env, '/conversations', { method: 'POST', body });
+  const p = res.payload || {};
+  const conversationId = String(p.conversation_id || p.id || '');
+  const conversationUrl = String(p.conversation_url || p.url || '');
+  const meetingToken = String(p.meeting_token || p.token || '');
+  if(!conversationId || !conversationUrl) return json({ error: 'The avatar provider did not return a usable live session.' }, 502);
+  await env.CALLFOCUS_CONFIG.put(avatarSessionKey(conversationId), JSON.stringify({ userId: auth.user.id, createdAt: new Date().toISOString() }), { expirationTtl: AVATAR_SESSION_TTL });
+  return json({ ok: true, conversationId, conversationUrl, meetingToken });
+}
+
+async function handleAvatarEnd(request, env){
+  if(request.method !== 'POST') return json({ error: 'Method not allowed.' }, 405);
+  const auth = await authenticatedCustomer(request, env);
+  if(!auth) return json({ error: 'Sign in first.' }, 401);
+  let body = {}; try{ body = await request.json(); }catch{}
+  const id = String(body?.conversationId || '').trim();
+  if(!id) return json({ error: 'Missing avatar session ID.' }, 400);
+  const record = env.CALLFOCUS_CONFIG ? await env.CALLFOCUS_CONFIG.get(avatarSessionKey(id), { type: 'json' }) : null;
+  if(!record || String(record.userId) !== String(auth.user.id)) return json({ error: 'This avatar session is not available.' }, 404);
+  try{ await tavusRequest(env, `/conversations/${encodeURIComponent(id)}/end`, { method: 'POST', body: {} , allowError: true }); }catch{}
+  try{ await env.CALLFOCUS_CONFIG.delete(avatarSessionKey(id)); }catch{}
+  return json({ ok: true });
+}
+
 async function safeCustomerRoute(label, handler) {
   try {
     return await handler();
@@ -2511,6 +2806,11 @@ export default {
     if (url.pathname === '/api/admin/custom-voices/create') return handleAdminCustomVoiceCreate(request, env);
     if (url.pathname === '/api/admin/diagnostics' && request.method === 'GET') return handleAdminDiagnostics(request, env);
     if (url.pathname === '/api/voice-note' && request.method === 'POST') return handleVoiceNote(request, env);
+    if (url.pathname.startsWith('/api/avatar/media/')) return handleAvatarMedia(request, env, decodeURIComponent(url.pathname.slice('/api/avatar/media/'.length)));
+    if (url.pathname === '/api/avatar/profile') return safeCustomerRoute('avatar-profile', () => handleAvatarProfile(request, env));
+    if (url.pathname === '/api/avatar/create') { const limited = await callFocusRateLimit(request, env, 'avatar-create', 6, 86400); if (limited) return limited; return safeCustomerRoute('avatar-create', () => handleAvatarCreate(request, env)); }
+    if (url.pathname === '/api/avatar/session') { const limited = await callFocusRateLimit(request, env, 'avatar-session', 30, 3600); if (limited) return limited; return safeCustomerRoute('avatar-session', () => handleAvatarSession(request, env)); }
+    if (url.pathname === '/api/avatar/end') return safeCustomerRoute('avatar-end', () => handleAvatarEnd(request, env));
     if (url.pathname === '/api/dynamics/analyze') { const limited = await callFocusRateLimit(request, env, 'dynamics-analyze', 40, 900); if (limited) return limited; return safeCustomerRoute('dynamics-analyze', () => handleDynamicsAnalyze(request, env)); }
     if (url.pathname === '/api/session') {
       if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
@@ -2521,6 +2821,7 @@ export default {
     }
     const pageMap = {
       '/': '/index.html',
+      '/avatar': '/avatar.html',
       '/voice-notes': '/voice-notes.html',
       '/credits': '/credits.html',
       '/callers': '/callers.html',

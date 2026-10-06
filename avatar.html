@@ -11,15 +11,15 @@
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
   <link rel="icon" type="image/png" href="./favicon.png" />
-  <title>Call & Voice Credits — CallFocus</title>
+  <title>Live AI Avatar — CallFocus</title>
   <script>document.documentElement.dataset.theme='pearl';document.documentElement.style.colorScheme='light';</script>
-  <meta name="description" content="View your shared CallFocus balance and pricing." />
+  <meta name="description" content="Create a realtime talking AI avatar from a selfie with CallFocus." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/callfocus.css?v=12.7" />
 </head>
-<body data-cf-document-view="credits">
+<body data-cf-document-view="avatar">
   <div class="app-root home-page" id="pageRoot">
     <header class="site-header" id="siteHeader">
       <div class="container header-inner">
@@ -217,7 +217,8 @@
           </div>
         </section>
       </section>
-      <section class="page-view app-page avatar-page" id="page-avatar" data-view="avatar">
+
+      <section class="page-view app-page avatar-page active" id="page-avatar" data-view="avatar">
         <div class="container avatar-page-shell">
           <div class="avatar-page-head app-page-head">
             <button class="cf-route-back avatar-back-btn" id="avatarBackBtn" type="button" data-cf-route-back aria-label="Go back"><span aria-hidden="true">‹</span></button>
@@ -331,7 +332,6 @@
       </section>
 
 
-
       <section class="page-view app-page voice-notes-page" id="page-voice-notes" data-view="voice-notes">
         <div class="container voice-notes-shell">
           <div class="voice-notes-head">
@@ -401,7 +401,7 @@
         </div>
       </section>
 
-      <section class="page-view app-page credit-page active" id="page-credits" data-view="credits">
+      <section class="page-view app-page credit-page" id="page-credits" data-view="credits">
         <div class="container credit-page-shell">
           <div class="credit-page-head">
             <button class="credit-back-btn" id="creditBackBtn" type="button" aria-label="Back to home">‹</button>
