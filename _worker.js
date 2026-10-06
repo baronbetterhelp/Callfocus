@@ -1,6 +1,20 @@
 const LIVE_VOICES = ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar','ripple','vesper','stone','meridian','beacon','cinder','tempo','quartz','willow','gleam','bossa','delta'];
 const TTS_VOICES = ['alloy','ash','ballad','coral','echo','fable','nova','onyx','sage','shimmer','verse','marin','cedar'];
 
+// Single source of truth for CallFocus credit pricing and time conversion.
+// Change creditsPerMinute here and the server + customer UI stay in sync through /api/public-config.
+const CALLFOCUS_CREDIT_POLICY = Object.freeze({
+  creditsPerMinute: 50,
+  nairaPerCredit: 10,
+  minimumPurchaseCredits: 300,
+  purchaseStepCredits: 50,
+  starterCredits: 75
+});
+const CALLFOCUS_SECONDS_PER_CREDIT = 60 / CALLFOCUS_CREDIT_POLICY.creditsPerMinute;
+function callFocusSecondsForCredits(credits) {
+  return Math.round(Math.max(0, Number(credits) || 0) * CALLFOCUS_SECONDS_PER_CREDIT);
+}
+
 const CALL_LANGUAGES = ['English','Spanish','French','Italian','German','Portuguese','Dutch','Arabic','Hindi','Mandarin Chinese','Cantonese','Japanese','Korean','Russian','Turkish','Vietnamese','Polish','Ukrainian','Greek','Hebrew','Indonesian','Malay','Thai','Swahili','Filipino','Romanian','Czech','Hungarian','Swedish','Norwegian','Danish','Finnish'];
 function normalizeCallLanguage(value){ const raw=String(value||'').trim(); return CALL_LANGUAGES.includes(raw)?raw:'English'; }
 
@@ -277,7 +291,7 @@ function defaultCustomerData(name = '') {
     wallet: {
       version: 2,
       revision: 0,
-      balanceSeconds: 90,
+      balanceSeconds: callFocusSecondsForCredits(CALLFOCUS_CREDIT_POLICY.starterCredits),
       starterGranted: true,
       starterGrantedAt: now,
       starterGrantMode: 'server_account_signup',
@@ -858,7 +872,15 @@ async function handlePublicConfig(env) {
     paymentsEnabled: callFocusPaymentsEnabled(env),
     paymentStatus: callFocusPaymentsEnabled(env) ? 'available' : 'awaiting_paystack_activation',
     manualPaymentsEnabled: manualPaymentReady(c),
-    manualPaymentStatus: manualPaymentReady(c) ? 'available' : 'not_configured'
+    manualPaymentStatus: manualPaymentReady(c) ? 'available' : 'not_configured',
+    pricing: {
+      creditsPerMinute: CALLFOCUS_CREDIT_POLICY.creditsPerMinute,
+      nairaPerCredit: CALLFOCUS_CREDIT_POLICY.nairaPerCredit,
+      minimumPurchaseCredits: CALLFOCUS_CREDIT_POLICY.minimumPurchaseCredits,
+      purchaseStepCredits: CALLFOCUS_CREDIT_POLICY.purchaseStepCredits,
+      starterCredits: CALLFOCUS_CREDIT_POLICY.starterCredits,
+      secondsPerCredit: CALLFOCUS_SECONDS_PER_CREDIT
+    }
   });
 }
 
@@ -1575,10 +1597,10 @@ The entire spoken call must stay in ${callLanguage}. This is a hard CallFocus se
 // V11.21 Paystack payments + recovery + dedicated transfer accounts
 // PAYSTACK_SECRET_KEY stays server-side in Cloudflare Runtime Secrets.
 // ----------------------------------------------------------------------------
-const PAYSTACK_MIN_CREDITS = 300;
-const PAYSTACK_CREDIT_STEP = 50;
-const PAYSTACK_NAIRA_PER_CREDIT = 10;
-const PAYSTACK_SECONDS_PER_CREDIT = 1.2;
+const PAYSTACK_MIN_CREDITS = CALLFOCUS_CREDIT_POLICY.minimumPurchaseCredits;
+const PAYSTACK_CREDIT_STEP = CALLFOCUS_CREDIT_POLICY.purchaseStepCredits;
+const PAYSTACK_NAIRA_PER_CREDIT = CALLFOCUS_CREDIT_POLICY.nairaPerCredit;
+const PAYSTACK_SECONDS_PER_CREDIT = CALLFOCUS_SECONDS_PER_CREDIT;
 const PAYSTACK_PENDING_TTL = 60 * 60 * 24 * 2;
 
 function paystackConfigured(env) {

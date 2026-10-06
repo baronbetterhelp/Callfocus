@@ -5,6 +5,26 @@ const esc = (value = '') => String(value).replace(/[&<>'"]/g, c => ({'&':'&amp;'
 const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
 const ACCOUNTS_KEY = 'callfocus_accounts_v4';
 const SESSION_KEY = 'callfocus_session_v4';
+// Pricing fallback is only used before /api/public-config returns. The server policy is authoritative.
+const CALLFOCUS_PRICING_FALLBACK = Object.freeze({
+  creditsPerMinute: 50,
+  nairaPerCredit: 10,
+  minimumPurchaseCredits: 300,
+  purchaseStepCredits: 50,
+  starterCredits: 75
+});
+window.CallFocusPricing = { ...CALLFOCUS_PRICING_FALLBACK };
+function applyPublicPricing(pricing = {}){
+  const numberOr = (value, fallback) => { const n=Number(value); return Number.isFinite(n)&&n>0?n:fallback; };
+  window.CallFocusPricing = {
+    creditsPerMinute: numberOr(pricing.creditsPerMinute, CALLFOCUS_PRICING_FALLBACK.creditsPerMinute),
+    nairaPerCredit: numberOr(pricing.nairaPerCredit, CALLFOCUS_PRICING_FALLBACK.nairaPerCredit),
+    minimumPurchaseCredits: Math.max(1, Math.round(numberOr(pricing.minimumPurchaseCredits, CALLFOCUS_PRICING_FALLBACK.minimumPurchaseCredits))),
+    purchaseStepCredits: Math.max(1, Math.round(numberOr(pricing.purchaseStepCredits, CALLFOCUS_PRICING_FALLBACK.purchaseStepCredits))),
+    starterCredits: Math.max(0, Math.round(Number.isFinite(Number(pricing.starterCredits))?Number(pricing.starterCredits):CALLFOCUS_PRICING_FALLBACK.starterCredits))
+  };
+  if(typeof window.CallFocusSyncPricingUI==='function') window.CallFocusSyncPricingUI();
+}
 const ADMIN_KEY = 'callfocus_admin_global_v4';
 const LEGACY_ADMIN_KEY = 'callfocus_admin_global_v3';
 const VOICES = ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar','ripple','vesper','stone','meridian','beacon','cinder','tempo','quartz','willow','gleam','bossa','delta'];
@@ -79,7 +99,7 @@ function applyGlobalTheme(theme){
   const meta=document.querySelector('meta[name="theme-color"]');
   if(meta) meta.setAttribute('content',next==='pearl'?'#f7f8f5':'#080808');
 }
-async function refreshPublicConfig(){ try{ const res=await fetch('/api/public-config',{cache:'no-store'}); if(res.ok){ remoteAdmin={...ADMIN_DEFAULTS,...await res.json()}; applyGlobalTheme(remoteAdmin.siteTheme); applyAdminLabels(); } }catch{} return loadAdmin(); }
+async function refreshPublicConfig(){ try{ const res=await fetch('/api/public-config',{cache:'no-store'}); if(res.ok){ const payload=await res.json(); remoteAdmin={...ADMIN_DEFAULTS,...payload}; applyPublicPricing(payload.pricing||{}); applyGlobalTheme(remoteAdmin.siteTheme); applyAdminLabels(); } }catch{} return loadAdmin(); }
 function initials(name='?'){ return (String(name).trim()[0] || '?').toUpperCase(); }
 function normalizeName(name=''){ return String(name).trim().toLowerCase().replace(/\s+/g,' '); }
 function toast(message){ $('toast').textContent = message; $('toast').classList.remove('hidden'); clearTimeout(toast._t); toast._t = setTimeout(()=>$('toast').classList.add('hidden'), 2400); }
@@ -1747,10 +1767,12 @@ if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.s
 /* CallFocus V11 — polished contact cards + call-credit wallet + pricing prototype */
 (()=>{
   const CREDIT_RULES = Object.freeze({
-    secondsPer100Credits: 120,
-    nairaPer100Credits: 1000,
-    minimumPurchaseCredits: 300,
-    starterSeconds: 90,
+    get creditsPerMinute(){ return Math.max(1, Number(window.CallFocusPricing?.creditsPerMinute)||CALLFOCUS_PRICING_FALLBACK.creditsPerMinute); },
+    get secondsPer100Credits(){ return 6000 / this.creditsPerMinute; },
+    get nairaPer100Credits(){ return 100 * Math.max(0, Number(window.CallFocusPricing?.nairaPerCredit)||CALLFOCUS_PRICING_FALLBACK.nairaPerCredit); },
+    get minimumPurchaseCredits(){ return Math.max(1, Math.round(Number(window.CallFocusPricing?.minimumPurchaseCredits)||CALLFOCUS_PRICING_FALLBACK.minimumPurchaseCredits)); },
+    get starterCredits(){ const n=Number(window.CallFocusPricing?.starterCredits); return Math.max(0, Math.round(Number.isFinite(n)?n:CALLFOCUS_PRICING_FALLBACK.starterCredits)); },
+    get starterSeconds(){ return Math.round(this.starterCredits * 60 / this.creditsPerMinute); },
     lowCreditEndSeconds: 12
   });
 
@@ -1795,6 +1817,39 @@ if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.s
     if(m<1) return `${r}s`;
     return `${m}m ${String(r).padStart(2,'0')}s`;
   }
+  function pricingDuration(seconds){
+    const s=Math.max(0,Math.round(Number(seconds)||0)), m=Math.floor(s/60), r=s%60;
+    const parts=[];
+    if(m) parts.push(`${m} ${m===1?'minute':'minutes'}`);
+    if(r) parts.push(`${r} ${r===1?'second':'seconds'}`);
+    return parts.join(' ') || '0 seconds';
+  }
+  function rateText(){ return `${formatCredits(CREDIT_RULES.creditsPerMinute)} credits = 1 minute`; }
+  function syncCreditPricingUI(){
+    const pricing=window.CallFocusPricing||CALLFOCUS_PRICING_FALLBACK;
+    const cpm=CREDIT_RULES.creditsPerMinute;
+    const per100Time=pricingDuration(secondsForCredits(100));
+    const per100Naira=formatNaira(nairaForCredits(100));
+    qsa('.credit-rate-card strong').forEach(el=>el.textContent=rateText());
+    qsa('.credit-rate-card small').forEach(el=>el.textContent=`100 credits = ${per100Naira} = ${per100Time}`);
+    qsa('.paystack-account > small').forEach(el=>el.textContent=`Keep this account number for future top-ups. ${per100Naira} = 100 credits = ${per100Time}.`);
+    qsa('.credit-section-title > small').forEach(el=>el.textContent=`${CREDIT_RULES.minimumPurchaseCredits.toLocaleString()} credits minimum`);
+    qsa('.credit-package[data-credit-package]').forEach(btn=>{
+      const credits=Math.max(0,Number(btn.dataset.creditPackage)||0);
+      const time=btn.querySelector('small'); if(time) time.textContent=pricingDuration(secondsForCredits(credits));
+      const amount=btn.querySelector('b'); if(amount) amount.textContent=formatNaira(nairaForCredits(credits));
+    });
+    const custom=$('customCreditAmount');
+    if(custom){ custom.min=String(CREDIT_RULES.minimumPurchaseCredits); if(Number(custom.value)<CREDIT_RULES.minimumPurchaseCredits) custom.value=String(CREDIT_RULES.minimumPurchaseCredits); }
+    if($('creditAmountError')) $('creditAmountError').textContent=`Minimum purchase is ${CREDIT_RULES.minimumPurchaseCredits.toLocaleString()} credits.`;
+    qsa('.credit-custom-card > div:first-child small').forEach(el=>el.textContent=`Enter ${CREDIT_RULES.minimumPurchaseCredits.toLocaleString()} credits or more.`);
+    qsa('.credit-starter-note p').forEach(el=>el.innerHTML=`Each new account receives <b>${CREDIT_RULES.starterCredits.toLocaleString()} starter credits</b> (${pricingDuration(CREDIT_RULES.starterSeconds)} of shared audio time), usable for either live calls or voice notes.`);
+    qsa('#signupPhone + .field-help').forEach(el=>el.textContent=`Used to help identify your account. New accounts receive ${CREDIT_RULES.starterCredits.toLocaleString()} starter credits.`);
+    qsa('[id="voiceNoteCreditRate"]').forEach(el=>{ if(!account||!data) el.textContent=rateText(); else if(!isUnlimitedAccount()) el.textContent=`Shared with live calls · ${rateText()}`; });
+    if($('creditDockBalance')&&!account) $('creditDockBalance').textContent=`${CREDIT_RULES.starterCredits.toLocaleString()} starter credits included`;
+    updateCreditCheckoutSummary();
+  }
+  window.CallFocusSyncPricingUI=syncCreditPricingUI;
 
   function ensureWallet(grantStarter=true){
     if(!account||!data) return null;
@@ -1849,13 +1904,13 @@ if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.s
     if(!root) return;
     if(!account||!data){
       root.textContent='Sign in to use shared credits';
-      if(sub) sub.textContent='50 credits = 1 minute';
+      if(sub) sub.textContent=rateText();
       return;
     }
     if(isUnlimitedAccount()){ root.textContent='Unlimited credit · no time limit'; if(sub) sub.textContent='Unlimited for live calls and voice notes'; return; }
     const seconds=currentBalanceSeconds();
     root.textContent=`${formatCredits(creditsForSeconds(seconds))} credits · ${humanTime(seconds)} available`;
-    if(sub) sub.textContent='Shared with live calls · 50 credits = 1 minute';
+    if(sub) sub.textContent=`Shared with live calls · ${rateText()}`;
   }
 
   window.CallFocusCredits={
@@ -1868,13 +1923,14 @@ if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.s
     render:()=>{renderCreditDock();renderLiveCredit();renderCreditPage();renderSettingsCredit();renderVoiceCredit();},
     rules:CREDIT_RULES
   };
+  syncCreditPricingUI();
 
   function renderCreditDock(){
     const label=$('creditDockLabel'), balance=$('creditDockBalance'), action=$('creditDockAction');
     if(!label||!balance||!action) return;
     if(!account||!data){
       label.textContent='Starter call credit';
-      balance.textContent='75 starter credits included';
+      balance.textContent=`${CREDIT_RULES.starterCredits.toLocaleString()} starter credits included`;
       action.textContent='Create account';
       return;
     }
@@ -2076,7 +2132,7 @@ if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.s
 
   // UI interactions.
   $('creditDockAction')?.addEventListener('click',()=>{
-    if(!account) return showAuth('signup',null,'Create an account to receive 75 starter credits.');
+    if(!account) return showAuth('signup',null,`Create an account to receive ${CREDIT_RULES.starterCredits.toLocaleString()} starter credits.`);
     if(isUnlimitedAccount()) return toast('This account has unlimited CallFocus credit.');
     showView('credits');
   });

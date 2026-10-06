@@ -1,3 +1,5 @@
+# Latest build: CallFocus V13.6 — Global Credit Rate
+
 CallFocus V13.1 — Compact Credits Screen
 
 CallFocus V12.7 Live AI Avatar
@@ -73,3 +75,7 @@ Moved the new-user starter-credit information to the bottom of the Credits page 
 
 ## V13.4
 Successful sign-in and verified signup land on the top of the main Home page.
+
+
+## V13.5
+Manual bank-transfer approval now automatically returns the customer to Home after the approval confirmation.
