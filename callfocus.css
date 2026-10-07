@@ -2110,3 +2110,28 @@ html[data-theme="pearl"] .cf-live-translation-foot{border-top-color:#dde7e3;colo
 .call-more-panel[data-cf-translation-ready="1"] > .cf-live-translation-foot{display:block!important;border-bottom:0!important;padding:9px 13px 10px!important}
 .call-more-panel[data-cf-translation-ready="1"] > .cf-legacy-call-meta{display:none!important}
 html[data-theme="pearl"] .call-more-panel[data-cf-translation-ready="1"] > .cf-live-translation-head{border-bottom-color:#dce6e2!important}
+\n\n/* ===== CallFocus V14.3 — full-screen manual-payment success ===== */
+body.manual-payment-success-active{overflow:hidden!important}
+#manualPaymentModal.manual-payment-success-screen{position:fixed!important;inset:0!important;z-index:99999!important;padding:0!important;background:rgba(249,251,249,.985)!important;backdrop-filter:blur(18px) saturate(115%);-webkit-backdrop-filter:blur(18px) saturate(115%);display:flex!important;align-items:stretch!important;justify-content:stretch!important}
+#manualPaymentModal.manual-payment-success-screen .manual-payment-modal{width:100%!important;max-width:none!important;min-height:100dvh!important;height:100dvh!important;margin:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:linear-gradient(180deg,#fbfdfb 0%,#f7faf8 58%,#f4f8f5 100%)!important;padding:clamp(28px,6vh,70px) 24px calc(34px + env(safe-area-inset-bottom))!important;display:grid!important;place-items:center!important;overflow:hidden!important}
+#manualPaymentModal.manual-payment-success-screen .modal-head{display:none!important}
+#manualPaymentModal.manual-payment-success-screen #manualPaymentAccountStep,
+#manualPaymentModal.manual-payment-success-screen #manualPaymentReceiptStep{display:none!important}
+#manualPaymentModal.manual-payment-success-screen #manualPaymentWaitingStep{display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;width:min(100%,620px)!important;min-height:100%!important;text-align:center!important;padding:0!important}
+#manualPaymentModal.manual-payment-success-screen .manual-waiting-visual{min-height:156px!important;padding:0 0 28px!important;display:grid!important;place-items:center!important}
+#manualPaymentModal.manual-payment-success-screen .manual-success-check{width:138px!important;height:138px!important;background:radial-gradient(circle at 50% 50%,rgba(57,180,96,.12),rgba(57,180,96,.045) 62%,transparent 63%)!important;animation:manualSuccessFullPop .65s cubic-bezier(.2,.82,.24,1.18) both!important}
+#manualPaymentModal.manual-payment-success-screen .manual-success-check svg{width:118px!important;height:118px!important;filter:drop-shadow(0 14px 28px rgba(49,166,90,.13))}
+#manualPaymentModal.manual-payment-success-screen .manual-success-check circle{stroke-width:2.9!important;animation:manualDrawCircle .85s ease-out forwards!important}
+#manualPaymentModal.manual-payment-success-screen .manual-success-check path{stroke-width:4!important;animation:manualDrawTick .48s ease-out .48s forwards!important}
+#manualPaymentModal.manual-payment-success-screen .manual-waiting-copy{padding:0!important;max-width:560px!important}
+#manualPaymentModal.manual-payment-success-screen .manual-waiting-copy .section-eyebrow{display:block!important;margin-bottom:14px!important;color:#2d8c70!important;font-size:12px!important;letter-spacing:.18em!important}
+#manualPaymentModal.manual-payment-success-screen .manual-waiting-copy h3{margin:0 0 16px!important;color:#123f35!important;font-family:'Manrope',sans-serif!important;font-size:clamp(34px,7vw,50px)!important;line-height:1.04!important;letter-spacing:-1.6px!important}
+#manualPaymentModal.manual-payment-success-screen .manual-waiting-copy p{max-width:510px!important;margin:0 auto!important;color:#6f827d!important;font-size:clamp(17px,4.3vw,22px)!important;line-height:1.55!important}
+#manualPaymentModal.manual-payment-success-screen .manual-waiting-copy small{display:block!important;margin-top:26px!important;color:#718783!important;font-size:14px!important;font-weight:800!important;letter-spacing:.01em!important;animation:manualSuccessRedirectPulse 1.3s ease-in-out infinite!important}
+#manualPaymentModal.manual-payment-success-screen .manual-payment-actions{display:none!important}
+#manualPaymentModal.manual-payment-success-screen::before,#manualPaymentModal.manual-payment-success-screen::after{content:'';position:absolute;border-radius:50%;pointer-events:none;filter:blur(2px);opacity:.65}
+#manualPaymentModal.manual-payment-success-screen::before{width:320px;height:320px;left:-140px;top:-110px;background:radial-gradient(circle,rgba(57,180,96,.09),transparent 68%)}
+#manualPaymentModal.manual-payment-success-screen::after{width:360px;height:360px;right:-170px;bottom:-150px;background:radial-gradient(circle,rgba(183,137,78,.07),transparent 70%)}
+@keyframes manualSuccessFullPop{0%{transform:scale(.72);opacity:0}62%{transform:scale(1.06);opacity:1}100%{transform:scale(1);opacity:1}}
+@keyframes manualSuccessRedirectPulse{0%,100%{opacity:.58;transform:translateY(0)}50%{opacity:1;transform:translateY(-2px)}}
+@media(max-width:640px){#manualPaymentModal.manual-payment-success-screen .manual-payment-modal{padding-left:26px!important;padding-right:26px!important}#manualPaymentModal.manual-payment-success-screen .manual-success-check{width:122px!important;height:122px!important}#manualPaymentModal.manual-payment-success-screen .manual-success-check svg{width:104px!important;height:104px!important}}

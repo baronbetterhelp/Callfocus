@@ -4956,7 +4956,7 @@ ${approvedPatterns}
   const getAmount=()=>Math.floor(Number($('customCreditAmount')?.value||0));
   const modal=()=>$('manualPaymentModal');
   const showModal=()=>{modal()?.classList.remove('hidden');document.body.classList.add('modal-open');};
-  const hideModal=()=>{modal()?.classList.add('hidden');document.body.classList.remove('modal-open');};
+  const hideModal=()=>{const m=modal();m?.classList.add('hidden');m?.classList.remove('manual-payment-success-screen');document.body.classList.remove('modal-open','manual-payment-success-active');};
   const setStep=name=>{
     $('manualPaymentAccountStep')?.classList.toggle('hidden',name!=='account');
     $('manualPaymentReceiptStep')?.classList.toggle('hidden',name!=='receipt');
@@ -5028,7 +5028,7 @@ ${approvedPatterns}
       : '<span></span><span></span><span></span>';
   }
   function showWaiting(p){
-    if(p)payment=p;setStep('waiting');showModal();setWaitingVisual('waiting');
+    if(p)payment=p;modal()?.classList.remove('manual-payment-success-screen');document.body.classList.remove('manual-payment-success-active');setStep('waiting');showModal();setWaitingVisual('waiting');
     $('manualWaitingReference').textContent=`Reference ${payment?.id||'—'}`;
     $('manualWaitingTitle').textContent='Waiting for manual confirmation';
     $('manualWaitingCopy').textContent='Your receipt has been sent for review. Your CallFocus balance will update automatically as soon as the payment is approved.';
@@ -5040,19 +5040,22 @@ ${approvedPatterns}
   }
   function approved(p){
     clearInterval(pollTimer);pollTimer=null;saveActive('');updateInline(null);showWaiting(p);setWaitingVisual('success');
-    $('manualWaitingTitle').textContent='Payment confirmed';$('manualWaitingCopy').textContent=`${creditsText(p.credits)} have been added to your CallFocus balance.`;
-    $('manualWaitingReference').textContent='Redirecting you to your credits page…';
+    const successModal=modal();successModal?.classList.add('manual-payment-success-screen');document.body.classList.add('manual-payment-success-active');
+    $('manualWaitingTitle').textContent='Payment confirmed';
+    $('manualWaitingCopy').textContent=`${creditsText(p.credits)} have been added successfully. Your CallFocus credits are now available.`;
+    $('manualWaitingReference').textContent='Taking you back to your credits page…';
     const checkBtn=$('manualCheckStatusBtn'),backBtn=$('manualBackHomeBtn');
     successMode=true;
     if(checkBtn){checkBtn.textContent='Payment confirmed';checkBtn.disabled=true;}
     if(backBtn){backBtn.textContent='Return now';backBtn.disabled=false;}
     try{window.CallFocusPaystack?.refreshWallet?.({quiet:true});}catch{}
     window.toast?.(`${creditsText(p.credits)} added to your balance`);
+    // Keep the full-screen success animation visible long enough to register clearly.
     setTimeout(()=>{
       hideModal();
       try{window.showView?.('credits',false);window.scrollTo({top:0,left:0,behavior:'auto'});}
       catch{location.href='/credits';}
-    },2400);
+    },4200);
   }
   function rejected(p){
     clearInterval(pollTimer);pollTimer=null;saveActive('');updateInline(null);successMode=false;
