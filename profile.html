@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#f7f8f5" />
+  <meta name="theme-color" content="#f5f8f6" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -28,19 +28,19 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=16.0" />
+  <link rel="stylesheet" href="/callfocus.css?v=16.1" />
+  <link rel="preload" href="./logo.png?v=16.0" as="image" />
 </head>
 <body data-cf-document-view="profile">
-
-  <div class="cf-boot-loader" id="cfBootLoader" aria-hidden="false">
-    <div class="cf-boot-card">
-      <div class="cf-boot-mark"><img src="./logo.png?v=16.0" alt="" /></div>
-      <strong>CallFocus</strong>
-      <small>Preparing your workspace…</small>
+  <div class="cf-boot-loader" id="cfBootLoader" aria-hidden="true">
+    <div class="cf-boot-loader-inner">
+      <div class="cf-boot-mark"><span class="cf-boot-ring"></span><img src="./logo.png?v=16.0" alt="" /></div>
+      <div class="cf-boot-wordmark"><strong>Call<span>Focus</span></strong><small>Preparing your workspace</small></div>
+      <div class="cf-boot-progress"><i></i></div>
     </div>
   </div>
-  <div class="cf-route-progress" id="cfRouteProgress" aria-hidden="true"></div>
-  <script>setTimeout(()=>{try{document.getElementById('cfBootLoader')?.setAttribute('aria-hidden','true')}catch{}},1600);</script>
+  <script>(function(){var l=document.getElementById('cfBootLoader');var done=function(){document.documentElement.classList.add('cf-ui-ready');if(l)setTimeout(function(){l.remove()},520)};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){requestAnimationFrame(function(){setTimeout(done,120)})},{once:true});else done();setTimeout(done,1300)})();</script>
+
   <div class="app-root home-page" id="pageRoot">
     <header class="site-header" id="siteHeader">
       <div class="container header-inner">
@@ -129,12 +129,17 @@
               <div class="hero-badge hero-enter hero-enter-1"><span class="badge-dot"></span> Realtime calls with context</div>
               <h1 class="hero-enter hero-enter-2">Give every conversation a better <em>continuation.</em></h1>
               <p class="hero-enter hero-enter-3">Set the full context once for a new person. On future calls, open the recent call thread, add only what is new today, and continue from where the conversation left off.</p>
+              <div class="hero-microtrust hero-enter hero-enter-3" aria-label="CallFocus capabilities">
+                <span><i></i>Caller context stays saved</span>
+                <span><i></i>Live transcript translation</span>
+                <span><i></i>Worldwide time zones</span>
+              </div>
               <div class="hero-actions hero-enter hero-enter-4">
                 <button class="btn btn-primary hero-primary" id="heroNewCallBtn">Start a new call</button>
                 <div class="hero-quick-actions" aria-label="Quick tools">
-                  <button class="btn btn-ghost voice-note-launch voice-note-launch-main" id="heroCreateVoiceBtn"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Create a voice note</span></button>
-                  <button class="btn btn-ghost voice-note-launch dynamics-launch" id="heroHowBtn"><span class="voice-note-launch-icon" aria-hidden="true">◎</span><span>Generate conversation dynamics</span></button>
-                  <button class="btn btn-ghost voice-note-launch avatar-launch" id="heroAvatarBtn" data-route="avatar"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Live AI Avatar</span><small>New</small></button>
+                  <button class="btn btn-ghost voice-note-launch voice-note-launch-main" id="heroCreateVoiceBtn"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Create a voice note<small>Human-style audio</small></span></button>
+                  <button class="btn btn-ghost voice-note-launch dynamics-launch" id="heroHowBtn"><span class="voice-note-launch-icon" aria-hidden="true">◎</span><span>Generate conversation dynamics<small>Build context from screenshots</small></span></button>
+                  <button class="btn btn-ghost voice-note-launch avatar-launch" id="heroAvatarBtn" data-route="avatar"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Live AI Avatar<small>Visual conversation</small></span><b class="quick-new-badge">New</b></button>
                 </div>
               </div>
               <div class="hero-proof hero-enter hero-enter-4 hero-proof-spaced">
@@ -149,7 +154,7 @@
               <div class="float-avatar">A</div>
               <strong>Alex Morgan</strong>
               <span>Romantic Call · 04:18</span>
-              <div class="float-controls"><i>Mute</i><i>Hold</i><i>Request end</i></div>
+              <div class="float-controls"><i>Mute</i><i>Hold</i><i>End naturally</i></div>
             </div>
           </div>
           <div class="hero-scroll-cue" aria-hidden="true"><span></span></div>
@@ -159,16 +164,16 @@
           <div class="trust-marquee container">
             <div class="trust-marquee-track">
               <div class="trust-row-set">
-                <span>Set the full context once</span>
-                <span>Call-specific location & time zone</span>
-                <span>Male, female or your own AI voice profile</span>
-                <span>Recent-call continuity</span>
+                <span>Saved caller context</span>
+                <span>Worldwide location & time zone</span>
+                <span>Live translation transcript</span>
+                <span>Shared credits across calls & voice notes</span>
               </div>
               <div class="trust-row-set trust-row-clone" aria-hidden="true">
-                <span>Set the full context once</span>
-                <span>Call-specific location & time zone</span>
-                <span>Male, female or your own AI voice profile</span>
-                <span>Recent-call continuity</span>
+                <span>Saved caller context</span>
+                <span>Worldwide location & time zone</span>
+                <span>Live translation transcript</span>
+                <span>Shared credits across calls & voice notes</span>
               </div>
             </div>
           </div>
@@ -227,7 +232,8 @@
             <div class="feature-grid">
               <article class="feature-card reveal-card" data-reveal><span>01</span><h3>Caller memory</h3><p>Keep both callers’ background and relationship dynamics attached to the person instead of rewriting them every time.</p></article>
               <article class="feature-card reveal-card" data-reveal><span>02</span><h3>Per-call time awareness</h3><p>Locations and time zones stay with each call thread, so they can be reused or changed when someone travels.</p></article>
-              <article class="feature-card reveal-card" data-reveal><span>03</span><h3>Graceful call ending</h3><p>Request End asks the voice assistant to wrap up naturally in the tone of that day’s conversation before the call closes.</p></article>
+              <article class="feature-card reveal-card" data-reveal><span>03</span><h3>Graceful call ending</h3><p>End naturally asks the voice to wrap up smoothly in the tone of that day’s conversation before the call closes.</p></article>
+              <article class="feature-card reveal-card" data-reveal><span>04</span><h3>Live translation transcript</h3><p>See both sides of the call in English as it happens, with non-English conversation translated live inside a movable transcript panel.</p></article>
             </div>
           </div>
         </section>
@@ -436,7 +442,7 @@
           </section>
 
           <section class="credit-purchase-section" id="creditPurchaseSection">
-            <div class="payment-pending-notice" id="paymentPendingNotice"><strong>Manual bank transfer available</strong><span>Paystack activation is still pending. You can request the CallFocus bank account, transfer the exact amount, upload your receipt, and receive credits after manual confirmation.</span></div>
+            <div class="payment-pending-notice" id="paymentPendingNotice"><strong>Bank transfer available</strong><span>Transfer the exact amount, upload your receipt, and your credits will be added after confirmation.</span></div>
             <div class="credit-section-title"><div><span class="section-eyebrow">Buy credits</span><h2>Choose your credit amount</h2></div><small>Minimum purchase: 300 credits</small></div>
             <div class="credit-package-grid">
               <button class="credit-package active" type="button" data-credit-package="300"><span>Starter top-up</span><strong>300 credits</strong><small>3 minutes</small><b>₦3,000</b></button>
@@ -523,7 +529,7 @@
     <footer class="premium-footer">
       <div class="container footer-inner">
         <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" src="./logo.png?v=16.0" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span></div></div>
-        <div class="footer-links"><button data-route="home">Home</button><button data-route="recent">Recent Calls</button><button data-route="profile">My Profile</button><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/support">Support</a></div>
+        <div class="footer-links"><button data-route="home">Home</button><button data-route="recent">Recent Calls</button><button data-route="profile">My Profile</button><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/support">Support</a></div><small class="footer-meta">Private context · Worldwide call setup · Shared call & voice-note credits</small>
       </div>
     </footer>
   </div>
@@ -579,7 +585,7 @@
 
   <div class="modal-backdrop hidden" id="newCallModal">
     <div class="modal call-form-modal wide-modal">
-      <div class="modal-head"><div><span class="section-eyebrow">Completely new call</span><h2>Prepare this caller once.</h2><p class="call-once-message">These details create the reusable call thread. Next time, go to <strong>Recent Calls</strong> and add only what is new for that day. You only need to edit both callers’ information or the conversation dynamics when something actually changes.</p></div><button class="modal-close" data-close="newCallModal">×</button></div>
+      <button class="modal-close new-call-floating-close" data-close="newCallModal" aria-label="Close new call setup">×</button>
       <form id="newCallForm" class="new-call-form">
         <div class="field-section"><span class="field-number">01</span><div class="field-content"><label>Call title<input id="newCallTitle" placeholder="e.g. Sunday evening check-in" /></label><small>Use a name you will recognize later in Recent Calls.</small></div></div>
         <div class="field-section"><span class="field-number">02</span><div class="field-content"><label>Name of the person you’re calling<input id="newCallPersonName" placeholder="e.g. David" /></label></div></div>
@@ -717,7 +723,7 @@
         <button class="call-control" id="muteBtn"><span>⌁</span><small>Mute</small></button>
         <button class="call-control" id="holdBtn"><span>Ⅱ</span><small>Hold</small></button>
         <button class="call-control" id="moreBtn"><span>•••</span><small>More</small></button>
-        <button class="call-control request" id="requestEndBtn"><span>↘</span><small>Request end</small></button>
+        <button class="call-control request" id="requestEndBtn"><span>↘</span><small>End naturally</small></button>
         <button class="call-control danger" id="endCallBtn"><span>⌕</span><small>End now</small></button>
       </div>
       <div class="call-more-panel hidden" id="callMorePanel">
