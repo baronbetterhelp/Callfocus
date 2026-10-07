@@ -1,1 +1,1 @@
-# CallFocus V14.4 — Customer page admin card removal
+# CallFocus V14.5 — Home refresh and Safari resume stability

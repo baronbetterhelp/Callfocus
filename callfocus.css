@@ -2135,3 +2135,15 @@ body.manual-payment-success-active{overflow:hidden!important}
 @keyframes manualSuccessFullPop{0%{transform:scale(.72);opacity:0}62%{transform:scale(1.06);opacity:1}100%{transform:scale(1);opacity:1}}
 @keyframes manualSuccessRedirectPulse{0%,100%{opacity:.58;transform:translateY(0)}50%{opacity:1;transform:translateY(-2px)}}
 @media(max-width:640px){#manualPaymentModal.manual-payment-success-screen .manual-payment-modal{padding-left:26px!important;padding-right:26px!important}#manualPaymentModal.manual-payment-success-screen .manual-success-check{width:122px!important;height:122px!important}#manualPaymentModal.manual-payment-success-screen .manual-success-check svg{width:104px!important;height:104px!important}}
+
+
+/* ===== CallFocus V14.5 — background-tab stability ===== */
+html.cf-page-hidden .trust-marquee-track,
+html.cf-page-hidden .hero-scroll-cue,
+html.cf-page-hidden .hero-status-dot,
+html.cf-page-hidden .manual-waiting-visual span,
+html.cf-page-hidden .manual-success-redirect,
+html.cf-page-hidden .avatar-stage-loading,
+html.cf-page-hidden .avatar-speaking-state{
+  animation-play-state:paused!important;
+}

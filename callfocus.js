@@ -1,3 +1,48 @@
+
+/* ===== CallFocus V14.5 — home reload + Safari resume stability ===== */
+(()=>{
+  const BUILD='14.5';
+  const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
+  const atRoot=()=>cleanPath()==='/';
+  const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
+
+  try{history.scrollRestoration='manual';}catch{}
+
+  // iOS Safari can restore the old scroll offset after the document has already painted.
+  // Re-assert the front-page position a few times only on the root route.
+  const settleRoot=()=>{
+    if(!atRoot())return;
+    forceTop();
+    requestAnimationFrame(()=>{forceTop();requestAnimationFrame(forceTop)});
+    setTimeout(forceTop,90);
+    setTimeout(forceTop,280);
+  };
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',settleRoot,{once:true});
+  else settleRoot();
+  window.addEventListener('load',settleRoot,{once:true});
+  window.addEventListener('pageshow',settleRoot);
+
+  // Pause decorative infinite animations while Safari has the tab backgrounded.
+  const syncVisibility=()=>document.documentElement.classList.toggle('cf-page-hidden',document.visibilityState!=='visible');
+  document.addEventListener('visibilitychange',syncVisibility,{passive:true});
+  syncVisibility();
+
+  // Ask the service worker for updates after a long background period. This is intentionally
+  // non-destructive: it does not reload a user who may be filling a form or in a call.
+  let hiddenAt=0;
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='hidden'){hiddenAt=Date.now();return;}
+    const away=hiddenAt?Date.now()-hiddenAt:0; hiddenAt=0;
+    if(away>5*60*1000 && 'serviceWorker' in navigator){
+      navigator.serviceWorker.getRegistration().then(r=>r?.update?.()).catch(()=>{});
+    }
+    if(atRoot())settleRoot();
+  });
+
+  // Publish the build for diagnostics without exposing any secret or account data.
+  window.CallFocusBuild=BUILD;
+})();
+
 /* ===== app.js ===== */
 const $ = (id) => document.getElementById(id);
 const qsa = (sel, root = document) => [...root.querySelectorAll(sel)];
