@@ -5565,3 +5565,31 @@ ${approvedPatterns}
     else if(typeof activeView!=='undefined'&&activeView==='recent'&&typeof selectedThreadId!=='undefined'&&selectedThreadId)setTimeout(()=>restore(selectedThreadId),0);
   });
 })();
+
+/* ===== CallFocus V16.0 — premium loading + navigation polish ===== */
+(()=>{
+  const installLoader=()=>{
+    if(document.querySelector('.cf-premium-loader'))return;
+    const loader=document.createElement('div');
+    loader.className='cf-premium-loader';
+    loader.setAttribute('role','status');
+    loader.setAttribute('aria-label','Loading CallFocus');
+    loader.innerHTML='<div class="cf-loader-inner"><div class="cf-loader-mark"><img src="/logo.png" alt=""></div><div><div class="cf-loader-word">Call<b>Focus</b></div><div class="cf-loader-caption">Preparing your workspace</div></div><div class="cf-loader-bar"><span></span></div></div>';
+    document.body.prepend(loader);
+    const started=performance.now();
+    const finish=()=>{
+      const elapsed=performance.now()-started;
+      setTimeout(()=>{
+        loader.classList.add('is-done');
+        setTimeout(()=>loader.remove(),520);
+      },Math.max(0,620-elapsed));
+    };
+    if(document.readyState==='complete')finish(); else window.addEventListener('load',finish,{once:true});
+    setTimeout(finish,1800);
+  };
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installLoader,{once:true}); else installLoader();
+  window.addEventListener('pageshow',()=>{
+    document.querySelectorAll('.cf-premium-loader.is-done').forEach(el=>el.remove());
+    document.documentElement.classList.remove('cf-page-hidden');
+  });
+})();
