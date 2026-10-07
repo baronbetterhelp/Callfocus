@@ -16,7 +16,7 @@
     document.documentElement.dataset.theme='pearl';
     document.documentElement.style.colorScheme='light';
     try{history.scrollRestoration='manual';}catch{}
-    window.__CALLFOCUS_BUILD__='15.1';
+    window.__CALLFOCUS_BUILD__='14.5';
     (function(){
       const cleanPath=(location.pathname||'/').replace(/\/+$/,'')||'/';
       const topNow=()=>{try{window.scrollTo(0,0);}catch{}};
@@ -28,21 +28,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=15.1" />
+  <link rel="stylesheet" href="/callfocus.css?v=15.0" />
 </head>
 <body data-cf-document-view="avatar">
-  <div class="cf-page-loader" id="cfPageLoader" aria-hidden="true">
-    <div class="cf-page-loader-inner">
-      <span class="cf-page-loader-logo"><img src="/logo.png?v=15.1" alt="" /></span>
-      <div class="cf-page-loader-wordmark"><strong>Call<span>Focus</span></strong><small>Preparing your workspace</small></div>
-      <div class="cf-page-loader-track"><i></i></div>
-    </div>
-  </div>
   <div class="app-root home-page" id="pageRoot">
     <header class="site-header" id="siteHeader">
       <div class="container header-inner">
-        <a class="brand" href="/" aria-label="CallFocus home">
-          <span class="brand-logo-shell" aria-hidden="true"><img class="brand-logo-image" src="/logo.png?v=15.1" alt="" /></span>
+        <a class="brand" href="#home" aria-label="CallFocus home">
+          <span class="brand-logo-shell" aria-hidden="true"><img class="brand-logo-image" src="./logo.png?v=13.8" alt="" /></span>
           <span class="brand-copy">
             <strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong>
             <small>Conversation continuity, simplified.</small>
@@ -123,7 +116,7 @@
           </div>
           <div class="container premium-hero-inner">
             <div class="hero-copy premium-copy">
-              <div class="hero-badge hero-enter hero-enter-1"><span class="badge-dot"></span> Realtime calls that keep the context</div>
+              <div class="hero-badge hero-enter hero-enter-1"><span class="badge-dot"></span> Realtime calls with context</div>
               <h1 class="hero-enter hero-enter-2">Give every conversation a better <em>continuation.</em></h1>
               <p class="hero-enter hero-enter-3">Set the full context once for a new person. On future calls, open the recent call thread, add only what is new today, and continue from where the conversation left off.</p>
               <div class="hero-actions hero-enter hero-enter-4">
@@ -136,17 +129,17 @@
               </div>
               <div class="hero-proof hero-enter hero-enter-4 hero-proof-spaced">
                 <div class="avatar-stack"><span>C</span><span>F</span><span>+</span></div>
-                <div><div class="proof-trust">Context · Continuity · Control</div><small>Your context stays organized around each caller and call thread.</small></div>
+                <div><div class="proof-stars">★★★★★</div><small>Your context stays organized around each caller and call thread.</small></div>
               </div>
             </div>
 
             <div class="hero-float-card hero-enter hero-enter-4">
               <span class="float-eyebrow">Example call preview</span>
-              <div class="float-status"><span class="status-light"></span> Ready to call</div>
+              <div class="float-status"><span class="status-light"></span> Connected to server</div>
               <div class="float-avatar">A</div>
               <strong>Alex Morgan</strong>
-              <span>Personal call · 04:18</span>
-              <div class="float-controls"><i>Speaker</i><i>Hold</i><i>End naturally</i></div>
+              <span>Romantic Call · 04:18</span>
+              <div class="float-controls"><i>Mute</i><i>Hold</i><i>Request end</i></div>
             </div>
           </div>
           <div class="hero-scroll-cue" aria-hidden="true"><span></span></div>
@@ -156,16 +149,16 @@
           <div class="trust-marquee container">
             <div class="trust-marquee-track">
               <div class="trust-row-set">
-                <span>Save caller context once</span>
-                <span>Worldwide locations & time zones</span>
-                <span>Choose the voice that fits the call</span>
-                <span>Continue previous call threads</span>
+                <span>Set the full context once</span>
+                <span>Call-specific location & time zone</span>
+                <span>Male, female or your own AI voice profile</span>
+                <span>Recent-call continuity</span>
               </div>
               <div class="trust-row-set trust-row-clone" aria-hidden="true">
-                <span>Save caller context once</span>
-                <span>Worldwide locations & time zones</span>
-                <span>Choose the voice that fits the call</span>
-                <span>Continue previous call threads</span>
+                <span>Set the full context once</span>
+                <span>Call-specific location & time zone</span>
+                <span>Male, female or your own AI voice profile</span>
+                <span>Recent-call continuity</span>
               </div>
             </div>
           </div>
@@ -180,7 +173,7 @@
             <div class="customer-stats reveal-card" data-reveal>
               <div><span>Saved callers</span><strong id="homeCallerCount">0</strong></div>
               <div><span>Recent threads</span><strong id="homeThreadCount">0</strong></div>
-              <div><span>Voice options</span><strong id="homeVoicePair">Male / Female</strong></div>
+              <div><span>Voice pair</span><strong id="homeVoicePair">cedar / marin</strong></div>
             </div>
             <div class="section-head reveal-card" data-reveal><div><span class="section-eyebrow">Continue</span><h3>Your recent calls</h3></div><button class="text-link" data-route="recent">View all</button></div>
             <div class="thread-preview-list" id="homeRecentThreads"></div>
@@ -195,7 +188,7 @@
             </div>
             <div class="process-grid">
               <article class="process-card reveal-card" data-reveal style="--delay:0ms"><span class="step-number">01</span><h3>Prepare the first call</h3><p>Add the call title, person’s name, both callers’ information, conversation dynamics, today’s topic, both locations/time zones, and the voice.</p></article>
-              <article class="process-card reveal-card" data-reveal style="--delay:90ms"><span class="step-number">02</span><h3>Call with the right context</h3><p>CallFocus uses the saved relationship context and the details that matter for that specific call, without making you rebuild the setup each time.</p></article>
+              <article class="process-card reveal-card" data-reveal style="--delay:90ms"><span class="step-number">02</span><h3>Call with the right context</h3><p>The live voice session receives the saved relationship context and the details that matter for that specific call.</p></article>
               <article class="process-card reveal-card" data-reveal style="--delay:180ms"><span class="step-number">03</span><h3>Next time, add only what changed</h3><p>Open Recent Calls, enter what today’s new conversation is about, and call again. Edit the saved caller information or dynamics only when you want to.</p></article>
             </div>
           </div>
@@ -224,16 +217,15 @@
             <div class="feature-grid">
               <article class="feature-card reveal-card" data-reveal><span>01</span><h3>Caller memory</h3><p>Keep both callers’ background and relationship dynamics attached to the person instead of rewriting them every time.</p></article>
               <article class="feature-card reveal-card" data-reveal><span>02</span><h3>Per-call time awareness</h3><p>Locations and time zones stay with each call thread, so they can be reused or changed when someone travels.</p></article>
-              <article class="feature-card reveal-card" data-reveal><span>03</span><h3>Graceful call ending</h3><p>End naturally lets CallFocus wrap up in the tone of that day’s conversation instead of cutting the call off abruptly.</p></article>
-              <article class="feature-card reveal-card" data-reveal><span>04</span><h3>Live translation transcript</h3><p>Open a movable transcript during the call to follow both sides in English, with live translation when another language is being spoken.</p></article>
+              <article class="feature-card reveal-card" data-reveal><span>03</span><h3>Graceful call ending</h3><p>Request End asks the voice assistant to wrap up naturally in the tone of that day’s conversation before the call closes.</p></article>
             </div>
           </div>
         </section>
 
         <section class="home-cta">
           <div class="container home-cta-inner reveal-card" data-reveal>
-            <div><span class="section-eyebrow">Ready when you are</span><h2>Start with one caller. Every conversation after that becomes easier to continue.</h2><p>Keep the relationship context organized, add only what is new today, and stay focused on the conversation itself.</p></div>
-            <div class="home-cta-actions"><button class="btn btn-primary" id="bottomNewCallBtn">Start a new call</button><button class="btn btn-ghost" type="button" data-route="recent">Continue a recent call</button></div>
+            <div><span class="section-eyebrow">Ready to use CallFocus?</span><h2>Start with one caller. The next call gets easier.</h2></div>
+            <button class="btn btn-primary" id="bottomNewCallBtn">Start a new call</button>
           </div>
         </section>
       </section>
@@ -357,9 +349,9 @@
 
             <div class="voice-note-result hidden" id="voiceNoteResult">
               <div class="voice-note-result-top">
-                <span class="voice-note-result-avatar"><img src="/logo.png?v=15.1" alt="" /></span>
+                <span class="voice-note-result-avatar"><img src="./logo.png?v=13.8" alt="" /></span>
                 <div><strong>Voice note ready</strong><small id="voiceNoteResultMeta">Female voice</small></div>
-                <span class="ai-voice-pill">Generated voice</span>
+                <span class="ai-voice-pill">AI-generated voice</span>
               </div>
               <p class="voice-note-script" id="voiceNoteResultScript"></p>
               <small class="voice-note-result-mode" id="voiceNoteResultMode">Created from your script</small>
@@ -388,7 +380,7 @@
                 <small id="voiceNoteCreditRate">Shared with live calls · 100 credits = 1 minute</small>
                 <button type="button" data-route="credits">Buy credits</button>
               </div>
-              <div class="voice-note-status" id="voiceNoteStatus">Create mode uses your exact written script. Reply mode drafts the message for you. Both follow your saved speech style and use the same shared credit balance as calls.</div>
+              <div class="voice-note-status" id="voiceNoteStatus">Create mode uses your exact written script. Reply mode drafts the message for you. Both use your current Admin speech settings and the same shared credit balance as calls.</div>
             </div>
           </div>
 
@@ -416,12 +408,12 @@
 
           <section class="paystack-transfer-card hidden" id="paystackTransferCard" aria-hidden="true">
             <div class="paystack-transfer-head">
-              <div><span class="section-eyebrow">Bank transfer</span><h2>Your reusable payment account</h2><p>Use one secure transfer account for future CallFocus top-ups. Confirmed transfers are converted to shared call and voice-note credit automatically.</p></div>
-              <span class="paystack-mode-badge" id="paystackModeBadge">Secure transfer</span>
+              <div><span class="section-eyebrow">Bank transfer</span><h2>Your reusable payment account</h2><p>Use one Paystack virtual account for future CallFocus top-ups. Verified transfers are converted to shared call and voice-note credit automatically.</p></div>
+              <span class="paystack-mode-badge" id="paystackModeBadge">Paystack</span>
             </div>
             <div class="paystack-transfer-body" id="paystackTransferEmpty">
               <div class="paystack-transfer-icon" aria-hidden="true">▦</div>
-              <div class="paystack-transfer-copy"><strong>No transfer account yet</strong><span>Create one once for this CallFocus account. Your account details are used only when you choose to create a reusable transfer account.</span></div>
+              <div class="paystack-transfer-copy"><strong>No transfer account yet</strong><span>Create one once for this CallFocus account. Your name, email and phone are securely sent to Paystack only when you choose to create it.</span></div>
               <button class="paystack-transfer-create" id="paystackCreateDvaBtn" type="button">Create transfer account</button>
             </div>
             <div class="paystack-account hidden" id="paystackTransferReady">
@@ -434,7 +426,7 @@
           </section>
 
           <section class="credit-purchase-section" id="creditPurchaseSection">
-            <div class="payment-pending-notice" id="paymentPendingNotice"><strong>Manual bank transfer available</strong><span>Request the CallFocus bank account, transfer the exact amount, upload your receipt, and receive credits after confirmation.</span></div>
+            <div class="payment-pending-notice" id="paymentPendingNotice"><strong>Manual bank transfer available</strong><span>Paystack activation is still pending. You can request the CallFocus bank account, transfer the exact amount, upload your receipt, and receive credits after manual confirmation.</span></div>
             <div class="credit-section-title"><div><span class="section-eyebrow">Buy credits</span><h2>Choose your credit amount</h2></div><small>Minimum purchase: 300 credits</small></div>
             <div class="credit-package-grid">
               <button class="credit-package active" type="button" data-credit-package="300"><span>Starter top-up</span><strong>300 credits</strong><small>3 minutes</small><b>₦3,000</b></button>
@@ -447,7 +439,7 @@
               <div class="credit-custom-summary"><span id="customCreditMinutes">3 minutes</span><strong id="customCreditNaira">₦3,000</strong></div>
             </div>
             <button class="credit-checkout-btn" id="creditCheckoutBtn" type="button" disabled aria-disabled="true"><span id="creditCheckoutLabel">Continue to payment</span><small id="creditCheckoutSummary">300 credits · ₦3,000</small></button>
-            <p class="credit-payment-note" id="creditPaymentNote">Bank transfer is available when needed. Credits are added only after the payment is confirmed.</p>
+            <p class="credit-payment-note" id="creditPaymentNote">When Paystack is unavailable, CallFocus can use manual bank transfer. Credits are added only after the payment is confirmed by an administrator.</p>
             <div class="manual-payment-inline-status hidden" id="manualPaymentInlineStatus"><span class="manual-status-dot"></span><div><strong id="manualPaymentInlineTitle">Payment awaiting confirmation</strong><small id="manualPaymentInlineCopy">Your balance will update automatically after approval.</small></div><button type="button" id="manualPaymentViewStatusBtn">View status</button></div>
           </section>
 
@@ -493,7 +485,7 @@
               <label>Default identity / role<input id="profileRole" placeholder="e.g. Friend, Founder, Consultant" /></label>
             </div>
             <label>About me<textarea id="profileAbout" rows="6" placeholder="Reusable details about you"></textarea></label>
-            <label>Default call rules <span class="optional">Optional</span><textarea id="profileRules" rows="6" placeholder="Personal preferences CallFocus should normally follow"></textarea></label>
+            <label>Default call rules <span class="optional">Optional</span><textarea id="profileRules" rows="6" placeholder="Personal rules the voice assistant should normally follow"></textarea></label>
             <div class="info-note">Location and time zone are intentionally not stored on your profile. They belong to individual call threads.</div>
             <div class="form-actions"><button class="btn btn-primary" id="saveProfileBtn">Save profile</button></div>
           </div>
@@ -520,7 +512,7 @@
 
     <footer class="premium-footer">
       <div class="container footer-inner">
-        <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" src="/logo.png?v=15.1" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span></div></div>
+        <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" src="./logo.png?v=13.8" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span></div></div>
         <div class="footer-links"><button data-route="home">Home</button><button data-route="recent">Recent Calls</button><button data-route="profile">My Profile</button><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/support">Support</a></div>
       </div>
     </footer>
@@ -581,7 +573,7 @@
       <form id="newCallForm" class="new-call-form">
         <div class="field-section"><span class="field-number">01</span><div class="field-content"><label>Call title<input id="newCallTitle" placeholder="e.g. Sunday evening check-in" /></label><small>Use a name you will recognize later in Recent Calls.</small></div></div>
         <div class="field-section"><span class="field-number">02</span><div class="field-content"><label>Name of the person you’re calling<input id="newCallPersonName" placeholder="e.g. David" /></label></div></div>
-        <div class="field-section"><span class="field-number">03</span><div class="field-content"><div class="field-heading"><strong>About both callers</strong><small>These are saved with this caller and can be edited later.</small></div><div class="form-grid two"><label>About you on this call<textarea id="newCallAboutSelf" rows="5" placeholder="Who you are, relevant personal context, and anything CallFocus should know about you"></textarea></label><label>About the person you’re calling<textarea id="newCallAboutCaller" rows="5" placeholder="Information about the person you’re calling"></textarea></label></div></div></div>
+        <div class="field-section"><span class="field-number">03</span><div class="field-content"><div class="field-heading"><strong>About both callers</strong><small>These are saved with this caller and can be edited later.</small></div><div class="form-grid two"><label>About you on this call<textarea id="newCallAboutSelf" rows="5" placeholder="Who you are, relevant personal context, and anything the voice assistant should know about you"></textarea></label><label>About the person you’re calling<textarea id="newCallAboutCaller" rows="5" placeholder="Information about the person you’re calling"></textarea></label></div></div></div>
         <div class="field-section"><span class="field-number">04</span><div class="field-content"><div class="field-heading"><strong>Dynamics of the conversation</strong><small>Custom dynamics give the best experience.</small></div><div class="dynamics-warning">For a better call experience, describe the real dynamics yourself. If you prefer not to, choose a preset such as Romantic, Friendship or Business.</div><label>Dynamics type<select id="newCallDynamicsMode"></select></label><label id="newCallDynamicsCustomWrap">Your conversation dynamics<textarea id="newCallDynamics" rows="5" placeholder="How both of you normally speak, how close you are, established tone, boundaries, recurring patterns and anything the voice assistant should understand"></textarea></label><div class="preset-description hidden" id="newCallDynamicsHelp"></div></div></div>
         <div class="field-section"><span class="field-number">05</span><div class="field-content"><label>What today’s call is about<textarea id="newCallTopic" rows="5" placeholder="What do you want to discuss on this specific call?"></textarea></label></div></div>
         <div class="field-section"><span class="field-number">06</span><div class="field-content"><div class="field-heading"><strong>Location and time zone for this call</strong><small>These belong to this call thread, not to your account profile.</small></div><div class="form-grid two">
@@ -700,10 +692,10 @@
         <div class="call-avatar" id="liveAvatar">C</div>
         <h2 id="liveCallerName">Caller</h2>
         <div class="live-region" id="liveRegion"></div>
-        <div class="live-status" id="liveStatus">Preparing call…</div>
+        <div class="live-status" id="liveStatus">Connecting to server…</div>
         <div class="call-timer" id="callTimer">00:00</div>
         <div class="live-credit-pill" id="liveCreditPill"><span>Call credit</span><strong id="liveCreditBalance">—</strong></div>
-        <button class="live-start-call hidden" id="liveStartCallBtn" type="button"><span>▶</span><strong>Start call</strong><small>Ready when you are</small></button>
+        <button class="live-start-call hidden" id="liveStartCallBtn" type="button"><span>▶</span><strong>Start call</strong><small>Server connected · begin when you are ready</small></button>
         <div class="live-transcript" id="liveTranscript">Call context is ready.</div>
         <div class="call-failure-actions hidden" id="callFailureActions">
           <button class="call-retry-btn" id="callRetryBtn" type="button">↻ <span>Try again</span></button>
@@ -730,6 +722,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=15.1"></script>
+  <script src="/callfocus.js?v=15.0"></script>
 </body>
 </html>

@@ -413,7 +413,7 @@ async function createCustomerAccount(env, { name, email, phone, passwordRecord, 
 
 async function handleCustomerSignup(request, env) {
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
-  if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account services are temporarily unavailable. Please try again later.', code: 'account_storage_unavailable' }, 503);
+  if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is not connected. Re-deploy with the CALLFOCUS_CONFIG KV binding from wrangler.jsonc.', code: 'account_storage_unavailable' }, 503);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
   const botError = callFocusBotTrap(body);
@@ -428,7 +428,7 @@ async function handleCustomerSignup(request, env) {
 
 async function handleCustomerSignupRequest(request, env) {
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
-  if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account services are temporarily unavailable. Please try again later.', code: 'account_storage_unavailable' }, 503);
+  if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is not connected. Re-deploy with the CALLFOCUS_CONFIG KV binding from wrangler.jsonc.', code: 'account_storage_unavailable' }, 503);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
   const botError = callFocusBotTrap(body);
@@ -511,7 +511,7 @@ async function handleCustomerSignupVerify(request, env) {
 async function handlePasswordResetRequest(request, env) {
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
   if (!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is not connected.', code: 'account_storage_unavailable' }, 503);
-  if (!callFocusEmailConfigured(env)) return json({ error: 'Password reset email is temporarily unavailable. Please contact CallFocus support.', code: 'email_not_configured' }, 503);
+  if (!callFocusEmailConfigured(env)) return json({ error: 'Password reset email is not configured yet. Add the CallFocus email sender in Cloudflare first.', code: 'email_not_configured' }, 503);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
   const botError = callFocusBotTrap(body);
@@ -1130,7 +1130,7 @@ async function recordLiveStatus(env, payload) {
 async function handleAdminCustomVoiceAccess(request, env) {
   if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
-  if (!env.OPENAI_API_KEY) return json({ enabled: false, status: 0, message: 'This feature is temporarily unavailable.' });
+  if (!env.OPENAI_API_KEY) return json({ enabled: false, status: 0, message: 'OPENAI_API_KEY is not configured.' });
   try {
     const r = await fetch('https://api.openai.com/v1/audio/consent_phrases', {
       headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` }
@@ -1140,18 +1140,18 @@ async function handleAdminCustomVoiceAccess(request, env) {
     return json({
       enabled: r.ok,
       status: r.status,
-      message: r.ok ? 'Custom voice access is available.' : (payload?.error?.message || 'Custom voice access is not available yet.'),
+      message: r.ok ? 'Custom voice access is enabled for this OpenAI project.' : (payload?.error?.message || 'Custom voice access is not enabled for this OpenAI project yet.'),
       phrases: r.ok ? payload : null
     });
   } catch {
-    return json({ enabled: false, status: 0, message: 'Could not check custom voice availability right now.' });
+    return json({ enabled: false, status: 0, message: 'Could not check OpenAI custom voice access right now.' });
   }
 }
 
 async function handleAdminCustomVoiceCreate(request, env) {
   if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
-  if (!env.OPENAI_API_KEY) return json({ error: 'This feature is temporarily unavailable.' }, 503);
+  if (!env.OPENAI_API_KEY) return json({ error: 'OpenAI API key is not configured.' }, 503);
   if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.put !== 'function') return json({ error: 'Global admin storage is not connected.' }, 503);
 
   let form;
@@ -1178,7 +1178,7 @@ async function handleAdminCustomVoiceCreate(request, env) {
   if (consentError || sampleError) return json({ error: consentError || sampleError }, 400);
 
   const current = await getConfig(env);
-  if (normalizeCustomVoices(current.customVoices).length >= 20) return json({ error: 'The custom voice limit has been reached. Remove or replace an existing voice before creating another.' }, 409);
+  if (normalizeCustomVoices(current.customVoices).length >= 20) return json({ error: 'This OpenAI organization already has 20 CallFocus custom voices registered. Remove or replace an existing voice before creating another.' }, 409);
 
   const consentForm = new FormData();
   consentForm.set('name', `callfocus_${name.replace(/[^a-z0-9_-]+/gi,'_').slice(0,48)}_${Date.now()}`);
@@ -1189,14 +1189,14 @@ async function handleAdminCustomVoiceCreate(request, env) {
     consentResponse = await fetch('https://api.openai.com/v1/audio/voice_consents', {
       method: 'POST', headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` }, body: consentForm
     });
-  } catch { return json({ error: 'Could not upload the consent recording right now.' }, 502); }
+  } catch { return json({ error: 'Could not upload the consent recording to OpenAI.' }, 502); }
   const consentRaw = await consentResponse.text();
   let consentPayload = {}; try { consentPayload = JSON.parse(consentRaw); } catch {}
   if (!consentResponse.ok) {
-    return json({ error: consentPayload?.error?.message || 'The consent recording could not be accepted. Make sure the speaker reads the consent phrase exactly.' }, consentResponse.status);
+    return json({ error: consentPayload?.error?.message || 'OpenAI rejected the consent recording. Make sure the speaker reads the consent phrase exactly.' }, consentResponse.status);
   }
   const consentId = String(consentPayload?.id || '').trim();
-  if (!consentId) return json({ error: 'The consent recording could not be completed. Please try again.' }, 502);
+  if (!consentId) return json({ error: 'OpenAI accepted the consent upload but did not return a consent ID.' }, 502);
 
   const voiceForm = new FormData();
   voiceForm.set('name', name);
@@ -1210,16 +1210,16 @@ async function handleAdminCustomVoiceCreate(request, env) {
     });
   } catch {
     try { await fetch(`https://api.openai.com/v1/audio/voice_consents/${encodeURIComponent(consentId)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` } }); } catch {}
-    return json({ error: 'Could not create the custom voice right now.' }, 502);
+    return json({ error: 'Could not create the custom voice with OpenAI.' }, 502);
   }
   const voiceRaw = await voiceResponse.text();
   let voicePayload = {}; try { voicePayload = JSON.parse(voiceRaw); } catch {}
   if (!voiceResponse.ok) {
     try { await fetch(`https://api.openai.com/v1/audio/voice_consents/${encodeURIComponent(consentId)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` } }); } catch {}
-    return json({ error: voicePayload?.error?.message || 'The custom voice could not be created. Confirm the consent and sample are from the same speaker.' }, voiceResponse.status);
+    return json({ error: voicePayload?.error?.message || 'OpenAI could not create the custom voice. Confirm the consent and sample are from the same speaker.' }, voiceResponse.status);
   }
   const voiceId = String(voicePayload?.id || '').trim();
-  if (!voiceId) return json({ error: 'The custom voice could not be completed. Please try again.' }, 502);
+  if (!voiceId) return json({ error: 'OpenAI created the voice but did not return a voice ID.' }, 502);
 
   const customVoices = normalizeCustomVoices([
     { id: voiceId, name, type: 'audio_sample', createdAt: new Date().toISOString() },
@@ -1251,10 +1251,10 @@ async function handleAdminDiagnostics(request, env) {
         message: r.ok ? 'GPT-Live 1 is accessible to this API project.' : (parsed?.error?.message || 'GPT-Live 1 access check failed.')
       };
     } catch {
-      modelAccess = { ok: false, status: 0, code: 'network_error', message: 'Could not check feature availability right now.' };
+      modelAccess = { ok: false, status: 0, code: 'network_error', message: 'Could not reach the OpenAI model-access check.' };
     }
   } else {
-    modelAccess = { ok: false, status: 0, code: 'missing_api_key', message: 'This feature is temporarily unavailable.' };
+    modelAccess = { ok: false, status: 0, code: 'missing_api_key', message: 'OPENAI_API_KEY is not configured.' };
   }
   let lastLiveStatus = null;
   if (env.CALLFOCUS_CONFIG && typeof env.CALLFOCUS_CONFIG.get === 'function') {
@@ -1274,7 +1274,7 @@ async function handleAdminDiagnostics(request, env) {
 
 async function handleVoicePreview(request, env) {
   if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
-  if (!env.OPENAI_API_KEY) return json({ error: 'This feature is temporarily unavailable.' }, 503);
+  if (!env.OPENAI_API_KEY) return json({ error: 'OpenAI API key is not configured.' }, 503);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
   const config = await getConfig(env);
@@ -1547,7 +1547,7 @@ function paceInstruction(pace) {
 }
 
 async function handleSession(request, env) {
-  if (!env.OPENAI_API_KEY) return new Response('Calls are temporarily unavailable. Please try again soon.', { status: 503 });
+  if (!env.OPENAI_API_KEY) return new Response('Server unavailable. Try again soon.', { status: 503 });
   const config = await getConfig(env);
   if (!config.serverOnline) return new Response(config.serverMessage || DEFAULT_CONFIG.serverMessage, { status: 503, headers: { 'Cache-Control': 'no-store' } });
 
@@ -1616,7 +1616,7 @@ The entire spoken call must stay in ${callLanguage}. This is a hard CallFocus se
       body: JSON.stringify(payload)
     });
   } catch {
-    return new Response('Calls are temporarily unavailable. Please try again soon.', { status: 502 });
+    return new Response('Server unavailable. Try again soon.', { status: 502 });
   }
 
   const responseText = await openai.text();
@@ -1634,18 +1634,18 @@ The entire spoken call must stay in ${callLanguage}. This is a hard CallFocus se
     console.error('CallFocus GPT-Live create failed', { status: openai.status, reason, message: message.slice(0, 500) });
     await recordLiveStatus(env, { ok: false, status: openai.status, code: reason, message: message.slice(0, 500) || 'GPT-Live session creation failed.' });
     const quota = openai.status === 429 || code === 'credit_balance_exhausted' || code === 'insufficient_quota' || code === 'project_spend_limit_exceeded' || code === 'organization_spend_limit_exceeded';
-    return new Response(quota ? 'Server not active. Try again soon.' : 'Calls are temporarily unavailable. Please try again soon.', {
+    return new Response(quota ? 'Server not active. Try again soon.' : 'Server unavailable. Try again soon.', {
       status: quota ? 503 : openai.status,
       headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-CallFocus-Error-Code': reason }
     });
   }
 
   let created;
-  try { created = JSON.parse(responseText); } catch { return new Response('Calls are temporarily unavailable. Please try again soon.', { status: 502 }); }
+  try { created = JSON.parse(responseText); } catch { return new Response('Server unavailable. Try again soon.', { status: 502 }); }
   const answerSdp = created?.transport?.sdp;
   if (!answerSdp) {
     await recordLiveStatus(env, { ok: false, status: 502, code: 'missing_sdp_answer', message: 'OpenAI Live response did not include transport.sdp.' });
-    return new Response('Calls are temporarily unavailable. Please try again soon.', { status: 502, headers: { 'X-CallFocus-Error-Code': 'missing_sdp_answer' } });
+    return new Response('Server unavailable. Try again soon.', { status: 502, headers: { 'X-CallFocus-Error-Code': 'missing_sdp_answer' } });
   }
   await recordLiveStatus(env, { ok: true, status: 201, code: 'ok', message: 'GPT-Live session created successfully.' });
 
@@ -1737,7 +1737,7 @@ function normalizeServerWallet(wallet, now = new Date().toISOString()) {
 
 async function paystackRequest(env, path, { method = 'GET', body = null } = {}) {
   if (!paystackConfigured(env)) {
-    const error = new Error('The payment service is temporarily unavailable.');
+    const error = new Error('Paystack is not configured on this server.');
     error.code = 'paystack_not_configured';
     error.status = 503;
     throw error;
@@ -1750,7 +1750,7 @@ async function paystackRequest(env, path, { method = 'GET', body = null } = {}) 
       body: body == null ? undefined : JSON.stringify(body)
     });
   } catch (cause) {
-    const error = new Error('Could not reach the payment service right now.');
+    const error = new Error('Could not reach Paystack right now.');
     error.code = 'paystack_network_error';
     error.status = 502;
     error.cause = cause;
@@ -1967,11 +1967,11 @@ async function creditVerifiedPaystackTransaction(env, transaction = {}) {
 }
 
 async function handlePaystackInitialize(request, env) {
-  if (!callFocusPaymentsEnabled(env)) return json({ error: 'Payments are temporarily unavailable. Please try again later.', code: 'payments_disabled' }, 503);
+  if (!callFocusPaymentsEnabled(env)) return json({ error: 'Payments are temporarily unavailable while Paystack activation is pending.', code: 'payments_disabled' }, 503);
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
   const auth = await authenticatedCustomer(request, env);
   if (!auth) return json({ error: 'Sign in again before purchasing credits.', code: 'session_expired' }, 401);
-  if (!paystackConfigured(env)) return json({ error: 'The payment service is temporarily unavailable.', code: 'paystack_not_configured' }, 503);
+  if (!paystackConfigured(env)) return json({ error: 'Paystack is not configured yet.', code: 'paystack_not_configured' }, 503);
   let body = {};
   try { body = await request.json(); } catch {}
   const credits = normalizePurchaseCredits(body?.credits);
@@ -2004,7 +2004,7 @@ async function handlePaystackInitialize(request, env) {
     return json({ ok: true, testMode: paystackIsTest(env), credits, amountNaira, reference: payload?.data?.reference || reference, authorizationUrl: payload?.data?.authorization_url || '', accessCode: payload?.data?.access_code || '' });
   } catch (error) {
     await env.CALLFOCUS_CONFIG.delete(paystackPendingKey(reference));
-    return json({ error: 'Could not start secure checkout. Please try again.', code: error?.code || 'paystack_initialize_failed' }, error?.status || 502);
+    return json({ error: error?.message || 'Could not start Paystack checkout.', code: error?.code || 'paystack_initialize_failed' }, error?.status || 502);
   }
 }
 
@@ -2023,7 +2023,7 @@ async function handlePaystackVerify(request, env) {
     const data = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
     return json({ ok: true, transactionStatus: transaction?.status || '', credited: !!result?.credited, duplicate: !!result?.duplicate, wallet: data.wallet, record: result?.record || null });
   } catch (error) {
-    return json({ error: 'Could not verify this payment. Please try again.', code: error?.code || 'paystack_verify_failed' }, error?.status || 502);
+    return json({ error: error?.message || 'Could not verify this Paystack payment.', code: error?.code || 'paystack_verify_failed' }, error?.status || 502);
   }
 }
 
@@ -2109,7 +2109,7 @@ async function handlePaystackRecover(request, env) {
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
   const auth = await authenticatedCustomer(request, env);
   if (!auth) return json({ error: 'Sign in again to recover the payment.', code: 'session_expired' }, 401);
-  if (!paystackConfigured(env)) return json({ error: 'The payment service is temporarily unavailable.', code: 'paystack_not_configured' }, 503);
+  if (!paystackConfigured(env)) return json({ error: 'Paystack is not configured yet.', code: 'paystack_not_configured' }, 503);
 
   try {
     const listed = await listRecentSuccessfulPaystackTransactions(env, auth.user);
@@ -2192,7 +2192,7 @@ async function handlePaystackRecover(request, env) {
       testMode: paystackIsTest(env)
     });
   } catch (error) {
-    return json({ error: 'Could not refresh recent payments. Please try again.', code: error?.code || 'paystack_recovery_failed' }, error?.status || 502);
+    return json({ error: error?.message || 'Could not recover recent Paystack payments.', code: error?.code || 'paystack_recovery_failed' }, error?.status || 502);
   }
 }
 
@@ -2224,7 +2224,7 @@ async function ensurePaystackCustomer(env, user) {
   });
   const customer = created?.data || {};
   code = String(customer.customer_code || '');
-  if (!code) throw new Error('The payment service could not complete the customer setup.');
+  if (!code) throw new Error('Paystack did not return a customer code.');
   await env.CALLFOCUS_CONFIG.put(paystackUserCustomerKey(user.id), code);
   await env.CALLFOCUS_CONFIG.put(paystackCustomerMapKey(code), user.id);
   return customer;
@@ -2238,11 +2238,11 @@ async function handlePaystackDva(request, env) {
     return json({ ok: true, dva: data.wallet?.paystackDva || null, testMode: paystackIsTest(env) });
   }
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET, POST' } });
-  if (!callFocusPaymentsEnabled(env)) return json({ error: 'Transfer-account creation is temporarily unavailable. Please try again later.', code: 'payments_disabled' }, 503);
-  if (!paystackConfigured(env)) return json({ error: 'The payment service is temporarily unavailable.' }, 503);
+  if (!callFocusPaymentsEnabled(env)) return json({ error: 'Transfer-account creation is temporarily unavailable while Paystack activation is pending.', code: 'payments_disabled' }, 503);
+  if (!paystackConfigured(env)) return json({ error: 'Paystack is not configured yet.' }, 503);
   let body = {};
   try { body = await request.json(); } catch {}
-  if (body?.consent !== true) return json({ error: 'Confirm consent before creating a transfer account.', code: 'consent_required' }, 400);
+  if (body?.consent !== true) return json({ error: 'Confirm consent before creating a Paystack transfer account.', code: 'consent_required' }, 400);
 
   const data = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
   if (data.wallet?.paystackDva?.accountNumber) return json({ ok: true, existing: true, dva: data.wallet.paystackDva, testMode: paystackIsTest(env) });
@@ -2263,7 +2263,7 @@ async function handlePaystackDva(request, env) {
       });
       existingDva = created?.data || null;
     }
-    if (!existingDva?.account_number) return json({ error: 'Your transfer account is still being prepared. Try again shortly.', code: 'dva_pending' }, 202);
+    if (!existingDva?.account_number) return json({ error: 'Paystack has not assigned the transfer account yet. Try again shortly.', code: 'dva_pending' }, 202);
     const dva = {
       id: existingDva.id || null,
       accountName: String(existingDva.account_name || ''),
@@ -2284,7 +2284,11 @@ async function handlePaystackDva(request, env) {
     if (dva.accountNumber) await env.CALLFOCUS_CONFIG.put(paystackDvaMapKey(dva.accountNumber), auth.user.id);
     return json({ ok: true, dva, wallet: data.wallet, testMode: paystackIsTest(env) });
   } catch (error) {
-    return json({ error: 'Could not create the transfer account. Please try again later.', code: error?.code || 'dva_create_failed', testMode: paystackIsTest(env) }, error?.status || 502);
+    const msg = String(error?.message || 'Could not create the Paystack transfer account.');
+    const activationHint = /live|business|dedicated|virtual|available|enabled|access/i.test(msg)
+      ? ' Dedicated virtual accounts may remain unavailable until Paystack finishes activating your business.'
+      : '';
+    return json({ error: `${msg}${activationHint}`.trim(), code: error?.code || 'dva_create_failed', testMode: paystackIsTest(env) }, error?.status || 502);
   }
 }
 
@@ -2487,13 +2491,13 @@ async function callOpenAIResponses(env, body) {
     const code = payload?.error?.code || payload?.error?.type || '';
     const quota = code === 'credit_balance_exhausted' || code === 'insufficient_quota';
     const rateLimited = response.status === 429 && !quota;
-    const err = new Error(quota ? 'Conversation analysis is temporarily unavailable. Please try again later.' : (rateLimited ? 'Conversation analysis is busy right now. Please wait a moment and try again.' : 'The conversation analysis could not be completed.'));
+    const err = new Error(quota ? 'Conversation analysis is temporarily unavailable because the API balance or spending limit is unavailable.' : (rateLimited ? 'Conversation analysis is busy right now. Please wait a moment and try again.' : (payload?.error?.message || 'OpenAI could not analyze these screenshots.')));
     err.status = (quota || rateLimited) ? 503 : Math.max(400, response.status || 502);
     throw err;
   }
   const text = extractResponsesText(payload);
   if (!text) {
-    const err = new Error('The conversation analysis returned no result. Please try again.');
+    const err = new Error('OpenAI returned an empty conversation analysis.');
     err.status = 502;
     throw err;
   }
@@ -2812,7 +2816,7 @@ async function readTavusAvatarStatus(env, profile){
   const type = profile.resourceType === 'replica' ? 'replicas' : 'faces';
   const response = await tavusRequest(env, `/${type}/${encodeURIComponent(profile.avatarId)}`, { allowError: true });
   if(!response.ok){
-    if(response.status === 404) return { ...profile, status: 'error', errorMessage: 'This avatar could not be found. Please choose another avatar.' };
+    if(response.status === 404) return { ...profile, status: 'error', errorMessage: 'This avatar could not be found at the video provider.' };
     return profile;
   }
   const p = response.payload || {};
@@ -2956,7 +2960,7 @@ async function handleAvatarSession(request, env){
   const auth = await authenticatedCustomer(request, env);
   if(!auth) return json({ error: 'Sign in to start a Live AI Avatar session.' }, 401);
   if(!env.CALLFOCUS_CONFIG) return json({ error: 'Account storage is unavailable.' }, 503);
-  if(!avatarProviderConfigured(env)) return json({ error: 'Live AI Avatar is temporarily unavailable. Please try again later.', code: 'avatar_provider_unconfigured' }, 503);
+  if(!avatarProviderConfigured(env)) return json({ error: 'Live AI Avatar is not activated yet. Add TAVUS_API_KEY to the CallFocus Worker.', code: 'avatar_provider_unconfigured' }, 503);
 
   let requestBody = {}; try{ requestBody = await request.json(); }catch{}
   const requestedFaceId = String(requestBody?.faceId || '').trim();
@@ -2967,7 +2971,7 @@ async function handleAvatarSession(request, env){
   if(requestedFaceId){
     const stockFaces = await loadTavusStockFaces(env);
     const selected = stockFaces.find(face => String(face.faceId) === requestedFaceId);
-    if(!selected) return json({ error: 'That avatar is not available right now. Refresh the avatar library and choose another face.' }, 400);
+    if(!selected) return json({ error: 'That stock avatar is not available to this Tavus account. Refresh the avatar library and choose another face.' }, 400);
     selectedFaceId = selected.faceId;
   }else{
     let profile = (await env.CALLFOCUS_CONFIG.get(avatarProfileKey(auth.user.id), { type: 'json' })) || {};
