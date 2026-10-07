@@ -5566,30 +5566,36 @@ ${approvedPatterns}
   });
 })();
 
-/* ===== CallFocus V16.0 — premium loading + navigation polish ===== */
+/* ===== CallFocus V16.0 — premium boot + lightweight route transitions ===== */
 (()=>{
-  const installLoader=()=>{
-    if(document.querySelector('.cf-premium-loader'))return;
-    const loader=document.createElement('div');
-    loader.className='cf-premium-loader';
-    loader.setAttribute('role','status');
-    loader.setAttribute('aria-label','Loading CallFocus');
-    loader.innerHTML='<div class="cf-loader-inner"><div class="cf-loader-mark"><img src="/logo.png" alt=""></div><div><div class="cf-loader-word">Call<b>Focus</b></div><div class="cf-loader-caption">Preparing your workspace</div></div><div class="cf-loader-bar"><span></span></div></div>';
-    document.body.prepend(loader);
-    const started=performance.now();
-    const finish=()=>{
-      const elapsed=performance.now()-started;
-      setTimeout(()=>{
-        loader.classList.add('is-done');
-        setTimeout(()=>loader.remove(),520);
-      },Math.max(0,620-elapsed));
-    };
-    if(document.readyState==='complete')finish(); else window.addEventListener('load',finish,{once:true});
-    setTimeout(finish,1800);
+  const loader=document.getElementById('cfBootLoader');
+  const progress=document.getElementById('cfRouteProgress');
+  let finished=false;
+  const finishBoot=()=>{
+    if(finished)return;
+    finished=true;
+    if(loader)loader.setAttribute('aria-hidden','true');
+    document.documentElement.classList.add('cf-ready');
+    setTimeout(()=>{try{loader?.remove()}catch{}},420);
   };
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installLoader,{once:true}); else installLoader();
-  window.addEventListener('pageshow',()=>{
-    document.querySelectorAll('.cf-premium-loader.is-done').forEach(el=>el.remove());
-    document.documentElement.classList.remove('cf-page-hidden');
-  });
+  if(document.readyState==='complete')setTimeout(finishBoot,180);
+  else window.addEventListener('load',()=>setTimeout(finishBoot,180),{once:true});
+  setTimeout(finishBoot,1250);
+
+  let routeTimer=0;
+  const pulse=()=>{
+    if(!progress)return;
+    clearTimeout(routeTimer);
+    document.body.classList.remove('cf-route-finishing');
+    document.body.classList.add('cf-route-moving');
+    routeTimer=setTimeout(()=>{
+      document.body.classList.remove('cf-route-moving');
+      document.body.classList.add('cf-route-finishing');
+      setTimeout(()=>document.body.classList.remove('cf-route-finishing'),330);
+    },260);
+  };
+  document.addEventListener('click',event=>{
+    const target=event.target?.closest?.('[data-route],[data-mobile-route],[data-account-route],[data-cf-route-back],.credit-back-btn,.voice-notes-back,.avatar-back-btn');
+    if(target)pulse();
+  },{capture:true,passive:true});
 })();

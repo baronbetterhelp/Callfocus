@@ -1,12 +1,21 @@
-# CallFocus V16.0 — Signature Pearl
+# CallFocus V16.0 — Pearl Atelier Redesign
 
-A visual and experience refinement built on V15.0 without replacing CallFocus core logic.
+Major visual and layout redesign built on the V15.0 worldwide-location build while preserving existing functionality.
 
-## Highlights
-- Signature Pearl premium visual system across customer-facing pages.
-- Refined glass surfaces, spacing, typography, depth, gradients and responsive mobile presentation.
-- Premium CallFocus loading screen with graceful fallback timeout and reduced-motion support.
-- Smoother page-view transitions and input focus states.
-- Reworked hero presentation, credit dock, quick actions, cards, continuity section and CTA styling.
-- Consistent premium treatment for credits, voice notes, callers, recent calls, profile, settings and avatar pages through the shared customer stylesheet.
-- Existing V15.0 worldwide locations, payments, credits, calls, voice notes, conversation dynamics, recent-call drafts and stability patches are preserved.
+## Customer experience
+- Rebuilt the Pearl Aurora visual system into a cleaner premium "Pearl Atelier" theme using porcelain white, sea-glass jade, champagne and soft ice tones.
+- Redesigned the header with a compact pill-style desktop navigation and cleaner mobile spacing.
+- Rebalanced the Home hero, credit dock, primary call action and three quick tools for better hierarchy on phones and desktop.
+- Turned the signed-in Home workspace into a premium command-center card with cleaner stats and recent-call presentation.
+- Standardized spacing, card radius, shadows, headings and surfaces across Home, Callers, Recent Calls, Credits, Profile, Settings, Voice Notes and Live Avatar.
+- Improved the Credits page into a more wallet-like layout with tighter package cards and clearer purchase hierarchy.
+- Improved the Voice Note studio, caller cards, profile/settings forms and Recent Calls workspace.
+- Added a lightweight branded loading screen and a subtle route-progress indicator.
+- Added stronger focus-visible states and reduced-motion support.
+- Reduced expensive visual effects and disabled hero parallax transforms to improve Safari/iPhone stability.
+
+## Admin
+- Polished the Admin Portal with the same Pearl visual language, cleaner tab navigation, more consistent panels and denser mobile spacing.
+
+## Preserved
+Calls, realtime transcript/translation, conversation dynamics, worldwide location search, voice notes, avatars, credits, Paystack/manual payments, email approval, users, admin settings, saved callers, Recent Calls, authentication and server-side logic are unchanged.

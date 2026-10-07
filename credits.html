@@ -16,7 +16,7 @@
     document.documentElement.dataset.theme='pearl';
     document.documentElement.style.colorScheme='light';
     try{history.scrollRestoration='manual';}catch{}
-    window.__CALLFOCUS_BUILD__='14.5';
+    window.__CALLFOCUS_BUILD__='16.0';
     (function(){
       const cleanPath=(location.pathname||'/').replace(/\/+$/,'')||'/';
       const topNow=()=>{try{window.scrollTo(0,0);}catch{}};
@@ -31,11 +31,21 @@
   <link rel="stylesheet" href="/callfocus.css?v=16.0" />
 </head>
 <body data-cf-document-view="credits">
+
+  <div class="cf-boot-loader" id="cfBootLoader" aria-hidden="false">
+    <div class="cf-boot-card">
+      <div class="cf-boot-mark"><img src="./logo.png?v=16.0" alt="" /></div>
+      <strong>CallFocus</strong>
+      <small>Preparing your workspace…</small>
+    </div>
+  </div>
+  <div class="cf-route-progress" id="cfRouteProgress" aria-hidden="true"></div>
+  <script>setTimeout(()=>{try{document.getElementById('cfBootLoader')?.setAttribute('aria-hidden','true')}catch{}},1600);</script>
   <div class="app-root home-page" id="pageRoot">
     <header class="site-header" id="siteHeader">
       <div class="container header-inner">
         <a class="brand" href="#home" aria-label="CallFocus home">
-          <span class="brand-logo-shell" aria-hidden="true"><img class="brand-logo-image" src="./logo.png?v=13.8" alt="" /></span>
+          <span class="brand-logo-shell" aria-hidden="true"><img class="brand-logo-image" src="./logo.png?v=16.0" alt="" /></span>
           <span class="brand-copy">
             <strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong>
             <small>Conversation continuity, simplified.</small>
@@ -349,7 +359,7 @@
 
             <div class="voice-note-result hidden" id="voiceNoteResult">
               <div class="voice-note-result-top">
-                <span class="voice-note-result-avatar"><img src="./logo.png?v=13.8" alt="" /></span>
+                <span class="voice-note-result-avatar"><img src="./logo.png?v=16.0" alt="" /></span>
                 <div><strong>Voice note ready</strong><small id="voiceNoteResultMeta">Female voice</small></div>
                 <span class="ai-voice-pill">AI-generated voice</span>
               </div>
@@ -512,7 +522,7 @@
 
     <footer class="premium-footer">
       <div class="container footer-inner">
-        <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" src="./logo.png?v=13.8" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span></div></div>
+        <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" src="./logo.png?v=16.0" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span></div></div>
         <div class="footer-links"><button data-route="home">Home</button><button data-route="recent">Recent Calls</button><button data-route="profile">My Profile</button><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/support">Support</a></div>
       </div>
     </footer>

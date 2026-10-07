@@ -16,7 +16,7 @@
     document.documentElement.dataset.theme='pearl';
     document.documentElement.style.colorScheme='light';
     try{history.scrollRestoration='manual';}catch{}
-    window.__CALLFOCUS_BUILD__='14.5';
+    window.__CALLFOCUS_BUILD__='16.0';
     (function(){
       const cleanPath=(location.pathname||'/').replace(/\/+$/,'')||'/';
       const topNow=()=>{try{window.scrollTo(0,0);}catch{}};
@@ -31,11 +31,21 @@
   <link rel="stylesheet" href="/callfocus.css?v=16.0" />
 </head>
 <body data-cf-document-view="home">
+
+  <div class="cf-boot-loader" id="cfBootLoader" aria-hidden="false">
+    <div class="cf-boot-card">
+      <div class="cf-boot-mark"><img src="./logo.png?v=16.0" alt="" /></div>
+      <strong>CallFocus</strong>
+      <small>Preparing your workspace…</small>
+    </div>
+  </div>
+  <div class="cf-route-progress" id="cfRouteProgress" aria-hidden="true"></div>
+  <script>setTimeout(()=>{try{document.getElementById('cfBootLoader')?.setAttribute('aria-hidden','true')}catch{}},1600);</script>
   <div class="app-root home-page" id="pageRoot">
     <header class="site-header" id="siteHeader">
       <div class="container header-inner">
         <a class="brand" href="#home" aria-label="CallFocus home">
-          <span class="brand-logo-shell" aria-hidden="true"><img class="brand-logo-image" src="./logo.png?v=13.8" alt="" /></span>
+          <span class="brand-logo-shell" aria-hidden="true"><img class="brand-logo-image" src="./logo.png?v=16.0" alt="" /></span>
           <span class="brand-copy">
             <strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong>
             <small>Conversation continuity, simplified.</small>
@@ -218,9 +228,6 @@
               <article class="feature-card reveal-card" data-reveal><span>01</span><h3>Caller memory</h3><p>Keep both callers’ background and relationship dynamics attached to the person instead of rewriting them every time.</p></article>
               <article class="feature-card reveal-card" data-reveal><span>02</span><h3>Per-call time awareness</h3><p>Locations and time zones stay with each call thread, so they can be reused or changed when someone travels.</p></article>
               <article class="feature-card reveal-card" data-reveal><span>03</span><h3>Graceful call ending</h3><p>Request End asks the voice assistant to wrap up naturally in the tone of that day’s conversation before the call closes.</p></article>
-              <article class="feature-card reveal-card" data-reveal><span>04</span><h3>Conversation dynamics</h3><p>Turn conversation screenshots into organized relationship context you can review, edit, copy, and use when preparing a new call.</p></article>
-              <article class="feature-card reveal-card" data-reveal><span>05</span><h3>Natural voice notes</h3><p>Create spoken messages from your own script or prepare a reply while using the same shared CallFocus credit balance.</p></article>
-              <article class="feature-card reveal-card" data-reveal><span>06</span><h3>Worldwide time awareness</h3><p>Search locations around the world and keep each caller’s location and time zone attached to the conversation thread.</p></article>
             </div>
           </div>
         </section>
@@ -352,7 +359,7 @@
 
             <div class="voice-note-result hidden" id="voiceNoteResult">
               <div class="voice-note-result-top">
-                <span class="voice-note-result-avatar"><img src="./logo.png?v=13.8" alt="" /></span>
+                <span class="voice-note-result-avatar"><img src="./logo.png?v=16.0" alt="" /></span>
                 <div><strong>Voice note ready</strong><small id="voiceNoteResultMeta">Female voice</small></div>
                 <span class="ai-voice-pill">AI-generated voice</span>
               </div>
@@ -515,7 +522,7 @@
 
     <footer class="premium-footer">
       <div class="container footer-inner">
-        <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" src="./logo.png?v=13.8" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span></div></div>
+        <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" src="./logo.png?v=16.0" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span></div></div>
         <div class="footer-links"><button data-route="home">Home</button><button data-route="recent">Recent Calls</button><button data-route="profile">My Profile</button><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/support">Support</a></div>
       </div>
     </footer>
