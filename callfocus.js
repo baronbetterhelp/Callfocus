@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='14.6';
+  const BUILD='15.0';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -81,7 +81,18 @@ const GLOBAL_CITIES = [
   ['Lagos, Nigeria','Africa/Lagos'],['Abuja, Nigeria','Africa/Lagos'],['Ibadan, Nigeria','Africa/Lagos'],['Port Harcourt, Nigeria','Africa/Lagos'],['Owerri, Nigeria','Africa/Lagos'],['Accra, Ghana','Africa/Accra'],['Nairobi, Kenya','Africa/Nairobi'],['Johannesburg, South Africa','Africa/Johannesburg'],['Cape Town, South Africa','Africa/Johannesburg'],['Cairo, Egypt','Africa/Cairo'],['Casablanca, Morocco','Africa/Casablanca'],
   ['Dubai, United Arab Emirates','Asia/Dubai'],['Abu Dhabi, United Arab Emirates','Asia/Dubai'],['Riyadh, Saudi Arabia','Asia/Riyadh'],['Jeddah, Saudi Arabia','Asia/Riyadh'],['Jerusalem, Israel','Asia/Jerusalem'],['Beirut, Lebanon','Asia/Beirut'],['Amman, Jordan','Asia/Amman'],['Mumbai, India','Asia/Kolkata'],['Delhi, India','Asia/Kolkata'],['Bengaluru, India','Asia/Kolkata'],['Kolkata, India','Asia/Kolkata'],['Karachi, Pakistan','Asia/Karachi'],['Lahore, Pakistan','Asia/Karachi'],['Dhaka, Bangladesh','Asia/Dhaka'],['Colombo, Sri Lanka','Asia/Colombo'],['Kathmandu, Nepal','Asia/Kathmandu'],['Tokyo, Japan','Asia/Tokyo'],['Osaka, Japan','Asia/Tokyo'],['Seoul, South Korea','Asia/Seoul'],['Beijing, China','Asia/Shanghai'],['Shanghai, China','Asia/Shanghai'],['Hong Kong','Asia/Hong_Kong'],['Taipei, Taiwan','Asia/Taipei'],['Singapore','Asia/Singapore'],['Kuala Lumpur, Malaysia','Asia/Kuala_Lumpur'],['Bangkok, Thailand','Asia/Bangkok'],['Jakarta, Indonesia','Asia/Jakarta'],['Manila, Philippines','Asia/Manila'],['Ho Chi Minh City, Vietnam','Asia/Ho_Chi_Minh'],
   ['Sydney, Australia','Australia/Sydney'],['Melbourne, Australia','Australia/Melbourne'],['Brisbane, Australia','Australia/Brisbane'],['Perth, Australia','Australia/Perth'],['Auckland, New Zealand','Pacific/Auckland']
+
 ];
+const TIMEZONE_LABELS = new Map(TIMEZONES);
+function allTimezoneValues(){
+  let values=[];
+  try{ if(typeof Intl.supportedValuesOf==='function') values=Intl.supportedValuesOf('timeZone')||[]; }catch{}
+  const combined=[...new Set([...TIMEZONES.map(([v])=>v),...values])];
+  return combined.sort((a,b)=>a.localeCompare(b));
+}
+function timezoneDisplayLabel(value){
+  return TIMEZONE_LABELS.get(value) || String(value||'').replace(/_/g,' ');
+}
 const DYNAMICS = {
   custom:{label:'Upload my own dynamics (Recommended)',description:'Describe the real tone, relationship patterns, boundaries and conversational style.',prompt:''},
   romantic:{label:'Romantic Call',description:'Warm, affectionate and emotionally attentive.',prompt:'Use a warm, affectionate and emotionally attentive romantic dynamic. Keep it natural and grounded in the supplied facts. Do not invent intimacy, promises, milestones or personal history.'},
@@ -163,11 +174,11 @@ function lastCall(thread){ return thread?.calls?.length ? thread.calls[thread.ca
 function dynamicsText(mode, custom){ const preset=DYNAMICS[mode]||DYNAMICS.custom; return mode==='custom' ? (String(custom||'').trim() || 'No custom dynamics were supplied. Use the saved caller information conservatively without inventing relationship history or tone.') : `${preset.label}: ${preset.prompt}`; }
 
 function initOptions(){
-  const tz = TIMEZONES.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
+  const tz = timezoneOptions('');
   $('newCallATimezone').innerHTML = tz; $('newCallBTimezone').innerHTML = tz;
   const dyn = Object.entries(DYNAMICS).map(([v,d])=>`<option value="${v}">${d.label}</option>`).join('');
   $('newCallDynamicsMode').innerHTML = dyn; $('callerDynamicsMode').innerHTML = dyn;
-  $('newCallATimezone').value = 'America/Los_Angeles'; $('newCallBTimezone').value = 'America/New_York';
+  $('newCallATimezone').value = ''; $('newCallBTimezone').value = '';
   updateDynamicsUI('newCall'); updateDynamicsUI('caller');
 }
 function updateDynamicsUI(scope){
@@ -264,9 +275,14 @@ function renderSettings(){ if(!account)return; $('settingsName').textContent=dat
 
 function renderThreadDetail(id){
   const t=data.threads.find(x=>x.id===id); if(!t)return; selectedThreadId=id; const last=lastCall(t); const dyn=DYNAMICS[t.dynamicsMode]||DYNAMICS.custom; const admin=loadAdmin();
-  $('threadDetailPanel').innerHTML=`<div class="thread-detail"><div class="thread-detail-head"><div class="thread-detail-avatar">${esc(initials(t.callerName))}</div><div><h2>${esc(t.title)}</h2><span>${esc(t.callerName)} · Last used ${esc(relativeTime(t.updatedAt))}</span></div></div><div class="thread-saved-grid"><div class="saved-info-card"><strong>About you</strong><p>${esc(t.aboutSelf||'Not supplied')}</p></div><div class="saved-info-card"><strong>About caller</strong><p>${esc(t.aboutCaller||'Not supplied')}</p></div><div class="saved-info-card"><strong>Dynamics</strong><p>${esc(dyn.label)}</p></div><div class="saved-info-card"><strong>Last call setup</strong><p>${esc(t.callerA.region||'—')} ↔ ${esc(t.callerB.region||'—')} · ${esc(t.voiceGender||'male')}</p></div></div><div class="repeat-call-box"><div><h3>What is new for today’s call?</h3><p>This is normally the only thing you need to add before calling again.</p></div><label>New conversation details<textarea id="repeatTopic" rows="5" placeholder="What do you want to discuss on this call?"></textarea></label><button class="btn btn-primary large" data-repeat-call="${t.id}">Call ${esc(t.callerName)} again</button></div><details class="thread-edit-details"><summary>Edit both callers or conversation dynamics (optional)</summary><div class="form-grid two"><label>About you<textarea id="repeatAboutSelf" rows="4">${esc(t.aboutSelf||'')}</textarea></label><label>About caller<textarea id="repeatAboutCaller" rows="4">${esc(t.aboutCaller||'')}</textarea></label></div><label>Dynamics type<select id="repeatDynamicsMode">${Object.entries(DYNAMICS).map(([v,d])=>`<option value="${v}" ${v===t.dynamicsMode?'selected':''}>${esc(d.label)}</option>`).join('')}</select></label><label>Custom dynamics<textarea id="repeatDynamics" rows="4">${esc(t.dynamics||'')}</textarea></label></details><details class="thread-edit-details"><summary>Edit last-used location, time zone or voice (optional)</summary><div class="form-grid two"><div class="location-card"><strong>Caller A</strong><label>Location<input id="repeatARegion" value="${esc(t.callerA.region||'')}" /></label><label>Time zone<select id="repeatATimezone">${timezoneOptions(t.callerA.timezone)}</select></label></div><div class="location-card"><strong>Caller B</strong><label>Location<input id="repeatBRegion" value="${esc(t.callerB.region||'')}" /></label><label>Time zone<select id="repeatBTimezone">${timezoneOptions(t.callerB.timezone)}</select></label></div></div><label>Voice<select id="repeatVoiceGender"><option value="male" ${t.voiceGender!=='female'?'selected':''}>Male · ${esc(admin.maleVoice)}</option><option value="female" ${t.voiceGender==='female'?'selected':''}>Female · ${esc(admin.femaleVoice)}</option></select></label></details><div class="thread-edit-details"><summary style="cursor:default">Call history in this thread</summary><div class="thread-history-mini">${(t.calls||[]).slice().reverse().slice(0,8).map(c=>`<div class="call-history-line"><span>${esc(c.topic||'No topic supplied')}</span><span>${esc(dateLabel(c.createdAt))} · ${esc(c.duration||'00:00')}</span></div>`).join('')||'<div class="call-history-line"><span>No completed calls saved yet.</span></div>'}</div></div></div>`;
+  $('threadDetailPanel').innerHTML=`<div class="thread-detail"><div class="thread-detail-head"><div class="thread-detail-avatar">${esc(initials(t.callerName))}</div><div><h2>${esc(t.title)}</h2><span>${esc(t.callerName)} · Last used ${esc(relativeTime(t.updatedAt))}</span></div></div><div class="thread-saved-grid"><div class="saved-info-card"><strong>About you</strong><p>${esc(t.aboutSelf||'Not supplied')}</p></div><div class="saved-info-card"><strong>About caller</strong><p>${esc(t.aboutCaller||'Not supplied')}</p></div><div class="saved-info-card"><strong>Dynamics</strong><p>${esc(dyn.label)}</p></div><div class="saved-info-card"><strong>Last call setup</strong><p>${esc(t.callerA.region||'—')} ↔ ${esc(t.callerB.region||'—')} · ${esc(t.voiceGender||'male')}</p></div></div><div class="repeat-call-box"><div><h3>What is new for today’s call?</h3><p>This is normally the only thing you need to add before calling again.</p></div><label>New conversation details<textarea id="repeatTopic" rows="5" placeholder="What do you want to discuss on this call?"></textarea></label><button class="btn btn-primary large" data-repeat-call="${t.id}">Call ${esc(t.callerName)} again</button></div><details class="thread-edit-details"><summary>Edit both callers or conversation dynamics (optional)</summary><div class="form-grid two"><label>About you<textarea id="repeatAboutSelf" rows="4">${esc(t.aboutSelf||'')}</textarea></label><label>About caller<textarea id="repeatAboutCaller" rows="4">${esc(t.aboutCaller||'')}</textarea></label></div><label>Dynamics type<select id="repeatDynamicsMode">${Object.entries(DYNAMICS).map(([v,d])=>`<option value="${v}" ${v===t.dynamicsMode?'selected':''}>${esc(d.label)}</option>`).join('')}</select></label><label>Custom dynamics<textarea id="repeatDynamics" rows="4">${esc(t.dynamics||'')}</textarea></label></details><details class="thread-edit-details"><summary>Edit last-used location, time zone or voice (optional)</summary><div class="form-grid two"><div class="location-card"><strong>Caller A</strong><label>Location<div class="location-autocomplete"><input id="repeatARegion" autocomplete="off" placeholder="e.g. Los Angeles, California, United States" value="${esc(t.callerA.region||'')}" /><button class="location-clear ${t.callerA.region?'':'hidden'}" type="button" data-clear-location="repeatARegion" aria-label="Clear Caller A location">×</button><div class="location-suggestions hidden" id="repeatASuggestions"></div></div></label><label>Time zone<select id="repeatATimezone">${timezoneOptions(t.callerA.timezone)}</select></label></div><div class="location-card"><strong>Caller B</strong><label>Location<div class="location-autocomplete"><input id="repeatBRegion" autocomplete="off" placeholder="e.g. Dhaka, Dhaka Division, Bangladesh" value="${esc(t.callerB.region||'')}" /><button class="location-clear ${t.callerB.region?'':'hidden'}" type="button" data-clear-location="repeatBRegion" aria-label="Clear Caller B location">×</button><div class="location-suggestions hidden" id="repeatBSuggestions"></div></div></label><label>Time zone<select id="repeatBTimezone">${timezoneOptions(t.callerB.timezone)}</select></label></div></div><label>Voice<select id="repeatVoiceGender"><option value="male" ${t.voiceGender!=='female'?'selected':''}>Male · ${esc(admin.maleVoice)}</option><option value="female" ${t.voiceGender==='female'?'selected':''}>Female · ${esc(admin.femaleVoice)}</option></select></label></details><div class="thread-edit-details"><summary style="cursor:default">Call history in this thread</summary><div class="thread-history-mini">${(t.calls||[]).slice().reverse().slice(0,8).map(c=>`<div class="call-history-line"><span>${esc(c.topic||'No topic supplied')}</span><span>${esc(dateLabel(c.createdAt))} · ${esc(c.duration||'00:00')}</span></div>`).join('')||'<div class="call-history-line"><span>No completed calls saved yet.</span></div>'}</div></div></div>`;
 }
-function timezoneOptions(selected){ return TIMEZONES.map(([v,l])=>`<option value="${v}" ${v===selected?'selected':''}>${esc(l)}</option>`).join(''); }
+function timezoneOptions(selected=''){
+  const chosen=String(selected||'');
+  const values=allTimezoneValues();
+  if(chosen && !values.includes(chosen)) values.unshift(chosen);
+  return `<option value="" ${!chosen?'selected':''}>Select time zone</option>` + values.map(v=>`<option value="${esc(v)}" ${v===chosen?'selected':''}>${esc(timezoneDisplayLabel(v))}</option>`).join('');
+}
 function selectThread(id){ if(!account)return; selectedThreadId=id; renderRecentThreads(); }
 
 function showView(view, scroll=true){
@@ -279,23 +295,99 @@ function showView(view, scroll=true){
 function openMobileMenu(){ $('mobileMenuWrap').classList.remove('hidden'); $('mobileMenuBtn').setAttribute('aria-expanded','true'); $('mobileMenuBtn').querySelector('.menu-glyph').textContent='×'; renderMobileAccount(); renderMobileRecents(); }
 function closeMobileMenu(){ $('mobileMenuWrap').classList.add('hidden'); $('mobileMenuBtn').setAttribute('aria-expanded','false'); $('mobileMenuBtn').querySelector('.menu-glyph').textContent='☰'; }
 
-function renderLocationSuggestions(inputId,suggestionsId,timezoneId){
-  const input=$(inputId), box=$(suggestionsId);
-  const query=input.value.trim().toLowerCase();
-  if(query.length<1){box.classList.add('hidden');box.innerHTML='';return;}
-  const matches=GLOBAL_CITIES.filter(([name])=>name.toLowerCase().includes(query)).slice(0,7);
-  if(!matches.length){box.classList.add('hidden');box.innerHTML='';return;}
-  box.innerHTML=matches.map(([name,tz])=>`<button type="button" data-location="${esc(name)}" data-timezone="${esc(tz)}"><strong>${esc(name)}</strong><small>${esc(TIMEZONES.find(x=>x[0]===tz)?.[1]||tz)}</small></button>`).join('');
+const locationSearchTimers=new Map();
+const locationSearchSequences=new Map();
+function locationLocalMatches(query){
+  const q=String(query||'').trim().toLowerCase();
+  if(!q)return [];
+  return GLOBAL_CITIES.filter(([name])=>name.toLowerCase().includes(q)).slice(0,8).map(([name,timezone])=>({name,timezone,secondary:timezoneDisplayLabel(timezone)}));
+}
+function ensureTimezoneChoice(select,timezone){
+  if(!select)return;
+  const tz=String(timezone||'');
+  if(!tz){select.value='';return;}
+  if(![...select.options].some(o=>o.value===tz)){
+    const option=document.createElement('option'); option.value=tz; option.textContent=timezoneDisplayLabel(tz); select.appendChild(option);
+  }
+  select.value=tz;
+}
+function updateLocationClearButton(inputId){
+  const input=$(inputId); if(!input)return;
+  const btn=document.querySelector(`[data-clear-location="${inputId}"]`);
+  if(btn)btn.classList.toggle('hidden',!input.value.trim());
+}
+function paintLocationSuggestions(inputId,suggestionsId,timezoneId,items,{searching=false}={}){
+  const input=$(inputId),box=$(suggestionsId); if(!input||!box)return;
+  const unique=[]; const seen=new Set();
+  (items||[]).forEach(item=>{const key=`${String(item.name||'').toLowerCase()}|${item.timezone||''}`;if(item.name&&!seen.has(key)){seen.add(key);unique.push(item)}});
+  if(!unique.length){
+    box.innerHTML=searching?'<div class="location-search-note">Searching worldwide…</div>':'<div class="location-search-note">No matching location yet. Keep typing or choose the time zone manually.</div>';
+    box.classList.toggle('hidden',!input.value.trim());
+    return;
+  }
+  box.innerHTML=unique.slice(0,10).map(item=>`<button type="button" data-location="${esc(item.name)}" data-timezone="${esc(item.timezone||'')}"><strong>${esc(item.name)}</strong><small>${esc(item.secondary||timezoneDisplayLabel(item.timezone)||'Location')}</small></button>`).join('');
   box.classList.remove('hidden');
-  box.querySelectorAll('button').forEach(btn=>btn.onclick=()=>{input.value=btn.dataset.location;$(timezoneId).value=btn.dataset.timezone;box.classList.add('hidden');});
+  box.querySelectorAll('button').forEach(btn=>btn.onclick=()=>{
+    input.value=btn.dataset.location||'';
+    ensureTimezoneChoice($(timezoneId),btn.dataset.timezone||'');
+    updateLocationClearButton(inputId);
+    box.classList.add('hidden');
+  });
+}
+async function fetchWorldwideLocations(query){
+  const res=await fetch(`/api/location-search?q=${encodeURIComponent(query)}`,{cache:'no-store',headers:{Accept:'application/json'}});
+  if(!res.ok)return [];
+  const data=await res.json().catch(()=>({}));
+  return Array.isArray(data?.results)?data.results:[];
+}
+function renderLocationSuggestions(inputId,suggestionsId,timezoneId){
+  const input=$(inputId),box=$(suggestionsId); if(!input||!box)return;
+  const query=input.value.trim();
+  updateLocationClearButton(inputId);
+  if(query.length<1){box.classList.add('hidden');box.innerHTML='';return;}
+  const local=locationLocalMatches(query);
+  paintLocationSuggestions(inputId,suggestionsId,timezoneId,local,{searching:query.length>=2&&!local.length});
+  const oldTimer=locationSearchTimers.get(inputId); if(oldTimer)clearTimeout(oldTimer);
+  if(query.length<2)return;
+  const seq=(locationSearchSequences.get(inputId)||0)+1; locationSearchSequences.set(inputId,seq);
+  const timer=setTimeout(async()=>{
+    try{
+      const remote=await fetchWorldwideLocations(query);
+      if(seq!==locationSearchSequences.get(inputId) || input.value.trim()!==query)return;
+      paintLocationSuggestions(inputId,suggestionsId,timezoneId,[...remote,...local]);
+    }catch{
+      if(input.value.trim()===query && !local.length)paintLocationSuggestions(inputId,suggestionsId,timezoneId,[]);
+    }
+  },260);
+  locationSearchTimers.set(inputId,timer);
+}
+function bindLocationPair(inputId,suggestionsId,timezoneId){
+  const input=$(inputId),box=$(suggestionsId); if(!input||!box||input.dataset.locationBound==='1')return;
+  input.dataset.locationBound='1';
+  input.addEventListener('input',()=>renderLocationSuggestions(inputId,suggestionsId,timezoneId));
+  input.addEventListener('focus',()=>renderLocationSuggestions(inputId,suggestionsId,timezoneId));
+  input.addEventListener('blur',()=>setTimeout(()=>box.classList.add('hidden'),180));
+  updateLocationClearButton(inputId);
 }
 function bindLocationAutocomplete(){
-  const pairs=[['newCallARegion','newCallASuggestions','newCallATimezone'],['newCallBRegion','newCallBSuggestions','newCallBTimezone']];
-  pairs.forEach(([inputId,suggestionsId,timezoneId])=>{const input=$(inputId);input.addEventListener('input',()=>renderLocationSuggestions(inputId,suggestionsId,timezoneId));input.addEventListener('focus',()=>renderLocationSuggestions(inputId,suggestionsId,timezoneId));input.addEventListener('blur',()=>setTimeout(()=>$(suggestionsId).classList.add('hidden'),180));});
+  [['newCallARegion','newCallASuggestions','newCallATimezone'],['newCallBRegion','newCallBSuggestions','newCallBTimezone']].forEach(args=>bindLocationPair(...args));
 }
+function bindRepeatLocationAutocomplete(){
+  [['repeatARegion','repeatASuggestions','repeatATimezone'],['repeatBRegion','repeatBSuggestions','repeatBTimezone']].forEach(args=>bindLocationPair(...args));
+}
+document.addEventListener('click',e=>{
+  const btn=e.target.closest('[data-clear-location]'); if(!btn)return;
+  const inputId=btn.dataset.clearLocation; const input=$(inputId); if(!input)return;
+  const map={newCallARegion:['newCallASuggestions','newCallATimezone'],newCallBRegion:['newCallBSuggestions','newCallBTimezone'],repeatARegion:['repeatASuggestions','repeatATimezone'],repeatBRegion:['repeatBSuggestions','repeatBTimezone']};
+  const [suggestionsId,timezoneId]=map[inputId]||[];
+  input.value=''; ensureTimezoneChoice($(timezoneId),''); if(suggestionsId)$(suggestionsId)?.classList.add('hidden'); updateLocationClearButton(inputId); input.focus();
+});
 
 function resetNewCallForm(){
-  $('newCallForm').reset(); $('newCallAboutSelf').value=data?.profile?.about||''; $('newCallDynamicsMode').value='custom'; $('newCallDynamics').value=''; const picks=[...GLOBAL_CITIES].sort(()=>Math.random()-.5).slice(0,2); $('newCallARegion').value=picks[0][0]; $('newCallATimezone').value=picks[0][1]; $('newCallBRegion').value=picks[1][0]; $('newCallBTimezone').value=picks[1][1]; selectedNewCallVoice='male'; $('newCallVoiceGender').value='male'; qsa('.voice-option').forEach(b=>b.classList.toggle('active',b.dataset.voice==='male')); updateDynamicsUI('newCall'); applyAdminLabels();
+  $('newCallForm').reset(); $('newCallAboutSelf').value=data?.profile?.about||''; $('newCallDynamicsMode').value='custom'; $('newCallDynamics').value='';
+  $('newCallARegion').value=''; $('newCallBRegion').value=''; ensureTimezoneChoice($('newCallATimezone'),''); ensureTimezoneChoice($('newCallBTimezone'),'');
+  updateLocationClearButton('newCallARegion'); updateLocationClearButton('newCallBRegion');
+  selectedNewCallVoice='male'; $('newCallVoiceGender').value='male'; qsa('.voice-option').forEach(b=>b.classList.toggle('active',b.dataset.voice==='male')); updateDynamicsUI('newCall'); applyAdminLabels();
 }
 function openNewCall(prefillCaller=null){
   if(!requireAccount({type:'newcall'},'Create an account or sign in before placing a call. Your caller details and recent-call thread will then be saved to your account.'))return;
@@ -324,13 +416,15 @@ function createThreadFromNewCall(call){
 }
 function prepareNewCall(){
   const admin=loadAdmin(); const call={mode:'new',threadId:'',callerId:'',title:$('newCallTitle').value.trim(),callerName:$('newCallPersonName').value.trim(),aboutSelf:$('newCallAboutSelf').value.trim(),aboutCaller:$('newCallAboutCaller').value.trim(),dynamicsMode:$('newCallDynamicsMode').value,rawDynamics:$('newCallDynamics').value.trim(),topic:$('newCallTopic').value.trim(),callerA:{region:$('newCallARegion').value.trim(),timezone:$('newCallATimezone').value,localTime:nowInTimezone($('newCallATimezone').value)},callerB:{region:$('newCallBRegion').value.trim(),timezone:$('newCallBTimezone').value,localTime:nowInTimezone($('newCallBTimezone').value)},callLanguage:$('newCallLanguage')?.value||'English',voiceGender:selectedNewCallVoice,voice:selectedNewCallVoice==='female'?admin.femaleVoice:admin.maleVoice,model:admin.model,instructions:admin.instructions,opening:admin.opening,speakFirst:admin.speakFirst!==false,interruptions:admin.interruptions!==false};
-  if(!call.title||!call.callerName||!call.aboutSelf||!call.aboutCaller||!call.topic||!call.callerA.region||!call.callerB.region) return {error:'Complete all required call sections before starting.'};
+  if(!call.title||!call.callerName||!call.aboutSelf||!call.aboutCaller||!call.topic||!call.callerA.region||!call.callerB.region||!call.callerA.timezone||!call.callerB.timezone) return {error:'Complete all required call sections, including both locations and time zones, before starting.'};
   if(call.dynamicsMode==='custom'&&!call.rawDynamics) return {error:'Add your conversation dynamics, or choose a preset.'};
   createOrUpdateCallerFromCall(call); createThreadFromNewCall(call); saveData(); return {call};
 }
 function prepareRepeatCall(threadId){
   const t=data.threads.find(x=>x.id===threadId); if(!t)return {error:'Call thread not found'}; const topic=$('repeatTopic')?.value.trim(); if(!topic)return {error:'Add what today’s call is about.'};
-  const aboutSelf=$('repeatAboutSelf')?.value.trim() ?? t.aboutSelf, aboutCaller=$('repeatAboutCaller')?.value.trim() ?? t.aboutCaller, dynamicsMode=$('repeatDynamicsMode')?.value || t.dynamicsMode, rawDynamics=$('repeatDynamics')?.value.trim() ?? t.dynamics, aRegion=$('repeatARegion')?.value.trim()||t.callerA.region, bRegion=$('repeatBRegion')?.value.trim()||t.callerB.region, aTz=$('repeatATimezone')?.value||t.callerA.timezone, bTz=$('repeatBTimezone')?.value||t.callerB.timezone, voiceGender=$('repeatVoiceGender')?.value||t.voiceGender||'male', callLanguage=$('repeatCallLanguage')?.value||t.callLanguage||'English'; const admin=loadAdmin();
+  const aboutSelf=$('repeatAboutSelf')?.value.trim() ?? t.aboutSelf, aboutCaller=$('repeatAboutCaller')?.value.trim() ?? t.aboutCaller, dynamicsMode=$('repeatDynamicsMode')?.value || t.dynamicsMode, rawDynamics=$('repeatDynamics')?.value.trim() ?? t.dynamics;
+  const aRegion=$('repeatARegion') ? $('repeatARegion').value.trim() : (t.callerA?.region||''), bRegion=$('repeatBRegion') ? $('repeatBRegion').value.trim() : (t.callerB?.region||''), aTz=$('repeatATimezone') ? $('repeatATimezone').value : (t.callerA?.timezone||''), bTz=$('repeatBTimezone') ? $('repeatBTimezone').value : (t.callerB?.timezone||''), voiceGender=$('repeatVoiceGender')?.value||t.voiceGender||'male', callLanguage=$('repeatCallLanguage')?.value||t.callLanguage||'English'; const admin=loadAdmin();
+  if(!aRegion||!bRegion||!aTz||!bTz)return {error:'Choose both locations and time zones before starting this call.'};
   Object.assign(t,{aboutSelf,aboutCaller,dynamicsMode,dynamics:rawDynamics,callerA:{region:aRegion,timezone:aTz},callerB:{region:bRegion,timezone:bTz},voiceGender,callLanguage,updatedAt:new Date().toISOString()}); const caller=data.callers.find(c=>c.id===t.callerId); if(caller)Object.assign(caller,{aboutSelf,aboutCaller,dynamicsMode,dynamics:rawDynamics,updatedAt:new Date().toISOString()}); saveData();
   return {call:{mode:'repeat',threadId:t.id,callerId:t.callerId,title:t.title,callerName:t.callerName,aboutSelf,aboutCaller,dynamicsMode,rawDynamics,topic,callerA:{region:aRegion,timezone:aTz,localTime:nowInTimezone(aTz)},callerB:{region:bRegion,timezone:bTz,localTime:nowInTimezone(bTz)},callLanguage:callLanguage||'English',voiceGender,voice:voiceGender==='female'?admin.femaleVoice:admin.maleVoice,model:admin.model,instructions:admin.instructions,opening:admin.opening,speakFirst:admin.speakFirst!==false,interruptions:admin.interruptions!==false}};
 }
@@ -721,7 +815,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
 
           <details class="thread-edit-details cf-thread-edit-card">
             <summary>Edit last-used location or time zone <span>Optional</span></summary>
-            <div class="form-grid two"><div class="location-card"><strong>Caller A</strong><label>Location<input id="repeatARegion" value="${esc(t.callerA?.region||'')}" /></label><label>Time zone<select id="repeatATimezone">${timezoneOptions(t.callerA?.timezone)}</select></label></div><div class="location-card"><strong>Caller B</strong><label>Location<input id="repeatBRegion" value="${esc(t.callerB?.region||'')}" /></label><label>Time zone<select id="repeatBTimezone">${timezoneOptions(t.callerB?.timezone)}</select></label></div></div>
+            <div class="form-grid two"><div class="location-card"><strong>Caller A</strong><label>Location<div class="location-autocomplete"><input id="repeatARegion" autocomplete="off" placeholder="e.g. Los Angeles, California, United States" value="${esc(t.callerA?.region||'')}" /><button class="location-clear ${t.callerA?.region?'':'hidden'}" type="button" data-clear-location="repeatARegion" aria-label="Clear Caller A location">×</button><div class="location-suggestions hidden" id="repeatASuggestions"></div></div></label><label>Time zone<select id="repeatATimezone">${timezoneOptions(t.callerA?.timezone)}</select></label></div><div class="location-card"><strong>Caller B</strong><label>Location<div class="location-autocomplete"><input id="repeatBRegion" autocomplete="off" placeholder="e.g. Dhaka, Dhaka Division, Bangladesh" value="${esc(t.callerB?.region||'')}" /><button class="location-clear ${t.callerB?.region?'':'hidden'}" type="button" data-clear-location="repeatBRegion" aria-label="Clear Caller B location">×</button><div class="location-suggestions hidden" id="repeatBSuggestions"></div></div></label><label>Time zone<select id="repeatBTimezone">${timezoneOptions(t.callerB?.timezone)}</select></label></div></div>
           </details>
 
           <section class="cf-next-call-composer">
@@ -1434,7 +1528,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
 
           <details class="thread-edit-details cf-thread-edit-card">
             <summary>Edit last-used location or time zone <span>Optional</span></summary>
-            <div class="form-grid two"><div class="location-card"><strong>Caller A</strong><label>Location<input id="repeatARegion" value="${esc(t.callerA?.region||'')}" /></label><label>Time zone<select id="repeatATimezone">${timezoneOptions(t.callerA?.timezone)}</select></label></div><div class="location-card"><strong>Caller B</strong><label>Location<input id="repeatBRegion" value="${esc(t.callerB?.region||'')}" /></label><label>Time zone<select id="repeatBTimezone">${timezoneOptions(t.callerB?.timezone)}</select></label></div></div>
+            <div class="form-grid two"><div class="location-card"><strong>Caller A</strong><label>Location<div class="location-autocomplete"><input id="repeatARegion" autocomplete="off" placeholder="e.g. Los Angeles, California, United States" value="${esc(t.callerA?.region||'')}" /><button class="location-clear ${t.callerA?.region?'':'hidden'}" type="button" data-clear-location="repeatARegion" aria-label="Clear Caller A location">×</button><div class="location-suggestions hidden" id="repeatASuggestions"></div></div></label><label>Time zone<select id="repeatATimezone">${timezoneOptions(t.callerA?.timezone)}</select></label></div><div class="location-card"><strong>Caller B</strong><label>Location<div class="location-autocomplete"><input id="repeatBRegion" autocomplete="off" placeholder="e.g. Dhaka, Dhaka Division, Bangladesh" value="${esc(t.callerB?.region||'')}" /><button class="location-clear ${t.callerB?.region?'':'hidden'}" type="button" data-clear-location="repeatBRegion" aria-label="Clear Caller B location">×</button><div class="location-suggestions hidden" id="repeatBSuggestions"></div></div></label><label>Time zone<select id="repeatBTimezone">${timezoneOptions(t.callerB?.timezone)}</select></label></div></div>
           </details>
 
           <section class="cf-next-call-composer cf-primary-composer">
@@ -1489,6 +1583,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
           </section>
         </div>
       </div>`;
+    bindRepeatLocationAutocomplete();
     requestAnimationFrame(()=>{const scroller=$('threadDetailPanel')?.querySelector('.cf-chat-scroll');if(scroller)scroller.scrollTop=0;});
   };
 

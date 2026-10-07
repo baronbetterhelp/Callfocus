@@ -1,1 +1,1 @@
-CallFocus V14.8 — Copy Call Details Only
+# CallFocus V15.0 — Worldwide location search and clear controls

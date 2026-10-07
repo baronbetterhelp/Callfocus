@@ -28,7 +28,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=14.6" />
+  <link rel="stylesheet" href="/callfocus.css?v=15.0" />
 </head>
 <body data-cf-document-view="voice-notes">
   <div class="app-root home-page" id="pageRoot">
@@ -577,8 +577,8 @@
         <div class="field-section"><span class="field-number">04</span><div class="field-content"><div class="field-heading"><strong>Dynamics of the conversation</strong><small>Custom dynamics give the best experience.</small></div><div class="dynamics-warning">For a better call experience, describe the real dynamics yourself. If you prefer not to, choose a preset such as Romantic, Friendship or Business.</div><label>Dynamics type<select id="newCallDynamicsMode"></select></label><label id="newCallDynamicsCustomWrap">Your conversation dynamics<textarea id="newCallDynamics" rows="5" placeholder="How both of you normally speak, how close you are, established tone, boundaries, recurring patterns and anything the voice assistant should understand"></textarea></label><div class="preset-description hidden" id="newCallDynamicsHelp"></div></div></div>
         <div class="field-section"><span class="field-number">05</span><div class="field-content"><label>What today’s call is about<textarea id="newCallTopic" rows="5" placeholder="What do you want to discuss on this specific call?"></textarea></label></div></div>
         <div class="field-section"><span class="field-number">06</span><div class="field-content"><div class="field-heading"><strong>Location and time zone for this call</strong><small>These belong to this call thread, not to your account profile.</small></div><div class="form-grid two">
-          <div class="location-card"><strong>Caller A</strong><label>Location<div class="location-autocomplete"><input id="newCallARegion" autocomplete="off" placeholder="Start typing a city or location" /><div class="location-suggestions hidden" id="newCallASuggestions"></div></div></label><label class="timezone-label">Time zone<select id="newCallATimezone"></select></label></div>
-          <div class="location-card"><strong>Caller B</strong><label>Location<div class="location-autocomplete"><input id="newCallBRegion" autocomplete="off" placeholder="Start typing a city or location" /><div class="location-suggestions hidden" id="newCallBSuggestions"></div></div></label><label class="timezone-label">Time zone<select id="newCallBTimezone"></select></label></div>
+          <div class="location-card"><strong>Caller A</strong><label>Location<div class="location-autocomplete"><input id="newCallARegion" autocomplete="off" placeholder="e.g. Los Angeles, California, United States" /><button class="location-clear hidden" type="button" data-clear-location="newCallARegion" aria-label="Clear Caller A location">×</button><div class="location-suggestions hidden" id="newCallASuggestions"></div></div></label><label class="timezone-label">Time zone<select id="newCallATimezone"></select></label></div>
+          <div class="location-card"><strong>Caller B</strong><label>Location<div class="location-autocomplete"><input id="newCallBRegion" autocomplete="off" placeholder="e.g. Dhaka, Dhaka Division, Bangladesh" /><button class="location-clear hidden" type="button" data-clear-location="newCallBRegion" aria-label="Clear Caller B location">×</button><div class="location-suggestions hidden" id="newCallBSuggestions"></div></div></label><label class="timezone-label">Time zone<select id="newCallBTimezone"></select></label></div>
         </div></div></div>
         <div class="field-section"><span class="field-number">07</span><div class="field-content"><div class="field-heading"><strong>Call language</strong><small>Choose the language for this caller thread. Future calls in this same thread keep this language automatically.</small></div><label>Language<select id="newCallLanguage">
           <option value="English" selected>English</option>
@@ -722,6 +722,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=14.7"></script>
+  <script src="/callfocus.js?v=15.0"></script>
 </body>
 </html>

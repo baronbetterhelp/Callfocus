@@ -2147,3 +2147,15 @@ html.cf-page-hidden .avatar-stage-loading,
 html.cf-page-hidden .avatar-speaking-state{
   animation-play-state:paused!important;
 }
+
+
+/* ===== CallFocus V15.0 — worldwide location search + clear controls ===== */
+.location-autocomplete{position:relative}
+.location-autocomplete input{padding-right:52px!important}
+.location-clear{position:absolute;z-index:3;right:10px;top:50%;transform:translateY(-50%);width:30px;height:30px;border:1px solid rgba(30,90,79,.16);border-radius:50%;background:rgba(239,247,244,.95);color:#386e65;display:grid;place-items:center;padding:0;font-size:18px;font-weight:600;line-height:1;cursor:pointer;box-shadow:0 4px 14px rgba(35,85,76,.08)}
+.location-clear:hover,.location-clear:focus{background:#e4f2ed;border-color:#a8cec4;outline:none}
+.location-clear.hidden{display:none!important}
+.location-search-note{padding:12px 14px;color:#7a8c87;font-size:11px;line-height:1.45;background:#fff}
+html:not([data-theme="pearl"]) .location-clear{background:#202624;color:#b7d9d1;border-color:#34443f}
+html:not([data-theme="pearl"]) .location-search-note{background:#171717;color:#8c9a96}
+@media(max-width:640px){.location-clear{right:9px;width:29px;height:29px}.location-autocomplete input{padding-right:48px!important}}
