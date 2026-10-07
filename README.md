@@ -1,1 +1,1 @@
-# CallFocus V14.9 — Human Voice Note Delivery
+CallFocus V14.8 — Copy Call Details Only
