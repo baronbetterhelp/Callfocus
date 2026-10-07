@@ -1,1 +1,1 @@
-# CallFocus V16.1 — New call intro panel removed
+# CallFocus V16.2 — Floating Header Restore
