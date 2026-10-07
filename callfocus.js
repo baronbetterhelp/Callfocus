@@ -4946,6 +4946,7 @@ ${approvedPatterns}
   let bank=null;
   let pollTimer=null;
   let busy=false;
+  let successMode=false;
   const $=id=>document.getElementById(id);
   const token=()=>localStorage.getItem(TOKEN_KEY)||'';
   const cfFetch=(path,options={})=>{const headers=new Headers(options.headers||{});if(token())headers.set('Authorization',`Bearer ${token()}`);return fetch(path,{...options,headers,cache:'no-store'});};
@@ -4996,6 +4997,7 @@ ${approvedPatterns}
   }
   async function cancel(){
     if(!payment?.id){hideModal();return;}if(busy)return;busy=true;
+    successMode=false;
     try{const res=await cfFetch('/api/manual-payment/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paymentId:payment.id})});const data=await readJson(res);if(!res.ok)throw new Error(data?.error||'Could not cancel this payment.');saveActive('');payment=null;bank=null;updateInline(null);hideModal();window.toast?.('Payment cancelled');}
     catch(err){window.toast?.(err?.message||'Could not cancel payment.');}
     finally{busy=false;}
@@ -5017,28 +5019,43 @@ ${approvedPatterns}
     }catch(err){window.toast?.(err?.message||'Could not submit the receipt.');}
     finally{busy=false;if(btn){btn.disabled=false;btn.textContent=old||'I’ve sent the money';}}
   }
+  function setWaitingVisual(state='waiting'){
+    const visual=$('manualWaitingVisual');
+    if(!visual)return;
+    visual.classList.toggle('is-success',state==='success');
+    visual.innerHTML=state==='success'
+      ? '<span class="manual-success-check" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none"><circle cx="32" cy="32" r="28"></circle><path d="M20 33.5 28.5 42 45 24.5"></path></svg></span>'
+      : '<span></span><span></span><span></span>';
+  }
   function showWaiting(p){
-    if(p)payment=p;setStep('waiting');showModal();
+    if(p)payment=p;setStep('waiting');showModal();setWaitingVisual('waiting');
     $('manualWaitingReference').textContent=`Reference ${payment?.id||'—'}`;
     $('manualWaitingTitle').textContent='Waiting for manual confirmation';
     $('manualWaitingCopy').textContent='Your receipt has been sent for review. Your CallFocus balance will update automatically as soon as the payment is approved.';
+    const checkBtn=$('manualCheckStatusBtn'),backBtn=$('manualBackHomeBtn');
+    successMode=false;
+    if(checkBtn){checkBtn.textContent='Keep waiting here';checkBtn.disabled=false;checkBtn.classList.remove('hidden');}
+    if(backBtn){backBtn.textContent='Back to home';backBtn.disabled=false;backBtn.classList.remove('hidden');}
     updateInline(payment);
   }
   function approved(p){
-    clearInterval(pollTimer);pollTimer=null;saveActive('');updateInline(null);
-    $('manualWaitingTitle').textContent='Payment approved';$('manualWaitingCopy').textContent=`${creditsText(p.credits)} have been added to your CallFocus balance.`;
-    $('manualCheckStatusBtn').textContent='Approved';$('manualCheckStatusBtn').disabled=true;
+    clearInterval(pollTimer);pollTimer=null;saveActive('');updateInline(null);showWaiting(p);setWaitingVisual('success');
+    $('manualWaitingTitle').textContent='Payment confirmed';$('manualWaitingCopy').textContent=`${creditsText(p.credits)} have been added to your CallFocus balance.`;
+    $('manualWaitingReference').textContent='Redirecting you to your credits page…';
+    const checkBtn=$('manualCheckStatusBtn'),backBtn=$('manualBackHomeBtn');
+    successMode=true;
+    if(checkBtn){checkBtn.textContent='Payment confirmed';checkBtn.disabled=true;}
+    if(backBtn){backBtn.textContent='Return now';backBtn.disabled=false;}
     try{window.CallFocusPaystack?.refreshWallet?.({quiet:true});}catch{}
     window.toast?.(`${creditsText(p.credits)} added to your balance`);
-    // Let the customer see the approval confirmation briefly, then return to Home.
     setTimeout(()=>{
       hideModal();
-      try{window.showView?.('home');window.scrollTo({top:0,left:0,behavior:'auto'});}
-      catch{location.href='/';}
-    },1400);
+      try{window.showView?.('credits',false);window.scrollTo({top:0,left:0,behavior:'auto'});}
+      catch{location.href='/credits';}
+    },2400);
   }
   function rejected(p){
-    clearInterval(pollTimer);pollTimer=null;saveActive('');updateInline(null);
+    clearInterval(pollTimer);pollTimer=null;saveActive('');updateInline(null);successMode=false;
     $('manualWaitingTitle').textContent='Payment needs attention';$('manualWaitingCopy').textContent=p.rejectionReason||'This payment was not approved. Contact support if you believe this is a mistake.';window.toast?.('Manual payment was not approved.');
     $('manualCheckStatusBtn').textContent='Not approved';$('manualCheckStatusBtn').disabled=true;
   }
@@ -5048,7 +5065,7 @@ ${approvedPatterns}
     catch(err){if(!quiet)window.toast?.(err?.message||'Could not check payment status.');return null;}
   }
   function startPolling(){clearInterval(pollTimer);pollTimer=setInterval(()=>{if(document.visibilityState==='visible')checkStatus({quiet:true});},5000);}
-  function backHome(){hideModal();try{window.showView?.('home');}catch{location.href='/';}startPolling();}
+  function backHome(){hideModal();if(successMode){try{window.showView?.('credits',false);window.scrollTo({top:0,left:0,behavior:'auto'});}catch{location.href='/credits';}return;}try{window.showView?.('home');}catch{location.href='/';}startPolling();}
   async function copyAccount(){const value=bank?.accountNumber||$('manualAccountNumber')?.textContent||'';if(!value||value==='—')return;try{await navigator.clipboard.writeText(value);window.toast?.('Account number copied');}catch{window.toast?.('Could not copy account number');}}
   function viewActive(){if(!payment?.id&&activeId())checkStatus({quiet:false,open:true});else if(payment?.status==='pending_confirmation')showWaiting(payment);}
   function closeTop(){if(payment?.status==='pending_confirmation'){hideModal();startPolling();}else cancel();}

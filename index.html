@@ -17,14 +17,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=13.2" />
+  <link rel="stylesheet" href="/callfocus.css?v=14.1" />
 </head>
 <body data-cf-document-view="home">
   <div class="app-root home-page" id="pageRoot">
     <header class="site-header" id="siteHeader">
       <div class="container header-inner">
         <a class="brand" href="#home" aria-label="CallFocus home">
-          <span class="brand-logo-shell" aria-hidden="true"><img class="brand-logo-image" src="./logo.png" alt="" /></span>
+          <span class="brand-logo-shell" aria-hidden="true"><img class="brand-logo-image" src="./logo.png?v=13.8" alt="" /></span>
           <span class="brand-copy">
             <strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong>
             <small>Conversation continuity, simplified.</small>
@@ -339,7 +339,7 @@
 
             <div class="voice-note-result hidden" id="voiceNoteResult">
               <div class="voice-note-result-top">
-                <span class="voice-note-result-avatar"><img src="./logo.png" alt="" /></span>
+                <span class="voice-note-result-avatar"><img src="./logo.png?v=13.8" alt="" /></span>
                 <div><strong>Voice note ready</strong><small id="voiceNoteResultMeta">Female voice</small></div>
                 <span class="ai-voice-pill">AI-generated voice</span>
               </div>
@@ -502,7 +502,7 @@
 
     <footer class="premium-footer">
       <div class="container footer-inner">
-        <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" src="./logo.png" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span></div></div>
+        <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" src="./logo.png?v=13.8" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span></div></div>
         <div class="footer-links"><button data-route="home">Home</button><button data-route="recent">Recent Calls</button><button data-route="profile">My Profile</button><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/support">Support</a></div>
       </div>
     </footer>
@@ -660,7 +660,7 @@
       </div>
 
       <div class="hidden" id="manualPaymentWaitingStep">
-        <div class="manual-waiting-visual"><span></span><span></span><span></span></div>
+        <div class="manual-waiting-visual" id="manualWaitingVisual"><span></span><span></span><span></span></div>
         <div class="manual-waiting-copy"><span class="section-eyebrow">Payment submitted</span><h3 id="manualWaitingTitle">Waiting for manual confirmation</h3><p id="manualWaitingCopy">Your receipt has been sent for review. Your CallFocus balance will update automatically as soon as the payment is approved.</p><small id="manualWaitingReference">Reference —</small></div>
         <div class="manual-payment-actions"><button class="btn btn-primary full" id="manualCheckStatusBtn" type="button">Keep waiting here</button><button class="btn btn-ghost full" id="manualBackHomeBtn" type="button">Back to home</button></div>
       </div>
@@ -712,6 +712,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=13.7"></script>
+  <script src="/callfocus.js?v=14.1"></script>
 </body>
 </html>
