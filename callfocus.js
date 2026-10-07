@@ -3722,7 +3722,9 @@ ${approvedPatterns}
     }catch{}
     if(save){ try{if(typeof saveData==='function')saveData();}catch{} }
     try{window.CallFocusCredits?.render?.();}catch{}
-    try{if(typeof renderAccountUI==='function')renderAccountUI();if(typeof renderWorkspace==='function')renderWorkspace();}catch{}
+    // Wallet polling must never rebuild customer forms. Repainting the whole workspace
+    // here was erasing unsent repeat-call details every time the balance refreshed.
+    try{if(typeof renderAccountUI==='function')renderAccountUI();}catch{}
     renderDva(wallet?.paystackDva||null);
   }
 
@@ -3899,7 +3901,9 @@ ${approvedPatterns}
     data.wallet=wallet;
     try{ if(typeof writeJSON==='function'&&typeof accountDataKey==='function') writeJSON(accountDataKey(account.id),data); }catch{}
     try{ window.CallFocusCredits?.render?.(); }catch{}
-    try{ if(typeof renderAccountUI==='function')renderAccountUI(); if(typeof renderWorkspace==='function')renderWorkspace(); }catch{}
+    // Recovery updates the balance only. Do not rebuild Recent Calls while someone is
+    // composing the next call, otherwise Safari replaces the textarea mid-entry.
+    try{ if(typeof renderAccountUI==='function')renderAccountUI(); }catch{}
   }
 
   async function recoverRecent({quiet=true,force=false}={}){
@@ -5352,4 +5356,126 @@ ${approvedPatterns}
 
   // The markup exists on every customer route, so initialize once even before a call starts.
   ensureUi();
+})();
+
+
+/* ===== CallFocus V14.7 — repeat-call draft stability ===== */
+(()=>{
+  const PREFIX='callfocus_repeat_draft_v147:';
+  const IDS=[
+    'repeatTopic','repeatAboutSelf','repeatAboutCaller','repeatDynamicsMode','repeatDynamics',
+    'repeatARegion','repeatATimezone','repeatBRegion','repeatBTimezone','repeatVoiceGender',
+    'repeatCallLanguage','repeatOpeningMode','repeatOpeningCustom'
+  ];
+
+  function threadKey(threadId){
+    const aid=(typeof account!=='undefined'&&account?.id)?String(account.id):'guest';
+    return `${PREFIX}${aid}:${String(threadId||'')}`;
+  }
+  function readDraft(threadId){
+    if(!threadId)return null;
+    try{const raw=sessionStorage.getItem(threadKey(threadId));return raw?JSON.parse(raw):null}catch{return null}
+  }
+  function writeDraft(threadId,draft){
+    if(!threadId||!draft)return;
+    try{sessionStorage.setItem(threadKey(threadId),JSON.stringify(draft))}catch{}
+  }
+  function clearDraft(threadId){try{sessionStorage.removeItem(threadKey(threadId))}catch{}}
+
+  function capture(threadId=typeof selectedThreadId!=='undefined'?selectedThreadId:null){
+    if(!threadId)return null;
+    const panel=document.getElementById('threadDetailPanel');
+    const topic=document.getElementById('repeatTopic');
+    if(!panel||!topic)return null;
+    const fields={};
+    for(const id of IDS){
+      const el=document.getElementById(id); if(!el)continue;
+      fields[id]=el.value;
+    }
+    const active=document.activeElement;
+    const focus=(active&&IDS.includes(active.id))?{
+      id:active.id,
+      start:typeof active.selectionStart==='number'?active.selectionStart:null,
+      end:typeof active.selectionEnd==='number'?active.selectionEnd:null
+    }:null;
+    const scroller=panel.querySelector('.cf-chat-scroll');
+    const draft={fields,focus,scrollTop:scroller?.scrollTop||0,updatedAt:Date.now()};
+    writeDraft(threadId,draft);
+    return draft;
+  }
+
+  function restore(threadId,{restoreFocus=false}={}){
+    const draft=readDraft(threadId); if(!draft)return;
+    for(const [id,value] of Object.entries(draft.fields||{})){
+      const el=document.getElementById(id); if(!el)continue;
+      // Only restore unsent customer edits. Selects/hidden inputs are included so voice,
+      // language and opening choices stay consistent with the typed topic.
+      el.value=value??'';
+      if(id==='repeatVoiceGender'){
+        document.querySelectorAll('[data-repeat-voice]').forEach(btn=>btn.classList.toggle('active',btn.dataset.repeatVoice===el.value));
+      }
+      if(id==='repeatCallLanguage'){
+        const label=document.getElementById('repeatLanguageCurrent'); if(label)label.textContent=el.value||'English';
+      }
+    }
+    const scroller=document.getElementById('threadDetailPanel')?.querySelector('.cf-chat-scroll');
+    if(scroller)scroller.scrollTop=Number(draft.scrollTop)||0;
+    if(restoreFocus&&draft.focus?.id){
+      const el=document.getElementById(draft.focus.id);
+      if(el){
+        try{el.focus({preventScroll:true});}catch{try{el.focus()}catch{}}
+        if(typeof draft.focus.start==='number'&&typeof el.setSelectionRange==='function'){
+          try{el.setSelectionRange(draft.focus.start,draft.focus.end??draft.focus.start)}catch{}
+        }
+      }
+    }
+  }
+
+  // Persist changes immediately. This protects the draft even if another background account
+  // update or iOS Safari lifecycle event causes a redraw.
+  document.addEventListener('input',e=>{
+    if(!IDS.includes(e.target?.id))return;
+    capture();
+  },true);
+  document.addEventListener('change',e=>{
+    if(!IDS.includes(e.target?.id))return;
+    capture();
+  },true);
+
+  // Wrap the final renderer, after all earlier CallFocus patches, so no later compatibility
+  // layer can erase an unsent next-call draft.
+  if(typeof renderThreadDetail==='function'){
+    const previousRender=renderThreadDetail;
+    renderThreadDetail=function(id){
+      const oldId=typeof selectedThreadId!=='undefined'?selectedThreadId:null;
+      const active=document.activeElement;
+      const wasEditing=!!(active&&IDS.includes(active.id));
+      if(oldId)capture(oldId);
+      const result=previousRender(id);
+      restore(id,{restoreFocus:wasEditing&&String(oldId)===String(id)});
+      return result;
+    };
+  }
+
+  // Starting a valid call consumes today's draft. Validation errors leave it intact.
+  if(typeof prepareRepeatCall==='function'){
+    const previousPrepare=prepareRepeatCall;
+    prepareRepeatCall=function(threadId){
+      capture(threadId);
+      const result=previousPrepare(threadId);
+      if(result?.call&&!result?.error)clearDraft(threadId);
+      return result;
+    };
+  }
+
+  // Restore the current draft when Safari resumes the tab without forcing a page redraw.
+  window.addEventListener('pageshow',()=>{
+    if(typeof activeView!=='undefined'&&activeView==='recent'&&typeof selectedThreadId!=='undefined'&&selectedThreadId){
+      setTimeout(()=>restore(selectedThreadId),0);
+    }
+  });
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='hidden')capture();
+    else if(typeof activeView!=='undefined'&&activeView==='recent'&&typeof selectedThreadId!=='undefined'&&selectedThreadId)setTimeout(()=>restore(selectedThreadId),0);
+  });
 })();

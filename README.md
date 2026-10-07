@@ -1,1 +1,1 @@
-# CallFocus V14.6 — iOS Safari navigation stability
+# CallFocus V14.7 — Repeat-call draft stability
