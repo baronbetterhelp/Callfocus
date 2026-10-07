@@ -1,8 +1,11 @@
-# CallFocus V16.1 — Mobile New-Call Safe Area
+# CallFocus V16.1 — New Call Modal Spacing Only
 
-- Moves the Completely New Call sheet below the iPhone/Android system status area on mobile and installed web-app layouts.
-- Keeps the close button fully visible and tappable instead of allowing the time, Dynamic Island/status icons, or battery indicator to cover it.
-- Matches the intended floating-sheet appearance with a visible gap above the rounded modal.
-- Constrains the sheet height to the remaining viewport so the form itself remains scrollable and the bottom controls remain reachable.
-- Uses `env(safe-area-inset-top)` and `env(safe-area-inset-bottom)` with practical fallbacks for browsers/webviews that report zero insets.
-- No call logic, form data, credits, payments, authentication, locations, or admin behavior changed.
+This build intentionally changes only the mobile layout of the **Completely New Call** modal.
+
+- Adds the larger top breathing room shown in the approved reference image.
+- Keeps the close button, title, explanation, and numbered form cards in the same design, shifted down as one unit.
+- Does not change the website header.
+- Does not change input or textarea font sizing or focus behavior.
+- Does not change call logic, payments, credits, navigation, locations, voices, dynamics, or any other website section.
+
+The customer HTML files are only cache-busted from `callfocus.css?v=16.0` to `callfocus.css?v=16.1` so Safari loads the one CSS adjustment immediately.
