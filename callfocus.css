@@ -2462,10 +2462,8 @@ html.cf-route-changing .page-view.active{opacity:.86;transition:opacity .14s eas
   html[data-theme="pearl"] .app-page{min-height:calc(100vh - 78px);padding:20px 0 68px!important}
   html[data-theme="pearl"] .app-page-head,html[data-theme="pearl"] .credit-page-head,html[data-theme="pearl"] .voice-notes-head,html[data-theme="pearl"] .avatar-page-head{padding:18px!important;border-radius:23px!important;gap:12px!important}.app-page-head h1,.credit-page-head h1,.voice-notes-head h1,.avatar-page-head h1{font-size:34px!important;letter-spacing:-1.8px!important}.app-page-head p,.credit-page-head p,.voice-notes-head p,.avatar-page-head p{font-size:12.5px!important;line-height:1.55!important}
   html[data-theme="pearl"] .cf-route-back,html[data-theme="pearl"] .credit-back-btn,html[data-theme="pearl"] .voice-notes-back,html[data-theme="pearl"] .avatar-back-btn{width:44px;height:44px;flex-basis:44px;border-radius:14px!important}
-  /* Keep mobile/PWA modal controls below iPhone and Android status bars/notches. */
-  html[data-theme="pearl"] .modal-backdrop{--cf-mobile-modal-top-gap:max(62px,calc(env(safe-area-inset-top) + 14px));padding:var(--cf-mobile-modal-top-gap) 0 0!important;align-items:end!important;backdrop-filter:blur(8px)!important;-webkit-backdrop-filter:blur(8px)!important;overscroll-behavior:contain}
-  html[data-theme="pearl"] .modal{width:100%!important;max-width:none!important;max-height:calc(100dvh - var(--cf-mobile-modal-top-gap))!important;border-radius:28px 28px 0 0!important;padding:18px!important;overscroll-behavior:contain}.modal-head{top:-18px!important;margin:-18px -18px 14px!important;padding:18px 18px 14px!important;border-radius:28px 28px 0 0!important}.modal-head h2{font-size:25px!important}.modal-head p{font-size:10px!important}
-  html[data-theme="pearl"] #newCallModal .modal-close{position:relative;z-index:30;touch-action:manipulation}
+  html[data-theme="pearl"] .modal-backdrop{padding:0!important;align-items:end!important;backdrop-filter:blur(8px)!important;-webkit-backdrop-filter:blur(8px)!important}
+  html[data-theme="pearl"] .modal{width:100%!important;max-width:none!important;max-height:94dvh!important;border-radius:28px 28px 0 0!important;padding:18px!important}.modal-head{top:-18px!important;margin:-18px -18px 14px!important;padding:18px 18px 14px!important;border-radius:28px 28px 0 0!important}.modal-head h2{font-size:25px!important}.modal-head p{font-size:10px!important}
   html[data-theme="pearl"] .field-section{grid-template-columns:1fr!important;padding:14px!important;border-radius:18px!important}.field-number{width:36px!important;height:36px!important}.call-form-footer{bottom:-18px!important;margin:2px -18px -18px!important;padding:13px 18px calc(13px + env(safe-area-inset-bottom))!important}
   html[data-theme="pearl"] .voice-note-chat{border-radius:24px!important;min-height:0!important}.voice-note-composer{padding:16px!important}.voice-note-mode-btn{min-height:52px!important;padding:10px!important}.voice-note-empty{min-height:220px!important;padding:34px 18px!important}
   html[data-theme="pearl"] .credit-purchase-section{padding:14px!important;border-radius:23px!important}.credit-balance-hero{border-radius:21px!important}.credit-package{border-radius:15px!important}.credit-custom-card{border-radius:16px!important}
@@ -2495,4 +2493,39 @@ html.cf-visuals-paused *,html.cf-page-hidden *{animation-play-state:paused!impor
   .cf-boot-ring::before,.cf-boot-mark img,.cf-boot-progress i,.page-view.active{animation:none!important}
   .cf-boot-loader{transition:none!important;animation:none!important}
   html[data-theme="pearl"] *{scroll-behavior:auto!important}
+}
+
+
+/* V16.1 — mobile new-call modal safe-area positioning
+   Keep the entire new-call sheet below iPhone/Android system status UI so the close control is always tappable. */
+@media(max-width:820px){
+  #newCallModal.modal-backdrop{
+    --cf-new-call-top-gap:max(74px,calc(env(safe-area-inset-top) + 16px));
+    align-items:start!important;
+    justify-items:stretch!important;
+    padding:var(--cf-new-call-top-gap) 0 max(10px,env(safe-area-inset-bottom))!important;
+    overflow:hidden!important;
+  }
+  #newCallModal .call-form-modal{
+    width:100%!important;
+    max-width:none!important;
+    max-height:calc(100dvh - var(--cf-new-call-top-gap) - max(10px,env(safe-area-inset-bottom)))!important;
+    margin:0!important;
+    border-radius:30px 30px 0 0!important;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
+  }
+  #newCallModal .modal-head{
+    border-radius:30px 30px 0 0!important;
+  }
+  #newCallModal .modal-close{
+    position:relative;
+    z-index:30;
+    touch-action:manipulation;
+  }
+}
+@media(max-width:460px){
+  #newCallModal.modal-backdrop{
+    --cf-new-call-top-gap:max(72px,calc(env(safe-area-inset-top) + 14px));
+  }
 }
