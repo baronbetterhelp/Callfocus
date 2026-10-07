@@ -1,1 +1,1 @@
-# CallFocus V14.5 — Home refresh and Safari resume stability
+# CallFocus V14.6 — iOS Safari navigation stability

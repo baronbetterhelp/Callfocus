@@ -1,45 +1,37 @@
 
-/* ===== CallFocus V14.5 — home reload + Safari resume stability ===== */
+/* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='14.5';
+  const BUILD='14.6';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
 
   try{history.scrollRestoration='manual';}catch{}
 
-  // iOS Safari can restore the old scroll offset after the document has already painted.
-  // Re-assert the front-page position a few times only on the root route.
+  // Keep the root page at the hero after an actual root load without continuously fighting Safari.
   const settleRoot=()=>{
     if(!atRoot())return;
     forceTop();
-    requestAnimationFrame(()=>{forceTop();requestAnimationFrame(forceTop)});
-    setTimeout(forceTop,90);
-    setTimeout(forceTop,280);
+    setTimeout(forceTop,80);
   };
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',settleRoot,{once:true});
   else settleRoot();
   window.addEventListener('load',settleRoot,{once:true});
-  window.addEventListener('pageshow',settleRoot);
 
-  // Pause decorative infinite animations while Safari has the tab backgrounded.
+  // CallFocus does not require offline HTML. Old service-worker navigation interception can
+  // interact badly with iOS Safari back/forward restoration, so retire existing registrations.
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.getRegistrations?.().then(regs=>Promise.all(regs.map(r=>r.unregister().catch(()=>false)))).catch(()=>{});
+  }
+  if('caches' in window){
+    caches.keys().then(keys=>Promise.all(keys.filter(k=>/callfocus/i.test(k)).map(k=>caches.delete(k)))).catch(()=>{});
+  }
+
+  // Only pause decorative animations when backgrounded. Do not refresh or mutate history on resume.
   const syncVisibility=()=>document.documentElement.classList.toggle('cf-page-hidden',document.visibilityState!=='visible');
   document.addEventListener('visibilitychange',syncVisibility,{passive:true});
   syncVisibility();
 
-  // Ask the service worker for updates after a long background period. This is intentionally
-  // non-destructive: it does not reload a user who may be filling a form or in a call.
-  let hiddenAt=0;
-  document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='hidden'){hiddenAt=Date.now();return;}
-    const away=hiddenAt?Date.now()-hiddenAt:0; hiddenAt=0;
-    if(away>5*60*1000 && 'serviceWorker' in navigator){
-      navigator.serviceWorker.getRegistration().then(r=>r?.update?.()).catch(()=>{});
-    }
-    if(atRoot())settleRoot();
-  });
-
-  // Publish the build for diagnostics without exposing any secret or account data.
   window.CallFocusBuild=BUILD;
 })();
 
@@ -413,7 +405,7 @@ function bind(){
 
 initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminLabels(); refreshPublicConfig(); renderWorkspace(); motionInit(); showView('home',false);
 
-if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{})); }
+/* V14.6: service worker retired for iOS Safari navigation stability. */
 
 ;
 
@@ -4152,12 +4144,25 @@ ${approvedPatterns}
     }finally{applying=false;}
   }
 
-  window.addEventListener('popstate',apply);
+  let popTimer=0;
+  window.addEventListener('popstate',()=>{
+    clearTimeout(popTimer);
+    popTimer=setTimeout(()=>{ if(!applying) apply(); },0);
+  });
+  function safeHome(){
+    applying=true;
+    try{ oldShow('home',false); setUrl('/',true); ensureBack(); window.scrollTo({top:0,left:0,behavior:'auto'}); }
+    finally{ applying=false; }
+  }
+
   window.addEventListener('click',e=>{
     const back=e.target.closest?.('[data-cf-route-back]');
     if(!back)return;
     e.preventDefault(); e.stopImmediatePropagation();
-    if(history.length>1) history.back(); else {setUrl('/',true);apply();}
+    // Do not use history.back() for CallFocus page-back controls. On iOS Safari a route
+    // restored from bfcache can crash/reload repeatedly. These controls always mean
+    // "return to CallFocus Home", so make that transition deterministic.
+    safeHome();
   },true);
 
   ensureBack(); apply();
