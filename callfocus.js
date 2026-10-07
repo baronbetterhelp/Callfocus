@@ -108,7 +108,7 @@ const DYNAMICS = {
 };
 const ADMIN_DEFAULTS = {
   serverOnline:true,
-  serverMessage:'Server not active right now. Please try again soon.',
+  serverMessage:'Calls are temporarily unavailable. Please try again soon.',
   maleVoice:'cedar',
   femaleVoice:'marin',
   voiceNoteMaleVoice:'cedar',
@@ -195,7 +195,7 @@ function applyAdminLabels(){
   const maleLabel=admin.maleVoiceLabel||admin.maleVoice; const femaleLabel=admin.femaleVoiceLabel||admin.femaleVoice;
   $('maleVoiceLabel').textContent = maleLabel;
   $('femaleVoiceLabel').textContent = femaleLabel;
-  if($('homeVoicePair')) $('homeVoicePair').textContent = `${maleLabel} / ${femaleLabel}`;
+  if($('homeVoicePair')) $('homeVoicePair').textContent = 'Male / Female';
 }
 
 function motionInit(){
@@ -433,26 +433,26 @@ function buildInstructions(c){
 }
 
 async function startCall(call){
-  closeModal('newCallModal'); document.body.style.overflow='hidden'; $('callScreen').classList.remove('hidden'); $('liveCallerName').textContent=call.callerName; $('liveAvatar').textContent=initials(call.callerName); $('liveRegion').textContent=[call.callerB.region,call.callerB.timezone].filter(Boolean).join(' · '); $('liveStatus').textContent='Connecting to server…'; $('liveTranscript').textContent=''; $('liveTranscript').classList.remove('error-visible'); $('liveCaption').textContent='Preparing realtime connection…'; $('callTimer').textContent='00:00'; $('callMoreTitle').textContent=call.title||call.callerName; $('callMoreTopic').textContent=call.topic||'No new topic supplied'; $('callMoreConnection').textContent='Connecting'; $('callMorePanel').classList.add('hidden'); live.current=call; live.transcript=''; live.connected=false; live.graceful=false; clearTimeout(live.gracefulTimer); resetCallControls();
+  closeModal('newCallModal'); document.body.style.overflow='hidden'; $('callScreen').classList.remove('hidden'); $('liveCallerName').textContent=call.callerName; $('liveAvatar').textContent=initials(call.callerName); $('liveRegion').textContent=[call.callerB.region,call.callerB.timezone].filter(Boolean).join(' · '); $('liveStatus').textContent='Connecting call…'; $('liveTranscript').textContent=''; $('liveTranscript').classList.remove('error-visible'); $('liveCaption').textContent='Preparing call…'; $('callTimer').textContent='00:00'; $('callMoreTitle').textContent=call.title||call.callerName; $('callMoreTopic').textContent=call.topic||'No new topic supplied'; $('callMoreConnection').textContent='Connecting'; $('callMorePanel').classList.add('hidden'); live.current=call; live.transcript=''; live.connected=false; live.graceful=false; clearTimeout(live.gracefulTimer); resetCallControls();
   try{
     const currentAdmin=await refreshPublicConfig();
     call.voice=call.voiceGender==='female'?currentAdmin.femaleVoice:currentAdmin.maleVoice; call.model=currentAdmin.model; call.opening=currentAdmin.opening; call.speakFirst=currentAdmin.speakFirst!==false; call.interruptions=currentAdmin.interruptions!==false;
-    if(currentAdmin.serverOnline===false){ const msg=currentAdmin.serverMessage||'Server not active right now. Please try again soon.'; $('liveStatus').textContent='Disconnected from server'; $('liveCaption').textContent=msg; $('liveTranscript').textContent=msg; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected'; toast(msg); return; }
-    const stream=await navigator.mediaDevices.getUserMedia({audio:true}); const pc=new RTCPeerConnection(); const dc=pc.createDataChannel('oai-events'); const audio=document.createElement('audio'); audio.autoplay=true;audio.playsInline=true; live.stream=stream;live.pc=pc;live.dc=dc;live.audio=audio; stream.getAudioTracks().forEach(t=>pc.addTrack(t,stream)); pc.ontrack=e=>{audio.srcObject=e.streams[0];audio.play().catch(()=>{})}; dc.onopen=()=>{$('liveCaption').textContent='Voice channel connected.'}; dc.onmessage=e=>handleRealtimeEvent(e.data); dc.onerror=()=>{$('liveCaption').textContent='Voice data channel error.'};
+    if(currentAdmin.serverOnline===false){ const msg=currentAdmin.serverMessage||'Calls are temporarily unavailable. Please try again soon.'; $('liveStatus').textContent='Call unavailable'; $('liveCaption').textContent=msg; $('liveTranscript').textContent=msg; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected'; toast(msg); return; }
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true}); const pc=new RTCPeerConnection(); const dc=pc.createDataChannel('oai-events'); const audio=document.createElement('audio'); audio.autoplay=true;audio.playsInline=true; live.stream=stream;live.pc=pc;live.dc=dc;live.audio=audio; stream.getAudioTracks().forEach(t=>pc.addTrack(t,stream)); pc.ontrack=e=>{audio.srcObject=e.streams[0];audio.play().catch(()=>{})}; dc.onopen=()=>{$('liveCaption').textContent='Call connected.'}; dc.onmessage=e=>handleRealtimeEvent(e.data); dc.onerror=()=>{$('liveCaption').textContent='Call connection error.'};
     const offer=await pc.createOffer(); await pc.setLocalDescription(offer); await waitForIce(pc); const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,voiceProfile:call.voiceProfile||null,contextInstructions:buildInstructions(call)}})}); const text=await res.text(); if(!res.ok)throw new Error(text||'Realtime session failed'); call.speakFirst=res.headers.get('X-CallFocus-Speak-First')!=='0'; try{call.opening=decodeURIComponent(res.headers.get('X-CallFocus-Opening')||call.opening||'')}catch{} await pc.setRemoteDescription({type:'answer',sdp:text});
-  }catch(err){ console.error(err); const raw=String(err?.message||err||'').toLowerCase(); const inactive=raw.includes('server not active')||raw.includes('credit_balance_exhausted')||raw.includes('insufficient_quota')||raw.includes('no credits')||raw.includes('quota'); $('liveStatus').textContent='Disconnected from server'; $('liveCaption').textContent=inactive?'Server not active right now. Please try again soon.':'Server unavailable. Try again soon.'; $('liveTranscript').textContent=inactive?'Server not active right now. Please try again soon.':'We could not connect this call right now. Please try again soon.'; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected'; toast(inactive?'Server not active right now. Please try again soon.':'Server unavailable. Try again soon.'); }
+  }catch(err){ console.error(err); const raw=String(err?.message||err||'').toLowerCase(); const inactive=raw.includes('server not active')||raw.includes('credit_balance_exhausted')||raw.includes('insufficient_quota')||raw.includes('no credits')||raw.includes('quota'); $('liveStatus').textContent='Call unavailable'; $('liveCaption').textContent=inactive?'Calls are temporarily unavailable. Please try again soon.':'Call service unavailable. Please try again soon.'; $('liveTranscript').textContent=inactive?'Calls are temporarily unavailable. Please try again soon.':'We could not connect this call right now. Please try again soon.'; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected'; toast(inactive?'Calls are temporarily unavailable. Please try again soon.':'Call service unavailable. Please try again soon.'); }
 }
 function waitForIce(pc){ if(pc.iceGatheringState==='complete')return Promise.resolve(); return new Promise(resolve=>{const f=()=>{if(pc.iceGatheringState==='complete'){pc.removeEventListener('icegatheringstatechange',f);resolve();}};pc.addEventListener('icegatheringstatechange',f);setTimeout(resolve,2500);}); }
 function handleRealtimeEvent(raw){
   let e; try{e=JSON.parse(raw)}catch{return}
-  if(e.type==='session.created'){ live.connected=true; $('liveTranscript').classList.remove('error-visible'); $('liveStatus').textContent='Connected to server'; $('liveCaption').textContent='Call started.'; $('callMoreConnection').textContent='Connected'; startTimer(); if(live.current?.speakFirst&&live.dc?.readyState==='open')setTimeout(()=>live.dc.send(JSON.stringify({type:'response.create',response:{instructions:`Begin the call now. ${live.current.opening}`}})),140); }
-  if(e.type==='input_audio_buffer.speech_started')$('liveStatus').textContent='Connected to server · Listening';
-  if(e.type==='input_audio_buffer.speech_stopped')$('liveStatus').textContent='Connected to server · Thinking';
-  if(e.type==='response.created')$('liveStatus').textContent='Connected to server · Speaking';
-  if(e.type==='response.done'){ $('liveStatus').textContent=live.held?'Connected to server · On hold':'Connected to server'; if(live.graceful){ $('liveCaption').textContent='Natural call ending delivered. Ending call…'; live.graceful=false; clearTimeout(live.gracefulTimer); live.gracefulTimer=setTimeout(()=>cleanupCall(true),5000); } }
+  if(e.type==='session.created'){ live.connected=true; $('liveTranscript').classList.remove('error-visible'); $('liveStatus').textContent='Call connected'; $('liveCaption').textContent='Call started.'; $('callMoreConnection').textContent='Connected'; startTimer(); if(live.current?.speakFirst&&live.dc?.readyState==='open')setTimeout(()=>live.dc.send(JSON.stringify({type:'response.create',response:{instructions:`Begin the call now. ${live.current.opening}`}})),140); }
+  if(e.type==='input_audio_buffer.speech_started')$('liveStatus').textContent='Listening';
+  if(e.type==='input_audio_buffer.speech_stopped')$('liveStatus').textContent='Getting ready to respond…';
+  if(e.type==='response.created')$('liveStatus').textContent='Speaking';
+  if(e.type==='response.done'){ $('liveStatus').textContent=live.held?'On hold':'Call connected'; if(live.graceful){ $('liveCaption').textContent='Natural call ending delivered. Ending call…'; live.graceful=false; clearTimeout(live.gracefulTimer); live.gracefulTimer=setTimeout(()=>cleanupCall(true),5000); } }
   if(e.type==='response.output_audio_transcript.delta'&&e.delta){ live.transcript+=e.delta; }
   if(e.type==='conversation.item.input_audio_transcription.completed'&&e.transcript)$('liveCaption').textContent=`Heard: ${e.transcript}`;
-  if(e.type==='error'){ $('liveStatus').textContent='Disconnected from server'; $('liveCaption').textContent='Server unavailable. Try again soon.'; $('liveTranscript').textContent='Server unavailable. Try again soon.'; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected'; }
+  if(e.type==='error'){ $('liveStatus').textContent='Call unavailable'; $('liveCaption').textContent='Call service unavailable. Please try again soon.'; $('liveTranscript').textContent='Call service unavailable. Please try again soon.'; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected'; }
 }
 function startTimer(){ clearInterval(live.timer);live.seconds=0;live.timer=setInterval(()=>{const t=fmtDuration(++live.seconds);$('callTimer').textContent=t;$('activeCallTime').textContent=t},1000); }
 function resetCallControls(){ live.muted=false;live.speakerOn=true;live.held=false;live.moreOpen=false;['muteBtn','holdBtn'].forEach(id=>$(id).classList.remove('active')); $('speakerBtn').classList.add('active'); $('moreBtn').classList.remove('active'); $('callMorePanel').classList.add('hidden'); }
@@ -476,7 +476,7 @@ function bind(){
   $('addCallerBtn').onclick=()=>openCallerModal(); $('callerForm').onsubmit=saveCallerFromForm; $('saveProfileBtn').onclick=saveProfile; $('settingsEditProfileBtn').onclick=()=>showView('profile'); $('deleteAccountBtn').onclick=()=>{if(!account)return; $('deleteConfirmInput').value='';openModal('deleteAccountModal')}; $('confirmDeleteAccountBtn').onclick=deleteAccount;
   $('muteBtn').onclick=()=>{live.muted=!live.muted;live.stream?.getAudioTracks().forEach(t=>t.enabled=!live.muted&&!live.held);$('muteBtn').classList.toggle('active',live.muted);$('liveCaption').textContent=live.muted?'Microphone muted.':'Microphone live.'};
   $('speakerBtn').onclick=()=>{live.speakerOn=!live.speakerOn;if(live.audio)live.audio.muted=!live.speakerOn;$('speakerBtn').classList.toggle('active',live.speakerOn);$('liveCaption').textContent=live.speakerOn?'Speaker audio on.':'Speaker audio off.'};
-  $('holdBtn').onclick=()=>{live.held=!live.held;live.stream?.getAudioTracks().forEach(t=>t.enabled=!live.held&&!live.muted);$('holdBtn').classList.toggle('active',live.held);$('liveStatus').textContent=live.held?'Connected to server · On hold':'Connected to server';$('liveCaption').textContent=live.held?'Call is on hold on your side.':'Hold released.'};
+  $('holdBtn').onclick=()=>{live.held=!live.held;live.stream?.getAudioTracks().forEach(t=>t.enabled=!live.held&&!live.muted);$('holdBtn').classList.toggle('active',live.held);$('liveStatus').textContent=live.held?'On hold':'Call connected';$('liveCaption').textContent=live.held?'Call is on hold on your side.':'Hold released.'};
   $('moreBtn').onclick=()=>{live.moreOpen=!live.moreOpen;$('moreBtn').classList.toggle('active',live.moreOpen);$('callMorePanel').classList.toggle('hidden',!live.moreOpen);};
   $('restoreCallBtn').onclick=()=>{$('activeCallBar').classList.add('hidden');$('callScreen').classList.remove('hidden');document.body.style.overflow='hidden';live.minimized=false;};
   $('activeCallEndBtn').onclick=()=>cleanupCall(true);
@@ -600,7 +600,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
   function showReadyGate(){
     live.started = false;
     if(live.stream) live.stream.getAudioTracks().forEach(t=>t.enabled=false);
-    $('liveStatus').textContent = 'Connected to server · Ready';
+    $('liveStatus').textContent = 'Ready to start';
     $('liveCaption').textContent = 'Connected. Tap Start Call when you’re ready.';
     $('callMoreConnection').textContent = 'Connected · Ready';
     $('liveStartCallBtn')?.classList.remove('hidden');
@@ -617,19 +617,19 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     }
     if(!live.started){
       if(e.type==='error'){
-        $('liveStatus').textContent='Disconnected from server';
-        $('liveCaption').textContent='Server unavailable. Try again soon.';
-        $('liveTranscript').textContent='Server unavailable. Try again soon.';
+        $('liveStatus').textContent='Call unavailable';
+        $('liveCaption').textContent='Call service unavailable. Please try again soon.';
+        $('liveTranscript').textContent='Call service unavailable. Please try again soon.';
         $('liveTranscript').classList.add('error-visible');
         $('callMoreConnection').textContent='Disconnected';
       }
       return;
     }
-    if(e.type==='input_audio_buffer.speech_started')$('liveStatus').textContent='Connected to server · Listening';
-    if(e.type==='input_audio_buffer.speech_stopped')$('liveStatus').textContent='Connected to server · Thinking';
-    if(e.type==='response.created')$('liveStatus').textContent='Connected to server · Speaking';
+    if(e.type==='input_audio_buffer.speech_started')$('liveStatus').textContent='Listening';
+    if(e.type==='input_audio_buffer.speech_stopped')$('liveStatus').textContent='Getting ready to respond…';
+    if(e.type==='response.created')$('liveStatus').textContent='Speaking';
     if(e.type==='response.done'){
-      $('liveStatus').textContent=live.held?'Connected to server · On hold':'Connected to server';
+      $('liveStatus').textContent=live.held?'On hold':'Call connected';
       if(live.graceful){
         $('liveCaption').textContent='Natural call ending delivered. Ending call…';
         live.graceful=false; clearTimeout(live.gracefulTimer); live.gracefulTimer=setTimeout(()=>cleanupCall(true),5000);
@@ -638,19 +638,19 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     if(e.type==='response.output_audio_transcript.delta'&&e.delta){ live.transcript+=e.delta; }
     if(e.type==='conversation.item.input_audio_transcription.completed'&&e.transcript)$('liveCaption').textContent=`Heard: ${e.transcript}`;
     if(e.type==='error'){
-      $('liveStatus').textContent='Disconnected from server'; $('liveCaption').textContent='Server unavailable. Try again soon.'; $('liveTranscript').textContent='Server unavailable. Try again soon.'; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected';
+      $('liveStatus').textContent='Call unavailable'; $('liveCaption').textContent='Call service unavailable. Please try again soon.'; $('liveTranscript').textContent='Call service unavailable. Please try again soon.'; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected';
     }
   };
 
   function beginConversation(){
-    if(!live.connected || live.dc?.readyState!=='open') return toast('Wait for the server to connect first');
+    if(!live.connected || live.dc?.readyState!=='open') return toast('Wait for the call to finish connecting first');
     if(live.started) return;
     live.started = true;
     $('liveStartCallBtn')?.classList.add('hidden');
     $('callScreen')?.classList.remove('awaiting-start');
     if(live.stream) live.stream.getAudioTracks().forEach(t=>t.enabled=!live.muted&&!live.held);
     startTimer();
-    $('liveStatus').textContent='Connected to server';
+    $('liveStatus').textContent='Call connected';
     $('callMoreConnection').textContent='Connected';
     const call=live.current;
     const waitFirst=call?.openingMode==='wait' || call?.speakFirst===false;
@@ -969,7 +969,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     live.started=false;
     live.connected=true;
     if(live.stream) live.stream.getAudioTracks().forEach(t=>t.enabled=false);
-    $('liveStatus').textContent='Connected to server · Ready';
+    $('liveStatus').textContent='Ready to start';
     $('liveCaption').textContent='Connected. Tap Start Call when you are ready.';
     $('callMoreConnection').textContent='Connected · current rules loaded';
     $('liveStartCallBtn')?.classList.remove('hidden');
@@ -983,10 +983,10 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     $('liveCallerName').textContent=call.callerName;
     $('liveAvatar').textContent=initials(call.callerName);
     $('liveRegion').textContent=[call.callerB.region,call.callerB.timezone].filter(Boolean).join(' · ');
-    $('liveStatus').textContent='Connecting to server…';
+    $('liveStatus').textContent='Connecting call…';
     $('liveTranscript').textContent='';
     $('liveTranscript').classList.remove('error-visible');
-    $('liveCaption').textContent='Preparing live voice connection…';
+    $('liveCaption').textContent='Preparing call…';
     $('callTimer').textContent='00:00';
     $('callMoreTitle').textContent=call.title||call.callerName;
     $('callMoreTopic').textContent=call.topic||'No new topic supplied';
@@ -1010,8 +1010,8 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       call.speakFirst=currentAdmin.speakFirst!==false;
       call.interruptions=currentAdmin.interruptions!==false;
       if(currentAdmin.serverOnline===false){
-        const msg=currentAdmin.serverMessage||'Server not active right now. Please try again soon.';
-        $('liveStatus').textContent='Disconnected from server';
+        const msg=currentAdmin.serverMessage||'Calls are temporarily unavailable. Please try again soon.';
+        $('liveStatus').textContent='Call unavailable';
         $('liveCaption').textContent=msg;
         $('liveTranscript').textContent=msg;
         $('liveTranscript').classList.add('error-visible');
@@ -1031,9 +1031,9 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       live.stream=stream; live.pc=pc; live.dc=dc; live.audio=audio;
       stream.getAudioTracks().forEach(t=>pc.addTrack(t,stream));
       pc.ontrack=e=>{audio.srcObject=e.streams[0];audio.play().catch(()=>{})};
-      dc.onopen=()=>{$('liveCaption').textContent='Voice channel connected. Waiting for session…'};
+      dc.onopen=()=>{$('liveCaption').textContent='Call connected. Getting ready…'};
       dc.onmessage=e=>handleRealtimeEvent(e.data);
-      dc.onerror=()=>{$('liveCaption').textContent='Voice connection error.'};
+      dc.onerror=()=>{$('liveCaption').textContent='Call connection error.'};
 
       const offer=await pc.createOffer();
       await pc.setLocalDescription(offer);
@@ -1052,8 +1052,8 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       console.error(err);
       const raw=String(err?.message||err||'').toLowerCase();
       const inactive=raw.includes('server not active')||raw.includes('credit_balance_exhausted')||raw.includes('insufficient_quota')||raw.includes('no credits')||raw.includes('quota');
-      const msg=inactive?'Server not active right now. Please try again soon.':'Server unavailable. Try again soon.';
-      $('liveStatus').textContent='Disconnected from server';
+      const msg=inactive?'Calls are temporarily unavailable. Please try again soon.':'Call service unavailable. Please try again soon.';
+      $('liveStatus').textContent='Call unavailable';
       $('liveCaption').textContent=msg;
       $('liveTranscript').textContent=msg;
       $('liveTranscript').classList.add('error-visible');
@@ -1069,19 +1069,19 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       return;
     }
     if(e.type==='session.input_transcript.delta'){
-      if(live.started) $('liveStatus').textContent='Connected to server · Listening';
+      if(live.started) $('liveStatus').textContent='Listening';
       return;
     }
     if(e.type==='session.output_transcript.delta'){
       if(e.delta){
         live.transcript=(live.transcript||'')+e.delta;
-        if(live.started) $('liveStatus').textContent='Connected to server · Speaking';
+        if(live.started) $('liveStatus').textContent='Speaking';
       }
       return;
     }
     if(e.type==='session.usage.updated'){
       live.liveUsageSeconds=e.usage?.seconds||live.liveUsageSeconds||0;
-      if(live.started && !$('liveStatus').textContent.includes('Speaking')) $('liveStatus').textContent=live.held?'Connected to server · On hold':'Connected to server';
+      if(live.started && !$('liveStatus').textContent.includes('Speaking')) $('liveStatus').textContent=live.held?'On hold':'Call connected';
       return;
     }
     if(e.type==='session.input_audio.muted') return;
@@ -1094,23 +1094,23 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     }
     if(e.type==='error'){
       console.error('GPT-Live error',e);
-      const msg=e.error?.message||'Server unavailable. Try again soon.';
-      $('liveStatus').textContent='Disconnected from server';
-      $('liveCaption').textContent='Server unavailable. Try again soon.';
+      const msg=e.error?.message||'Call service unavailable. Please try again soon.';
+      $('liveStatus').textContent='Call unavailable';
+      $('liveCaption').textContent='Call service unavailable. Please try again soon.';
       $('callMoreConnection').textContent='Disconnected';
       if(msg) console.warn(msg);
     }
   };
 
   function beginLiveConversation(){
-    if(!live.connected||live.dc?.readyState!=='open') return toast('Wait for the server to connect first');
+    if(!live.connected||live.dc?.readyState!=='open') return toast('Wait for the call to finish connecting first');
     if(live.started) return;
     live.started=true;
     $('liveStartCallBtn')?.classList.add('hidden');
     $('callScreen')?.classList.remove('awaiting-start');
     if(live.stream) live.stream.getAudioTracks().forEach(t=>t.enabled=!live.muted&&!live.held);
     startTimer();
-    $('liveStatus').textContent='Connected to server';
+    $('liveStatus').textContent='Call connected';
     $('callMoreConnection').textContent='Connected · current rules loaded';
     const call=live.current;
     const waitFirst=call?.openingMode==='wait'||call?.speakFirst===false;
@@ -1237,7 +1237,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     const failed=cloneCall(call||live.current);
     lastFailedCall=failed;
     live.connected=false; live.started=false;
-    $('liveStatus').textContent='Disconnected from server';
+    $('liveStatus').textContent='Call unavailable';
     $('liveCaption').textContent=msg;
     $('liveTranscript').textContent=msg;
     $('liveTranscript').classList.add('error-visible');
@@ -1297,9 +1297,9 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     $('liveCallerName').textContent=call.callerName;
     $('liveAvatar').textContent=initials(call.callerName);
     $('liveRegion').textContent=[call.callerB.region,call.callerB.timezone].filter(Boolean).join(' · ');
-    $('liveStatus').textContent='Connecting to server…';
+    $('liveStatus').textContent='Connecting call…';
     $('liveTranscript').textContent=''; $('liveTranscript').classList.remove('error-visible');
-    $('liveCaption').textContent='Preparing live voice connection…'; $('callTimer').textContent='00:00';
+    $('liveCaption').textContent='Preparing call…'; $('callTimer').textContent='00:00';
     $('callMoreTitle').textContent=call.title||call.callerName; $('callMoreTopic').textContent=call.topic||'No new topic supplied';
     $('callMoreConnection').textContent='Connecting'; $('callMorePanel').classList.add('hidden'); $('liveStartCallBtn')?.classList.add('hidden');
     live.current=call; live.transcript=''; live.connected=false; live.started=false; live.graceful=false; live.liveUsageSeconds=0; live.seconds=0; resetCallControls();
@@ -1308,7 +1308,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       const currentAdmin=await refreshPublicConfig();
       call.voice=call.voiceGender==='female'?currentAdmin.femaleVoice:currentAdmin.maleVoice;
       call.model='gpt-live-1'; call.opening=currentAdmin.opening; call.speakFirst=currentAdmin.speakFirst!==false; call.interruptions=currentAdmin.interruptions!==false;
-      if(currentAdmin.serverOnline===false) return failCall(call,currentAdmin.serverMessage||'Server not active right now. Please try again soon.','admin_offline');
+      if(currentAdmin.serverOnline===false) return failCall(call,currentAdmin.serverMessage||'Calls are temporarily unavailable. Please try again soon.','admin_offline');
 
       const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
       stream.getAudioTracks().forEach(t=>t.enabled=false);
@@ -1316,8 +1316,8 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       live.stream=stream; live.pc=pc; live.dc=dc; live.audio=audio;
       stream.getAudioTracks().forEach(t=>pc.addTrack(t,stream));
       pc.ontrack=e=>{audio.srcObject=e.streams[0];audio.play().catch(()=>{})};
-      dc.onopen=()=>{$('liveCaption').textContent='Voice channel connected. Waiting for session…'};
-      dc.onmessage=e=>handleRealtimeEvent(e.data); dc.onerror=()=>{$('liveCaption').textContent='Voice connection error.'};
+      dc.onopen=()=>{$('liveCaption').textContent='Call connected. Getting ready…'};
+      dc.onmessage=e=>handleRealtimeEvent(e.data); dc.onerror=()=>{$('liveCaption').textContent='Call connection error.'};
 
       const offer=await pc.createOffer(); await pc.setLocalDescription(offer); await waitForIce(pc);
       const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,voiceProfile:call.voiceProfile||null,callLanguage:call.callLanguage||'English',contextInstructions:buildInstructions(call)}})});
@@ -1329,7 +1329,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       console.error(err);
       const raw=String(err?.message||err||'').toLowerCase(); const reason=err?.callFocusReason||'';
       const inactive=raw.includes('server not active')||raw.includes('credit')||raw.includes('quota')||reason.includes('credit')||reason.includes('quota');
-      failCall(call,inactive?'Server not active right now. Please try again soon.':'Server unavailable. Try again soon.',reason);
+      failCall(call,inactive?'Calls are temporarily unavailable. Please try again soon.':'Call service unavailable. Please try again soon.',reason);
     }
   };
 
@@ -1348,8 +1348,8 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     if(parsed?.type==='session.started'){
       clearTimeout(failureReturnTimer); failureReturnTimer=null; lastFailedCall=null; hideFailureActions(); document.getElementById('cfThreadRetryBanner')?.remove();
     }
-    if(parsed?.type==='session.closed'&&!live.started&&live.current)failCall(live.current,'Server unavailable. Try again soon.','session_closed_before_start');
-    if(parsed?.type==='error'&&live.current)failCall(live.current,'Server unavailable. Try again soon.',parsed.error?.code||parsed.error?.type||'live_session_error');
+    if(parsed?.type==='session.closed'&&!live.started&&live.current)failCall(live.current,'Call service unavailable. Please try again soon.','session_closed_before_start');
+    if(parsed?.type==='error'&&live.current)failCall(live.current,'Call service unavailable. Please try again soon.',parsed.error?.code||parsed.error?.type||'live_session_error');
   };
 })();
 
@@ -1385,7 +1385,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
 
     if(event.type==='session.output_transcript.delta'&&event.delta){
       live.gracefulSpoke=true;
-      $('liveStatus').textContent='Connected to server · Wrapping up';
+      $('liveStatus').textContent='Wrapping up…';
       $('liveCaption').textContent='Ending the call naturally…';
       // Reset after every transcript fragment so we do not cut the goodbye short.
       scheduleGracefulClose(3600);
@@ -1404,7 +1404,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
 
     live.graceful=true;
     live.gracefulSpoke=false;
-    $('liveStatus').textContent='Connected to server · Wrapping up';
+    $('liveStatus').textContent='Wrapping up…';
     $('liveCaption').textContent='Requesting a natural call ending…';
 
     try{
@@ -2306,7 +2306,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       emptyCopy: 'Write the exact message the voice note should speak.',
       generate: 'Create voice note',
       resultMode: 'Created from your written script',
-      status: 'Create mode uses your exact written script. Reply mode drafts the message for you. Both use your current Admin speech settings and the same shared credit balance as calls.'
+      status: 'Create mode uses your exact written script. Reply mode drafts the message for you. Both follow your saved speech style and use the same shared credit balance as calls.'
     },
     reply: {
       label: 'Reply request',
@@ -2316,7 +2316,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       emptyCopy: 'Describe the reply naturally, just like you would explain it before recording.',
       generate: 'Reply with voice note',
       resultMode: 'Reply voice note drafted by CallFocus from your prompt',
-      status: 'Reply mode drafts the spoken message for you before generating the audio. Create mode reads the exact script you typed. Both use your current Admin speech settings and the same shared credit balance as calls.'
+      status: 'Reply mode drafts the spoken message for you before generating the audio. Create mode reads the exact script you typed. Both follow your saved speech style and use the same shared credit balance as calls.'
     }
   };
 
@@ -2827,7 +2827,7 @@ ${approvedPatterns}
 
     live.graceful=true;
     live.gracefulSpoke=false;
-    document.getElementById('liveStatus').textContent='Connected to server · Wrapping up';
+    document.getElementById('liveStatus').textContent='Wrapping up…';
     document.getElementById('liveCaption').textContent='Preparing a natural call ending…';
 
     const instructions=buildEndingInstructions();
@@ -2985,7 +2985,7 @@ ${approvedPatterns}
 
     const status=document.getElementById('liveStatus');
     const caption=document.getElementById('liveCaption');
-    if(status) status.textContent='Connected to server · Wrapping up';
+    if(status) status.textContent='Wrapping up…';
     if(caption) caption.textContent='Preparing a natural call ending…';
 
     endRuleId=`cf_end_rule_${Date.now()}`;
@@ -3311,7 +3311,7 @@ ${approvedPatterns}
           const localData=readJSON(accountDataKey(localAcc.id),defaultData(localAcc.name));
           await migrateSnapshot({account:localAcc,data:localData},{redirect:new URLSearchParams(location.search).get('migrate')==='1'});
           if(new URLSearchParams(location.search).get('migrate')!=='1'){
-            closeModal('authModal');toast('Account moved to secure server storage');renderWorkspace();
+            closeModal('authModal');toast('Account synced successfully');renderWorkspace();
           }
           return;
         }
@@ -3589,7 +3589,7 @@ ${approvedPatterns}
       const msg='The account service returned an incomplete response. Please try again.';
       authStatus(msg,'error','authModal');toast(msg);
     }catch(err){
-      const msg='Could not reach the CallFocus account server. Please try again.';
+      const msg='Could not reach CallFocus right now. Please try again.';
       authStatus(msg,'error','authModal');toast(msg);
     }finally{setBusy(submit,false);}
   }
@@ -3765,7 +3765,7 @@ ${approvedPatterns}
         // matching the post-signup experience regardless of the route used to sign in.
         location.replace('/');
       }catch{
-        const msg='Could not reach the CallFocus account server. Please try again.';
+        const msg='Could not reach CallFocus right now. Please try again.';
         showAuthStatus(msg,'error'); window.toast?.(msg);
       }finally{ if(button){button.disabled=false;button.textContent=idle;} }
     };
@@ -3833,10 +3833,10 @@ ${approvedPatterns}
       const name=document.getElementById('paystackDvaName');
       const number=document.getElementById('paystackDvaNumber');
       const badge=document.getElementById('paystackModeBadge');
-      if(bank)bank.textContent=dva.bankName||'Paystack virtual account';
+      if(bank)bank.textContent=dva.bankName||'Transfer account';
       if(name)name.textContent=dva.accountName||'CallFocus customer';
       if(number)number.textContent=dva.accountNumber||'—';
-      if(badge)badge.textContent=dva.testMode?'Paystack test':'Paystack live';
+      if(badge)badge.textContent='Secure transfer';
     }else{
       ready.classList.add('hidden');empty.classList.remove('hidden');
     }
@@ -3849,7 +3849,7 @@ ${approvedPatterns}
     if(!res.ok){ if(!quiet&&payload?.error) window.toast?.(payload.error); return null; }
     if(payload?.wallet) applyWallet(payload.wallet);
     const badge=document.getElementById('paystackModeBadge');
-    if(badge) badge.textContent=payload?.testMode?'Paystack test':'Paystack live';
+    if(badge) badge.textContent='Secure transfer';
     return payload;
   }
 
@@ -3862,16 +3862,16 @@ ${approvedPatterns}
     checkoutBusy=true;
     const btn=document.getElementById('creditCheckoutBtn');
     const oldHtml=btn?.innerHTML;
-    if(btn){btn.disabled=true;btn.innerHTML='<span>Opening Paystack…</span><small>Secure checkout</small>';}
+    if(btn){btn.disabled=true;btn.innerHTML='<span>Opening secure checkout…</span><small>Please wait</small>';}
     try{
       const res=await cfFetch('/api/paystack/initialize',{method:'POST',body:JSON.stringify({credits})});
       const payload=await readJson(res);
-      if(!res.ok) throw new Error(payload?.error||'Could not start Paystack checkout.');
-      if(!payload?.authorizationUrl) throw new Error('Paystack did not return a checkout link.');
+      if(!res.ok) throw new Error(payload?.error||'Could not start secure checkout.');
+      if(!payload?.authorizationUrl) throw new Error('The payment service did not return a checkout link.');
       sessionStorage.setItem('callfocus_paystack_reference',payload.reference||'');
       location.href=payload.authorizationUrl;
     }catch(err){
-      window.toast?.(err?.message||'Could not start Paystack checkout.');
+      window.toast?.(err?.message||'Could not start secure checkout.');
       checkoutBusy=false;
       if(btn){btn.disabled=false;if(oldHtml)btn.innerHTML=oldHtml;}
     }
@@ -3886,10 +3886,10 @@ ${approvedPatterns}
 
     for(let i=0;i<24&&(!token()||typeof account==='undefined'||!account||typeof data==='undefined'||!data);i++) await new Promise(r=>setTimeout(r,250));
     if(!token()){
-      window.toast?.('Sign in to finish verifying your Paystack payment.');
+      window.toast?.('Sign in to finish verifying your payment.');
       return;
     }
-    window.toast?.('Verifying Paystack payment…');
+    window.toast?.('Verifying payment…');
     try{
       const res=await cfFetch(`/api/paystack/verify?reference=${encodeURIComponent(reference)}`);
       const payload=await readJson(res);
@@ -3901,26 +3901,26 @@ ${approvedPatterns}
           ? `Payment verified${credits?` · ${credits} credits added`:''}`
           : 'Payment verified · your CallFocus balance is up to date');
       }else{
-        window.toast?.('Paystack has not marked this payment successful yet.');
+        window.toast?.('The payment has not been confirmed yet.');
       }
       sessionStorage.removeItem('callfocus_paystack_reference');
       url.searchParams.delete('paystack');url.searchParams.delete('reference');url.searchParams.delete('trxref');
       history.replaceState({},'',url.pathname+url.search+url.hash);
       try{window.showView?.('credits',false);}catch{}
-    }catch(err){window.toast?.(err?.message||'Could not verify the Paystack payment.');}
+    }catch(err){window.toast?.(err?.message||'Could not verify the payment.');}
   }
 
   async function createDva(){
     if(dvaBusy)return;
     if(!token()||typeof account==='undefined'||!account){
-      try{window.showAuth?.('signin',null,'Sign in before creating your Paystack transfer account.');}catch{}
+      try{window.showAuth?.('signin',null,'Sign in before creating your transfer account.');}catch{}
       return;
     }
     dvaBusy=true;
     const btn=document.getElementById('paystackCreateDvaBtn');
     const old=btn?.textContent;
     if(btn){btn.disabled=true;btn.textContent='Creating account…';}
-    setTransferStatus('Creating your reusable Paystack transfer account…','info');
+    setTransferStatus('Creating your reusable transfer account…','info');
     try{
       const res=await cfFetch('/api/paystack/dva',{method:'POST',body:JSON.stringify({consent:true})});
       const payload=await readJson(res);
@@ -3929,7 +3929,7 @@ ${approvedPatterns}
       if(payload?.dva?.accountNumber){
         renderDva(payload.dva);setTransferStatus('Transfer account ready. You can reuse this account number for future top-ups.','success');
       }else{
-        setTransferStatus(payload?.error||'Paystack is still preparing the transfer account. Try again shortly.','info');
+        setTransferStatus(payload?.error||'Your transfer account is still being prepared. Try again shortly.','info');
       }
     }catch(err){setTransferStatus(err?.message||'Could not create the transfer account.','error');window.toast?.(err?.message||'Could not create the transfer account.');}
     finally{dvaBusy=false;if(btn){btn.disabled=false;btn.textContent=old||'Create transfer account';}}
@@ -4003,7 +4003,7 @@ ${approvedPatterns}
     try{
       const res=await cfFetch('/api/paystack/recover',{method:'POST'});
       const payload=await readJson(res);
-      if(!res.ok) throw new Error(payload?.error||'Could not recover recent Paystack payments.');
+      if(!res.ok) throw new Error(payload?.error||'Could not refresh recent payments.');
       sessionStorage.setItem(RECOVERY_STAMP_KEY,String(Date.now()));
       if(payload?.wallet) applyRecoveredWallet(payload.wallet);
       const recovered=Array.isArray(payload?.recovered)?payload.recovered:[];
@@ -4012,11 +4012,11 @@ ${approvedPatterns}
         window.toast?.(`Payment verified${credits?` · ${credits} credits added`:''}`);
         try{ window.showView?.('credits',false); }catch{}
       }else if(!quiet){
-        window.toast?.('Your Paystack payment history is already up to date.');
+        window.toast?.('Your payment history is already up to date.');
       }
       return payload;
     }catch(err){
-      if(!quiet)window.toast?.(err?.message||'Could not recover recent Paystack payments.');
+      if(!quiet)window.toast?.(err?.message||'Could not refresh recent payments.');
       return null;
     }finally{ recoveryBusy=false; }
   }
@@ -4679,7 +4679,7 @@ ${approvedPatterns}
     const label=document.getElementById('creditCheckoutLabel');
     if(label)label.textContent=paystack?'Continue to payment':manual?'Request account number':'Payments unavailable';
     const note=document.getElementById('creditPaymentNote');
-    if(note)note.textContent=paystack?'Secure checkout is handled by Paystack. Credits are added only after CallFocus verifies a successful payment on the server.':manual?'Pay by bank transfer, upload your receipt, and receive credits after manual confirmation.':'Payments are temporarily unavailable while Paystack activation is pending.';
+    if(note)note.textContent=paystack?'Secure checkout is available. Credits are added after the payment is confirmed.':manual?'Pay by bank transfer, upload your receipt, and receive credits after confirmation.':'Payments are temporarily unavailable. Please try again later.';
     const notice=document.getElementById('paymentPendingNotice');
     if(notice&&!paystack){const strong=notice.querySelector('strong'),span=notice.querySelector('span');if(strong)strong.textContent=manual?'Bank transfer available':'Payments are temporarily unavailable';if(span)span.textContent=manual?'Transfer the exact amount, upload your receipt, and your credits will be added after confirmation.':'Payments are temporarily unavailable. Please try again later.';}
     const dva=document.getElementById('paystackCreateDvaBtn'); if(dva)dva.disabled=!paystack;
@@ -5566,36 +5566,24 @@ ${approvedPatterns}
   });
 })();
 
-/* ===== CallFocus V16.0 — premium boot + lightweight route transitions ===== */
-(()=>{
-  const loader=document.getElementById('cfBootLoader');
-  const progress=document.getElementById('cfRouteProgress');
-  let finished=false;
-  const finishBoot=()=>{
-    if(finished)return;
-    finished=true;
-    if(loader)loader.setAttribute('aria-hidden','true');
-    document.documentElement.classList.add('cf-ready');
-    setTimeout(()=>{try{loader?.remove()}catch{}},420);
-  };
-  if(document.readyState==='complete')setTimeout(finishBoot,180);
-  else window.addEventListener('load',()=>setTimeout(finishBoot,180),{once:true});
-  setTimeout(finishBoot,1250);
 
-  let routeTimer=0;
-  const pulse=()=>{
-    if(!progress)return;
-    clearTimeout(routeTimer);
-    document.body.classList.remove('cf-route-finishing');
-    document.body.classList.add('cf-route-moving');
-    routeTimer=setTimeout(()=>{
-      document.body.classList.remove('cf-route-moving');
-      document.body.classList.add('cf-route-finishing');
-      setTimeout(()=>document.body.classList.remove('cf-route-finishing'),330);
-    },260);
+/* ===== CallFocus V15.1 — premium customer experience polish ===== */
+(()=>{
+  const finishLoad=()=>{
+    document.documentElement.classList.add('cf-loaded');
+    const loader=document.getElementById('cfPageLoader');
+    if(loader)setTimeout(()=>loader.remove(),520);
   };
-  document.addEventListener('click',event=>{
-    const target=event.target?.closest?.('[data-route],[data-mobile-route],[data-account-route],[data-cf-route-back],.credit-back-btn,.voice-notes-back,.avatar-back-btn');
-    if(target)pulse();
-  },{capture:true,passive:true});
+  if(document.readyState==='complete') setTimeout(finishLoad,120);
+  else window.addEventListener('load',()=>setTimeout(finishLoad,120),{once:true});
+  setTimeout(finishLoad,2600);
+
+  // A subtle pressed state makes touch controls feel immediate without changing behavior.
+  document.addEventListener('pointerdown',e=>{
+    const control=e.target.closest('button,.btn,[role="button"]');
+    if(control&&!control.disabled)control.classList.add('cf-pressing');
+  },{passive:true});
+  const clearPressed=()=>document.querySelectorAll('.cf-pressing').forEach(el=>el.classList.remove('cf-pressing'));
+  document.addEventListener('pointerup',clearPressed,{passive:true});
+  document.addEventListener('pointercancel',clearPressed,{passive:true});
 })();

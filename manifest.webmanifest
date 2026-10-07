@@ -1,7 +1,7 @@
 {
   "name": "CallFocus",
   "short_name": "CallFocus",
-  "description": "Context-aware realtime calling workspace.",
+  "description": "Natural live calls, voice notes and conversation continuity with saved caller context.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
