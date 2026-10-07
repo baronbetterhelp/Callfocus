@@ -1,1 +1,1 @@
-# CallFocus V14.7 — Repeat-call draft stability
+CallFocus V14.8 — Copy Call Details Only

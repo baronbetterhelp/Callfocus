@@ -1375,20 +1375,11 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     return Promise.resolve();
   }
   function formatCallCopyV105(thread,call,index){
-    const lines=[
-      `CallFocus — ${thread.title || thread.callerName || 'Call'}`,
-      `Call ${index+1}`,
-      `Caller: ${thread.callerName || 'Not supplied'}`,
-      `Date: ${dateLabel(call.createdAt)}`,
-      `Duration: ${call.duration || '00:00'}`,
-      `Status: ${call.connected===false?'Not connected':'Completed'}`,
-      `Voice: ${(call.voiceGender||'male')==='female'?'Female':'Male'}`,
-      `Opening: ${openingLabelV105(call.openingMode||'auto')}`,
-      '',
-      `Call details: ${call.topic || 'No specific topic supplied.'}`
-    ];
-    if(call.openingCustom) lines.push(`Custom opening: ${call.openingCustom}`);
-    if((call.assistantTranscript||'').trim()) lines.push('',`Saved spoken output: ${call.assistantTranscript.trim()}`);
+    // Copy only the user-authored content for this individual call.
+    // Do not include caller metadata, date, duration, status, voice, opening mode,
+    // call number, CallFocus branding, or saved transcript output.
+    const lines=[`Call details: ${call.topic || 'No specific topic supplied.'}`];
+    if((call.openingCustom||'').trim()) lines.push(`Custom opening: ${call.openingCustom.trim()}`);
     return lines.join('\n');
   }
   function callEntryHTMLV105(thread,c,index){
