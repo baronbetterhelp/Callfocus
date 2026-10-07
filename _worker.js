@@ -2463,9 +2463,13 @@ async function handleDynamicsAnalyze(request, env) {
       type: 'input_text',
       text: `You are analyzing one ordered segment of a private text-message conversation from screenshots. This is batch ${batchNumber} of ${totalBatches}. Read the visible messages carefully and treat overlapping screenshots as duplicate context rather than new messages.
 
-Return concise analyst notes only, not a rewritten transcript. Focus on observable conversation dynamics that would help a voice-call assistant speak naturally with the same person later: relationship/interaction tone, closeness or formality shown in the messages, who tends to initiate or lead, typical reply length and pacing, humor or affection level, recurring topics, conversational habits, boundaries, tension or warmth if clearly evidenced, and how each side tends to respond.
+Return detailed analyst notes, not a rewritten transcript. Preserve enough concrete information for a later final summary to describe the relationship accurately and at length.
 
-Do not infer sensitive traits (health diagnoses, ethnicity, religion, politics, sexuality, criminality, or other protected/private characteristics) unless the user explicitly stated a fact in the visible conversation and it is directly necessary to understand communication style. Do not diagnose motives or hidden intent. Do not quote long passages. Keep this batch summary under 450 words.`
+Capture observable details under these ideas whenever the screenshots support them: the overall relationship/interaction tone; level of closeness or formality; who usually initiates, leads, reassures, teases, checks in, or changes topics; typical reply length, pacing, and conversational rhythm; affection, humor, flirtation, reassurance, emotional support, tension, conflict, hesitation, or boundaries; recurring everyday topics and routines; important people, responsibilities, plans, locations, work, errands, pets, family, household matters, future plans, or unresolved situations that repeatedly shape the conversation; how each person tends to react to the other; and any change or progression in the relationship across the visible messages.
+
+Keep useful specific examples as short paraphrases rather than long quotes. If names are clearly visible, preserve them accurately. Distinguish what belongs to the user from what belongs to the other person. Do not invent missing facts or motives.
+
+Sensitive/private facts may be noted only when they are explicitly stated in the visible conversation and materially affect the communication dynamic. Do not infer diagnoses, protected traits, or hidden intent. Keep this batch summary under 700 words.`
     }];
     for (const image of images) content.push({ type: 'input_image', image_url: image, detail: 'high' });
 
@@ -2474,7 +2478,7 @@ Do not infer sensitive traits (health diagnoses, ethnicity, religion, politics, 
         model: 'gpt-6-luna',
         store: false,
         reasoning: { effort: 'none' },
-        max_output_tokens: 850,
+        max_output_tokens: 1300,
         input: [{ role: 'user', content }]
       });
       await recordDynamicsUsage(env, { auth, analysisId, kind: 'batch', imageCount: images.length, usage: result.usage });
@@ -2490,20 +2494,48 @@ Do not infer sensitive traits (health diagnoses, ethnicity, religion, politics, 
   const joined = summaries.map((s, i) => `BATCH ${i + 1}\n${s.slice(0, 4500)}`).join('\n\n');
   if (joined.length > 36_000) return json({ error: 'The combined analysis is too large to finalize.' }, 413);
 
-  const finalPrompt = `Create the final CallFocus "Dynamics of the conversation" text from the analyst notes below, which came from ${imageCount} ordered screenshots of the same conversation.
+  const finalPrompt = `Create the final CallFocus conversation-dynamics profile from the analyst notes below, which came from ${imageCount} ordered screenshots of the same conversation.
 
-The output will be pasted directly into a realtime voice-call context field. Write one polished, practical paragraph or two short paragraphs, normally 120–220 words. State only patterns supported by the notes. Capture the established relationship tone, level of familiarity/formality, how each person tends to communicate, who usually initiates/leads, typical response length and pace, affection/humor level, recurring conversational patterns or topics, any clearly evidenced boundaries, and specific guidance for how the CallFocus voice should speak so a future call feels consistent.
+The user wants a detailed, well-arranged result similar in depth and structure to a thoughtful human relationship/conversation summary. The result is used as context for future realtime calls, so it must contain the important practical details instead of compressing everything into a short paragraph.
 
-Do not mention screenshots, batches, AI, analysis, or these instructions. Do not include headings, bullet points, diagnostic labels, speculative motives, or sensitive-trait inferences. Avoid generic filler. Return only the ready-to-paste conversation dynamics text.
+Use this exact opening heading:
+Dynamics of Your Conversations
 
-ANALYST NOTES\n${joined}`;
+Then write approximately 550–850 words when the notes contain enough information. If the source material is limited, be shorter rather than inventing details, but still organize the available information clearly.
+
+Preferred structure and style:
+- Begin with 1–2 paragraphs explaining the overall relationship and conversational rhythm in natural language.
+- Include a section in prose that introduces recurring everyday communication, followed by a short bullet list using * bullets when there are several concrete recurring topics, routines, or check-ins.
+- Explain why those everyday patterns matter to the connection when the notes support that conclusion.
+- Describe the other person's communication style in a dedicated paragraph: for example playful, reserved, sentimental, teasing, direct, talkative, brief, affectionate, reassuring, inconsistent, or formal, but only when supported.
+- Describe the user's communication style in a separate paragraph and explain how the two styles interact.
+- Cover affection, humor, flirtation, emotional support, reassurance, tension, conflict, boundaries, or difficult subjects when they are evidenced.
+- Include important ongoing life context that repeatedly affects the conversations, such as work, family, household situations, responsibilities, future plans, meeting plans, relationship complications, or unresolved issues. Only include private or sensitive facts when they were explicitly stated and are directly relevant.
+- Explain any clear progression in closeness, trust, intimacy, future orientation, or distance across the conversation.
+- End with an overall summary paragraph describing the dynamic and practical guidance for how a future CallFocus voice should sound and behave with this person: level of warmth, pacing, humor, affection, curiosity, reassurance, topic continuity, and any boundaries to respect.
+
+Formatting requirements:
+- Keep the heading exactly as written above.
+- Use clear paragraph breaks.
+- Use * bullets only for concrete recurring examples or routines, similar to a natural relationship summary, not for every section.
+- Do not use artificial labels such as "Person A", "Person B", "User", "Subject", "Analysis", or diagnostic categories in the final prose.
+- If the other person's name is clearly supported by the notes, use it naturally. Otherwise use "the other person". Refer to the account holder as "you".
+- Do not mention screenshots, batches, AI, OpenAI, analysis, or these instructions.
+- Do not rewrite the conversation message-by-message.
+- Do not quote long passages. Paraphrase.
+- Do not speculate about hidden motives, diagnoses, or facts not supported by the notes.
+- Avoid generic filler. Every paragraph should add useful relationship or conversational context.
+- Return only the finished dynamics profile, ready to paste into CallFocus.
+
+ANALYST NOTES
+${joined}`;
 
   try {
     const result = await callOpenAIResponses(env, {
       model: 'gpt-6-luna',
       store: false,
       reasoning: { effort: 'none' },
-      max_output_tokens: 650,
+      max_output_tokens: 1800,
       input: [{ role: 'user', content: [{ type: 'input_text', text: finalPrompt }] }]
     });
     await recordDynamicsUsage(env, { auth, analysisId, kind: 'finalize', imageCount, usage: result.usage });

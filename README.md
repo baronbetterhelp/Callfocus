@@ -1,1 +1,1 @@
-# CallFocus V14.1 — Manual payment approved success return to Credits
+# CallFocus V14.2 — Detailed Conversation Dynamics

@@ -4272,7 +4272,7 @@ ${approvedPatterns}
     wrap.innerHTML=`
       <div class="modal dynamics-modal" role="dialog" aria-modal="true" aria-labelledby="dynamicsGeneratorTitle">
         <div class="modal-head">
-          <div><span class="section-eyebrow">AI conversation analysis</span><h2 id="dynamicsGeneratorTitle">Generate conversation dynamics</h2><p>Select up to 50 conversation screenshots at once. CallFocus analyzes them together and creates editable dynamics you can copy into any call.</p></div>
+          <div><span class="section-eyebrow">AI conversation analysis</span><h2 id="dynamicsGeneratorTitle">Generate conversation dynamics</h2><p>Select up to 50 conversation screenshots at once. CallFocus analyzes them together and creates a detailed, structured conversation-dynamics profile you can edit, copy, or use in a call.</p></div>
           <button class="modal-close" type="button" id="dynamicsCloseBtn" aria-label="Close">×</button>
         </div>
         <label class="dynamics-upload-zone" for="dynamicsFileInput">
@@ -4459,7 +4459,7 @@ ${approvedPatterns}
         summaries.push(payload.summary);
         setProgress(((b+1)/(totalBatches+1))*100,`Analyzed ${start+group.length} of ${files.length} screenshots.`);
       }
-      setProgress((totalBatches/(totalBatches+1))*100,'Combining the full conversation into final dynamics…');
+      setProgress((totalBatches/(totalBatches+1))*100,'Building your detailed conversation dynamics…');
       const final=await api('/api/dynamics/analyze',{kind:'finalize',summaries,imageCount:files.length,analysisId});
       if(!final?.dynamics) throw new Error('CallFocus could not create the final conversation dynamics.');
       $('dynamicsResultText').value=final.dynamics.trim();
