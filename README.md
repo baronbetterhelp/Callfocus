@@ -1,1 +1,3 @@
-# CallFocus V15.1 — Telegram Channel Widget
+# CallFocus V15.2 — Dynamics Upload Stability
+
+Current stable build. See `README-V15.2.md` for the latest changes.

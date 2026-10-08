@@ -2559,10 +2559,10 @@ Sensitive/private facts may be noted only when they are explicitly stated in the
   }
 
   const summaries = Array.isArray(body?.summaries) ? body.summaries.map(x => String(x || '').trim()).filter(Boolean) : [];
-  if (!summaries.length || summaries.length > 10) return json({ error: 'No screenshot analysis was available to combine.' }, 400);
+  if (!summaries.length || summaries.length > 16) return json({ error: 'No screenshot analysis was available to combine.' }, 400);
   const imageCount = Math.max(1, Math.min(50, Math.floor(Number(body?.imageCount) || 1)));
   const joined = summaries.map((s, i) => `BATCH ${i + 1}\n${s.slice(0, 4500)}`).join('\n\n');
-  if (joined.length > 36_000) return json({ error: 'The combined analysis is too large to finalize.' }, 413);
+  if (joined.length > 64_000) return json({ error: 'The combined analysis is too large to finalize.' }, 413);
 
   const finalPrompt = `Create the final CallFocus conversation-dynamics profile from the analyst notes below, which came from ${imageCount} ordered screenshots of the same conversation.
 

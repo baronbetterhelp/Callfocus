@@ -4393,11 +4393,14 @@ ${approvedPatterns}
 /* CallFocus V11.32 — select up to 50 conversation screenshots and generate dynamics */
 (()=>{
   const MAX_IMAGES=50;
-  const BATCH_SIZE=6;
+  const DESKTOP_BATCH_SIZE=6;
+  const MOBILE_BATCH_SIZE=4;
+  const ANALYSIS_MAX_EDGE=1600;
+  const ANALYSIS_JPEG_QUALITY=0.76;
+  const MAX_FILE_BYTES=20*1024*1024;
   const SERVER_TOKEN_KEY='callfocus_server_session_v1';
   const ALLOWED_TYPES=new Set(['image/png','image/jpeg','image/webp','image/gif']);
   let files=[];
-  let thumbUrls=[];
   let busy=false;
 
   const $=id=>document.getElementById(id);
@@ -4444,7 +4447,7 @@ ${approvedPatterns}
       </div>`;
     document.body.appendChild(wrap);
 
-    $('dynamicsFileInput').addEventListener('change',event=>selectFiles([...event.target.files]));
+    $('dynamicsFileInput').addEventListener('change',event=>{ selectFiles([...event.target.files]); event.target.value=''; });
     $('dynamicsCloseBtn').onclick=closeModal;
     $('dynamicsClearBtn').onclick=()=>resetSelection(true);
     $('dynamicsGenerateBtn').onclick=runAnalysis;
@@ -4479,10 +4482,7 @@ ${approvedPatterns}
     document.body.style.overflow='';
   }
 
-  function clearThumbUrls(){
-    thumbUrls.forEach(url=>{ try{URL.revokeObjectURL(url);}catch{} });
-    thumbUrls=[];
-  }
+  function clearThumbUrls(){}
 
   function resetSelection(resetInput=false){
     if(busy) return;
@@ -4495,8 +4495,8 @@ ${approvedPatterns}
 
   function selectFiles(incoming){
     if(busy) return;
-    const valid=incoming.filter(f=>ALLOWED_TYPES.has(String(f.type||'').toLowerCase()));
-    if(valid.length!==incoming.length) notify('Some files were skipped. Use PNG, JPG, WEBP or GIF images.');
+    const valid=incoming.filter(f=>ALLOWED_TYPES.has(String(f.type||'').toLowerCase()) && Number(f.size||0)<=MAX_FILE_BYTES);
+    if(valid.length!==incoming.length) notify('Some files were skipped. Use PNG, JPG, WEBP or GIF screenshots smaller than 20 MB each.');
     files=valid.slice(0,MAX_IMAGES);
     if(valid.length>MAX_IMAGES) notify('CallFocus accepts a maximum of 50 screenshots per analysis.');
     clearThumbUrls();
@@ -4514,13 +4514,35 @@ ${approvedPatterns}
     thumbs.innerHTML='';
     if(!files.length){ thumbs.innerHTML='<div class="dynamics-empty-thumbs">Your selected screenshots will appear here.</div>'; return; }
     files.forEach((file,i)=>{
-      const url=URL.createObjectURL(file); thumbUrls.push(url);
-      const item=document.createElement('div'); item.className='dynamics-thumb';
-      const img=document.createElement('img'); img.src=url; img.alt=`Screenshot ${i+1}`; img.loading='lazy';
+      const item=document.createElement('div'); item.className='dynamics-thumb dynamics-thumb-safe';
+      const placeholder=document.createElement('div'); placeholder.className='dynamics-thumb-placeholder'; placeholder.setAttribute('aria-hidden','true'); placeholder.textContent='IMG';
+      const label=document.createElement('span'); label.className='dynamics-thumb-label'; label.textContent=`Screenshot ${i+1}`;
+      const size=document.createElement('small'); size.className='dynamics-thumb-size'; size.textContent=formatFileSize(file.size);
       const num=document.createElement('b'); num.textContent=String(i+1);
       const remove=document.createElement('button'); remove.type='button'; remove.className='dynamics-thumb-remove'; remove.setAttribute('aria-label',`Remove screenshot ${i+1}`); remove.textContent='×';
       remove.onclick=e=>{ e.stopPropagation(); if(busy)return; files.splice(i,1); if($('dynamicsFileInput'))$('dynamicsFileInput').value=''; renderSelection(); };
-      item.append(img,num,remove); thumbs.appendChild(item);
+      item.append(placeholder,label,size,num,remove); thumbs.appendChild(item);
+    });
+  }
+
+  function formatFileSize(bytes){
+    const n=Math.max(0,Number(bytes)||0);
+    if(n<1024) return `${n} B`;
+    if(n<1024*1024) return `${Math.max(1,Math.round(n/1024))} KB`;
+    return `${(n/(1024*1024)).toFixed(n>=10*1024*1024?0:1)} MB`;
+  }
+
+  function useSmallerBatches(){
+    const ua=String(navigator.userAgent||'');
+    const isiOS=/iPad|iPhone|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&Number(navigator.maxTouchPoints||0)>1);
+    const narrow=globalThis.matchMedia?.('(max-width: 820px)')?.matches;
+    return !!(isiOS||narrow);
+  }
+
+  function yieldToBrowser(){
+    return new Promise(resolve=>{
+      if(typeof requestAnimationFrame==='function') requestAnimationFrame(()=>setTimeout(resolve,0));
+      else setTimeout(resolve,0);
     });
   }
 
@@ -4533,25 +4555,57 @@ ${approvedPatterns}
     $('dynamicsProgressPercent').textContent=`${Math.round(Math.max(0,Math.min(100,percent)))}%`;
   }
 
-  function readAsDataURL(file){
-    return new Promise((resolve,reject)=>{ const r=new FileReader(); r.onload=()=>resolve(String(r.result||'')); r.onerror=()=>reject(new Error('Could not read an image.')); r.readAsDataURL(file); });
+  function loadImage(src){
+    return new Promise((resolve,reject)=>{
+      const img=new Image();
+      img.decoding='async';
+      img.onload=()=>resolve(img);
+      img.onerror=()=>reject(new Error('One screenshot could not be prepared.'));
+      img.src=src;
+    });
   }
 
-  function loadImage(src){
-    return new Promise((resolve,reject)=>{ const img=new Image(); img.onload=()=>resolve(img); img.onerror=()=>reject(new Error('One screenshot could not be prepared.')); img.src=src; });
+  function blobToDataURL(blob){
+    return new Promise((resolve,reject)=>{
+      const r=new FileReader();
+      r.onload=()=>resolve(String(r.result||''));
+      r.onerror=()=>reject(new Error('One screenshot could not be encoded.'));
+      r.readAsDataURL(blob);
+    });
+  }
+
+  function canvasToBlob(canvas,type,quality){
+    return new Promise((resolve,reject)=>{
+      canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('One screenshot could not be compressed.')),type,quality);
+    });
   }
 
   async function prepareImage(file){
-    const src=await readAsDataURL(file);
-    const img=await loadImage(src);
-    const longest=Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height);
-    const scale=longest>2048 ? 2048/longest : 1;
-    const width=Math.max(1,Math.round((img.naturalWidth||img.width)*scale));
-    const height=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
-    const canvas=document.createElement('canvas'); canvas.width=width; canvas.height=height;
-    const ctx=canvas.getContext('2d',{alpha:false});
-    ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,width,height); ctx.drawImage(img,0,0,width,height);
-    return canvas.toDataURL('image/jpeg',0.84);
+    const src=URL.createObjectURL(file);
+    let canvas=null;
+    let img=null;
+    try{
+      img=await loadImage(src);
+      const naturalWidth=Math.max(1,img.naturalWidth||img.width||1);
+      const naturalHeight=Math.max(1,img.naturalHeight||img.height||1);
+      const longest=Math.max(naturalWidth,naturalHeight);
+      const scale=longest>ANALYSIS_MAX_EDGE ? ANALYSIS_MAX_EDGE/longest : 1;
+      const width=Math.max(1,Math.round(naturalWidth*scale));
+      const height=Math.max(1,Math.round(naturalHeight*scale));
+      canvas=document.createElement('canvas');
+      canvas.width=width; canvas.height=height;
+      const ctx=canvas.getContext('2d',{alpha:false,willReadFrequently:false});
+      if(!ctx) throw new Error('This browser could not prepare a screenshot.');
+      ctx.fillStyle='#ffffff'; ctx.fillRect(0,0,width,height); ctx.drawImage(img,0,0,width,height);
+      const blob=await canvasToBlob(canvas,'image/jpeg',ANALYSIS_JPEG_QUALITY);
+      const encoded=await blobToDataURL(blob);
+      return encoded;
+    }finally{
+      try{URL.revokeObjectURL(src);}catch{}
+      try{if(img) img.removeAttribute('src');}catch{}
+      try{if(canvas){canvas.width=1;canvas.height=1;}}catch{}
+      img=null; canvas=null;
+    }
   }
 
   async function api(path,body){
@@ -4578,25 +4632,29 @@ ${approvedPatterns}
     $('dynamicsResult')?.classList.add('hidden');
     $('dynamicsGenerateBtn').textContent='Analyzing…';
     $('dynamicsClearBtn').disabled=true;
-    const totalBatches=Math.ceil(files.length/BATCH_SIZE);
+    const batchSize=useSmallerBatches()?MOBILE_BATCH_SIZE:DESKTOP_BATCH_SIZE;
+    const totalBatches=Math.ceil(files.length/batchSize);
     const summaries=[];
     const analysisId=(globalThis.crypto?.randomUUID?.()||`cfai_${Date.now()}_${Math.random().toString(36).slice(2,10)}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,96);
     try{
       for(let b=0;b<totalBatches;b++){
-        const start=b*BATCH_SIZE;
-        const group=files.slice(start,start+BATCH_SIZE);
+        const start=b*batchSize;
+        const group=files.slice(start,start+batchSize);
         const prepared=[];
         for(let j=0;j<group.length;j++){
           const imageIndex=start+j+1;
           const prepPct=((b+(j/group.length)*0.38)/(totalBatches+1))*100;
           setProgress(prepPct,`Preparing screenshot ${imageIndex} of ${files.length}…`);
           prepared.push(await prepareImage(group[j]));
+          await yieldToBrowser();
         }
         const analyzePct=((b+0.45)/(totalBatches+1))*100;
         setProgress(analyzePct,`Analyzing screenshots ${start+1}–${start+group.length} of ${files.length}…`);
         const payload=await analyzeBatch(prepared,b+1,totalBatches,analysisId);
         if(!payload?.summary) throw new Error('CallFocus did not receive a usable analysis for one screenshot group.');
         summaries.push(payload.summary);
+        prepared.length=0;
+        await yieldToBrowser();
         setProgress(((b+1)/(totalBatches+1))*100,`Analyzed ${start+group.length} of ${files.length} screenshots.`);
       }
       setProgress((totalBatches/(totalBatches+1))*100,'Building your detailed conversation dynamics…');

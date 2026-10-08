@@ -2177,3 +2177,15 @@ html:not([data-theme="pearl"]) .location-search-note{background:#171717;color:#8
 .cf-telegram-popup-open .cf-telegram-bubble{opacity:0;transform:scale(.55);pointer-events:none}
 @media(max-width:560px){.cf-telegram-card{bottom:max(18px,calc(env(safe-area-inset-bottom) + 12px));width:calc(100vw - 22px);border-radius:21px;padding:14px;grid-template-columns:47px minmax(0,1fr);gap:11px}.cf-telegram-card-icon{width:47px;height:47px;border-radius:15px}.cf-telegram-card-icon svg{width:26px;height:26px}.cf-telegram-card-copy{padding-right:25px}.cf-telegram-card-copy strong{font-size:14px}.cf-telegram-card-copy p{font-size:9px;line-height:1.5}.cf-telegram-join{min-height:42px}.cf-telegram-bubble{right:14px;bottom:max(18px,calc(env(safe-area-inset-bottom) + 12px));width:57px;height:57px}.cf-telegram-bubble svg{width:29px;height:29px}}
 @media(prefers-reduced-motion:reduce){.cf-telegram-card,.cf-telegram-bubble,.cf-telegram-join{transition-duration:.01ms!important}}
+
+/* ===== CallFocus V15.2 — low-memory Dynamics screenshot selection ===== */
+.dynamics-thumb-safe{aspect-ratio:auto;min-height:92px;padding:11px 8px 9px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center;background:linear-gradient(145deg,rgba(239,247,244,.96),rgba(255,251,244,.96));overflow:visible}
+.dynamics-thumb-placeholder{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:rgba(30,116,100,.1);border:1px solid rgba(30,116,100,.14);color:#197363;font:800 9px/1 Manrope,sans-serif;letter-spacing:.08em}
+.dynamics-thumb-label{max-width:100%;font:750 10px/1.25 Manrope,sans-serif;color:#315d54;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dynamics-thumb-size{font:650 9px/1.2 Manrope,sans-serif;color:#8a9a96}
+.dynamics-thumb-safe b{left:5px;bottom:5px}
+.dynamics-thumb-safe .dynamics-thumb-remove{top:5px;right:5px}
+html:not([data-theme="pearl"]) .dynamics-thumb-safe{background:linear-gradient(145deg,#171d1b,#121614);border-color:#2d3935}
+html:not([data-theme="pearl"]) .dynamics-thumb-placeholder{background:#1b2a26;border-color:#31423d;color:#79c9b8}
+html:not([data-theme="pearl"]) .dynamics-thumb-label{color:#dcebe6}
+@media(max-width:640px){.dynamics-thumb-safe{min-height:86px;padding:10px 6px 8px}.dynamics-thumb-placeholder{width:31px;height:31px}.dynamics-thumb-label{font-size:9px}}
