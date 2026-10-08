@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.0';
+  const BUILD='15.1';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -5564,4 +5564,162 @@ ${approvedPatterns}
     if(document.visibilityState==='hidden')capture();
     else if(typeof activeView!=='undefined'&&activeView==='recent'&&typeof selectedThreadId!=='undefined'&&selectedThreadId)setTimeout(()=>restore(selectedThreadId),0);
   });
+})();
+
+
+/* ===== CallFocus V15.1 — Home-only Telegram channel promo ===== */
+(()=>{
+  const TELEGRAM_URL='https://t.me/callfocus';
+  const FIRST_OPEN_DELAY=10000;
+  const POPUP_DURATION=5000;
+  let introShown=false;
+  let introTimer=0;
+  let collapseTimer=0;
+  let widget=null;
+  let bubble=null;
+  let card=null;
+  let suppressNextClick=false;
+
+  const isHome=()=>{
+    const home=document.getElementById('page-home');
+    return !!home?.classList.contains('active') && (((location.pathname||'/').replace(/\/+$/,'')||'/')==='/');
+  };
+  const clearTimers=()=>{clearTimeout(introTimer);clearTimeout(collapseTimer);introTimer=collapseTimer=0;};
+  const hideAll=()=>{
+    clearTimers();
+    if(!widget)return;
+    widget.classList.remove('cf-telegram-popup-open','cf-telegram-bubble-open');
+    widget.setAttribute('aria-hidden','true');
+  };
+  const showBubble=()=>{
+    if(!widget||!isHome())return;
+    clearTimeout(collapseTimer); collapseTimer=0;
+    widget.setAttribute('aria-hidden','false');
+    widget.classList.remove('cf-telegram-popup-open');
+    requestAnimationFrame(()=>widget.classList.add('cf-telegram-bubble-open'));
+  };
+  const openPopup=()=>{
+    if(!widget||!isHome())return;
+    introShown=true;
+    clearTimeout(introTimer); clearTimeout(collapseTimer);
+    widget.setAttribute('aria-hidden','false');
+    widget.classList.remove('cf-telegram-bubble-open');
+    requestAnimationFrame(()=>widget.classList.add('cf-telegram-popup-open'));
+    collapseTimer=setTimeout(showBubble,POPUP_DURATION);
+  };
+  const scheduleIntro=()=>{
+    clearTimeout(introTimer);
+    if(!isHome())return;
+    if(introShown){ showBubble(); return; }
+    introTimer=setTimeout(()=>{ if(isHome())openPopup(); },FIRST_OPEN_DELAY);
+  };
+  const syncToRoute=()=>{
+    if(isHome())scheduleIntro();
+    else hideAll();
+  };
+
+  function createWidget(){
+    if(document.getElementById('cfTelegramPromo'))return;
+    widget=document.createElement('div');
+    widget.id='cfTelegramPromo';
+    widget.className='cf-telegram-promo';
+    widget.setAttribute('aria-hidden','true');
+    widget.innerHTML=`
+      <aside class="cf-telegram-card" role="dialog" aria-label="Join the CallFocus Telegram channel">
+        <button class="cf-telegram-card-close" type="button" aria-label="Minimize Telegram update">×</button>
+        <span class="cf-telegram-card-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M21.6 3.5 18.4 19c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6 12.8l-4.8-1.5c-1-.3-1-1 .2-1.5L20.2 2.6c.9-.3 1.7.2 1.4.9Z" fill="currentColor"/></svg>
+        </span>
+        <div class="cf-telegram-card-copy">
+          <span class="cf-telegram-eyebrow">CallFocus on Telegram</span>
+          <strong>Join our Telegram channel for more updates</strong>
+          <p>Get CallFocus updates, new features, useful tools and important announcements in one place.</p>
+        </div>
+        <a class="cf-telegram-join" href="${TELEGRAM_URL}" target="_blank" rel="noopener noreferrer">
+          <span>Join Telegram channel</span><b aria-hidden="true">↗</b>
+        </a>
+      </aside>
+      <button class="cf-telegram-bubble" type="button" aria-label="Open CallFocus Telegram update">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21.6 3.5 18.4 19c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6 12.8l-4.8-1.5c-1-.3-1-1 .2-1.5L20.2 2.6c.9-.3 1.7.2 1.4.9Z" fill="currentColor"/></svg>
+        <span>Telegram</span>
+      </button>`;
+    document.body.appendChild(widget);
+    bubble=widget.querySelector('.cf-telegram-bubble');
+    card=widget.querySelector('.cf-telegram-card');
+
+    widget.querySelector('.cf-telegram-card-close')?.addEventListener('click',showBubble);
+    widget.querySelector('.cf-telegram-join')?.addEventListener('click',()=>setTimeout(showBubble,120));
+    bubble?.addEventListener('click',e=>{
+      if(suppressNextClick){e.preventDefault(); suppressNextClick=false; return;}
+      openPopup();
+    });
+    enableDrag();
+  }
+
+  function enableDrag(){
+    if(!bubble)return;
+    let dragging=false, moved=false, pointerId=null, startX=0, startY=0, startLeft=0, startTop=0;
+    const clamp=(value,min,max)=>Math.min(Math.max(value,min),max);
+    const pinCurrentPosition=()=>{
+      const r=bubble.getBoundingClientRect();
+      bubble.style.left=`${r.left}px`;
+      bubble.style.top=`${r.top}px`;
+      bubble.style.right='auto';
+      bubble.style.bottom='auto';
+    };
+    const keepInsideViewport=()=>{
+      if(!bubble.style.left)return;
+      const r=bubble.getBoundingClientRect();
+      const margin=8;
+      const left=clamp(r.left,margin,Math.max(margin,innerWidth-r.width-margin));
+      const top=clamp(r.top,margin+Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cf-telegram-safe-top'))||margin,Math.max(margin,innerHeight-r.height-margin));
+      bubble.style.left=`${left}px`; bubble.style.top=`${top}px`;
+    };
+    bubble.addEventListener('pointerdown',e=>{
+      if(e.button!==undefined&&e.button!==0)return;
+      dragging=true; moved=false; pointerId=e.pointerId;
+      pinCurrentPosition();
+      const r=bubble.getBoundingClientRect();
+      startX=e.clientX; startY=e.clientY; startLeft=r.left; startTop=r.top;
+      bubble.classList.add('is-dragging');
+      try{bubble.setPointerCapture(pointerId)}catch{}
+      e.preventDefault();
+    });
+    bubble.addEventListener('pointermove',e=>{
+      if(!dragging||e.pointerId!==pointerId)return;
+      const dx=e.clientX-startX,dy=e.clientY-startY;
+      if(Math.hypot(dx,dy)>5)moved=true;
+      const r=bubble.getBoundingClientRect(),margin=8;
+      bubble.style.left=`${clamp(startLeft+dx,margin,Math.max(margin,innerWidth-r.width-margin))}px`;
+      bubble.style.top=`${clamp(startTop+dy,margin,Math.max(margin,innerHeight-r.height-margin))}px`;
+      e.preventDefault();
+    });
+    const endDrag=e=>{
+      if(!dragging||e.pointerId!==pointerId)return;
+      dragging=false; bubble.classList.remove('is-dragging');
+      try{bubble.releasePointerCapture(pointerId)}catch{}
+      if(moved){suppressNextClick=true; setTimeout(()=>{suppressNextClick=false},350);}
+      pointerId=null;
+    };
+    bubble.addEventListener('pointerup',endDrag);
+    bubble.addEventListener('pointercancel',endDrag);
+    window.addEventListener('resize',keepInsideViewport,{passive:true});
+  }
+
+  function init(){
+    createWidget();
+    const home=document.getElementById('page-home');
+    if(home){
+      new MutationObserver(syncToRoute).observe(home,{attributes:true,attributeFilter:['class']});
+    }
+    window.addEventListener('popstate',()=>setTimeout(syncToRoute,0));
+    window.addEventListener('pageshow',()=>setTimeout(syncToRoute,0));
+    document.addEventListener('visibilitychange',()=>{
+      if(document.visibilityState==='visible')syncToRoute();
+      else clearTimers();
+    });
+    syncToRoute();
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
+  else init();
 })();
