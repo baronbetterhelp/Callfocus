@@ -138,7 +138,7 @@ function readJSON(key, fallback){ try { return JSON.parse(localStorage.getItem(k
 function writeJSON(key, value){ localStorage.setItem(key, JSON.stringify(value)); }
 function accounts(){ return readJSON(ACCOUNTS_KEY, []); }
 function accountDataKey(id){ return `callfocus_account_data_v4_${id}`; }
-function defaultData(name=''){ return { profile:{name,role:'',about:'',rules:''}, callers:[], threads:[] }; }
+function defaultData(name=''){ return { profile:{name,role:'',about:'',rules:''}, callers:[], threads:[], callDrafts:[] }; }
 function loadAdmin(){ return {...ADMIN_DEFAULTS, ...remoteAdmin}; }
 function applyGlobalTheme(theme){
   const next=theme==='pearl'?'pearl':'black';
@@ -5780,4 +5780,281 @@ ${approvedPatterns}
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
   else init();
+})();
+
+
+/* ===== CallFocus V15.3 — first-call auto-fill + account-synced saved setups ===== */
+(()=>{
+  const MAX_IMAGES=50;
+  const MIN_IMAGES=20;
+  const MOBILE_BATCH_SIZE=4;
+  const DESKTOP_BATCH_SIZE=5;
+  const ANALYSIS_MAX_EDGE=1600;
+  const ANALYSIS_JPEG_QUALITY=0.76;
+  const MAX_FILE_BYTES=20*1024*1024;
+  const SERVER_TOKEN_KEY='callfocus_server_session_v1';
+  const ALLOWED_TYPES=new Set(['image/png','image/jpeg','image/webp','image/gif']);
+  let autoFiles=[];
+  let autoBusy=false;
+  let activeDraftId='';
+
+  const byId=id=>document.getElementById(id);
+  const token=()=>localStorage.getItem(SERVER_TOKEN_KEY)||'';
+  const notify=message=>{ try{ if(typeof window.toast==='function')return window.toast(message); if(typeof toast==='function')return toast(message); }catch{} console.log(message); };
+  const safeText=v=>String(v??'').trim();
+
+  function ensureDraftData(){
+    if(typeof data==='undefined'||!data)return [];
+    if(!Array.isArray(data.callDrafts))data.callDrafts=[];
+    return data.callDrafts;
+  }
+
+  function installNewCallTools(){
+    const form=byId('newCallForm');
+    if(!form||byId('cfFirstCallTools'))return;
+    const panel=document.createElement('section');
+    panel.id='cfFirstCallTools';
+    panel.className='cf-first-call-tools';
+    panel.innerHTML=`
+      <div class="cf-first-call-tools-copy">
+        <span class="section-eyebrow">Optional shortcuts</span>
+        <strong>Fill the caller context yourself, or let CallFocus build it from your conversations.</strong>
+        <p>Auto-fill can create About you, About the caller and Conversation dynamics from 20–50 screenshots. Nothing is added to the form until you review it.</p>
+      </div>
+      <div class="cf-first-call-tools-actions">
+        <button class="btn btn-primary" type="button" id="cfAutoFillAllBtn">Fill in all information automatically</button>
+        <button class="btn btn-ghost" type="button" id="cfSavedSetupsBtn">Saved information <span id="cfSavedSetupsCount">0</span></button>
+      </div>`;
+    form.prepend(panel);
+
+    const footer=form.querySelector('.call-form-footer');
+    if(footer&&!byId('cfSaveCallInfoBtn')){
+      const actions=document.createElement('div');
+      actions.className='cf-call-footer-actions';
+      actions.innerHTML=`<button class="btn btn-ghost large" type="button" id="cfSaveCallInfoBtn">Save information</button>`;
+      const submit=footer.querySelector('button[type="submit"]');
+      if(submit){actions.appendChild(submit);footer.appendChild(actions);} else footer.appendChild(actions);
+    }
+    byId('cfAutoFillAllBtn')?.addEventListener('click',openAutoFill);
+    byId('cfSavedSetupsBtn')?.addEventListener('click',openSavedSetups);
+    byId('cfSaveCallInfoBtn')?.addEventListener('click',saveCurrentSetup);
+    updateSavedCount();
+  }
+
+  function installAutoFillModal(){
+    if(byId('cfAutoFillModal'))return;
+    const wrap=document.createElement('div');
+    wrap.id='cfAutoFillModal';
+    wrap.className='modal-backdrop hidden';
+    wrap.innerHTML=`
+      <div class="modal cf-autofill-modal" role="dialog" aria-modal="true" aria-labelledby="cfAutoFillTitle">
+        <div class="modal-head">
+          <div><span class="section-eyebrow">First-call auto-fill</span><h2 id="cfAutoFillTitle">Generate all caller information</h2><p>Upload 20–50 conversation screenshots. Add a few facts about yourself first so CallFocus can separate your details from the person you are calling.</p></div>
+          <button class="modal-close" type="button" id="cfAutoFillClose" aria-label="Close">×</button>
+        </div>
+        <div class="cf-autofill-personal">
+          <div class="field-heading"><strong>About you</strong><small>Required before generation</small></div>
+          <div class="form-grid three cf-autofill-meta-grid">
+            <label>Your name<input id="cfAutoSelfName" autocomplete="name" placeholder="e.g. Diane" /></label>
+            <label>Your age<input id="cfAutoSelfAge" type="number" inputmode="numeric" min="1" max="120" placeholder="e.g. 38" /></label>
+            <label>Your job / work type<input id="cfAutoSelfJob" placeholder="e.g. Medical aid assistant" /></label>
+          </div>
+          <p class="cf-autofill-note">These facts anchor the analysis. CallFocus will not invent missing personal information about either person.</p>
+        </div>
+        <label class="dynamics-upload-zone cf-autofill-upload" for="cfAutoFillFiles">
+          <span class="dynamics-upload-icon">＋</span><strong>Upload conversation screenshots</strong>
+          <p>Choose at least 20 and up to 50 screenshots, preferably in conversation order.</p>
+        </label>
+        <input class="dynamics-file-input" id="cfAutoFillFiles" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple />
+        <div class="dynamics-selection-head"><strong id="cfAutoFillCount">0 / 50 selected</strong><span id="cfAutoFillSelectionNote">At least 20 screenshots required</span></div>
+        <div class="dynamics-thumbs cf-autofill-thumbs" id="cfAutoFillThumbs"><div class="dynamics-empty-thumbs">Your selected screenshots will appear here.</div></div>
+        <div class="dynamics-privacy">Screenshots are used only for this generation request and are not saved to your CallFocus account. The generated text is saved only if you choose to add or save it.</div>
+        <div class="dynamics-progress-wrap hidden" id="cfAutoFillProgressWrap">
+          <div class="dynamics-progress-line"><div class="dynamics-progress-bar" id="cfAutoFillProgressBar"></div></div>
+          <div class="dynamics-progress-copy"><span id="cfAutoFillProgressText">Preparing images…</span><span id="cfAutoFillProgressPercent">0%</span></div>
+        </div>
+        <div class="cf-autofill-results hidden" id="cfAutoFillResults">
+          <div class="cf-autofill-result-head"><div><span class="section-eyebrow">Generated information</span><strong>Review before adding to your call</strong></div><small>You can edit any result below.</small></div>
+          <label>About you<textarea id="cfAutoAboutSelfResult" rows="7"></textarea></label>
+          <label>About the caller<textarea id="cfAutoAboutCallerResult" rows="7"></textarea></label>
+          <label>Conversation dynamics<textarea id="cfAutoDynamicsResult" rows="12"></textarea></label>
+          <div class="cf-autofill-result-actions"><button class="btn btn-primary" type="button" id="cfAutoApplyBtn">Add generated information to call</button></div>
+        </div>
+        <div class="dynamics-modal-actions cf-autofill-actions">
+          <button class="btn btn-ghost" type="button" id="cfAutoClearBtn">Clear screenshots</button>
+          <button class="btn btn-primary" type="button" id="cfAutoGenerateBtn" disabled>Generate information</button>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap);
+    byId('cfAutoFillClose').onclick=closeAutoFill;
+    byId('cfAutoClearBtn').onclick=()=>resetAutoFiles(true);
+    byId('cfAutoGenerateBtn').onclick=runAutoFill;
+    byId('cfAutoApplyBtn').onclick=applyGeneratedInfo;
+    byId('cfAutoFillFiles').addEventListener('change',e=>{selectAutoFiles([...e.target.files]);e.target.value='';});
+    ['cfAutoSelfName','cfAutoSelfAge','cfAutoSelfJob'].forEach(id=>byId(id)?.addEventListener('input',renderAutoSelection));
+    wrap.addEventListener('click',e=>{if(e.target===wrap&&!autoBusy)closeAutoFill();});
+  }
+
+  function installSavedModal(){
+    if(byId('cfSavedSetupsModal'))return;
+    const wrap=document.createElement('div');
+    wrap.id='cfSavedSetupsModal';
+    wrap.className='modal-backdrop hidden';
+    wrap.innerHTML=`<div class="modal medium-modal cf-saved-setups-modal" role="dialog" aria-modal="true" aria-labelledby="cfSavedSetupsTitle">
+      <div class="modal-head"><div><span class="section-eyebrow">Account-synced information</span><h2 id="cfSavedSetupsTitle">Saved first-call information</h2><p>Save a setup now and load it after signing in on another browser or device.</p></div><button class="modal-close" type="button" id="cfSavedSetupsClose">×</button></div>
+      <div id="cfSavedSetupsList" class="cf-saved-setups-list"></div>
+    </div>`;
+    document.body.appendChild(wrap);
+    byId('cfSavedSetupsClose').onclick=()=>closeOverlay('cfSavedSetupsModal');
+    wrap.addEventListener('click',e=>{if(e.target===wrap)closeOverlay('cfSavedSetupsModal');});
+    wrap.addEventListener('click',e=>{
+      const load=e.target.closest('[data-cf-load-draft]');
+      if(load){loadDraft(load.dataset.cfLoadDraft);return;}
+      const del=e.target.closest('[data-cf-delete-draft]');
+      if(del){deleteDraft(del.dataset.cfDeleteDraft);}
+    });
+  }
+
+  function openOverlay(id){byId(id)?.classList.remove('hidden');document.body.style.overflow='hidden';}
+  function closeOverlay(id){byId(id)?.classList.add('hidden');if(!document.querySelector('.modal-backdrop:not(.hidden)')&&!byId('callScreen')?.classList.contains('hidden')){}else if(document.querySelectorAll('.modal-backdrop:not(.hidden)').length===0&&byId('callScreen')?.classList.contains('hidden'))document.body.style.overflow='';}
+
+  function openAutoFill(){
+    if(!token()){try{showAuth('signin',null,'Sign in to generate and save caller information.');}catch{notify('Sign in first.');}return;}
+    installAutoFillModal();
+    const profile=(typeof data!=='undefined'&&data?.profile)||{};
+    byId('cfAutoSelfName').value=safeText(profile.name||account?.name||'');
+    byId('cfAutoSelfJob').value=safeText(profile.role||'');
+    byId('cfAutoSelfAge').value='';
+    resetAutoFiles(true);
+    openOverlay('cfAutoFillModal');
+  }
+  function closeAutoFill(){if(autoBusy)return notify('Please wait for the current generation to finish.');closeOverlay('cfAutoFillModal');}
+
+  function selectAutoFiles(incoming){
+    if(autoBusy)return;
+    const valid=incoming.filter(f=>ALLOWED_TYPES.has(String(f.type||'').toLowerCase())&&Number(f.size||0)<=MAX_FILE_BYTES);
+    if(valid.length!==incoming.length)notify('Some files were skipped. Use PNG, JPG, WEBP or GIF screenshots smaller than 20 MB each.');
+    autoFiles=valid.slice(0,MAX_IMAGES);
+    if(valid.length>MAX_IMAGES)notify('CallFocus accepts a maximum of 50 screenshots.');
+    byId('cfAutoFillResults')?.classList.add('hidden');
+    renderAutoSelection();
+  }
+  function resetAutoFiles(resetInput=false){
+    if(autoBusy)return;
+    autoFiles=[];
+    if(resetInput&&byId('cfAutoFillFiles'))byId('cfAutoFillFiles').value='';
+    byId('cfAutoFillResults')?.classList.add('hidden');
+    renderAutoSelection();
+    const wrap=byId('cfAutoFillProgressWrap');if(wrap)wrap.classList.add('hidden');
+  }
+  function formatSize(bytes){const n=Math.max(0,Number(bytes)||0);if(n<1024)return`${n} B`;if(n<1048576)return`${Math.max(1,Math.round(n/1024))} KB`;return`${(n/1048576).toFixed(n>=10485760?0:1)} MB`;}
+  function renderAutoSelection(){
+    const count=byId('cfAutoFillCount'),note=byId('cfAutoFillSelectionNote'),thumbs=byId('cfAutoFillThumbs'),button=byId('cfAutoGenerateBtn');
+    if(count)count.textContent=`${autoFiles.length} / ${MAX_IMAGES} selected`;
+    const remaining=Math.max(0,MIN_IMAGES-autoFiles.length);
+    if(note)note.textContent=remaining?`${remaining} more screenshot${remaining===1?'':'s'} required`:`${autoFiles.length} screenshots ready`;
+    const metaReady=!!safeText(byId('cfAutoSelfName')?.value)&&!!safeText(byId('cfAutoSelfAge')?.value)&&!!safeText(byId('cfAutoSelfJob')?.value);
+    if(button)button.disabled=autoBusy||autoFiles.length<MIN_IMAGES||!metaReady;
+    if(!thumbs)return;
+    thumbs.innerHTML='';
+    if(!autoFiles.length){thumbs.innerHTML='<div class="dynamics-empty-thumbs">Your selected screenshots will appear here.</div>';return;}
+    autoFiles.forEach((file,i)=>{
+      const item=document.createElement('div');item.className='dynamics-thumb dynamics-thumb-safe';
+      item.innerHTML=`<div class="dynamics-thumb-placeholder" aria-hidden="true">IMG</div><span class="dynamics-thumb-label">Screenshot ${i+1}</span><small class="dynamics-thumb-size">${formatSize(file.size)}</small><b>${i+1}</b>`;
+      const remove=document.createElement('button');remove.type='button';remove.className='dynamics-thumb-remove';remove.textContent='×';remove.setAttribute('aria-label',`Remove screenshot ${i+1}`);remove.onclick=()=>{if(autoBusy)return;autoFiles.splice(i,1);renderAutoSelection();};
+      item.appendChild(remove);thumbs.appendChild(item);
+    });
+  }
+
+  function smallerBatches(){const ua=String(navigator.userAgent||'');const isiOS=/iPad|iPhone|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&Number(navigator.maxTouchPoints||0)>1);const narrow=globalThis.matchMedia?.('(max-width: 820px)')?.matches;return!!(isiOS||narrow);}
+  function yieldBrowser(){return new Promise(resolve=>typeof requestAnimationFrame==='function'?requestAnimationFrame(()=>setTimeout(resolve,0)):setTimeout(resolve,0));}
+  function setAutoProgress(percent,text,error=false){const wrap=byId('cfAutoFillProgressWrap');if(!wrap)return;wrap.classList.remove('hidden');byId('cfAutoFillProgressBar').style.width=`${Math.max(0,Math.min(100,percent))}%`;byId('cfAutoFillProgressText').textContent=text||'';byId('cfAutoFillProgressText').classList.toggle('dynamics-status-error',!!error);byId('cfAutoFillProgressPercent').textContent=`${Math.round(Math.max(0,Math.min(100,percent)))}%`;}
+  function loadImage(src){return new Promise((resolve,reject)=>{const img=new Image();img.decoding='async';img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('One screenshot could not be prepared.'));img.src=src;});}
+  function canvasBlob(canvas){return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('One screenshot could not be compressed.')),'image/jpeg',ANALYSIS_JPEG_QUALITY));}
+  function blobDataURL(blob){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||''));r.onerror=()=>reject(new Error('One screenshot could not be encoded.'));r.readAsDataURL(blob);});}
+  async function prepareImage(file){
+    const src=URL.createObjectURL(file);let img=null,canvas=null;
+    try{img=await loadImage(src);const nw=Math.max(1,img.naturalWidth||img.width||1),nh=Math.max(1,img.naturalHeight||img.height||1),longest=Math.max(nw,nh),scale=longest>ANALYSIS_MAX_EDGE?ANALYSIS_MAX_EDGE/longest:1,w=Math.max(1,Math.round(nw*scale)),h=Math.max(1,Math.round(nh*scale));canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d',{alpha:false,willReadFrequently:false});if(!ctx)throw new Error('This browser could not prepare a screenshot.');ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);return await blobDataURL(await canvasBlob(canvas));}
+    finally{try{URL.revokeObjectURL(src)}catch{}try{if(img)img.removeAttribute('src')}catch{}try{if(canvas){canvas.width=1;canvas.height=1}}catch{}img=null;canvas=null;}
+  }
+  async function api(body){
+    const res=await fetch('/api/call-context/analyze',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token()}`},body:JSON.stringify(body),cache:'no-store'});let payload={};try{payload=await res.json()}catch{}if(!res.ok)throw new Error(payload?.error||'CallFocus could not generate the caller information.');return payload;
+  }
+  async function analyzeBatch(images,batchNumber,totalBatches,analysisId,userMeta,callerHint){let last;for(let a=0;a<2;a++){try{return await api({kind:'batch',images,batchNumber,totalBatches,analysisId,userMeta,callerHint});}catch(e){last=e;if(a===0)await new Promise(r=>setTimeout(r,650));}}throw last;}
+
+  async function runAutoFill(){
+    if(autoBusy)return;
+    const userMeta={name:safeText(byId('cfAutoSelfName')?.value),age:safeText(byId('cfAutoSelfAge')?.value),job:safeText(byId('cfAutoSelfJob')?.value)};
+    if(!userMeta.name||!userMeta.age||!userMeta.job)return notify('Enter your name, age and job/work type first.');
+    if(autoFiles.length<MIN_IMAGES)return notify('Upload at least 20 conversation screenshots.');
+    const age=Number(userMeta.age);if(!Number.isFinite(age)||age<1||age>120)return notify('Enter a valid age.');
+    autoBusy=true;renderAutoSelection();byId('cfAutoGenerateBtn').textContent='Generating…';byId('cfAutoClearBtn').disabled=true;byId('cfAutoFillResults')?.classList.add('hidden');
+    const batchSize=smallerBatches()?MOBILE_BATCH_SIZE:DESKTOP_BATCH_SIZE,totalBatches=Math.ceil(autoFiles.length/batchSize),summaries=[],analysisId=(crypto.randomUUID?.()||`cfctx_${Date.now()}_${Math.random().toString(36).slice(2,10)}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,96),callerHint=safeText(byId('newCallPersonName')?.value);
+    try{
+      for(let b=0;b<totalBatches;b++){
+        const start=b*batchSize,group=autoFiles.slice(start,start+batchSize),prepared=[];
+        for(let j=0;j<group.length;j++){const index=start+j+1;setAutoProgress(((b+(j/group.length)*.38)/(totalBatches+1))*100,`Preparing screenshot ${index} of ${autoFiles.length}…`);prepared.push(await prepareImage(group[j]));await yieldBrowser();}
+        setAutoProgress(((b+.45)/(totalBatches+1))*100,`Reading screenshots ${start+1}–${start+group.length} of ${autoFiles.length}…`);
+        const result=await analyzeBatch(prepared,b+1,totalBatches,analysisId,userMeta,callerHint);if(!result?.summary)throw new Error('One screenshot group did not return usable information.');summaries.push(result.summary);prepared.length=0;await yieldBrowser();setAutoProgress(((b+1)/(totalBatches+1))*100,`Read ${start+group.length} of ${autoFiles.length} screenshots.`);
+      }
+      setAutoProgress((totalBatches/(totalBatches+1))*100,'Building About you, About the caller and conversation dynamics…');
+      const final=await api({kind:'finalize',summaries,imageCount:autoFiles.length,analysisId,userMeta,callerHint});
+      if(!final?.aboutSelf||!final?.aboutCaller||!final?.dynamics)throw new Error('CallFocus could not create all three information sections.');
+      byId('cfAutoAboutSelfResult').value=final.aboutSelf.trim();byId('cfAutoAboutCallerResult').value=final.aboutCaller.trim();byId('cfAutoDynamicsResult').value=final.dynamics.trim();
+      byId('cfAutoFillResults').dataset.callerName=safeText(final.callerName||'');byId('cfAutoFillResults').classList.remove('hidden');setAutoProgress(100,`Finished using ${autoFiles.length} screenshots.`);byId('cfAutoFillResults').scrollIntoView({behavior:'smooth',block:'nearest'});
+    }catch(e){setAutoProgress(0,e?.message||'Generation failed. Please try again.',true);notify(e?.message||'Generation failed. Please try again.');}
+    finally{autoBusy=false;byId('cfAutoGenerateBtn').textContent='Generate information';byId('cfAutoClearBtn').disabled=false;renderAutoSelection();}
+  }
+
+  function applyGeneratedInfo(){
+    const self=safeText(byId('cfAutoAboutSelfResult')?.value),caller=safeText(byId('cfAutoAboutCallerResult')?.value),dyn=safeText(byId('cfAutoDynamicsResult')?.value);if(!self||!caller||!dyn)return notify('Keep all three generated sections filled before adding them.');
+    byId('newCallAboutSelf').value=self;byId('newCallAboutCaller').value=caller;byId('newCallDynamicsMode').value='custom';byId('newCallDynamics').value=dyn;try{updateDynamicsUI('newCall')}catch{}
+    const inferred=safeText(byId('cfAutoFillResults')?.dataset.callerName);if(inferred&&!safeText(byId('newCallPersonName')?.value))byId('newCallPersonName').value=inferred;
+    closeAutoFill();byId('newCallAboutSelf')?.closest('.field-section')?.scrollIntoView({behavior:'smooth',block:'center'});notify('Generated information added to the correct first-call fields.');
+  }
+
+  function captureSetup(){
+    return {
+      title:safeText(byId('newCallTitle')?.value),personName:safeText(byId('newCallPersonName')?.value),aboutSelf:safeText(byId('newCallAboutSelf')?.value),aboutCaller:safeText(byId('newCallAboutCaller')?.value),dynamicsMode:byId('newCallDynamicsMode')?.value||'custom',dynamics:safeText(byId('newCallDynamics')?.value),topic:safeText(byId('newCallTopic')?.value),aRegion:safeText(byId('newCallARegion')?.value),aTimezone:byId('newCallATimezone')?.value||'',bRegion:safeText(byId('newCallBRegion')?.value),bTimezone:byId('newCallBTimezone')?.value||'',language:byId('newCallLanguage')?.value||'English',voiceGender:(typeof selectedNewCallVoice!=='undefined'?selectedNewCallVoice:(byId('newCallVoiceGender')?.value||'male')),voiceProfileId:(typeof selectedAiVoiceId!=='undefined'?selectedAiVoiceId:''),openingMode:byId('newCallOpeningMode')?.value||'auto',openingCustom:safeText(byId('newCallOpeningCustom')?.value)
+    };
+  }
+  function setupHasContent(x){return Object.entries(x).some(([k,v])=>!['dynamicsMode','language','voiceGender','voiceProfileId','openingMode','openingCustom','aTimezone','bTimezone'].includes(k)&&safeText(v));}
+  async function cloudSyncNow(){const t=token();if(!t||typeof data==='undefined'||!data)return false;try{const res=await fetch('/api/account/data',{method:'PUT',headers:{'Content-Type':'application/json',Authorization:`Bearer ${t}`},body:JSON.stringify({data}),cache:'no-store'});return res.ok}catch{return false}}
+  async function saveCurrentSetup(){
+    if(typeof account==='undefined'||!account||typeof data==='undefined'||!data)return notify('Sign in before saving information.');
+    const setup=captureSetup();if(!setupHasContent(setup))return notify('Add some first-call information before saving.');
+    const drafts=ensureDraftData(),now=new Date().toISOString();let item=activeDraftId?drafts.find(d=>d.id===activeDraftId):null;
+    if(item)Object.assign(item,setup,{updatedAt:now});else{item={id:crypto.randomUUID?.()||`draft_${Date.now()}_${Math.random().toString(36).slice(2,9)}`,...setup,createdAt:now,updatedAt:now};drafts.unshift(item);activeDraftId=item.id;}
+    if(drafts.length>30)drafts.length=30;
+    try{saveData()}catch{}updateSavedCount();const btn=byId('cfSaveCallInfoBtn');if(btn){btn.disabled=true;btn.textContent='Saving…';}
+    const synced=await cloudSyncNow();if(btn){btn.disabled=false;btn.textContent='Save information';}notify(synced?'Information saved to your CallFocus account.':'Information saved locally. Cloud sync will retry automatically.');
+  }
+  function updateSavedCount(){const count=byId('cfSavedSetupsCount');if(count)count.textContent=String((typeof data!=='undefined'&&Array.isArray(data?.callDrafts))?data.callDrafts.length:0);}
+  function openSavedSetups(){if(typeof account==='undefined'||!account)return notify('Sign in to view saved information.');installSavedModal();renderSavedSetups();openOverlay('cfSavedSetupsModal');}
+  function renderSavedSetups(){
+    const root=byId('cfSavedSetupsList');if(!root)return;const drafts=[...ensureDraftData()].sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+    if(!drafts.length){root.innerHTML='<div class="empty-state">You have not saved any first-call information yet.</div>';return;}
+    root.innerHTML=drafts.map(d=>`<article class="cf-saved-setup-card"><div><strong>${escapeHtml(d.title||d.personName||'Saved call setup')}</strong><span>${escapeHtml(d.personName||'Caller not named yet')}</span><small>${escapeHtml(formatDraftDate(d.updatedAt||d.createdAt))}</small></div><div class="cf-saved-setup-actions"><button class="btn btn-primary" type="button" data-cf-load-draft="${escapeHtml(d.id)}">Load</button><button class="btn btn-ghost" type="button" data-cf-delete-draft="${escapeHtml(d.id)}">Delete</button></div></article>`).join('');
+  }
+  function escapeHtml(v){return String(v??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+  function formatDraftDate(v){try{return new Date(v).toLocaleString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})}catch{return'Saved'}}
+  function applySetup(d){
+    const set=(id,v)=>{const el=byId(id);if(el)el.value=v??''};set('newCallTitle',d.title);set('newCallPersonName',d.personName);set('newCallAboutSelf',d.aboutSelf);set('newCallAboutCaller',d.aboutCaller);set('newCallDynamicsMode',d.dynamicsMode||'custom');set('newCallDynamics',d.dynamics);set('newCallTopic',d.topic);set('newCallARegion',d.aRegion);set('newCallBRegion',d.bRegion);try{ensureTimezoneChoice(byId('newCallATimezone'),d.aTimezone||'');ensureTimezoneChoice(byId('newCallBTimezone'),d.bTimezone||'');updateLocationClearButton('newCallARegion');updateLocationClearButton('newCallBRegion')}catch{set('newCallATimezone',d.aTimezone);set('newCallBTimezone',d.bTimezone)}set('newCallLanguage',d.language||'English');set('newCallOpeningMode',d.openingMode||'auto');set('newCallOpeningCustom',d.openingCustom);try{updateDynamicsUI('newCall')}catch{}
+    try{selectedNewCallVoice=d.voiceGender||'male';set('newCallVoiceGender',selectedNewCallVoice);document.querySelectorAll('#newCallModal .voice-option').forEach(b=>b.classList.toggle('active',b.dataset.voice===selectedNewCallVoice));}catch{}
+    try{selectedAiVoiceId=d.voiceProfileId||'';window.CallFocusAiVoice?.renderNewCallPicker?.()}catch{}
+    byId('newCallOpeningMode')?.dispatchEvent(new Event('change',{bubbles:true}));activeDraftId=d.id||'';
+  }
+  function loadDraft(id){const d=ensureDraftData().find(x=>x.id===id);if(!d)return notify('Saved information was not found.');applySetup(d);closeOverlay('cfSavedSetupsModal');notify('Saved information loaded.');}
+  async function deleteDraft(id){const drafts=ensureDraftData(),i=drafts.findIndex(d=>d.id===id);if(i<0)return;drafts.splice(i,1);if(activeDraftId===id)activeDraftId='';try{saveData()}catch{}updateSavedCount();renderSavedSetups();await cloudSyncNow();notify('Saved information deleted.');}
+
+  function hookLifecycle(){
+    if(typeof resetNewCallForm==='function'){
+      const priorReset=resetNewCallForm;resetNewCallForm=function(){activeDraftId='';const r=priorReset.apply(this,arguments);setTimeout(()=>{installNewCallTools();updateSavedCount();},0);return r;};
+    }
+    if(typeof renderWorkspace==='function'){
+      const priorRender=renderWorkspace;renderWorkspace=function(){const r=priorRender.apply(this,arguments);try{ensureDraftData();updateSavedCount();}catch{}return r;};
+    }
+  }
+  function boot(){installNewCallTools();installAutoFillModal();installSavedModal();hookLifecycle();try{ensureDraftData();updateSavedCount()}catch{}}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();

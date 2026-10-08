@@ -288,6 +288,7 @@ function defaultCustomerData(name = '') {
     profile: { name: String(name || ''), role: '', about: '', rules: '' },
     callers: [],
     threads: [],
+    callDrafts: [],
     wallet: {
       version: 2,
       revision: 0,
@@ -361,6 +362,7 @@ function mergeMigratedCustomerData(existing, incoming, name = '') {
     profile: { ...(incoming.profile || {}), ...(existing.profile || {}) },
     callers: mergeById(existing.callers, incoming.callers),
     threads: mergeById(existing.threads, incoming.threads),
+    callDrafts: mergeById(existing.callDrafts, incoming.callDrafts),
     wallet: existing.wallet || incoming.wallet || defaultCustomerData(name).wallet,
     voiceNotes: mergeById(existing.voiceNotes, incoming.voiceNotes)
   };
@@ -2616,6 +2618,78 @@ ${joined}`;
 }
 
 
+
+
+// -----------------------------------------------------------------------------
+// V15.3 first-call auto-fill generator
+// Builds About you, About the caller and Conversation dynamics from 20–50
+// screenshots while keeping the same low-memory browser batching strategy.
+// Screenshots are never written to KV.
+// -----------------------------------------------------------------------------
+function parseCallContextJson(text) {
+  const raw = String(text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '');
+  const start = raw.indexOf('{'), end = raw.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  try { return JSON.parse(raw.slice(start, end + 1)); } catch { return null; }
+}
+
+async function handleCallContextAnalyze(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Sign in to generate caller information.' }, 401);
+  if (!env.OPENAI_API_KEY) return json({ error: 'Automatic caller information is unavailable right now.' }, 503);
+  let body = {};
+  try { body = await request.json(); } catch { return json({ error: 'Invalid generation request.' }, 400); }
+  const kind = body?.kind === 'finalize' ? 'finalize' : 'batch';
+  const suppliedAnalysisId = String(body?.analysisId || '').trim();
+  const analysisId = /^[A-Za-z0-9_-]{8,96}$/.test(suppliedAnalysisId) ? suppliedAnalysisId : crypto.randomUUID();
+  const meta = body?.userMeta && typeof body.userMeta === 'object' ? body.userMeta : {};
+  const userName = String(meta?.name || '').trim().slice(0, 120);
+  const userAge = String(meta?.age || '').trim().slice(0, 12);
+  const userJob = String(meta?.job || '').trim().slice(0, 180);
+  const callerHint = String(body?.callerHint || '').trim().slice(0, 120);
+  if (!userName || !userAge || !userJob) return json({ error: 'Enter your name, age and job/work type before generating.' }, 400);
+
+  if (kind === 'batch') {
+    const images = Array.isArray(body?.images) ? body.images : [];
+    if (!images.length || images.length > 8) return json({ error: 'Each generation batch must contain 1 to 8 screenshots.' }, 400);
+    let totalChars = 0;
+    for (const image of images) {
+      if (typeof image !== 'string' || !/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,/i.test(image)) return json({ error: 'One screenshot is not a supported image.' }, 400);
+      if (image.length > 8_000_000) return json({ error: 'One screenshot is too large. Please use a smaller image.' }, 413);
+      totalChars += image.length;
+    }
+    if (totalChars > 32_000_000) return json({ error: 'This screenshot batch is too large. Please try again.' }, 413);
+    const batchNumber = Math.max(1, Math.floor(Number(body?.batchNumber) || 1));
+    const totalBatches = Math.max(batchNumber, Math.floor(Number(body?.totalBatches) || batchNumber));
+    const identity = `The CallFocus account holder is ${userName}, age ${userAge}, whose job/work type is ${userJob}.${callerHint ? ` The person they intend to call is named or believed to be named ${callerHint}.` : ''}`;
+    const content = [{ type: 'input_text', text: `${identity}\n\nYou are reading batch ${batchNumber} of ${totalBatches} ordered screenshots from the same private conversation. Build detailed analyst notes that will later be used to create three separate CallFocus fields: About the account holder, About the other caller, and Dynamics of Your Conversations.\n\nUse visible chat layout, names, message direction and wording carefully to distinguish the account holder from the other person. In common messaging layouts outgoing/right-side messages may belong to the account holder, but only use that cue when the interface clearly supports it. The supplied name/age/job are confirmed facts about the account holder and must not be reassigned to the other person.\n\nCapture explicit facts about each person: names, work, family, location, routines, responsibilities, preferences, plans, interests, relevant life context and anything else actually stated. Separately capture communication behavior: who initiates, response length and timing, warmth, affection, flirtation, humor, reassurance, conflict, boundaries, recurring subjects, future plans, unresolved situations, and changes in closeness. Preserve important concrete context with short paraphrases.\n\nDo not invent demographics, jobs, family relationships, diagnoses, motives or hidden facts. If a fact cannot be assigned confidently, mark it as uncertain in the notes rather than guessing. Treat overlapping screenshots as duplicate context, not additional evidence. Keep this batch summary under 850 words.` }];
+    for (const image of images) content.push({ type: 'input_image', image_url: image, detail: 'high' });
+    try {
+      const result = await callOpenAIResponses(env, { model: 'gpt-6-luna', store: false, reasoning: { effort: 'none' }, max_output_tokens: 1600, input: [{ role: 'user', content }] });
+      await recordDynamicsUsage(env, { auth, analysisId, kind: 'batch', imageCount: images.length, usage: result.usage });
+      return json({ ok: true, summary: result.text, batchNumber, imageCount: images.length, analysisId });
+    } catch (error) { return json({ error: String(error?.message || 'Could not read this screenshot group.') }, Number(error?.status || 502)); }
+  }
+
+  const summaries = Array.isArray(body?.summaries) ? body.summaries.map(x => String(x || '').trim()).filter(Boolean) : [];
+  if (!summaries.length || summaries.length > 16) return json({ error: 'No screenshot information was available to combine.' }, 400);
+  const imageCount = Math.max(20, Math.min(50, Math.floor(Number(body?.imageCount) || 20)));
+  const joined = summaries.map((x,i)=>`BATCH ${i+1}\n${x.slice(0,5200)}`).join('\n\n');
+  if (joined.length > 78_000) return json({ error: 'The combined conversation information is too large to finalize.' }, 413);
+  const prompt = `Create three CallFocus first-call context fields from the analyst notes below. They came from ${imageCount} ordered conversation screenshots.\n\nCONFIRMED ACCOUNT-HOLDER FACTS\nName: ${userName}\nAge: ${userAge}\nJob/work type: ${userJob}${callerHint ? `\nOther caller name hint: ${callerHint}` : ''}\n\nReturn STRICT JSON only with exactly these keys:\n{\n  "callerName": "",\n  "aboutSelf": "",\n  "aboutCaller": "",\n  "dynamics": ""\n}\n\nRequirements for aboutSelf:\n- Write roughly 140–260 useful words when enough information exists.\n- Start naturally with the confirmed name, age and job/work type.\n- Add only account-holder facts explicitly supported by the notes, plus their observed communication style and relevant ongoing context.\n- Do not invent missing biography.\n\nRequirements for aboutCaller:\n- Write roughly 140–300 useful words when enough information exists.\n- Include the other person's clearly supported name and facts, work, routines, family/life context, preferences, plans, communication style, and anything practically important for future calls.\n- If a detail is unsupported, omit it instead of saying it as fact.\n\nRequirements for callerName:\n- Use the other person's supported name when clear. Prefer the supplied caller-name hint when it matches the notes. If no name is supported, return an empty string.\n\nRequirements for dynamics:\n- Begin exactly with: Dynamics of Your Conversations\n- Aim for 550–850 words when the evidence supports that depth. Be shorter rather than inventing details.\n- Describe overall relationship dynamic and conversational rhythm, recurring everyday habits/topics, the other person's communication style, the account holder's communication style, how both styles interact, emotional support, affection/flirtation, humor, tension/conflict, boundaries, future plans, unresolved complications, important ongoing life context, progression in closeness/distance, and practical guidance for how a future CallFocus voice should behave.\n- Use short * bullets only where helpful for recurring concrete topics or routines.\n- Treat the relationship as established only to the degree supported by the messages.\n- Never invent missing personal information.\n- Do not mention screenshots, batches, AI, models, prompts or analysis.\n- Do not use labels such as Person A/Person B in the finished text. Refer to the account holder as "you" in the dynamics.\n\nMake all three text fields ready to paste directly into CallFocus. Escape line breaks correctly as JSON strings.\n\nANALYST NOTES\n${joined}`;
+  try {
+    const result = await callOpenAIResponses(env, { model: 'gpt-6-luna', store: false, reasoning: { effort: 'none' }, max_output_tokens: 3200, input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }] }] });
+    const parsed = parseCallContextJson(result.text);
+    if (!parsed || !String(parsed.aboutSelf||'').trim() || !String(parsed.aboutCaller||'').trim() || !String(parsed.dynamics||'').trim()) {
+      const err = new Error('The generated information was incomplete. Please try again.'); err.status = 502; throw err;
+    }
+    await recordDynamicsUsage(env, { auth, analysisId, kind: 'finalize', imageCount, usage: result.usage });
+    return json({ ok: true, callerName: String(parsed.callerName||'').trim().slice(0,120), aboutSelf: String(parsed.aboutSelf).trim(), aboutCaller: String(parsed.aboutCaller).trim(), dynamics: String(parsed.dynamics).trim(), imageCount, analysisId });
+  } catch (error) { return json({ error: String(error?.message || 'Could not create the caller information.') }, Number(error?.status || 502)); }
+}
+
+
 /* ===== CallFocus V13.2 — Live call translation transcript ===== */
 async function handleLiveTranscriptTranslate(request, env) {
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
@@ -3506,7 +3580,7 @@ export default {
     if (url.pathname === '/api/manual-payment/cancel') return safeCustomerRoute('manual-payment-cancel', () => handleManualPaymentCancel(request, env));
     if (url.pathname === '/api/manual-payment/status') return safeCustomerRoute('manual-payment-status', () => handleManualPaymentStatus(request, env));
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.0' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.3' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -3532,6 +3606,7 @@ export default {
     if (url.pathname === '/api/avatar/end') return safeCustomerRoute('avatar-end', () => handleAvatarEnd(request, env));
     if (url.pathname === '/api/live-translate') { const limited = await callFocusRateLimit(request, env, 'live-translate', 900, 3600); if (limited) return limited; return safeCustomerRoute('live-translate', () => handleLiveTranscriptTranslate(request, env)); }
     if (url.pathname === '/api/dynamics/analyze') { const limited = await callFocusRateLimit(request, env, 'dynamics-analyze', 40, 900); if (limited) return limited; return safeCustomerRoute('dynamics-analyze', () => handleDynamicsAnalyze(request, env)); }
+    if (url.pathname === '/api/call-context/analyze') { const limited = await callFocusRateLimit(request, env, 'call-context-analyze', 40, 900); if (limited) return limited; return safeCustomerRoute('call-context-analyze', () => handleCallContextAnalyze(request, env)); }
     if (url.pathname === '/api/session') {
       if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
       return handleSession(request, env);
