@@ -725,3 +725,8 @@ html[data-theme="pearl"] .premium-footer .footer-links a:hover{
 .admin-inline-save{width:100%;min-height:52px}
 .admin-recommendation.bad{border-color:#e0a5a5!important;background:#fff5f5!important;color:#9d4444!important}
 @media(max-width:640px){.admin-screenshot-limits-panel{gap:15px}.admin-screenshot-limits-panel h3{font-size:22px}.admin-inline-save{min-height:54px}}
+
+/* CallFocus V15.6 — admin delivery hardening */
+.admin-screenshot-limits-panel{position:relative!important;margin:20px 0 24px!important;padding:24px!important;background:linear-gradient(145deg,rgba(255,255,255,.96),rgba(241,250,247,.96))!important;border:2px solid rgba(194,148,68,.48)!important}
+.admin-screenshot-limits-panel::before{content:"ACTIVE CONTROL";justify-self:start;display:inline-flex;align-items:center;min-height:28px;padding:0 10px;border-radius:999px;background:rgba(31,126,113,.10);border:1px solid rgba(31,126,113,.18);font:800 10px/1 'Manrope',sans-serif;letter-spacing:1.25px;color:#176e62}
+@media(max-width:640px){.admin-screenshot-limits-panel{padding:18px!important;margin:16px 0 22px!important}}

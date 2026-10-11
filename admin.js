@@ -1,4 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
+const ADMIN_BUILD_VERSION='15.6';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -46,6 +47,22 @@ function populateVoices(){
 function renderServerState(){const online=$('adminServerOnline').checked;$('serverStateBadge').classList.toggle('offline',!online);$('serverStateBadge').querySelector('b').textContent=online?'Online':'Offline';if($('adminDashServer'))$('adminDashServer').textContent=online?'Online':'Offline'}
 function readBackup(){try{return JSON.parse(localStorage.getItem(ADMIN_BACKUP_KEY)||'null')}catch{return null}}
 function saveBackup(config){try{localStorage.setItem(ADMIN_BACKUP_KEY,JSON.stringify({savedAt:new Date().toISOString(),config}));renderBackupStatus()}catch{}}
+async function saveScreenshotLimitsDirect(){
+  const limits=screenshotLimits();
+  if(limits.min>limits.max){renderScreenshotLimitsSummary();toast('Minimum screenshots cannot be higher than maximum screenshots');return false;}
+  const btn=$('saveScreenshotLimitsBtn'); const old=btn?.textContent; if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{
+    const result=await api('/api/admin/screenshot-limits',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({min:limits.min,max:limits.max})});
+    if(currentConfig){currentConfig={...currentConfig,...result.config};}
+    if($('adminAnalysisScreenshotMin'))$('adminAnalysisScreenshotMin').value=result.min;
+    if($('adminAnalysisScreenshotMax'))$('adminAnalysisScreenshotMax').value=result.max;
+    renderScreenshotLimitsSummary();
+    toast(`Screenshot limits saved: ${result.min}–${result.max}`);
+    return true;
+  }catch(err){toast(err.message||'Could not save screenshot limits');return false;}
+  finally{if(btn){btn.disabled=false;btn.textContent=old||'Save screenshot limits';}}
+}
+
 function screenshotLimits(){const min=Math.max(1,Math.min(50,Math.round(Number($('adminAnalysisScreenshotMin')?.value)||20)));const max=Math.max(1,Math.min(50,Math.round(Number($('adminAnalysisScreenshotMax')?.value)||50)));return {min,max};}
 function renderScreenshotLimitsSummary(){const box=$('adminScreenshotLimitsSummary');if(!box)return;const {min,max}=screenshotLimits();box.innerHTML=min<=max?`Customers must upload between <strong>${min} and ${max} screenshot${max===1?'':'s'}</strong> before either generator can run. Allowed admin range: 1–50.`:`Minimum cannot be higher than maximum. Current values: <strong>${min}</strong> minimum and <strong>${max}</strong> maximum.`;box.classList.toggle('bad',min>max);}
 function formPayload(){const limits=screenshotLimits();return {customVoices:[...customVoices],unlimitedCreditEmails:[...unlimitedCreditEmails],siteTheme:$('adminSiteTheme').value||'black',serverOnline:$('adminServerOnline').checked,serverMessage:$('adminServerMessage').value.trim(),maleVoice:$('adminMaleVoice').value,femaleVoice:$('adminFemaleVoice').value,model:'gpt-live-1',speakingPace:$('adminSpeakingPace').value,speechStyle:$('adminSpeechStyle').value.trim(),instructions:$('adminInstructions').value.trim(),opening:$('adminOpening').value.trim(),speakFirst:$('adminSpeakFirst').checked,interruptions:$('adminInterruptions').checked,manualPaymentsEnabled:$('adminManualPaymentsEnabled')?.checked===true,manualPaymentBankName:$('adminManualBankName')?.value.trim()||'',manualPaymentAccountName:$('adminManualAccountName')?.value.trim()||'',manualPaymentAccountNumber:$('adminManualAccountNumber')?.value.replace(/[^0-9]/g,'')||'',manualPaymentNotificationEmail:$('adminManualPaymentEmail')?.value.trim().toLowerCase()||'support@callfocus.link',analysisScreenshotMin:limits.min,analysisScreenshotMax:limits.max,autoFillScreenshotLimit:limits.max}}
@@ -135,8 +152,9 @@ $('adminFemaleVoice')?.addEventListener('change',renderCustomVoiceLibrary);
 
 populateVoices();
 document.querySelectorAll('[data-site-theme]').forEach(btn=>btn.addEventListener('click',()=>{const value=btn.dataset.siteTheme==='pearl'?'pearl':'black';$('adminSiteTheme').value=value;document.querySelectorAll('[data-site-theme]').forEach(x=>{const on=x===btn;x.classList.toggle('active',on);x.setAttribute('aria-pressed',String(on));});scheduleDraftBackup()}));
-$('adminGateBtn').onclick=login;$('adminPasscode').addEventListener('keydown',e=>{if(e.key==='Enter')login()});$('adminServerOnline').onchange=()=>{renderServerState();scheduleDraftBackup()};$('saveAdminBtn').onclick=()=>saveConfig();$('saveScreenshotLimitsBtn')?.addEventListener('click',()=>saveConfig('Screenshot limits saved for both generators'));$('restoreAdminBackupBtn')?.addEventListener('click',restoreBackup);$('adminLockBtn').onclick=()=>{sessionStorage.removeItem('callfocus_admin_key');location.reload()};document.querySelectorAll('[data-preview]').forEach(btn=>btn.onclick=()=>previewVoice(btn.dataset.preview,btn));
+$('adminGateBtn').onclick=login;$('adminPasscode').addEventListener('keydown',e=>{if(e.key==='Enter')login()});$('adminServerOnline').onchange=()=>{renderServerState();scheduleDraftBackup()};$('saveAdminBtn').onclick=()=>saveConfig();$('saveScreenshotLimitsBtn')?.addEventListener('click',saveScreenshotLimitsDirect);$('restoreAdminBackupBtn')?.addEventListener('click',restoreBackup);$('adminLockBtn').onclick=()=>{sessionStorage.removeItem('callfocus_admin_key');location.reload()};document.querySelectorAll('[data-preview]').forEach(btn=>btn.onclick=()=>previewVoice(btn.dataset.preview,btn));
 ['adminServerMessage','adminMaleVoice','adminFemaleVoice','adminSpeakingPace','adminSpeechStyle','adminInstructions','adminOpening','adminSpeakFirst','adminInterruptions','adminAnalysisScreenshotMin','adminAnalysisScreenshotMax'].forEach(id=>$(id)?.addEventListener('input',()=>{if(id==='adminAnalysisScreenshotMin'||id==='adminAnalysisScreenshotMax')renderScreenshotLimitsSummary();scheduleDraftBackup();}));
+(async()=>{try{const r=await fetch('/api/app-version',{cache:'no-store'});const d=await r.json();if(String(d?.version||'')&&String(d.version)!==ADMIN_BUILD_VERSION&&!sessionStorage.getItem('callfocus_admin_reload_'+d.version)){sessionStorage.setItem('callfocus_admin_reload_'+d.version,'1');location.replace('/admin?build='+encodeURIComponent(d.version)+'&t='+Date.now());}}catch{}})();
 const remembered=sessionStorage.getItem('callfocus_admin_key');if(remembered){adminKey=remembered;api('/api/admin/config').then(r=>{$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!r.storageConnected&&backup?.config){fill(backup.config,false)}else{fill(r.config,r.storageConnected);if(r.storageConnected)saveBackup(r.config)}loadAdminUsers(true);loadAdminAiUsage();loadAdminManualPayments();}).catch(()=>{adminKey='';sessionStorage.removeItem('callfocus_admin_key')})}
 
 
