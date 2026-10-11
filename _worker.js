@@ -71,6 +71,8 @@ const DEFAULT_CONFIG = {
   manualPaymentAccountName: '',
   manualPaymentAccountNumber: '',
   manualPaymentNotificationEmail: 'support@callfocus.link',
+  analysisScreenshotMin: 20,
+  analysisScreenshotMax: 50,
   autoFillScreenshotLimit: 50,
   updatedAt: null
 };
@@ -777,6 +779,10 @@ async function getConfig(env) {
   try {
     const saved = await env.CALLFOCUS_CONFIG.get('global_config', { type: 'json' });
     const merged = { ...DEFAULT_CONFIG, ...(saved || {}), model: 'gpt-live-1' };
+    if (saved && saved.analysisScreenshotMin == null) merged.analysisScreenshotMin = DEFAULT_CONFIG.analysisScreenshotMin;
+    if (saved && saved.analysisScreenshotMax == null && saved.autoFillScreenshotLimit != null) {
+      merged.analysisScreenshotMax = Math.max(1, Math.min(50, Math.round(Number(saved.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax)));
+    }
     merged.customVoices = normalizeCustomVoices(merged.customVoices);
     return merged;
   } catch {
@@ -794,6 +800,9 @@ function sanitizeConfig(input = {}) {
   const manualPaymentNotificationEmailRaw = normalizeCustomerEmail(input.manualPaymentNotificationEmail || DEFAULT_CONFIG.manualPaymentNotificationEmail);
   const manualPaymentNotificationEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(manualPaymentNotificationEmailRaw) ? manualPaymentNotificationEmailRaw : DEFAULT_CONFIG.manualPaymentNotificationEmail;
   const manualPaymentAccountNumber = String(input.manualPaymentAccountNumber || '').replace(/[^0-9]/g, '').slice(0, 32);
+  const screenshotMin = Math.max(1, Math.min(50, Math.round(Number(input.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin)));
+  const legacyMax = Number(input.analysisScreenshotMax ?? input.autoFillScreenshotLimit);
+  const screenshotMax = Math.max(screenshotMin, Math.min(50, Math.round(Number.isFinite(legacyMax) && legacyMax > 0 ? legacyMax : DEFAULT_CONFIG.analysisScreenshotMax)));
   return {
     serverOnline: input.serverOnline !== false,
     serverMessage: String(input.serverMessage || DEFAULT_CONFIG.serverMessage).slice(0, 240),
@@ -814,7 +823,9 @@ function sanitizeConfig(input = {}) {
     manualPaymentAccountName: String(input.manualPaymentAccountName || '').trim().slice(0, 160),
     manualPaymentAccountNumber,
     manualPaymentNotificationEmail,
-    autoFillScreenshotLimit: Math.max(20, Math.min(50, Math.round(Number(input.autoFillScreenshotLimit) || DEFAULT_CONFIG.autoFillScreenshotLimit))),
+    analysisScreenshotMin: screenshotMin,
+    analysisScreenshotMax: screenshotMax,
+    autoFillScreenshotLimit: screenshotMax,
     updatedAt: new Date().toISOString()
   };
 }
@@ -909,7 +920,9 @@ async function handlePublicConfig(env) {
     paymentStatus: callFocusPaymentsEnabled(env) ? 'available' : 'awaiting_paystack_activation',
     manualPaymentsEnabled: manualPaymentReady(c),
     manualPaymentStatus: manualPaymentReady(c) ? 'available' : 'not_configured',
-    autoFillScreenshotLimit: Math.max(20, Math.min(50, Math.round(Number(c.autoFillScreenshotLimit) || DEFAULT_CONFIG.autoFillScreenshotLimit))),
+    analysisScreenshotMin: Math.max(1, Math.min(50, Math.round(Number(c.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin))),
+    analysisScreenshotMax: Math.max(Math.max(1, Math.min(50, Math.round(Number(c.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin))), Math.min(50, Math.round(Number(c.analysisScreenshotMax ?? c.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax))),
+    autoFillScreenshotLimit: Math.max(Math.max(1, Math.min(50, Math.round(Number(c.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin))), Math.min(50, Math.round(Number(c.analysisScreenshotMax ?? c.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax))),
     pricing: {
       creditsPerMinute: CALLFOCUS_CREDIT_POLICY.creditsPerMinute,
       nairaPerCredit: CALLFOCUS_CREDIT_POLICY.nairaPerCredit,
@@ -2520,8 +2533,13 @@ async function handleDynamicsAnalyze(request, env) {
   const kind = body?.kind === 'finalize' ? 'finalize' : 'batch';
   const suppliedAnalysisId = String(body?.analysisId || '').trim();
   const analysisId = /^[A-Za-z0-9_-]{8,96}$/.test(suppliedAnalysisId) ? suppliedAnalysisId : crypto.randomUUID();
+  const config = await getConfig(env);
+  const minScreenshots = Math.max(1, Math.min(50, Math.round(Number(config.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin)));
+  const maxScreenshots = Math.max(minScreenshots, Math.min(50, Math.round(Number(config.analysisScreenshotMax ?? config.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax)));
 
   if (kind === 'batch') {
+    const declaredTotal = Math.floor(Number(body?.totalImageCount) || 0);
+    if (declaredTotal < minScreenshots || declaredTotal > maxScreenshots) return json({ error: `Upload between ${minScreenshots} and ${maxScreenshots} screenshots for conversation dynamics.` }, 400);
     const images = Array.isArray(body?.images) ? body.images : [];
     if (!images.length || images.length > 8) return json({ error: 'Each analysis batch must contain 1 to 8 screenshots.' }, 400);
     let totalChars = 0;
@@ -2565,7 +2583,8 @@ Sensitive/private facts may be noted only when they are explicitly stated in the
 
   const summaries = Array.isArray(body?.summaries) ? body.summaries.map(x => String(x || '').trim()).filter(Boolean) : [];
   if (!summaries.length || summaries.length > 16) return json({ error: 'No screenshot analysis was available to combine.' }, 400);
-  const imageCount = Math.max(1, Math.min(50, Math.floor(Number(body?.imageCount) || 1)));
+  const imageCount = Math.floor(Number(body?.imageCount) || 0);
+  if (imageCount < minScreenshots || imageCount > maxScreenshots) return json({ error: `Upload between ${minScreenshots} and ${maxScreenshots} screenshots for conversation dynamics.` }, 400);
   const joined = summaries.map((s, i) => `BATCH ${i + 1}\n${s.slice(0, 4500)}`).join('\n\n');
   if (joined.length > 64_000) return json({ error: 'The combined analysis is too large to finalize.' }, 413);
 
@@ -2652,8 +2671,13 @@ async function handleCallContextAnalyze(request, env) {
   const userJob = String(meta?.job || '').trim().slice(0, 180);
   const callerHint = String(body?.callerHint || '').trim().slice(0, 120);
   if (!userName || !userAge || !userJob) return json({ error: 'Enter your name, age and job/work type before generating.' }, 400);
+  const config = await getConfig(env);
+  const minScreenshots = Math.max(1, Math.min(50, Math.round(Number(config.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin)));
+  const maxScreenshots = Math.max(minScreenshots, Math.min(50, Math.round(Number(config.analysisScreenshotMax ?? config.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax)));
 
   if (kind === 'batch') {
+    const declaredTotal = Math.floor(Number(body?.totalImageCount) || 0);
+    if (declaredTotal < minScreenshots || declaredTotal > maxScreenshots) return json({ error: `Upload between ${minScreenshots} and ${maxScreenshots} screenshots for automatic first-call information.` }, 400);
     const images = Array.isArray(body?.images) ? body.images : [];
     if (!images.length || images.length > 8) return json({ error: 'Each generation batch must contain 1 to 8 screenshots.' }, 400);
     let totalChars = 0;
@@ -2677,11 +2701,8 @@ async function handleCallContextAnalyze(request, env) {
 
   const summaries = Array.isArray(body?.summaries) ? body.summaries.map(x => String(x || '').trim()).filter(Boolean) : [];
   if (!summaries.length || summaries.length > 16) return json({ error: 'No screenshot information was available to combine.' }, 400);
-  const config = await getConfig(env);
-  const autoFillScreenshotLimit = Math.max(20, Math.min(50, Math.round(Number(config.autoFillScreenshotLimit) || DEFAULT_CONFIG.autoFillScreenshotLimit)));
   const imageCount = Math.floor(Number(body?.imageCount) || 0);
-  if (imageCount < 20) return json({ error: 'Upload at least 20 conversation screenshots.' }, 400);
-  if (imageCount > autoFillScreenshotLimit) return json({ error: `This CallFocus setup currently allows up to ${autoFillScreenshotLimit} screenshots for automatic first-call information.` }, 400);
+  if (imageCount < minScreenshots || imageCount > maxScreenshots) return json({ error: `Upload between ${minScreenshots} and ${maxScreenshots} screenshots for automatic first-call information.` }, 400);
   const joined = summaries.map((x,i)=>`BATCH ${i+1}\n${x.slice(0,5200)}`).join('\n\n');
   if (joined.length > 78_000) return json({ error: 'The combined conversation information is too large to finalize.' }, 413);
   const prompt = `Create three CallFocus first-call context fields from the analyst notes below. They came from ${imageCount} ordered conversation screenshots.\n\nCONFIRMED ACCOUNT-HOLDER FACTS\nName: ${userName}\nAge: ${userAge}\nJob/work type: ${userJob}${callerHint ? `\nOther caller name hint: ${callerHint}` : ''}\n\nReturn STRICT JSON only with exactly these keys:\n{\n  "callerName": "",\n  "aboutSelf": "",\n  "aboutCaller": "",\n  "dynamics": ""\n}\n\nRequirements for aboutSelf:\n- Write roughly 140–260 useful words when enough information exists.\n- Start naturally with the confirmed name, age and job/work type.\n- Add only account-holder facts explicitly supported by the notes, plus their observed communication style and relevant ongoing context.\n- Do not invent missing biography.\n\nRequirements for aboutCaller:\n- Write roughly 140–300 useful words when enough information exists.\n- Include the other person's clearly supported name and facts, work, routines, family/life context, preferences, plans, communication style, and anything practically important for future calls.\n- If a detail is unsupported, omit it instead of saying it as fact.\n\nRequirements for callerName:\n- Use the other person's supported name when clear. Prefer the supplied caller-name hint when it matches the notes. If no name is supported, return an empty string.\n\nRequirements for dynamics:\n- Begin exactly with: Dynamics of Your Conversations\n- Aim for 550–850 words when the evidence supports that depth. Be shorter rather than inventing details.\n- Describe overall relationship dynamic and conversational rhythm, recurring everyday habits/topics, the other person's communication style, the account holder's communication style, how both styles interact, emotional support, affection/flirtation, humor, tension/conflict, boundaries, future plans, unresolved complications, important ongoing life context, progression in closeness/distance, and practical guidance for how a future CallFocus voice should behave.\n- Use short * bullets only where helpful for recurring concrete topics or routines.\n- Treat the relationship as established only to the degree supported by the messages.\n- Never invent missing personal information.\n- Do not mention screenshots, batches, AI, models, prompts or analysis.\n- Do not use labels such as Person A/Person B in the finished text. Refer to the account holder as "you" in the dynamics.\n\nMake all three text fields ready to paste directly into CallFocus. Escape line breaks correctly as JSON strings.\n\nANALYST NOTES\n${joined}`;
@@ -3587,7 +3608,7 @@ export default {
     if (url.pathname === '/api/manual-payment/cancel') return safeCustomerRoute('manual-payment-cancel', () => handleManualPaymentCancel(request, env));
     if (url.pathname === '/api/manual-payment/status') return safeCustomerRoute('manual-payment-status', () => handleManualPaymentStatus(request, env));
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.3' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.5' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -3618,8 +3639,13 @@ export default {
       if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
       return handleSession(request, env);
     }
-    if (url.pathname === '/admin' || url.pathname === '/admin/') {
-      return env.ASSETS.fetch(new Request(new URL('/admin.html', url.origin), request));
+    if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
+      const asset = await env.ASSETS.fetch(new Request(new URL('/admin.html', url.origin), request));
+      const headers = new Headers(asset.headers);
+      headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      headers.set('Pragma', 'no-cache');
+      headers.set('Expires', '0');
+      return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {
       '/': '/index.html',
