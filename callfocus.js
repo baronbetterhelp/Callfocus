@@ -4393,7 +4393,6 @@ ${approvedPatterns}
 /* CallFocus V11.32 — select up to 50 conversation screenshots and generate dynamics */
 (()=>{
   const MAX_IMAGES=50;
-  const MIN_IMAGES=10;
   const DESKTOP_BATCH_SIZE=6;
   const MOBILE_BATCH_SIZE=4;
   const ANALYSIS_MAX_EDGE=1600;
@@ -4416,16 +4415,16 @@ ${approvedPatterns}
     wrap.innerHTML=`
       <div class="modal dynamics-modal" role="dialog" aria-modal="true" aria-labelledby="dynamicsGeneratorTitle">
         <div class="modal-head">
-          <div><span class="section-eyebrow">AI conversation analysis</span><h2 id="dynamicsGeneratorTitle">Generate conversation dynamics</h2><p>Select 10–50 conversation screenshots at once. CallFocus analyzes them together and creates a detailed, structured conversation-dynamics profile you can edit, copy, or use in a call.</p></div>
+          <div><span class="section-eyebrow">AI conversation analysis</span><h2 id="dynamicsGeneratorTitle">Generate conversation dynamics</h2><p>Select up to 50 conversation screenshots at once. CallFocus analyzes them together and creates a detailed, structured conversation-dynamics profile you can edit, copy, or use in a call.</p></div>
           <button class="modal-close" type="button" id="dynamicsCloseBtn" aria-label="Close">×</button>
         </div>
         <label class="dynamics-upload-zone" for="dynamicsFileInput">
           <span class="dynamics-upload-icon">＋</span>
           <strong>Upload conversation screenshots</strong>
-          <p>Choose 10–50 PNG, JPG, WEBP or GIF images. Select them in conversation order when possible.</p>
+          <p>Choose 1–50 PNG, JPG, WEBP or GIF images. Select them in conversation order when possible.</p>
         </label>
         <input class="dynamics-file-input" id="dynamicsFileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple />
-        <div class="dynamics-selection-head"><strong id="dynamicsCount">0 / 50 selected</strong><span id="dynamicsSelectionNote">At least 10 screenshots required</span></div>
+        <div class="dynamics-selection-head"><strong id="dynamicsCount">0 / 50 selected</strong><span id="dynamicsSelectionNote">No screenshots selected</span></div>
         <div class="dynamics-thumbs" id="dynamicsThumbs"><div class="dynamics-empty-thumbs">Your selected screenshots will appear here.</div></div>
         <div class="dynamics-privacy">Screenshots are used only for this analysis request and are not saved to the CallFocus account. Avoid uploading content you do not have permission to process.</div>
         <div class="dynamics-progress-wrap hidden" id="dynamicsProgressWrap">
@@ -4509,9 +4508,8 @@ ${approvedPatterns}
     clearThumbUrls();
     const count=$('dynamicsCount'), note=$('dynamicsSelectionNote'), thumbs=$('dynamicsThumbs'), generate=$('dynamicsGenerateBtn');
     if(count) count.textContent=`${files.length} / ${MAX_IMAGES} selected`;
-    const remaining=Math.max(0,MIN_IMAGES-files.length);
-    if(note) note.textContent=remaining ? `${remaining} more screenshot${remaining===1?'':'s'} required` : `${files.length} screenshots ready`;
-    if(generate) generate.disabled=files.length<MIN_IMAGES||busy;
+    if(note) note.textContent=files.length ? `${files.length} screenshot${files.length===1?'':'s'} ready` : 'No screenshots selected';
+    if(generate) generate.disabled=!files.length||busy;
     if(!thumbs) return;
     thumbs.innerHTML='';
     if(!files.length){ thumbs.innerHTML='<div class="dynamics-empty-thumbs">Your selected screenshots will appear here.</div>'; return; }
@@ -4628,8 +4626,7 @@ ${approvedPatterns}
   }
 
   async function runAnalysis(){
-    if(busy) return;
-    if(files.length<MIN_IMAGES) return notify('Upload at least 10 conversation screenshots.');
+    if(busy||!files.length) return;
     if(!token()) return openGenerator();
     busy=true; renderSelection();
     $('dynamicsResult')?.classList.add('hidden');
@@ -5789,7 +5786,7 @@ ${approvedPatterns}
 /* ===== CallFocus V15.3 — first-call auto-fill + account-synced saved setups ===== */
 (()=>{
   const MAX_IMAGES=50;
-  const MIN_IMAGES=10;
+  const MIN_IMAGES=20;
   const MOBILE_BATCH_SIZE=4;
   const DESKTOP_BATCH_SIZE=5;
   const ANALYSIS_MAX_EDGE=1600;
@@ -5822,7 +5819,7 @@ ${approvedPatterns}
       <div class="cf-first-call-tools-copy">
         <span class="section-eyebrow">Optional shortcuts</span>
         <strong>Fill the caller context yourself, or let CallFocus build it from your conversations.</strong>
-        <p>Auto-fill can create About you, About the caller and Conversation dynamics from 10–50 screenshots. Nothing is added to the form until you review it.</p>
+        <p>Auto-fill can create About you, About the caller and Conversation dynamics from 20–50 screenshots. Nothing is added to the form until you review it.</p>
       </div>
       <div class="cf-first-call-tools-actions">
         <button class="btn btn-primary" type="button" id="cfAutoFillAllBtn">Fill in all information automatically</button>
@@ -5852,7 +5849,7 @@ ${approvedPatterns}
     wrap.innerHTML=`
       <div class="modal cf-autofill-modal" role="dialog" aria-modal="true" aria-labelledby="cfAutoFillTitle">
         <div class="modal-head">
-          <div><span class="section-eyebrow">First-call auto-fill</span><h2 id="cfAutoFillTitle">Generate all caller information</h2><p>Upload 10–50 conversation screenshots. Add a few facts about yourself first so CallFocus can separate your details from the person you are calling.</p></div>
+          <div><span class="section-eyebrow">First-call auto-fill</span><h2 id="cfAutoFillTitle">Generate all caller information</h2><p>Upload 20–50 conversation screenshots. Add a few facts about yourself first so CallFocus can separate your details from the person you are calling.</p></div>
           <button class="modal-close" type="button" id="cfAutoFillClose" aria-label="Close">×</button>
         </div>
         <div class="cf-autofill-personal">
@@ -5866,10 +5863,10 @@ ${approvedPatterns}
         </div>
         <label class="dynamics-upload-zone cf-autofill-upload" for="cfAutoFillFiles">
           <span class="dynamics-upload-icon">＋</span><strong>Upload conversation screenshots</strong>
-          <p>Choose at least 10 and up to 50 screenshots, preferably in conversation order.</p>
+          <p>Choose at least 20 and up to 50 screenshots, preferably in conversation order.</p>
         </label>
         <input class="dynamics-file-input" id="cfAutoFillFiles" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple />
-        <div class="dynamics-selection-head"><strong id="cfAutoFillCount">0 / 50 selected</strong><span id="cfAutoFillSelectionNote">At least 10 screenshots required</span></div>
+        <div class="dynamics-selection-head"><strong id="cfAutoFillCount">0 / 50 selected</strong><span id="cfAutoFillSelectionNote">At least 20 screenshots required</span></div>
         <div class="dynamics-thumbs cf-autofill-thumbs" id="cfAutoFillThumbs"><div class="dynamics-empty-thumbs">Your selected screenshots will appear here.</div></div>
         <div class="dynamics-privacy">Screenshots are used only for this generation request and are not saved to your CallFocus account. The generated text is saved only if you choose to add or save it.</div>
         <div class="dynamics-progress-wrap hidden" id="cfAutoFillProgressWrap">
@@ -5989,7 +5986,7 @@ ${approvedPatterns}
     if(autoBusy)return;
     const userMeta={name:safeText(byId('cfAutoSelfName')?.value),age:safeText(byId('cfAutoSelfAge')?.value),job:safeText(byId('cfAutoSelfJob')?.value)};
     if(!userMeta.name||!userMeta.age||!userMeta.job)return notify('Enter your name, age and job/work type first.');
-    if(autoFiles.length<MIN_IMAGES)return notify('Upload at least 10 conversation screenshots.');
+    if(autoFiles.length<MIN_IMAGES)return notify('Upload at least 20 conversation screenshots.');
     const age=Number(userMeta.age);if(!Number.isFinite(age)||age<1||age>120)return notify('Enter a valid age.');
     autoBusy=true;renderAutoSelection();byId('cfAutoGenerateBtn').textContent='Generating…';byId('cfAutoClearBtn').disabled=true;byId('cfAutoFillResults')?.classList.add('hidden');
     const batchSize=smallerBatches()?MOBILE_BATCH_SIZE:DESKTOP_BATCH_SIZE,totalBatches=Math.ceil(autoFiles.length/batchSize),summaries=[],analysisId=(crypto.randomUUID?.()||`cfctx_${Date.now()}_${Math.random().toString(36).slice(2,10)}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,96),callerHint=safeText(byId('newCallPersonName')?.value);

@@ -2622,7 +2622,7 @@ ${joined}`;
 
 // -----------------------------------------------------------------------------
 // V15.3 first-call auto-fill generator
-// Builds About you, About the caller and Conversation dynamics from 10–50
+// Builds About you, About the caller and Conversation dynamics from 20–50
 // screenshots while keeping the same low-memory browser batching strategy.
 // Screenshots are never written to KV.
 // -----------------------------------------------------------------------------
@@ -2674,7 +2674,7 @@ async function handleCallContextAnalyze(request, env) {
 
   const summaries = Array.isArray(body?.summaries) ? body.summaries.map(x => String(x || '').trim()).filter(Boolean) : [];
   if (!summaries.length || summaries.length > 16) return json({ error: 'No screenshot information was available to combine.' }, 400);
-  const imageCount = Math.max(10, Math.min(50, Math.floor(Number(body?.imageCount) || 10)));
+  const imageCount = Math.max(20, Math.min(50, Math.floor(Number(body?.imageCount) || 20)));
   const joined = summaries.map((x,i)=>`BATCH ${i+1}\n${x.slice(0,5200)}`).join('\n\n');
   if (joined.length > 78_000) return json({ error: 'The combined conversation information is too large to finalize.' }, 413);
   const prompt = `Create three CallFocus first-call context fields from the analyst notes below. They came from ${imageCount} ordered conversation screenshots.\n\nCONFIRMED ACCOUNT-HOLDER FACTS\nName: ${userName}\nAge: ${userAge}\nJob/work type: ${userJob}${callerHint ? `\nOther caller name hint: ${callerHint}` : ''}\n\nReturn STRICT JSON only with exactly these keys:\n{\n  "callerName": "",\n  "aboutSelf": "",\n  "aboutCaller": "",\n  "dynamics": ""\n}\n\nRequirements for aboutSelf:\n- Write roughly 140–260 useful words when enough information exists.\n- Start naturally with the confirmed name, age and job/work type.\n- Add only account-holder facts explicitly supported by the notes, plus their observed communication style and relevant ongoing context.\n- Do not invent missing biography.\n\nRequirements for aboutCaller:\n- Write roughly 140–300 useful words when enough information exists.\n- Include the other person's clearly supported name and facts, work, routines, family/life context, preferences, plans, communication style, and anything practically important for future calls.\n- If a detail is unsupported, omit it instead of saying it as fact.\n\nRequirements for callerName:\n- Use the other person's supported name when clear. Prefer the supplied caller-name hint when it matches the notes. If no name is supported, return an empty string.\n\nRequirements for dynamics:\n- Begin exactly with: Dynamics of Your Conversations\n- Aim for 550–850 words when the evidence supports that depth. Be shorter rather than inventing details.\n- Describe overall relationship dynamic and conversational rhythm, recurring everyday habits/topics, the other person's communication style, the account holder's communication style, how both styles interact, emotional support, affection/flirtation, humor, tension/conflict, boundaries, future plans, unresolved complications, important ongoing life context, progression in closeness/distance, and practical guidance for how a future CallFocus voice should behave.\n- Use short * bullets only where helpful for recurring concrete topics or routines.\n- Treat the relationship as established only to the degree supported by the messages.\n- Never invent missing personal information.\n- Do not mention screenshots, batches, AI, models, prompts or analysis.\n- Do not use labels such as Person A/Person B in the finished text. Refer to the account holder as "you" in the dynamics.\n\nMake all three text fields ready to paste directly into CallFocus. Escape line breaks correctly as JSON strings.\n\nANALYST NOTES\n${joined}`;
@@ -3580,7 +3580,7 @@ export default {
     if (url.pathname === '/api/manual-payment/cancel') return safeCustomerRoute('manual-payment-cancel', () => handleManualPaymentCancel(request, env));
     if (url.pathname === '/api/manual-payment/status') return safeCustomerRoute('manual-payment-status', () => handleManualPaymentStatus(request, env));
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.4' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.3' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);

@@ -1,3 +1,3 @@
-# CallFocus V15.4 — 10-Screenshot Minimum
+# CallFocus V15.3 — First-Call Auto-Fill & Cloud-Saved Information
 
-Current build. See `README-V15.4.md` for the latest changes.
+Current stable build. See `README-V15.3.md` for the latest changes.
