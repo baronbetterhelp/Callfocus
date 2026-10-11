@@ -119,7 +119,7 @@ const ADMIN_DEFAULTS = {
   opening:'Use the customer-selected opening for each call. Greet naturally, then pause and let the other person respond before moving further into the topic.',
   speakFirst:true,
   interruptions:true,
-  analysisScreenshotMin:20,
+  analysisScreenshotMin:10,
   analysisScreenshotMax:50,
   autoFillScreenshotLimit:50
 };
@@ -4409,7 +4409,7 @@ ${approvedPatterns}
   const $=id=>document.getElementById(id);
   const notify=message=>{ try{ if(typeof window.toast==='function') return window.toast(message); if(typeof toast==='function') return toast(message); }catch{} console.log(message); };
   const token=()=>localStorage.getItem(SERVER_TOKEN_KEY)||'';
-  function minImages(){const n=Math.round(Number(loadAdmin()?.analysisScreenshotMin));return Math.max(1,Math.min(ABSOLUTE_MAX_IMAGES,Number.isFinite(n)?n:20));}
+  function minImages(){const n=Math.round(Number(loadAdmin()?.analysisScreenshotMin));return Math.max(1,Math.min(ABSOLUTE_MAX_IMAGES,Number.isFinite(n)?n:10));}
   function maxImages(){const min=minImages();const raw=Math.round(Number(loadAdmin()?.analysisScreenshotMax??loadAdmin()?.autoFillScreenshotLimit));return Math.max(min,Math.min(ABSOLUTE_MAX_IMAGES,Number.isFinite(raw)?raw:ABSOLUTE_MAX_IMAGES));}
   function rangeLabel(){const min=minImages(),max=maxImages();return min===max?`${min} screenshot${min===1?'':'s'}`:`${min}–${max} screenshots`;}
   function refreshDynamicsLimitsUI(){const min=minImages(),max=maxImages();if(files.length>max)files=files.slice(0,max);const intro=$('dynamicsGeneratorIntro');if(intro)intro.textContent=`Upload ${rangeLabel()}. CallFocus analyzes them together and creates a detailed, structured conversation-dynamics profile you can edit, copy, or use in a call.`;const copy=$('dynamicsUploadCopy');if(copy)copy.textContent=min===max?`Choose exactly ${min} screenshot${min===1?'':'s'} in conversation order when possible.`:`Choose at least ${min} and up to ${max} screenshots in conversation order when possible.`;renderSelection();}
@@ -5816,7 +5816,7 @@ ${approvedPatterns}
   const token=()=>localStorage.getItem(SERVER_TOKEN_KEY)||'';
   const notify=message=>{ try{ if(typeof window.toast==='function')return window.toast(message); if(typeof toast==='function')return toast(message); }catch{} console.log(message); };
   const safeText=v=>String(v??'').trim();
-  function minImages(){const n=Math.round(Number(loadAdmin()?.analysisScreenshotMin));return Math.max(1,Math.min(ABSOLUTE_MAX_IMAGES,Number.isFinite(n)?n:20));}
+  function minImages(){const n=Math.round(Number(loadAdmin()?.analysisScreenshotMin));return Math.max(1,Math.min(ABSOLUTE_MAX_IMAGES,Number.isFinite(n)?n:10));}
   function maxImages(){const min=minImages();const raw=Math.round(Number(loadAdmin()?.analysisScreenshotMax??loadAdmin()?.autoFillScreenshotLimit));return Math.max(min,Math.min(ABSOLUTE_MAX_IMAGES,Number.isFinite(raw)?raw:ABSOLUTE_MAX_IMAGES));}
   function autoFillRangeLabel(){const min=minImages(),max=maxImages();return min===max?`${min} screenshot${min===1?'':'s'}`:`${min}–${max} screenshots`;}
   function refreshAutoFillLimitUI(){

@@ -71,7 +71,7 @@ const DEFAULT_CONFIG = {
   manualPaymentAccountName: '',
   manualPaymentAccountNumber: '',
   manualPaymentNotificationEmail: 'support@callfocus.link',
-  analysisScreenshotMin: 20,
+  analysisScreenshotMin: 10,
   analysisScreenshotMax: 50,
   autoFillScreenshotLimit: 50,
   updatedAt: null
@@ -920,9 +920,9 @@ async function handlePublicConfig(env) {
     paymentStatus: callFocusPaymentsEnabled(env) ? 'available' : 'awaiting_paystack_activation',
     manualPaymentsEnabled: manualPaymentReady(c),
     manualPaymentStatus: manualPaymentReady(c) ? 'available' : 'not_configured',
-    analysisScreenshotMin: Math.max(1, Math.min(50, Math.round(Number(c.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin))),
-    analysisScreenshotMax: Math.max(Math.max(1, Math.min(50, Math.round(Number(c.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin))), Math.min(50, Math.round(Number(c.analysisScreenshotMax ?? c.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax))),
-    autoFillScreenshotLimit: Math.max(Math.max(1, Math.min(50, Math.round(Number(c.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin))), Math.min(50, Math.round(Number(c.analysisScreenshotMax ?? c.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax))),
+    analysisScreenshotMin: 10,
+    analysisScreenshotMax: Math.max(10, Math.min(50, Math.round(Number(c.analysisScreenshotMax ?? c.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax))),
+    autoFillScreenshotLimit: Math.max(10, Math.min(50, Math.round(Number(c.analysisScreenshotMax ?? c.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax))),
     pricing: {
       creditsPerMinute: CALLFOCUS_CREDIT_POLICY.creditsPerMinute,
       nairaPerCredit: CALLFOCUS_CREDIT_POLICY.nairaPerCredit,
@@ -2556,7 +2556,7 @@ async function handleDynamicsAnalyze(request, env) {
   const suppliedAnalysisId = String(body?.analysisId || '').trim();
   const analysisId = /^[A-Za-z0-9_-]{8,96}$/.test(suppliedAnalysisId) ? suppliedAnalysisId : crypto.randomUUID();
   const config = await getConfig(env);
-  const minScreenshots = Math.max(1, Math.min(50, Math.round(Number(config.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin)));
+  const minScreenshots = 10;
   const maxScreenshots = Math.max(minScreenshots, Math.min(50, Math.round(Number(config.analysisScreenshotMax ?? config.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax)));
 
   if (kind === 'batch') {
@@ -2666,7 +2666,7 @@ ${joined}`;
 
 // -----------------------------------------------------------------------------
 // V15.3 first-call auto-fill generator
-// Builds About you, About the caller and Conversation dynamics from 20–50
+// Builds About you, About the caller and Conversation dynamics from 10–50
 // screenshots while keeping the same low-memory browser batching strategy.
 // Screenshots are never written to KV.
 // -----------------------------------------------------------------------------
@@ -2694,7 +2694,7 @@ async function handleCallContextAnalyze(request, env) {
   const callerHint = String(body?.callerHint || '').trim().slice(0, 120);
   if (!userName || !userAge || !userJob) return json({ error: 'Enter your name, age and job/work type before generating.' }, 400);
   const config = await getConfig(env);
-  const minScreenshots = Math.max(1, Math.min(50, Math.round(Number(config.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin)));
+  const minScreenshots = 10;
   const maxScreenshots = Math.max(minScreenshots, Math.min(50, Math.round(Number(config.analysisScreenshotMax ?? config.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax)));
 
   if (kind === 'batch') {
