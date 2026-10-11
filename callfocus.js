@@ -129,6 +129,7 @@ let account = null;
 let data = null;
 let activeView = 'home';
 let selectedThreadId = null;
+let recentCallsListMode = true;
 let pendingAction = null;
 let selectedNewCallVoice = 'male';
 let selectedAiVoiceId = '';
@@ -286,10 +287,21 @@ function timezoneOptions(selected=''){
   if(chosen && !values.includes(chosen)) values.unshift(chosen);
   return `<option value="" ${!chosen?'selected':''}>Select time zone</option>` + values.map(v=>`<option value="${esc(v)}" ${v===chosen?'selected':''}>${esc(timezoneDisplayLabel(v))}</option>`).join('');
 }
-function selectThread(id){ if(!account)return; selectedThreadId=id; renderRecentThreads(); }
+function selectThread(id){ if(!account)return; setRecentCallsListMode(false); selectedThreadId=id; renderRecentThreads(); }
+
+// Keep the complete list separate from an explicitly selected conversation.
+// Retain the selected thread and its form so unsent repeat-call drafts survive.
+function setRecentCallsListMode(showList){
+  recentCallsListMode=!!showList;
+  $('page-recent')?.classList.toggle('cf-recent-list-view',recentCallsListMode);
+  document.querySelector('.recent-list-panel')?.classList.remove('mobile-open');
+  document.querySelector('.cf-conversation-backdrop')?.classList.remove('show');
+  document.body.classList.remove('cf-drawer-open');
+}
 
 function showView(view, scroll=true){
   if(['avatar','callers','recent','profile','settings'].includes(view) && !account){ requireAccount({type:'route',route:view},'Create an account or sign in to open your saved CallFocus workspace.'); return; }
+  if(view==='recent') setRecentCallsListMode(true);
   activeView=view; qsa('.page-view').forEach(p=>p.classList.toggle('active',p.dataset.view===view)); qsa('.nav-anchor').forEach(n=>n.classList.toggle('active',n.dataset.route===view));
   closeMobileMenu(); $('headerAccountDropdown').classList.add('hidden');
   if(view==='recent') renderRecentThreads(); if(view==='profile')renderProfile(); if(view==='settings')renderSettings();
@@ -736,11 +748,11 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       $('threadDetailPanel').innerHTML='<div class="empty-thread-detail">Your recent calls will appear here after your first call.</div>';
       return;
     }
-    if(!selectedThreadId || !threads.some(t=>t.id===selectedThreadId)) selectedThreadId=threads[0].id;
+    if(!recentCallsListMode && (!selectedThreadId || !threads.some(t=>t.id===selectedThreadId))) selectedThreadId=threads[0].id;
 
     $('recentThreadList').innerHTML=`<div class="cf-recent-list-head"><div><strong>Conversations</strong><small>${threads.length} saved thread${threads.length===1?'':'s'}</small></div></div>` + threads.map(t=>{
       const last=lastCall(t);
-      return `<button class="recent-thread-button ${selectedThreadId===t.id?'active':''}" data-select-thread="${t.id}">
+      return `<button class="recent-thread-button ${!recentCallsListMode && selectedThreadId===t.id?'active':''}" data-select-thread="${t.id}">
         <span class="recent-thread-avatar">${esc(initials(t.callerName))}</span>
         <span class="recent-thread-copy">
           <strong>${esc(t.title)}</strong>
@@ -750,7 +762,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
         <span class="cf-thread-list-meta"><time>${esc(relativeTime(t.updatedAt))}</time><b>${esc(lastDuration(t))}</b></span>
       </button>`;
     }).join('');
-    renderThreadDetail(selectedThreadId);
+    if(!recentCallsListMode) renderThreadDetail(selectedThreadId);
     ensureConversationBackdrop();
   };
 

@@ -1,5 +1,5 @@
 # CallFocus
 
-Latest stable build: **V15.6 — Admin Screenshot Controls Delivery Fix**.
+Latest build: **V15.7 — Recent Calls View All Fix**.
 
-This build preserves V15.5 shared screenshot minimum/maximum controls and hardens Admin Portal delivery so the controls cannot disappear because of stale admin HTML/assets.
+Built on the uploaded V15.6 complete build. See `README-V15.7.md` for the changes.
