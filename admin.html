@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=15.7" />
+  <link rel="stylesheet" href="/admin.css?v=12.9" />
 </head>
 <body class="admin-page">
   <header class="site-header">
@@ -54,16 +54,6 @@
 
       <section class="admin-tab-panel active" data-admin-panel="dashboard">
         <div class="admin-section-heading"><span class="kicker">CallFocus administration</span><h2>Dashboard</h2><p>A quick overview of the service and items that need your attention.</p></div>
-
-        <div class="premium-panel form-panel admin-screenshot-limits-panel admin-dashboard-limits-panel" id="adminScreenshotLimitsPanel" data-admin-screenshot-location="dashboard">
-          <div class="admin-users-heading"><div><span class="kicker">Dashboard control · V15.7</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots customers can use. These values apply to both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div>
-          <div class="form-grid two admin-screenshot-limit-grid">
-            <label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label>
-            <label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label>
-          </div>
-          <div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div>
-          <button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button>
-        </div>
         <div class="admin-overview-grid">
           <article class="admin-stat-card"><span>Calling service</span><strong id="adminDashServer">Checking…</strong><small id="adminDashStorage">Global settings</small></article>
           <article class="admin-stat-card"><span>Customer accounts</span><strong id="adminDashUsers">0</strong><small id="adminDashUsersNote">Loading users…</small></article>
@@ -205,6 +195,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=15.7"></script>
+  <script src="/admin.js?v=12.3"></script>
 </body>
 </html>
