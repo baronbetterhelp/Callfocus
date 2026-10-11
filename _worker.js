@@ -71,6 +71,7 @@ const DEFAULT_CONFIG = {
   manualPaymentAccountName: '',
   manualPaymentAccountNumber: '',
   manualPaymentNotificationEmail: 'support@callfocus.link',
+  autoFillScreenshotLimit: 50,
   updatedAt: null
 };
 
@@ -813,6 +814,7 @@ function sanitizeConfig(input = {}) {
     manualPaymentAccountName: String(input.manualPaymentAccountName || '').trim().slice(0, 160),
     manualPaymentAccountNumber,
     manualPaymentNotificationEmail,
+    autoFillScreenshotLimit: Math.max(20, Math.min(50, Math.round(Number(input.autoFillScreenshotLimit) || DEFAULT_CONFIG.autoFillScreenshotLimit))),
     updatedAt: new Date().toISOString()
   };
 }
@@ -907,6 +909,7 @@ async function handlePublicConfig(env) {
     paymentStatus: callFocusPaymentsEnabled(env) ? 'available' : 'awaiting_paystack_activation',
     manualPaymentsEnabled: manualPaymentReady(c),
     manualPaymentStatus: manualPaymentReady(c) ? 'available' : 'not_configured',
+    autoFillScreenshotLimit: Math.max(20, Math.min(50, Math.round(Number(c.autoFillScreenshotLimit) || DEFAULT_CONFIG.autoFillScreenshotLimit))),
     pricing: {
       creditsPerMinute: CALLFOCUS_CREDIT_POLICY.creditsPerMinute,
       nairaPerCredit: CALLFOCUS_CREDIT_POLICY.nairaPerCredit,
@@ -2674,7 +2677,11 @@ async function handleCallContextAnalyze(request, env) {
 
   const summaries = Array.isArray(body?.summaries) ? body.summaries.map(x => String(x || '').trim()).filter(Boolean) : [];
   if (!summaries.length || summaries.length > 16) return json({ error: 'No screenshot information was available to combine.' }, 400);
-  const imageCount = Math.max(20, Math.min(50, Math.floor(Number(body?.imageCount) || 20)));
+  const config = await getConfig(env);
+  const autoFillScreenshotLimit = Math.max(20, Math.min(50, Math.round(Number(config.autoFillScreenshotLimit) || DEFAULT_CONFIG.autoFillScreenshotLimit)));
+  const imageCount = Math.floor(Number(body?.imageCount) || 0);
+  if (imageCount < 20) return json({ error: 'Upload at least 20 conversation screenshots.' }, 400);
+  if (imageCount > autoFillScreenshotLimit) return json({ error: `This CallFocus setup currently allows up to ${autoFillScreenshotLimit} screenshots for automatic first-call information.` }, 400);
   const joined = summaries.map((x,i)=>`BATCH ${i+1}\n${x.slice(0,5200)}`).join('\n\n');
   if (joined.length > 78_000) return json({ error: 'The combined conversation information is too large to finalize.' }, 413);
   const prompt = `Create three CallFocus first-call context fields from the analyst notes below. They came from ${imageCount} ordered conversation screenshots.\n\nCONFIRMED ACCOUNT-HOLDER FACTS\nName: ${userName}\nAge: ${userAge}\nJob/work type: ${userJob}${callerHint ? `\nOther caller name hint: ${callerHint}` : ''}\n\nReturn STRICT JSON only with exactly these keys:\n{\n  "callerName": "",\n  "aboutSelf": "",\n  "aboutCaller": "",\n  "dynamics": ""\n}\n\nRequirements for aboutSelf:\n- Write roughly 140–260 useful words when enough information exists.\n- Start naturally with the confirmed name, age and job/work type.\n- Add only account-holder facts explicitly supported by the notes, plus their observed communication style and relevant ongoing context.\n- Do not invent missing biography.\n\nRequirements for aboutCaller:\n- Write roughly 140–300 useful words when enough information exists.\n- Include the other person's clearly supported name and facts, work, routines, family/life context, preferences, plans, communication style, and anything practically important for future calls.\n- If a detail is unsupported, omit it instead of saying it as fact.\n\nRequirements for callerName:\n- Use the other person's supported name when clear. Prefer the supplied caller-name hint when it matches the notes. If no name is supported, return an empty string.\n\nRequirements for dynamics:\n- Begin exactly with: Dynamics of Your Conversations\n- Aim for 550–850 words when the evidence supports that depth. Be shorter rather than inventing details.\n- Describe overall relationship dynamic and conversational rhythm, recurring everyday habits/topics, the other person's communication style, the account holder's communication style, how both styles interact, emotional support, affection/flirtation, humor, tension/conflict, boundaries, future plans, unresolved complications, important ongoing life context, progression in closeness/distance, and practical guidance for how a future CallFocus voice should behave.\n- Use short * bullets only where helpful for recurring concrete topics or routines.\n- Treat the relationship as established only to the degree supported by the messages.\n- Never invent missing personal information.\n- Do not mention screenshots, batches, AI, models, prompts or analysis.\n- Do not use labels such as Person A/Person B in the finished text. Refer to the account holder as "you" in the dynamics.\n\nMake all three text fields ready to paste directly into CallFocus. Escape line breaks correctly as JSON strings.\n\nANALYST NOTES\n${joined}`;
