@@ -1,14 +1,16 @@
-# CallFocus V15.4 — 10-Screenshot Minimum
+# CallFocus V15.4 — Admin-Controlled Auto-Fill Screenshot Limit
 
-Built on CallFocus V15.3.
+Built on V15.3.
 
-- Generate conversation dynamics now requires 10–50 screenshots.
-- Fill in all information automatically now requires 10–50 screenshots instead of 20–50.
-- Instructions, selection feedback, disabled buttons and generation checks use the same 10-image minimum.
-- Auto-fill finalization now preserves a 10-image count instead of raising it to 20.
-- Customer JavaScript cache references and the app-version endpoint advance to 15.4.
-- The 50-image maximum, mobile compression/batching, required auto-fill name/age/work fields, editable results, saved setups and Telegram widget are retained.
+## New
+- Admin Portal > AI usage now includes **First-call auto-fill screenshot limit**.
+- Admin can set the maximum from **20 to 50 screenshots**; default remains 50.
+- Customer first-call auto-fill copy, selected counter, file cap and validation update from the saved global setting.
+- The server also enforces the saved maximum during final generation, so the limit is not only a visual/browser rule.
+- The original minimum remains 20 screenshots.
+- The standalone Conversation Dynamics Generator keeps its existing 50-screenshot maximum.
 
-## Deployment
-
-Upload the Changes Only package over the V15.3 build, or deploy the Complete package as the whole build. Keep the existing Cloudflare bindings and secrets.
+## Preserved
+- V15.3 first-call auto-fill and account-synced saved information.
+- V15.2 low-memory screenshot compression/batching.
+- Telegram widget, calls, voice notes, payments, credits, saved callers, recent calls, admin functions and Pearl Aurora UI.

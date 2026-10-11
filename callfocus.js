@@ -118,7 +118,10 @@ const ADMIN_DEFAULTS = {
   instructions:'Follow the customer-provided call rules and relationship context closely. Keep the conversation responsive and natural. Do not turn a social call into an interview, support exchange, coaching session, or scripted agenda.',
   opening:'Use the customer-selected opening for each call. Greet naturally, then pause and let the other person respond before moving further into the topic.',
   speakFirst:true,
-  interruptions:true
+  interruptions:true,
+  analysisScreenshotMin:20,
+  analysisScreenshotMax:50,
+  autoFillScreenshotLimit:50
 };
 let remoteAdmin = {...ADMIN_DEFAULTS};
 
@@ -147,7 +150,7 @@ function applyGlobalTheme(theme){
   const meta=document.querySelector('meta[name="theme-color"]');
   if(meta) meta.setAttribute('content',next==='pearl'?'#f7f8f5':'#080808');
 }
-async function refreshPublicConfig(){ try{ const res=await fetch('/api/public-config',{cache:'no-store'}); if(res.ok){ const payload=await res.json(); remoteAdmin={...ADMIN_DEFAULTS,...payload}; applyPublicPricing(payload.pricing||{}); applyGlobalTheme(remoteAdmin.siteTheme); applyAdminLabels(); } }catch{} return loadAdmin(); }
+async function refreshPublicConfig(){ try{ const res=await fetch('/api/public-config',{cache:'no-store'}); if(res.ok){ const payload=await res.json(); remoteAdmin={...ADMIN_DEFAULTS,...payload}; applyPublicPricing(payload.pricing||{}); applyGlobalTheme(remoteAdmin.siteTheme); applyAdminLabels(); if(typeof window.callFocusRefreshDynamicsLimits==='function') window.callFocusRefreshDynamicsLimits(); if(typeof window.callFocusRefreshAutoFillLimit==='function') window.callFocusRefreshAutoFillLimit(); } }catch{} return loadAdmin(); }
 function initials(name='?'){ return (String(name).trim()[0] || '?').toUpperCase(); }
 function normalizeName(name=''){ return String(name).trim().toLowerCase().replace(/\s+/g,' '); }
 function toast(message){ $('toast').textContent = message; $('toast').classList.remove('hidden'); clearTimeout(toast._t); toast._t = setTimeout(()=>$('toast').classList.add('hidden'), 2400); }
@@ -4390,10 +4393,9 @@ ${approvedPatterns}
 ;
 
 /* ===== v11.32-dynamics.js ===== */
-/* CallFocus V11.32 — select up to 50 conversation screenshots and generate dynamics */
+/* CallFocus V15.5 — shared admin-controlled screenshot limits for conversation dynamics */
 (()=>{
-  const MAX_IMAGES=50;
-  const MIN_IMAGES=10;
+  const ABSOLUTE_MAX_IMAGES=50;
   const DESKTOP_BATCH_SIZE=6;
   const MOBILE_BATCH_SIZE=4;
   const ANALYSIS_MAX_EDGE=1600;
@@ -4407,6 +4409,11 @@ ${approvedPatterns}
   const $=id=>document.getElementById(id);
   const notify=message=>{ try{ if(typeof window.toast==='function') return window.toast(message); if(typeof toast==='function') return toast(message); }catch{} console.log(message); };
   const token=()=>localStorage.getItem(SERVER_TOKEN_KEY)||'';
+  function minImages(){const n=Math.round(Number(loadAdmin()?.analysisScreenshotMin));return Math.max(1,Math.min(ABSOLUTE_MAX_IMAGES,Number.isFinite(n)?n:20));}
+  function maxImages(){const min=minImages();const raw=Math.round(Number(loadAdmin()?.analysisScreenshotMax??loadAdmin()?.autoFillScreenshotLimit));return Math.max(min,Math.min(ABSOLUTE_MAX_IMAGES,Number.isFinite(raw)?raw:ABSOLUTE_MAX_IMAGES));}
+  function rangeLabel(){const min=minImages(),max=maxImages();return min===max?`${min} screenshot${min===1?'':'s'}`:`${min}–${max} screenshots`;}
+  function refreshDynamicsLimitsUI(){const min=minImages(),max=maxImages();if(files.length>max)files=files.slice(0,max);const intro=$('dynamicsGeneratorIntro');if(intro)intro.textContent=`Upload ${rangeLabel()}. CallFocus analyzes them together and creates a detailed, structured conversation-dynamics profile you can edit, copy, or use in a call.`;const copy=$('dynamicsUploadCopy');if(copy)copy.textContent=min===max?`Choose exactly ${min} screenshot${min===1?'':'s'} in conversation order when possible.`:`Choose at least ${min} and up to ${max} screenshots in conversation order when possible.`;renderSelection();}
+  window.callFocusRefreshDynamicsLimits=refreshDynamicsLimitsUI;
 
   function installModal(){
     if($('dynamicsGeneratorModal')) return;
@@ -4416,16 +4423,16 @@ ${approvedPatterns}
     wrap.innerHTML=`
       <div class="modal dynamics-modal" role="dialog" aria-modal="true" aria-labelledby="dynamicsGeneratorTitle">
         <div class="modal-head">
-          <div><span class="section-eyebrow">AI conversation analysis</span><h2 id="dynamicsGeneratorTitle">Generate conversation dynamics</h2><p>Select 10–50 conversation screenshots at once. CallFocus analyzes them together and creates a detailed, structured conversation-dynamics profile you can edit, copy, or use in a call.</p></div>
+          <div><span class="section-eyebrow">AI conversation analysis</span><h2 id="dynamicsGeneratorTitle">Generate conversation dynamics</h2><p id="dynamicsGeneratorIntro">Upload ${rangeLabel()}. CallFocus analyzes them together and creates a detailed, structured conversation-dynamics profile you can edit, copy, or use in a call.</p></div>
           <button class="modal-close" type="button" id="dynamicsCloseBtn" aria-label="Close">×</button>
         </div>
         <label class="dynamics-upload-zone" for="dynamicsFileInput">
           <span class="dynamics-upload-icon">＋</span>
           <strong>Upload conversation screenshots</strong>
-          <p>Choose 10–50 PNG, JPG, WEBP or GIF images. Select them in conversation order when possible.</p>
+          <p id="dynamicsUploadCopy">${minImages()===maxImages()?`Choose exactly ${minImages()} screenshot${minImages()===1?'':'s'} in conversation order when possible.`:`Choose at least ${minImages()} and up to ${maxImages()} screenshots in conversation order when possible.`}</p>
         </label>
         <input class="dynamics-file-input" id="dynamicsFileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple />
-        <div class="dynamics-selection-head"><strong id="dynamicsCount">0 / 50 selected</strong><span id="dynamicsSelectionNote">At least 10 screenshots required</span></div>
+        <div class="dynamics-selection-head"><strong id="dynamicsCount">0 / ${maxImages()} selected</strong><span id="dynamicsSelectionNote">At least ${minImages()} screenshot${minImages()===1?'':'s'} required</span></div>
         <div class="dynamics-thumbs" id="dynamicsThumbs"><div class="dynamics-empty-thumbs">Your selected screenshots will appear here.</div></div>
         <div class="dynamics-privacy">Screenshots are used only for this analysis request and are not saved to the CallFocus account. Avoid uploading content you do not have permission to process.</div>
         <div class="dynamics-progress-wrap hidden" id="dynamicsProgressWrap">
@@ -4498,8 +4505,9 @@ ${approvedPatterns}
     if(busy) return;
     const valid=incoming.filter(f=>ALLOWED_TYPES.has(String(f.type||'').toLowerCase()) && Number(f.size||0)<=MAX_FILE_BYTES);
     if(valid.length!==incoming.length) notify('Some files were skipped. Use PNG, JPG, WEBP or GIF screenshots smaller than 20 MB each.');
-    files=valid.slice(0,MAX_IMAGES);
-    if(valid.length>MAX_IMAGES) notify('CallFocus accepts a maximum of 50 screenshots per analysis.');
+    const max=maxImages();
+    files=valid.slice(0,max);
+    if(valid.length>max) notify(`CallFocus currently accepts a maximum of ${max} screenshots per analysis.`);
     clearThumbUrls();
     renderSelection();
     $('dynamicsResult')?.classList.add('hidden');
@@ -4508,10 +4516,12 @@ ${approvedPatterns}
   function renderSelection(){
     clearThumbUrls();
     const count=$('dynamicsCount'), note=$('dynamicsSelectionNote'), thumbs=$('dynamicsThumbs'), generate=$('dynamicsGenerateBtn');
-    if(count) count.textContent=`${files.length} / ${MAX_IMAGES} selected`;
-    const remaining=Math.max(0,MIN_IMAGES-files.length);
-    if(note) note.textContent=remaining ? `${remaining} more screenshot${remaining===1?'':'s'} required` : `${files.length} screenshots ready`;
-    if(generate) generate.disabled=files.length<MIN_IMAGES||busy;
+    const min=minImages(),max=maxImages();
+    if(files.length>max)files=files.slice(0,max);
+    if(count) count.textContent=`${files.length} / ${max} selected`;
+    const remaining=Math.max(0,min-files.length);
+    if(note) note.textContent=remaining?`${remaining} more screenshot${remaining===1?'':'s'} required`:`${files.length} screenshot${files.length===1?'':'s'} ready`;
+    if(generate) generate.disabled=files.length<min||busy;
     if(!thumbs) return;
     thumbs.innerHTML='';
     if(!files.length){ thumbs.innerHTML='<div class="dynamics-empty-thumbs">Your selected screenshots will appear here.</div>'; return; }
@@ -4621,7 +4631,7 @@ ${approvedPatterns}
   async function analyzeBatch(imageData,batchNumber,totalBatches,analysisId){
     let lastError;
     for(let attempt=0;attempt<2;attempt++){
-      try{return await api('/api/dynamics/analyze',{kind:'batch',images:imageData,batchNumber,totalBatches,analysisId});}
+      try{return await api('/api/dynamics/analyze',{kind:'batch',images:imageData,batchNumber,totalBatches,totalImageCount:files.length,analysisId});}
       catch(error){lastError=error;if(attempt===0) await new Promise(r=>setTimeout(r,650));}
     }
     throw lastError;
@@ -4629,7 +4639,9 @@ ${approvedPatterns}
 
   async function runAnalysis(){
     if(busy) return;
-    if(files.length<MIN_IMAGES) return notify('Upload at least 10 conversation screenshots.');
+    const min=minImages(),max=maxImages();
+    if(files.length<min)return notify(`Upload at least ${min} screenshot${min===1?'':'s'} before generating dynamics.`);
+    if(files.length>max)return notify(`This CallFocus setup currently allows up to ${max} screenshots per analysis.`);
     if(!token()) return openGenerator();
     busy=true; renderSelection();
     $('dynamicsResult')?.classList.add('hidden');
@@ -5786,10 +5798,9 @@ ${approvedPatterns}
 })();
 
 
-/* ===== CallFocus V15.3 — first-call auto-fill + account-synced saved setups ===== */
+/* ===== CallFocus V15.5 — shared admin-controlled screenshot limits ===== */
 (()=>{
-  const MAX_IMAGES=50;
-  const MIN_IMAGES=10;
+  const ABSOLUTE_MAX_IMAGES=50;
   const MOBILE_BATCH_SIZE=4;
   const DESKTOP_BATCH_SIZE=5;
   const ANALYSIS_MAX_EDGE=1600;
@@ -5805,6 +5816,21 @@ ${approvedPatterns}
   const token=()=>localStorage.getItem(SERVER_TOKEN_KEY)||'';
   const notify=message=>{ try{ if(typeof window.toast==='function')return window.toast(message); if(typeof toast==='function')return toast(message); }catch{} console.log(message); };
   const safeText=v=>String(v??'').trim();
+  function minImages(){const n=Math.round(Number(loadAdmin()?.analysisScreenshotMin));return Math.max(1,Math.min(ABSOLUTE_MAX_IMAGES,Number.isFinite(n)?n:20));}
+  function maxImages(){const min=minImages();const raw=Math.round(Number(loadAdmin()?.analysisScreenshotMax??loadAdmin()?.autoFillScreenshotLimit));return Math.max(min,Math.min(ABSOLUTE_MAX_IMAGES,Number.isFinite(raw)?raw:ABSOLUTE_MAX_IMAGES));}
+  function autoFillRangeLabel(){const min=minImages(),max=maxImages();return min===max?`${min} screenshot${min===1?'':'s'}`:`${min}–${max} screenshots`;}
+  function refreshAutoFillLimitUI(){
+    const min=minImages(),max=maxImages();
+    const shortcut=byId('cfFirstCallAutoFillDescription');
+    if(shortcut)shortcut.textContent=`Auto-fill can create About you, About the caller and Conversation dynamics from ${autoFillRangeLabel(max)}. Nothing is added to the form until you review it.`;
+    const intro=byId('cfAutoFillIntro');
+    if(intro)intro.textContent=`Upload ${autoFillRangeLabel(max)}. Add a few facts about yourself first so CallFocus can separate your details from the person you are calling.`;
+    const uploadCopy=byId('cfAutoFillUploadCopy');
+    if(uploadCopy)uploadCopy.textContent=min===max?`Choose exactly ${min} screenshot${min===1?'':'s'}, preferably in conversation order.`:`Choose at least ${min} and up to ${max} screenshots, preferably in conversation order.`;
+    if(autoFiles.length>max)autoFiles=autoFiles.slice(0,max);
+    renderAutoSelection();
+  }
+  window.callFocusRefreshAutoFillLimit=refreshAutoFillLimitUI;
 
   function ensureDraftData(){
     if(typeof data==='undefined'||!data)return [];
@@ -5822,7 +5848,7 @@ ${approvedPatterns}
       <div class="cf-first-call-tools-copy">
         <span class="section-eyebrow">Optional shortcuts</span>
         <strong>Fill the caller context yourself, or let CallFocus build it from your conversations.</strong>
-        <p>Auto-fill can create About you, About the caller and Conversation dynamics from 10–50 screenshots. Nothing is added to the form until you review it.</p>
+        <p id="cfFirstCallAutoFillDescription">Auto-fill can create About you, About the caller and Conversation dynamics from ${autoFillRangeLabel()}. Nothing is added to the form until you review it.</p>
       </div>
       <div class="cf-first-call-tools-actions">
         <button class="btn btn-primary" type="button" id="cfAutoFillAllBtn">Fill in all information automatically</button>
@@ -5852,7 +5878,7 @@ ${approvedPatterns}
     wrap.innerHTML=`
       <div class="modal cf-autofill-modal" role="dialog" aria-modal="true" aria-labelledby="cfAutoFillTitle">
         <div class="modal-head">
-          <div><span class="section-eyebrow">First-call auto-fill</span><h2 id="cfAutoFillTitle">Generate all caller information</h2><p>Upload 10–50 conversation screenshots. Add a few facts about yourself first so CallFocus can separate your details from the person you are calling.</p></div>
+          <div><span class="section-eyebrow">First-call auto-fill</span><h2 id="cfAutoFillTitle">Generate all caller information</h2><p id="cfAutoFillIntro">Upload ${autoFillRangeLabel()}. Add a few facts about yourself first so CallFocus can separate your details from the person you are calling.</p></div>
           <button class="modal-close" type="button" id="cfAutoFillClose" aria-label="Close">×</button>
         </div>
         <div class="cf-autofill-personal">
@@ -5866,10 +5892,10 @@ ${approvedPatterns}
         </div>
         <label class="dynamics-upload-zone cf-autofill-upload" for="cfAutoFillFiles">
           <span class="dynamics-upload-icon">＋</span><strong>Upload conversation screenshots</strong>
-          <p>Choose at least 10 and up to 50 screenshots, preferably in conversation order.</p>
+          <p id="cfAutoFillUploadCopy">${minImages()===maxImages()?`Choose exactly ${minImages()} screenshot${minImages()===1?'':'s'}, preferably in conversation order.`:`Choose at least ${minImages()} and up to ${maxImages()} screenshots, preferably in conversation order.`}</p>
         </label>
         <input class="dynamics-file-input" id="cfAutoFillFiles" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple />
-        <div class="dynamics-selection-head"><strong id="cfAutoFillCount">0 / 50 selected</strong><span id="cfAutoFillSelectionNote">At least 10 screenshots required</span></div>
+        <div class="dynamics-selection-head"><strong id="cfAutoFillCount">0 / ${maxImages()} selected</strong><span id="cfAutoFillSelectionNote">At least ${minImages()} screenshot${minImages()===1?'':'s'} required</span></div>
         <div class="dynamics-thumbs cf-autofill-thumbs" id="cfAutoFillThumbs"><div class="dynamics-empty-thumbs">Your selected screenshots will appear here.</div></div>
         <div class="dynamics-privacy">Screenshots are used only for this generation request and are not saved to your CallFocus account. The generated text is saved only if you choose to add or save it.</div>
         <div class="dynamics-progress-wrap hidden" id="cfAutoFillProgressWrap">
@@ -5929,6 +5955,7 @@ ${approvedPatterns}
     byId('cfAutoSelfJob').value=safeText(profile.role||'');
     byId('cfAutoSelfAge').value='';
     resetAutoFiles(true);
+    refreshAutoFillLimitUI();
     openOverlay('cfAutoFillModal');
   }
   function closeAutoFill(){if(autoBusy)return notify('Please wait for the current generation to finish.');closeOverlay('cfAutoFillModal');}
@@ -5937,8 +5964,9 @@ ${approvedPatterns}
     if(autoBusy)return;
     const valid=incoming.filter(f=>ALLOWED_TYPES.has(String(f.type||'').toLowerCase())&&Number(f.size||0)<=MAX_FILE_BYTES);
     if(valid.length!==incoming.length)notify('Some files were skipped. Use PNG, JPG, WEBP or GIF screenshots smaller than 20 MB each.');
-    autoFiles=valid.slice(0,MAX_IMAGES);
-    if(valid.length>MAX_IMAGES)notify('CallFocus accepts a maximum of 50 screenshots.');
+    const max=maxImages();
+    autoFiles=valid.slice(0,max);
+    if(valid.length>max)notify(`CallFocus currently accepts a maximum of ${max} screenshots for automatic first-call information.`);
     byId('cfAutoFillResults')?.classList.add('hidden');
     renderAutoSelection();
   }
@@ -5953,11 +5981,14 @@ ${approvedPatterns}
   function formatSize(bytes){const n=Math.max(0,Number(bytes)||0);if(n<1024)return`${n} B`;if(n<1048576)return`${Math.max(1,Math.round(n/1024))} KB`;return`${(n/1048576).toFixed(n>=10485760?0:1)} MB`;}
   function renderAutoSelection(){
     const count=byId('cfAutoFillCount'),note=byId('cfAutoFillSelectionNote'),thumbs=byId('cfAutoFillThumbs'),button=byId('cfAutoGenerateBtn');
-    if(count)count.textContent=`${autoFiles.length} / ${MAX_IMAGES} selected`;
-    const remaining=Math.max(0,MIN_IMAGES-autoFiles.length);
+    const max=maxImages();
+    if(autoFiles.length>max)autoFiles=autoFiles.slice(0,max);
+    if(count)count.textContent=`${autoFiles.length} / ${max} selected`;
+    const min=minImages();
+    const remaining=Math.max(0,min-autoFiles.length);
     if(note)note.textContent=remaining?`${remaining} more screenshot${remaining===1?'':'s'} required`:`${autoFiles.length} screenshots ready`;
     const metaReady=!!safeText(byId('cfAutoSelfName')?.value)&&!!safeText(byId('cfAutoSelfAge')?.value)&&!!safeText(byId('cfAutoSelfJob')?.value);
-    if(button)button.disabled=autoBusy||autoFiles.length<MIN_IMAGES||!metaReady;
+    if(button)button.disabled=autoBusy||autoFiles.length<min||!metaReady;
     if(!thumbs)return;
     thumbs.innerHTML='';
     if(!autoFiles.length){thumbs.innerHTML='<div class="dynamics-empty-thumbs">Your selected screenshots will appear here.</div>';return;}
@@ -5983,13 +6014,16 @@ ${approvedPatterns}
   async function api(body){
     const res=await fetch('/api/call-context/analyze',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token()}`},body:JSON.stringify(body),cache:'no-store'});let payload={};try{payload=await res.json()}catch{}if(!res.ok)throw new Error(payload?.error||'CallFocus could not generate the caller information.');return payload;
   }
-  async function analyzeBatch(images,batchNumber,totalBatches,analysisId,userMeta,callerHint){let last;for(let a=0;a<2;a++){try{return await api({kind:'batch',images,batchNumber,totalBatches,analysisId,userMeta,callerHint});}catch(e){last=e;if(a===0)await new Promise(r=>setTimeout(r,650));}}throw last;}
+  async function analyzeBatch(images,batchNumber,totalBatches,analysisId,userMeta,callerHint){let last;for(let a=0;a<2;a++){try{return await api({kind:'batch',images,batchNumber,totalBatches,totalImageCount:autoFiles.length,analysisId,userMeta,callerHint});}catch(e){last=e;if(a===0)await new Promise(r=>setTimeout(r,650));}}throw last;}
 
   async function runAutoFill(){
     if(autoBusy)return;
     const userMeta={name:safeText(byId('cfAutoSelfName')?.value),age:safeText(byId('cfAutoSelfAge')?.value),job:safeText(byId('cfAutoSelfJob')?.value)};
     if(!userMeta.name||!userMeta.age||!userMeta.job)return notify('Enter your name, age and job/work type first.');
-    if(autoFiles.length<MIN_IMAGES)return notify('Upload at least 10 conversation screenshots.');
+    const min=minImages();
+    if(autoFiles.length<min)return notify(`Upload at least ${min} conversation screenshot${min===1?'':'s'}.`);
+    const max=maxImages();
+    if(autoFiles.length>max)return notify(`This CallFocus setup currently allows up to ${max} screenshots for automatic first-call information.`);
     const age=Number(userMeta.age);if(!Number.isFinite(age)||age<1||age>120)return notify('Enter a valid age.');
     autoBusy=true;renderAutoSelection();byId('cfAutoGenerateBtn').textContent='Generating…';byId('cfAutoClearBtn').disabled=true;byId('cfAutoFillResults')?.classList.add('hidden');
     const batchSize=smallerBatches()?MOBILE_BATCH_SIZE:DESKTOP_BATCH_SIZE,totalBatches=Math.ceil(autoFiles.length/batchSize),summaries=[],analysisId=(crypto.randomUUID?.()||`cfctx_${Date.now()}_${Math.random().toString(36).slice(2,10)}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,96),callerHint=safeText(byId('newCallPersonName')?.value);
