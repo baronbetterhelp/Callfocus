@@ -1,5 +1,5 @@
 # CallFocus
 
-Latest build: **V15.7 — Recent Calls View All Fix**.
+Latest build: **V15.8 — Call Cost Monitoring & Persistent Sign-In**.
 
-Built on the uploaded V15.6 complete build. See `README-V15.7.md` for the changes.
+Built on V15.7. See `README-V15.8.md` for the features and billing connection setup.

@@ -96,7 +96,7 @@ function json(data, status = 200) {
 // Uses the existing CALLFOCUS_CONFIG Workers KV namespace with isolated key
 // prefixes, so no additional Cloudflare binding is required.
 // -----------------------------------------------------------------------------
-const CUSTOMER_SESSION_TTL = 60 * 60 * 24 * 30; // 30 days
+// Customer sessions persist until sign-out or credential/account revocation.
 const CUSTOMER_DATA_MAX_BYTES = 2_000_000;
 const CUSTOMER_EMAIL_CODE_TTL = 60 * 10; // 10 minutes
 
@@ -326,7 +326,7 @@ async function createCustomerSession(env, userOrId) {
   const authVersion = typeof userOrId === 'string' ? 1 : Number(userOrId?.authVersion || 1);
   const token = randomToken(36);
   const key = await customerSessionKey(token);
-  await env.CALLFOCUS_CONFIG.put(key, JSON.stringify({ userId, authVersion, createdAt: new Date().toISOString() }), { expirationTtl: CUSTOMER_SESSION_TTL });
+  await env.CALLFOCUS_CONFIG.put(key, JSON.stringify({ userId, authVersion, persistent:true, createdAt: new Date().toISOString() }));
   return token;
 }
 
@@ -342,6 +342,8 @@ async function authenticatedCustomer(request, env) {
   const userAuthVersion = Number(user.authVersion || 1);
   const sessionAuthVersion = Number(session.authVersion || 1);
   if (userAuthVersion !== sessionAuthVersion) return null;
+  // Upgrade an existing valid 30-day session without requiring another login.
+  if(session.persistent!==true){session.persistent=true;await env.CALLFOCUS_CONFIG.put(await customerSessionKey(token),JSON.stringify(session));}
   return { token, session, user };
 }
 
@@ -860,10 +862,20 @@ function callFocusBotTrap(body) {
   return '';
 }
 
-function adminAuthorized(request, env) {
-  const expected = String(env.CALLFOCUS_ADMIN_PASSCODE || '');
-  const supplied = String(request.headers.get('X-CallFocus-Admin-Key') || '');
-  return !!expected && supplied === expected;
+async function adminAuthorized(request, env) {
+  const expected=String(env.CALLFOCUS_ADMIN_PASSCODE||'');
+  const supplied=String(request.headers.get('X-CallFocus-Admin-Key')||'');
+  if(!expected||!supplied)return false;
+  if(supplied===expected)return true; // Retain compatibility with deployed admin clients.
+  if(!supplied.startsWith('session:')||!env.CALLFOCUS_CONFIG)return false;
+  const record=await env.CALLFOCUS_CONFIG.get(`admin:session:${await sha256Hex(supplied.slice(8))}`,{type:'json'});
+  return !!record&&record.passcodeHash===await sha256Hex(expected);
+}
+async function handleAdminLogout(request,env){
+  if(request.method!=='POST')return json({error:'Method not allowed.'},405);
+  const supplied=String(request.headers.get('X-CallFocus-Admin-Key')||'');
+  if(supplied.startsWith('session:')&&env.CALLFOCUS_CONFIG)await env.CALLFOCUS_CONFIG.delete(`admin:session:${await sha256Hex(supplied.slice(8))}`);
+  return json({ok:true});
 }
 
 async function handleLocationSearch(request) {
@@ -950,7 +962,7 @@ async function handleCreditEntitlement(request, env) {
 
 
 async function handleAdminUnlimitedUser(request, env) {
-  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
   if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.put !== 'function') {
     return json({ error: 'Global admin storage is not connected yet. Add a Workers KV binding named CALLFOCUS_CONFIG.' }, 503);
@@ -1014,7 +1026,7 @@ function adminUserSummary(user, data, unlimitedEmails = []) {
 }
 
 async function handleAdminUsers(request, env) {
-  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
   if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.list !== 'function') {
     return json({ error: 'Global account storage is not connected.' }, 503);
@@ -1050,7 +1062,7 @@ async function handleAdminUsers(request, env) {
 }
 
 async function handleAdminUserAction(request, env) {
-  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
   if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.put !== 'function') return json({ error: 'Global account storage is not connected.' }, 503);
   let body = {};
@@ -1116,7 +1128,7 @@ async function handleAdminUserAction(request, env) {
 }
 
 async function handleAdminConfig(request, env) {
-  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method === 'GET') {
     const config = await getConfig(env);
     return json({ config, storageConnected: !!env.CALLFOCUS_CONFIG, engine: 'GPT-Live 1' });
@@ -1134,7 +1146,7 @@ async function handleAdminConfig(request, env) {
 }
 
 async function handleAdminScreenshotLimits(request, env) {
-  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   const current = await getConfig(env);
   if (request.method === 'GET') {
     const min = Math.max(1, Math.min(50, Math.round(Number(current.analysisScreenshotMin) || 20)));
@@ -1157,7 +1169,12 @@ async function handleAdminScreenshotLimits(request, env) {
 
 async function handleAdminLogin(request, env) {
   if (!env.CALLFOCUS_ADMIN_PASSCODE) return json({ error: 'Admin passcode is not configured on the server.' }, 503);
-  return adminAuthorized(request, env) ? json({ ok: true }) : json({ error: 'Incorrect admin passcode.' }, 401);
+  if(request.method!=='POST')return json({error:'Method not allowed.'},405);
+  if(!await adminAuthorized(request,env))return json({error:'Incorrect admin passcode.'},401);
+  if(!env.CALLFOCUS_CONFIG)return json({error:'Account storage is not connected.'},503);
+  const token=randomToken(36);
+  await env.CALLFOCUS_CONFIG.put(`admin:session:${await sha256Hex(token)}`,JSON.stringify({passcodeHash:await sha256Hex(String(env.CALLFOCUS_ADMIN_PASSCODE)),createdAt:new Date().toISOString()}));
+  return json({ok:true,adminToken:`session:${token}`});
 }
 
 
@@ -1168,7 +1185,7 @@ async function recordLiveStatus(env, payload) {
 
 
 async function handleAdminCustomVoiceAccess(request, env) {
-  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
   if (!env.OPENAI_API_KEY) return json({ enabled: false, status: 0, message: 'OPENAI_API_KEY is not configured.' });
   try {
@@ -1189,7 +1206,7 @@ async function handleAdminCustomVoiceAccess(request, env) {
 }
 
 async function handleAdminCustomVoiceCreate(request, env) {
-  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
   if (!env.OPENAI_API_KEY) return json({ error: 'OpenAI API key is not configured.' }, 503);
   if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.put !== 'function') return json({ error: 'Global admin storage is not connected.' }, 503);
@@ -1276,7 +1293,7 @@ async function handleAdminCustomVoiceCreate(request, env) {
 }
 
 async function handleAdminDiagnostics(request, env) {
-  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   const config = await getConfig(env);
   let modelAccess = { ok: false, status: 0, code: '', message: '' };
   if (env.OPENAI_API_KEY) {
@@ -1313,7 +1330,7 @@ async function handleAdminDiagnostics(request, env) {
 }
 
 async function handleVoicePreview(request, env) {
-  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (!env.OPENAI_API_KEY) return json({ error: 'OpenAI API key is not configured.' }, 503);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
@@ -1689,6 +1706,8 @@ The entire spoken call must stay in ${callLanguage}. This is a hard CallFocus se
   }
   await recordLiveStatus(env, { ok: true, status: 201, code: 'ok', message: 'GPT-Live session created successfully.' });
 
+  let callUsageId=null;
+  try{callUsageId=await registerCallUsage(request,env,body,created)}catch(error){console.error('CallFocus call registration failed',error?.message||error)}
   const headers = new Headers({
     'Content-Type': 'application/sdp',
     'Cache-Control': 'no-store',
@@ -1699,6 +1718,8 @@ The entire spoken call must stay in ${callLanguage}. This is a hard CallFocus se
     'X-CallFocus-AI-Voice': userVoiceProfile?.name || '',
     'X-CallFocus-Config-Updated': config.updatedAt || ''
   });
+  if(callUsageId)headers.set('X-CallFocus-Call-Usage-ID',callUsageId);
+  headers.set('X-CallFocus-Provider-Session-ID',String(created?.id||created?.session?.id||''));
   return new Response(answerSdp, { status: 200, headers });
 }
 
@@ -2500,7 +2521,7 @@ async function recordDynamicsUsage(env, { auth, analysisId, kind, imageCount = 0
 }
 
 async function handleAdminAiUsage(request, env) {
-  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
   if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.list !== 'function') return json({ error: 'Global admin storage is not connected.' }, 503);
   const stats = (await env.CALLFOCUS_CONFIG.get(AI_USAGE_GLOBAL_KEY, { type: 'json' })) || {
@@ -2792,6 +2813,7 @@ TRANSCRIPT SEGMENT:\n${rawText}`;
     }
     const translation = extractResponsesText(payload);
     if (!translation) return json({ error: 'No translation was returned.' }, 502);
+    await recordCallBackendUsage(env,auth,String(body.callUsageId||''),String(payload.id||''),'gpt-6-luna',payload.usage||{});
     return json({ ok: true, translation, sourceLanguage, translated: true });
   } catch (error) {
     console.error('CallFocus live transcript translation failed', error?.message || error);
@@ -3405,7 +3427,7 @@ async function handleManualPaymentStatus(request, env) {
 }
 
 async function handleAdminManualPayments(request, env) {
-  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
   if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.list !== 'function') return json({ error: 'Global storage is not connected.' }, 503);
   const page = await env.CALLFOCUS_CONFIG.list({ prefix: 'manual:payment:', limit: 250 });
@@ -3495,7 +3517,7 @@ async function applyManualPaymentDecision(env, id, action, reason = '') {
 }
 
 async function handleAdminManualPaymentAction(request, env) {
-  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
   let body = {}; try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
   const result = await applyManualPaymentDecision(env, body?.paymentId, body?.action, body?.reason);
@@ -3557,7 +3579,7 @@ async function handleManualPaymentReview(request, env) {
 }
 
 async function handleAdminManualPaymentReceipt(request, env) {
-  if (!adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
   const id = String(new URL(request.url).searchParams.get('id') || '').trim();
   const record = await manualPaymentRecord(env, id);
@@ -3630,7 +3652,7 @@ export default {
     if (url.pathname === '/api/manual-payment/cancel') return safeCustomerRoute('manual-payment-cancel', () => handleManualPaymentCancel(request, env));
     if (url.pathname === '/api/manual-payment/status') return safeCustomerRoute('manual-payment-status', () => handleManualPaymentStatus(request, env));
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.7' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.8' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -3639,6 +3661,10 @@ export default {
     if (url.pathname === '/api/admin/screenshot-limits') return handleAdminScreenshotLimits(request, env);
     if (url.pathname === '/api/admin/users') return handleAdminUsers(request, env);
     if (url.pathname === '/api/admin/ai-usage') return handleAdminAiUsage(request, env);
+    if (url.pathname === '/api/admin/logout') return handleAdminLogout(request, env);
+    if (url.pathname === '/api/admin/call-usage') return handleAdminCallUsage(request, env);
+    if (url.pathname === '/api/admin/billed-costs') return handleAdminBilledCosts(request, env);
+    if (url.pathname === '/api/call-usage') return safeCustomerRoute('call-usage', () => handleCallUsage(request, env));
     if (url.pathname === '/api/admin/user-action') return handleAdminUserAction(request, env);
     if (url.pathname === '/api/admin/manual-payments') return handleAdminManualPayments(request, env);
     if (url.pathname === '/api/admin/manual-payment-action') return handleAdminManualPaymentAction(request, env);
@@ -3663,10 +3689,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.7', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.8', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.7').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.7');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.8').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.8');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -3676,16 +3702,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.7');
+      headers.set('X-CallFocus-Admin-Build', '15.8');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.7', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.8', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.7');
+      headers.set('X-CallFocus-Admin-Build', '15.8');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {
@@ -3713,3 +3739,134 @@ export default {
     return env.ASSETS.fetch(request);
   }
 };
+
+
+// V15.8 call monitoring. Store usage metadata only, never audio or transcripts.
+const CALL_USAGE_RETENTION_SECONDS = 60 * 60 * 24 * 365;
+const LIVE_VOICE_RATE_USD_PER_MINUTE = 0.05;
+const LIVE_INITIALIZATION_SECONDS = 15;
+function callUsageIndexKey(id) { return `call_usage:id:${id}`; }
+function usageNumber(value, maximum = 86400) { const n = Number(value); return Number.isFinite(n) ? Math.max(0, Math.min(maximum, n)) : 0; }
+function callUsageMetadata(r) {
+  return { durationSeconds:r.durationSeconds||0, billableSeconds:r.billableSeconds||0, creditsUsed:r.creditsUsed||0, estimatedCostUsd:r.estimatedCostUsd||0, finalized:r.finalized===true, started:r.started===true, updatedAt:r.updatedAt, missingBackendPricing:r.missingBackendPricing===true };
+}
+async function storeCallUsage(env, key, record) {
+  await env.CALLFOCUS_CONFIG.put(key, JSON.stringify(record), { expirationTtl:CALL_USAGE_RETENTION_SECONDS, metadata:callUsageMetadata(record) });
+}
+function priceCallUsage(record) {
+  // The 15-second setup charge is credited against subsequent duration, not added again.
+  record.billableSeconds = record.providerSeconds===null ? LIVE_INITIALIZATION_SECONDS : Math.max(0,Number(record.providerSeconds)||0);
+  record.voiceCostUsd = record.billableSeconds / 60 * record.voiceRateUsdPerMinute;
+  record.backendCostUsd = (record.backendResponses||[]).reduce((sum,r)=>sum+(Number(r.estimatedCostUsd)||0),0);
+  record.missingBackendPricing = (record.backendResponses||[]).some(r=>r.estimatedCostUsd===null);
+  record.estimatedCostUsd = record.voiceCostUsd + record.backendCostUsd;
+  return record;
+}
+async function registerCallUsage(request, env, body, providerSession) {
+  if(!env.CALLFOCUS_CONFIG) return null;
+  const auth=await authenticatedCustomer(request,env); if(!auth)return null;
+  const id=crypto.randomUUID(),when=Date.now(),now=new Date(when).toISOString();
+  const key=`call_usage:recent:${String(9_999_999_999_999-when).padStart(13,'0')}:${id}`;
+  const details=body?.session||{};
+  const record=priceCallUsage({id,userId:auth.user.id,userName:auth.user.name||'',userEmail:auth.user.email||'',threadId:String(details.threadId||'').slice(0,160),title:String(details.callTitle||'').slice(0,160),callerName:String(details.callerName||'').slice(0,120),model:'gpt-live-1',providerSessionId:String(providerSession?.id||providerSession?.session?.id||'').slice(0,160),createdAt:now,updatedAt:now,durationSeconds:0,providerSeconds:null,voiceRateUsdPerMinute:LIVE_VOICE_RATE_USD_PER_MINUTE,creditsUsed:0,started:false,finalized:false,sequence:0,backendResponses:[],usageSource:'initialization'});
+  await storeCallUsage(env,key,record);
+  await env.CALLFOCUS_CONFIG.put(callUsageIndexKey(id),JSON.stringify({key,userId:auth.user.id}),{expirationTtl:CALL_USAGE_RETENTION_SECONDS});
+  return id;
+}
+function cleanBackendUsage(item) {
+  const id=String(item?.id||'').slice(0,160);if(!id)return null;
+  const model=String(item?.model||'').slice(0,100);
+  const usage=normalizeOpenAIUsage({usage:item?.usage||{}});
+  usage.inputTokens=Math.min(10_000_000,usage.inputTokens);usage.outputTokens=Math.min(10_000_000,usage.outputTokens);usage.cachedInputTokens=Math.min(usage.inputTokens,usage.cachedInputTokens);usage.totalTokens=usage.inputTokens+usage.outputTokens;
+  return {id,model,...usage,estimatedCostUsd:/^gpt-6-luna(?:-|$)/.test(model)?estimateGpt6LunaCost(usage):null};
+}
+async function handleCallUsage(request,env) {
+  if(request.method!=='POST')return json({error:'Method not allowed.'},405);
+  const auth=await authenticatedCustomer(request,env);if(!auth)return json({error:'Sign in to save call usage.'},401);
+  let body;try{body=await request.json()}catch{return json({error:'Invalid call usage.'},400)}
+  const id=String(body?.callUsageId||'');if(!/^[A-Za-z0-9_-]{8,96}$/.test(id))return json({error:'Invalid call identifier.'},400);
+  const index=await env.CALLFOCUS_CONFIG.get(callUsageIndexKey(id),{type:'json'});
+  if(!index||index.userId!==auth.user.id)return json({error:'Call usage not found.'},404);
+  const record=await env.CALLFOCUS_CONFIG.get(index.key,{type:'json'});
+  if(!record||record.userId!==auth.user.id)return json({error:'Call usage not found.'},404);
+  const sequence=Math.floor(usageNumber(body.sequence,1_000_000_000));
+  if(sequence<=Number(record.sequence||0))return json({ok:true,id,duplicate:true});
+  record.sequence=sequence;
+  record.durationSeconds=Math.max(record.durationSeconds||0,usageNumber(body.durationSeconds));
+  if(body.providerSeconds!==null&&body.providerSeconds!==undefined&&Number.isFinite(Number(body.providerSeconds))){record.providerSeconds=Math.max(record.providerSeconds||0,usageNumber(body.providerSeconds));record.usageSource='api_duration';}
+  record.started=record.started===true||body.started===true;
+  record.finalized=record.finalized===true||body.finalized===true;
+  if(body.closed===true){record.closed=true;record.usageSource=record.providerSeconds===null?'initialization':'api_final_duration';}
+  record.reason=String(body.reason||record.reason||'').slice(0,80);
+  record.creditsUsed=Math.max(record.creditsUsed||0,usageNumber(body.creditsUsed,1_000_000));
+  record.unlimitedCredit=body.unlimitedCredit===true||record.unlimitedCredit===true;
+  if(record.unlimitedCredit)record.creditsUsed=0;
+  const seen=new Map((record.backendResponses||[]).map(r=>[r.id,r]));
+  for(const raw of (Array.isArray(body.backendResponses)?body.backendResponses:[]).slice(0,100)){const item=cleanBackendUsage(raw);if(item&&!seen.has(item.id))seen.set(item.id,item);}
+  record.backendResponses=[...seen.values()].slice(0,500);
+  record.updatedAt=new Date().toISOString();
+  if(record.finalized)record.completedAt=record.completedAt||record.updatedAt;
+  await storeCallUsage(env,index.key,priceCallUsage(record));
+  return json({ok:true,id,estimatedCostUsd:record.estimatedCostUsd});
+}
+async function recordCallBackendUsage(env,auth,callUsageId,responseId,model,usage) {
+  if(!callUsageId||!responseId||!env.CALLFOCUS_CONFIG)return;
+  try{
+    const index=await env.CALLFOCUS_CONFIG.get(callUsageIndexKey(callUsageId),{type:'json'});
+    if(!index||index.userId!==auth.user.id)return;
+    const item=cleanBackendUsage({id:responseId,model,usage});if(!item)return;
+    // Separate immutable response entries avoid racing a voice snapshot on the same KV key.
+    const key=`call_usage:backend:${callUsageId}:${await sha256Hex(responseId)}`;
+    await env.CALLFOCUS_CONFIG.put(key,JSON.stringify(item),{expirationTtl:CALL_USAGE_RETENTION_SECONDS,metadata:{callUsageId,estimatedCostUsd:item.estimatedCostUsd||0,inputTokens:item.inputTokens,outputTokens:item.outputTokens,missingPricing:item.estimatedCostUsd===null}});
+  }catch(error){console.error('CallFocus call backend accounting failed',error?.message||error)}
+}
+async function handleAdminCallUsage(request,env) {
+  if(!await adminAuthorized(request,env))return json({error:'Sign in to the Admin Portal.'},401);
+  if(request.method!=='GET')return json({error:'Method not allowed.'},405);
+  if(!env.CALLFOCUS_CONFIG)return json({error:'Account storage is not connected.'},503);
+  const stats={calls:0,completedCalls:0,durationSeconds:0,billableSeconds:0,creditsUsed:0,estimatedCostUsd:0,lastUpdatedAt:null,partial:false};
+  const trackedIds=new Set();
+  let cursor,scanned=0;
+  do{
+    const page=await env.CALLFOCUS_CONFIG.list({prefix:'call_usage:recent:',limit:1000,...(cursor?{cursor}:{})});
+    for(const entry of page.keys||[]){trackedIds.add(entry.name.split(':').at(-1));const m=entry.metadata||{};stats.calls++;if(m.finalized)stats.completedCalls++;stats.durationSeconds+=usageNumber(m.durationSeconds);stats.billableSeconds+=usageNumber(m.billableSeconds);stats.creditsUsed+=usageNumber(m.creditsUsed,1_000_000);stats.estimatedCostUsd+=usageNumber(m.estimatedCostUsd,10000);if(String(m.updatedAt||'')>String(stats.lastUpdatedAt||''))stats.lastUpdatedAt=m.updatedAt;}
+    cursor=page.list_complete?null:page.cursor;scanned++;
+  }while(cursor&&scanned<10);
+  stats.partial=!!cursor;
+  const backendByCall=new Map();cursor=null;scanned=0;
+  do{
+    const page=await env.CALLFOCUS_CONFIG.list({prefix:'call_usage:backend:',limit:1000,...(cursor?{cursor}:{})});
+    for(const entry of page.keys||[]){const m=entry.metadata||{};if(!trackedIds.has(m.callUsageId))continue;const total=backendByCall.get(m.callUsageId)||{cost:0,tokens:0,missing:false};total.cost+=usageNumber(m.estimatedCostUsd,10000);total.tokens+=usageNumber(m.inputTokens,10_000_000)+usageNumber(m.outputTokens,10_000_000);total.missing=total.missing||m.missingPricing===true;backendByCall.set(m.callUsageId,total);stats.estimatedCostUsd+=usageNumber(m.estimatedCostUsd,10000);}
+    cursor=page.list_complete?null:page.cursor;scanned++;
+  }while(cursor&&scanned<5);
+  stats.partial=stats.partial||!!cursor;
+  const requestedCursor=new URL(request.url).searchParams.get('cursor')||'';
+  const page=await env.CALLFOCUS_CONFIG.list({prefix:'call_usage:recent:',limit:20,...(requestedCursor?{cursor:requestedCursor}:{})});
+  const recent=(await Promise.all((page.keys||[]).map(k=>env.CALLFOCUS_CONFIG.get(k.name,{type:'json'})))).filter(Boolean);
+  for(const record of recent){const backend=backendByCall.get(record.id);if(backend){record.backendCostUsd=(record.backendCostUsd||0)+backend.cost;record.estimatedCostUsd=(record.estimatedCostUsd||0)+backend.cost;record.translationTokens=backend.tokens;record.missingBackendPricing=record.missingBackendPricing||backend.missing;}}
+  return json({ok:true,stats,recent,nextCursor:page.list_complete?null:page.cursor,pricing:{voicePerMinuteUsd:LIVE_VOICE_RATE_USD_PER_MINUTE},retentionDays:365});
+}
+async function handleAdminBilledCosts(request,env) {
+  if(!await adminAuthorized(request,env))return json({error:'Sign in to the Admin Portal.'},401);
+  if(request.method!=='GET')return json({error:'Method not allowed.'},405);
+  const key=String(env.OPENAI_ADMIN_KEY||'').trim(),projectId=String(env.OPENAI_BILLING_PROJECT_ID||'').trim();
+  if(!key)return json({ok:true,configured:false,scope:projectId?'project':'organization',message:'Connect an OpenAI Admin API key in Cloudflare to load provider-reported billed spend.'});
+  const now=Math.floor(Date.now()/1000),day=86400,end=now,start=Math.floor(now/day)*day-29*day;
+  const query=new URLSearchParams({start_time:String(start),end_time:String(end),bucket_width:'1d',limit:'30'});
+  query.append('group_by[]','project_id');if(projectId)query.append('project_ids[]',projectId);
+  const cacheKey=`call_usage:billing:${projectId||'organization'}`;
+  const cached=await env.CALLFOCUS_CONFIG?.get(cacheKey,{type:'json'});
+  if(cached&&Date.now()-Date.parse(cached.fetchedAt)<60000)return json({...cached,cached:true});
+  try{
+    let nextPage=null,buckets=[];
+    for(let i=0;i<5;i++){
+      if(nextPage)query.set('page',nextPage);
+      const response=await fetch(`https://api.openai.com/v1/organization/costs?${query}`,{headers:{Authorization:`Bearer ${key}`},signal:AbortSignal.timeout(15000)});
+      if(!response.ok)return json({ok:true,configured:true,available:false,message:response.status===401||response.status===403?'The billing key needs organization usage/cost access.':'OpenAI billed spend is temporarily unavailable.'});
+      const payload=await response.json();buckets.push(...(payload.data||[]));nextPage=payload.has_more?payload.next_page:null;if(!nextPage)break;
+    }
+    const daily=buckets.map(b=>({date:new Date(b.start_time*1000).toISOString().slice(0,10),amountUsd:(b.results||[]).filter(r=>(!projectId||r.project_id===projectId)&&String(r.amount?.currency||'usd').toLowerCase()==='usd').reduce((s,r)=>s+(Number(r.amount?.value)||0),0)}));
+    const result={ok:true,configured:true,available:true,scope:projectId?'project':'organization',projectId:projectId||null,totalUsd:daily.reduce((s,r)=>s+r.amountUsd,0),todayUsd:daily.filter(r=>r.date===new Date().toISOString().slice(0,10)).reduce((s,r)=>s+r.amountUsd,0),daily,fetchedAt:new Date().toISOString(),periodStart:new Date(start*1000).toISOString(),partial:!!nextPage};
+    await env.CALLFOCUS_CONFIG?.put(cacheKey,JSON.stringify(result),{expirationTtl:300});return json(result);
+  }catch{return json({ok:true,configured:true,available:false,message:'OpenAI billed spend is temporarily unavailable.'})}
+}

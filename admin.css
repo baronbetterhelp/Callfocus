@@ -730,3 +730,20 @@ html[data-theme="pearl"] .premium-footer .footer-links a:hover{
 .admin-screenshot-limits-panel{position:relative!important;margin:20px 0 24px!important;padding:24px!important;background:linear-gradient(145deg,rgba(255,255,255,.96),rgba(241,250,247,.96))!important;border:2px solid rgba(194,148,68,.48)!important}
 .admin-screenshot-limits-panel::before{content:"ACTIVE CONTROL";justify-self:start;display:inline-flex;align-items:center;min-height:28px;padding:0 10px;border-radius:999px;background:rgba(31,126,113,.10);border:1px solid rgba(31,126,113,.18);font:800 10px/1 'Manrope',sans-serif;letter-spacing:1.25px;color:#176e62}
 @media(max-width:640px){.admin-screenshot-limits-panel{padding:18px!important;margin:16px 0 22px!important}}
+
+/* V15.8 call monitoring uses the existing Pearl Aurora admin cards. */
+.call-usage-panel,.call-billing-panel{margin-bottom:22px}
+.call-usage-grid{margin:18px 0}
+.call-usage-list{display:grid;gap:12px;margin-top:16px}
+.call-usage-item{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px;padding:19px;border:1px solid #dfe8e4;border-radius:18px;background:#f9fbfa}
+.call-usage-user{grid-column:1/-1}
+.call-usage-user span{white-space:normal;overflow-wrap:anywhere}
+.call-usage-status{grid-column:1/-1;font-size:11px;color:#357368;font-weight:700}
+.call-usage-row-note{grid-column:1/-1;margin:0;font-size:11px;color:#778981;line-height:1.6}
+.call-usage-note{margin-top:12px}
+.call-billing-grid{grid-template-columns:repeat(2,minmax(0,1fr));margin:16px 0}
+.call-billing-setup{margin-top:14px;border-top:1px solid #e0e9e4;padding-top:14px}
+.call-billing-setup summary{cursor:pointer;font-weight:700;font-size:13px;color:#32645b}
+.call-billing-setup code{overflow-wrap:anywhere}
+#callUsageMoreBtn{margin-top:16px}
+@media(max-width:620px){.call-usage-item{padding:15px;gap:12px}.call-usage-grid .admin-stat-card{min-width:0}.call-usage-grid .admin-stat-card strong,.call-billing-grid .admin-stat-card strong{font-size:25px}.call-billing-panel .admin-users-heading{flex-wrap:wrap}.call-billing-panel .admin-users-heading .btn{width:100%}}

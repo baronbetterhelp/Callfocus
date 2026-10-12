@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.1';
+  const BUILD='15.8';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -1287,9 +1287,11 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
   }
 
   // Ending any call always returns to that call's setup/thread instead of Home.
-  cleanupCall=function(save=true){
+  cleanupCall=async function(save=true){
+    if(live._cfUserClosing)return live._cfClosePromise;
     clearTimeout(failureReturnTimer); failureReturnTimer=null;
     const call=cloneCall(live.current||lastFailedCall);
+    if(window.CallFocusCallUsage)await window.CallFocusCallUsage.closeSession();
     if(save&&live.current){try{saveCompletedCall()}catch{}}
     try{if(live.dc?.readyState==='open')live.dc.send(JSON.stringify({type:'session.close',event_id:`close_${Date.now()}`}))}catch{}
     destroyTransport();
@@ -1317,6 +1319,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     $('liveCaption').textContent='Preparing live voice connection…'; $('callTimer').textContent='00:00';
     $('callMoreTitle').textContent=call.title||call.callerName; $('callMoreTopic').textContent=call.topic||'No new topic supplied';
     $('callMoreConnection').textContent='Connecting'; $('callMorePanel').classList.add('hidden'); $('liveStartCallBtn')?.classList.add('hidden');
+    call.callUsageId='';call.providerSessionId='';
     live.current=call; live.transcript=''; live.connected=false; live.started=false; live.graceful=false; live.liveUsageSeconds=0; live.seconds=0; resetCallControls();
 
     try{
@@ -1335,10 +1338,13 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       dc.onmessage=e=>handleRealtimeEvent(e.data); dc.onerror=()=>{$('liveCaption').textContent='Voice connection error.'};
 
       const offer=await pc.createOffer(); await pc.setLocalDescription(offer); await waitForIce(pc);
-      const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,voiceProfile:call.voiceProfile||null,callLanguage:call.callLanguage||'English',contextInstructions:buildInstructions(call)}})});
+      const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('callfocus_server_session_v1')||''}`},body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,voiceProfile:call.voiceProfile||null,callLanguage:call.callLanguage||'English',contextInstructions:buildInstructions(call),threadId:call.threadId,callTitle:call.title,callerName:call.callerName}})});
       const text=await res.text();
       if(!res.ok){const reason=res.headers.get('X-CallFocus-Error-Code')||`http_${res.status}`;throw Object.assign(new Error(text||'Live session failed'),{callFocusReason:reason})}
       call.speakFirst=res.headers.get('X-CallFocus-Speak-First')!=='0'; call.engine=res.headers.get('X-CallFocus-Engine')||'gpt-live-1'; call.configUpdatedAt=res.headers.get('X-CallFocus-Config-Updated')||'';
+      call.callUsageId=res.headers.get('X-CallFocus-Call-Usage-ID')||'';
+      call.providerSessionId=res.headers.get('X-CallFocus-Provider-Session-ID')||'';
+      window.CallFocusCallUsage?.prepared?.(call);
       await pc.setRemoteDescription({type:'answer',sdp:text});
     }catch(err){
       console.error(err);
@@ -1363,8 +1369,8 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     if(parsed?.type==='session.started'){
       clearTimeout(failureReturnTimer); failureReturnTimer=null; lastFailedCall=null; hideFailureActions(); document.getElementById('cfThreadRetryBanner')?.remove();
     }
-    if(parsed?.type==='session.closed'&&!live.started&&live.current)failCall(live.current,'Server unavailable. Try again soon.','session_closed_before_start');
-    if(parsed?.type==='error'&&live.current)failCall(live.current,'Server unavailable. Try again soon.',parsed.error?.code||parsed.error?.type||'live_session_error');
+    if(parsed?.type==='session.closed'&&!live.started&&live.current&&!live._cfUserClosing)failCall(live.current,'Server unavailable. Try again soon.','session_closed_before_start');
+    if(parsed?.type==='error'&&live.current&&!live._cfUserClosing)failCall(live.current,'Server unavailable. Try again soon.',parsed.error?.code||parsed.error?.type||'live_session_error');
   };
 })();
 
@@ -3171,6 +3177,8 @@ ${approvedPatterns}
   let syncInFlight=false;
   let pendingSync=false;
   let serverReady=false;
+  let restoreInFlight=null;
+  let sessionRetryTimer=null;
 
   function legacySnapshot(){
     try{
@@ -3349,7 +3357,7 @@ ${approvedPatterns}
     localStorage.removeItem(SERVER_TOKEN_KEY);
     localStorage.removeItem(SESSION_KEY);
     if(oldToken){
-      try{await fetch('/api/auth/signout',{method:'POST',headers:{Authorization:`Bearer ${oldToken}`},cache:'no-store'});}catch{}
+      try{fetch('/api/auth/signout',{method:'POST',headers:{Authorization:`Bearer ${oldToken}`},keepalive:true,cache:'no-store'}).catch(()=>{});}catch{}
     }
     account=null;data=null;selectedThreadId=null;clearEntitlement();
     try{closeMobileMenu();$('headerAccountDropdown').classList.add('hidden');}catch{}
@@ -3372,18 +3380,52 @@ ${approvedPatterns}
     account=null;data=null;selectedThreadId=null;clearEntitlement();closeModal('deleteAccountModal');showView('home',false);renderAccountUI();renderWorkspace();toast('Account deleted');
   };
 
-  restoreSession=async function(){
-    if(!serverToken){account=null;data=null;renderAccountUI();renderWorkspace();return false;}
-    try{
-      const res=await serverFetch('/api/auth/session',{method:'GET'});
-      const payload=await readPayload(res);
-      if(!res.ok)throw new Error(payload?.error||'Session expired');
-      setServerSession(payload.user,payload.data,serverToken);
-      return true;
-    }catch{
-      serverToken='';localStorage.removeItem(SERVER_TOKEN_KEY);localStorage.removeItem(SESSION_KEY);account=null;data=null;renderAccountUI();renderWorkspace();return false;
-    }
+  function restoreCachedCustomer(){
+    if(account&&data)return;
+    const id=localStorage.getItem(SESSION_KEY);
+    const cached=accounts().find(a=>a.id===id);
+    if(!cached)return;
+    account={...cached};data=readJSON(accountDataKey(id),defaultData(cached.name));
+    data.profile ||= defaultData(cached.name).profile;data.callers ||= [];data.threads ||= [];
+    renderAccountUI();renderWorkspace();
+  }
+  restoreSession=function(){
+    if(restoreInFlight)return restoreInFlight;
+    const expectedToken=serverToken;
+    if(!expectedToken){account=null;data=null;renderAccountUI();renderWorkspace();return Promise.resolve(false);}
+    restoreInFlight=(async()=>{
+      try{
+        const res=await serverFetch('/api/auth/session',{method:'GET'});
+        if(serverToken!==expectedToken)return false;
+        if(res.status===401||res.status===403){
+          serverToken='';serverReady=false;localStorage.removeItem(SERVER_TOKEN_KEY);localStorage.removeItem(SESSION_KEY);
+          account=null;data=null;selectedThreadId=null;clearEntitlement();renderAccountUI();renderWorkspace();return false;
+        }
+        if(!res.ok)throw new Error('Session check temporarily unavailable');
+        const payload=await readPayload(res);
+        if(serverToken!==expectedToken)return false;
+        if(!payload?.user?.id)throw new Error('Incomplete session response');
+        setServerSession(payload.user,payload.data,expectedToken);clearTimeout(sessionRetryTimer);return true;
+      }catch{
+        if(serverToken!==expectedToken)return false;
+        // A network interruption does not revoke a valid remembered login.
+        serverReady=false;restoreCachedCustomer();
+        clearTimeout(sessionRetryTimer);sessionRetryTimer=setTimeout(()=>{if(serverToken&&!serverReady)restoreSession()},10000);
+        return !!account;
+      }finally{restoreInFlight=null;}
+    })();
+    return restoreInFlight;
   };
+
+  window.addEventListener('online',()=>{if(serverToken&&!serverReady)restoreSession()});
+  window.addEventListener('pageshow',()=>{if(serverToken&&!serverReady)restoreSession()});
+  window.addEventListener('focus',()=>{if(serverToken&&!serverReady)restoreSession()});
+  // Another tab's explicit sign-out also signs this tab out.
+  window.addEventListener('storage',e=>{
+    if(e.key!==SERVER_TOKEN_KEY)return;
+    if(!e.newValue){serverToken='';serverReady=false;account=null;data=null;selectedThreadId=null;clearEntitlement();renderAccountUI();renderWorkspace();showView('home',false);}
+    else if(e.newValue!==serverToken){serverToken=e.newValue;serverReady=false;restoreSession();}
+  });
 
   function consumeHandoffToken(){
     const hash=String(location.hash||'');
@@ -5457,7 +5499,7 @@ ${approvedPatterns}
     turn.inFlight=true;turn.pending=false;turn.lastSent=source;renderTurn(turn);
     try{
       const headers={'Content-Type':'application/json'};const t=token();if(t)headers.Authorization=`Bearer ${t}`;
-      const res=await fetch('/api/live-translate',{method:'POST',headers,cache:'no-store',body:JSON.stringify({text:source,sourceLanguage:callLanguage(),speaker:speakerLabel(turn.role)})});
+      const res=await fetch('/api/live-translate',{method:'POST',headers,cache:'no-store',body:JSON.stringify({text:source,sourceLanguage:callLanguage(),speaker:speakerLabel(turn.role),callUsageId:live?.current?.callUsageId||''})});
       let data={};try{data=await res.json()}catch{}
       if(!res.ok)throw new Error(data?.error||'Translation unavailable');
       turn.translation=String(data?.translation||source).trim();turn.error=false;
@@ -6106,4 +6148,113 @@ ${approvedPatterns}
   }
   function boot(){installNewCallTools();installAutoFillModal();installSavedModal();hookLifecycle();try{ensureDraftData();updateSavedCount()}catch{}}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+})();
+
+/* ===== CallFocus V15.8 — live-call usage capture and durable reporting ===== */
+(()=>{
+  const QUEUE_KEY='callfocus_call_usage_queue_v158';
+  const SESSION_KEY='callfocus_server_session_v1';
+  const states=new Map();let flushing=false,retryTimer=null;
+  let pending={};try{pending=JSON.parse(localStorage.getItem(QUEUE_KEY)||'{}')||{}}catch{}
+  function storeQueue(){try{localStorage.setItem(QUEUE_KEY,JSON.stringify(pending))}catch{}}
+  function stateFor(call=live?.current){
+    if(!call?.callUsageId)return null;
+    let s=states.get(call.callUsageId);
+    if(!s){s={id:call.callUsageId,userId:account?.id||'',providerSeconds:null,durationSeconds:0,creditsUsed:0,sequence:Number(pending[call.callUsageId]?.sequence)||0,started:false,closed:false,finalized:false,lastReportAt:0,backend:new Map(),reason:''};states.set(s.id,s)}
+    return s;
+  }
+  function capture(s){
+    if(!s)return;
+    if(live?.current?.callUsageId===s.id){
+      s.durationSeconds=Math.max(s.durationSeconds,Number(live.seconds)||0);
+      s.started=s.started||live.started===true;
+      s.unlimitedCredit=window.CallFocusEntitlements?.unlimited===true;
+      const credits=window.CallFocusCredits?.creditsForSeconds?.(Number(live.creditSecondsUsed)||0)||0;
+      s.creditsUsed=s.unlimitedCredit?0:(s.started?Math.max(s.creditsUsed,Math.round(credits*10)/10):0);
+    }
+  }
+  function report(s,{force=false}={}){
+    if(!s)return;capture(s);
+    if(!force&&Date.now()-s.lastReportAt<10000)return;
+    s.lastReportAt=Date.now();s.sequence++;
+    pending[s.id]={callUsageId:s.id,userId:s.userId,sequence:s.sequence,providerSeconds:s.providerSeconds,durationSeconds:s.durationSeconds,creditsUsed:s.creditsUsed,unlimitedCredit:!!s.unlimitedCredit,started:s.started,closed:s.closed,finalized:s.finalized,reason:s.reason,backendResponses:[...s.backend.values()].slice(-100)};
+    storeQueue();flush();
+  }
+  function retryFlush(delay){clearTimeout(retryTimer);retryTimer=setTimeout(()=>{retryTimer=null;flush()},delay)}
+  async function flush(){
+    if(flushing)return;const token=localStorage.getItem(SESSION_KEY)||'';
+    if(!token||!account?.id)return;
+    flushing=true;
+    try{
+      for(const [id,body]of Object.entries(pending)){
+        if(body.userId!==account?.id)continue;
+        const res=await fetch('/api/call-usage',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify(body),keepalive:true,cache:'no-store'});
+        if(!res.ok)throw new Error('Call usage report will retry');
+        if(pending[id]?.sequence===body.sequence)delete pending[id];storeQueue();
+      }
+    }catch{retryFlush(10000)}
+    finally{flushing=false;if(Object.values(pending).some(b=>b.userId===account?.id)&&!retryTimer)retryFlush(1000)}
+  }
+  function backendEvent(s,event){
+    if(!s)return;
+    const nested=event?.event||event?.response_event;
+    const response=nested?.response;
+    if(nested?.type!=='response.completed'||!response?.id||!response.usage)return;
+    if(s.backend.has(response.id))return;
+    s.backend.set(response.id,{id:response.id,model:response.model||'',usage:response.usage});report(s);
+  }
+  const previousHandle=handleRealtimeEvent;
+  handleRealtimeEvent=function(raw){
+    let event;try{event=typeof raw==='string'?JSON.parse(raw):raw}catch{}
+    const s=stateFor();
+    if(s&&event){
+      if(event.type==='session.usage.updated'||event.type==='session.closed'){
+        if(Number.isFinite(Number(event.usage?.seconds)))s.providerSeconds=Math.max(s.providerSeconds||0,Number(event.usage.seconds));
+        if(event.type==='session.closed'){
+          s.closed=true;s.finalized=true;s.reason=String(event.reason||'closed');report(s,{force:true});
+        }else report(s);
+      }
+      if(event.type==='response.event')backendEvent(s,event);
+    }
+    if(event?.type==='session.closed'&&live?._cfCloseResolve)live._cfCloseResolve();
+    const result=previousHandle(raw);
+    if(event?.type==='session.closed'&&live?.started&&!live._cfUserClosing)cleanupCall(true);
+    return result;
+  };
+  const previousStartTimer=startTimer;
+  startTimer=function(){const result=previousStartTimer();const s=stateFor();if(s){s.started=true;report(s,{force:true})}return result};
+  const previousSave=saveCompletedCall;
+  saveCompletedCall=function(){
+    const call=live?.current,s=stateFor(call);capture(s);
+    const result=previousSave();
+    if(s){
+      s.finalized=true;report(s,{force:true});
+      const thread=data?.threads?.find(t=>t.id===call?.threadId),saved=thread?.calls?.at(-1);
+      if(saved){saved.callUsageId=s.id;saved.apiUsageSeconds=s.providerSeconds;saved.apiUsageFinal=s.closed;}
+    }
+    return result;
+  };
+  async function closeSession(){
+    if(live._cfUserClosing)return live._cfClosePromise;
+    const current=live,s=stateFor();capture(s);
+    current._cfUserClosing=true;
+    clearInterval(current.timer);current.timer=null;
+    try{current.stream?.getAudioTracks?.().forEach(t=>t.enabled=false)}catch{}
+    if(s){s.finalized=true;s.reason=s.reason||'close_requested';}
+    if(s?.closed||current.dc?.readyState!=='open'){report(s,{force:true});return;}
+    const caption=document.getElementById('liveCaption');if(caption)caption.textContent='Ending call…';
+    current._cfClosePromise=new Promise(resolve=>{
+      let done=false,timer;
+      const finish=()=>{if(done)return;done=true;clearTimeout(timer);current._cfCloseResolve=null;report(s,{force:true});resolve()};
+      current._cfCloseResolve=finish;timer=setTimeout(finish,3500);
+      try{current.dc.send(JSON.stringify({type:'session.close',event_id:`close_${Date.now()}`}))}catch{finish()}
+    });
+    return current._cfClosePromise;
+  }
+  window.CallFocusCallUsage={prepared:call=>{const s=stateFor(call);if(s)report(s,{force:true})},closeSession,flush};
+  // Keep a recoverable last snapshot when a phone closes/backgrounds the page.
+  window.addEventListener('pagehide',()=>{const s=stateFor();if(s){s.finalized=true;s.reason=s.reason||'page_closed';report(s,{force:true})}});
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')report(stateFor(),{force:true});else flush()});
+  window.addEventListener('online',flush);window.addEventListener('pageshow',flush);
+  setTimeout(flush,1200);
 })();

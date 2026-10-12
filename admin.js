@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.7';
+const ADMIN_BUILD_VERSION='15.8';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -19,6 +19,9 @@ const EXTRA_FEMALE_VOICES=[
 const LIVE_ONLY_VOICES=new Set([...EXTRA_MALE_VOICES,...EXTRA_FEMALE_VOICES].map(([id])=>id));
 const $=id=>document.getElementById(id);
 const ADMIN_BACKUP_KEY='callfocus_admin_config_backup_v1';
+const ADMIN_SESSION_KEY='callfocus_admin_session_v158';
+function rememberAdminSession(token){if(!String(token||'').startsWith('session:'))return;localStorage.setItem(ADMIN_SESSION_KEY,token);sessionStorage.removeItem('callfocus_admin_key');}
+function forgetAdminSession(){localStorage.removeItem(ADMIN_SESSION_KEY);sessionStorage.removeItem('callfocus_admin_key');}
 let adminKey='';
 let currentConfig=null;
 let previewUrl='';
@@ -96,8 +99,8 @@ async function addUnlimitedUser(){
   const ok=await setUnlimitedUser('add',email,btn); if(ok&&input)input.value='';
 }
 function fill(config,storageConnected){currentConfig=config;customVoices=Array.isArray(config.customVoices)?config.customVoices:[];populateVoices();renderCustomVoiceLibrary();unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;if($('adminManualPaymentsEnabled'))$('adminManualPaymentsEnabled').checked=config.manualPaymentsEnabled===true;if($('adminManualBankName'))$('adminManualBankName').value=config.manualPaymentBankName||'';if($('adminManualAccountName'))$('adminManualAccountName').value=config.manualPaymentAccountName||'';if($('adminManualAccountNumber'))$('adminManualAccountNumber').value=config.manualPaymentAccountNumber||'';if($('adminManualPaymentEmail'))$('adminManualPaymentEmail').value=config.manualPaymentNotificationEmail||'support@callfocus.link';if($('adminAnalysisScreenshotMin'))$('adminAnalysisScreenshotMin').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMin)||20)));if($('adminAnalysisScreenshotMax'))$('adminAnalysisScreenshotMax').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMax)||Number(config.autoFillScreenshotLimit)||50)));renderScreenshotLimitsSummary();$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);if($('adminDashStorage'))$('adminDashStorage').textContent=storageConnected?'Global storage connected':'Storage needs attention';renderServerState();renderBackupStatus(storageConnected)}
-async function api(path,options={}){const res=await fetch(path,{...options,headers:authHeaders(options.headers||{})});const type=res.headers.get('content-type')||'';const data=type.includes('application/json')?await res.json():await res.text();if(!res.ok)throw new Error(data?.error||data||'Request failed');return data}
-async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{await api('/api/admin/login',{method:'POST'});const result=await api('/api/admin/config');sessionStorage.setItem('callfocus_admin_key',key);$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminUsers(true);loadAdminAiUsage();loadAdminManualPayments();}catch(err){adminKey='';$('adminGateNote').textContent=err.message;toast(err.message)}}
+async function api(path,options={}){const res=await fetch(path,{...options,headers:authHeaders(options.headers||{})});const type=res.headers.get('content-type')||'';const data=type.includes('application/json')?await res.json():await res.text();if(!res.ok)throw Object.assign(new Error(data?.error||data||'Request failed'),{status:res.status});return data}
+async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{const auth=await api('/api/admin/login',{method:'POST'});adminKey=auth.adminToken||key;rememberAdminSession(adminKey);$('adminPasscode').value='';const result=await api('/api/admin/config');$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminUsers(true);loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadAdminManualPayments();}catch(err){adminKey='';if(err.status===401||err.status===403)forgetAdminSession();$('adminGateNote').textContent=err.message;toast(err.message)}}
 async function saveConfig(message='Global CallFocus settings saved'){const limits=screenshotLimits();if(limits.min>limits.max){renderScreenshotLimitsSummary();toast('Minimum screenshots cannot be higher than maximum screenshots');return false;}const payload=formPayload();saveBackup(payload);try{const result=await api('/api/admin/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});fill(result.config,true);saveBackup(result.config);toast(message);return true}catch(err){renderBackupStatus(false);toast(`${err.message} — your settings are protected on this device`);return false}}
 function restoreBackup(){const b=readBackup();if(!b?.config)return toast('No protected backup found');fill(b.config,!!currentConfig);toast('Protected settings loaded. Press Save global settings to write them to KV.')}
 function scheduleDraftBackup(){clearTimeout(draftTimer);draftTimer=setTimeout(()=>{try{saveBackup(formPayload())}catch{}},350)}
@@ -152,10 +155,30 @@ $('adminFemaleVoice')?.addEventListener('change',renderCustomVoiceLibrary);
 
 populateVoices();
 document.querySelectorAll('[data-site-theme]').forEach(btn=>btn.addEventListener('click',()=>{const value=btn.dataset.siteTheme==='pearl'?'pearl':'black';$('adminSiteTheme').value=value;document.querySelectorAll('[data-site-theme]').forEach(x=>{const on=x===btn;x.classList.toggle('active',on);x.setAttribute('aria-pressed',String(on));});scheduleDraftBackup()}));
-$('adminGateBtn').onclick=login;$('adminPasscode').addEventListener('keydown',e=>{if(e.key==='Enter')login()});$('adminServerOnline').onchange=()=>{renderServerState();scheduleDraftBackup()};$('saveAdminBtn').onclick=()=>saveConfig();$('saveScreenshotLimitsBtn')?.addEventListener('click',saveScreenshotLimitsDirect);$('restoreAdminBackupBtn')?.addEventListener('click',restoreBackup);$('adminLockBtn').onclick=()=>{sessionStorage.removeItem('callfocus_admin_key');location.reload()};document.querySelectorAll('[data-preview]').forEach(btn=>btn.onclick=()=>previewVoice(btn.dataset.preview,btn));
+$('adminGateBtn').onclick=login;$('adminPasscode').addEventListener('keydown',e=>{if(e.key==='Enter')login()});$('adminServerOnline').onchange=()=>{renderServerState();scheduleDraftBackup()};$('saveAdminBtn').onclick=()=>saveConfig();$('saveScreenshotLimitsBtn')?.addEventListener('click',saveScreenshotLimitsDirect);$('restoreAdminBackupBtn')?.addEventListener('click',restoreBackup);$('adminLockBtn').onclick=()=>{const key=adminKey;forgetAdminSession();adminKey='';fetch('/api/admin/logout',{method:'POST',headers:{'X-CallFocus-Admin-Key':key},keepalive:true}).catch(()=>{});location.reload()};document.querySelectorAll('[data-preview]').forEach(btn=>btn.onclick=()=>previewVoice(btn.dataset.preview,btn));
 ['adminServerMessage','adminMaleVoice','adminFemaleVoice','adminSpeakingPace','adminSpeechStyle','adminInstructions','adminOpening','adminSpeakFirst','adminInterruptions','adminAnalysisScreenshotMin','adminAnalysisScreenshotMax'].forEach(id=>$(id)?.addEventListener('input',()=>{if(id==='adminAnalysisScreenshotMin'||id==='adminAnalysisScreenshotMax')renderScreenshotLimitsSummary();scheduleDraftBackup();}));
 (async()=>{try{const r=await fetch('/api/app-version',{cache:'no-store'});const d=await r.json();if(String(d?.version||'')&&String(d.version)!==ADMIN_BUILD_VERSION&&!sessionStorage.getItem('callfocus_admin_reload_'+d.version)){sessionStorage.setItem('callfocus_admin_reload_'+d.version,'1');location.replace('/admin?build='+encodeURIComponent(d.version)+'&t='+Date.now());}}catch{}})();
-const remembered=sessionStorage.getItem('callfocus_admin_key');if(remembered){adminKey=remembered;api('/api/admin/config').then(r=>{$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!r.storageConnected&&backup?.config){fill(backup.config,false)}else{fill(r.config,r.storageConnected);if(r.storageConnected)saveBackup(r.config)}loadAdminUsers(true);loadAdminAiUsage();loadAdminManualPayments();}).catch(()=>{adminKey='';sessionStorage.removeItem('callfocus_admin_key')})}
+let restoringAdmin=false;
+async function restoreRememberedAdmin(){
+  const remembered=localStorage.getItem(ADMIN_SESSION_KEY)||sessionStorage.getItem('callfocus_admin_key');
+  if(!remembered||restoringAdmin)return;
+  restoringAdmin=true;adminKey=remembered;
+  try{
+    const r=await api('/api/admin/config');if(adminKey!==remembered)return;
+    if(!remembered.startsWith('session:')){const auth=await api('/api/admin/login',{method:'POST'});if(adminKey!==remembered)return;adminKey=auth.adminToken||remembered;rememberAdminSession(adminKey);}
+    $('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');
+    const backup=readBackup();
+    if(!r.storageConnected&&backup?.config)fill(backup.config,false);else{fill(r.config,r.storageConnected);if(r.storageConnected)saveBackup(r.config);}
+    loadAdminUsers(true);loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadAdminManualPayments();
+  }catch(err){
+    if(adminKey!==remembered)return;
+    adminKey='';if(err.status===401||err.status===403)forgetAdminSession();else $('adminGateNote').textContent='Your sign-in is remembered. Refresh when the connection is available.';
+  }finally{restoringAdmin=false;}
+}
+restoreRememberedAdmin();
+window.addEventListener('online',()=>{if(!adminKey)restoreRememberedAdmin()});
+window.addEventListener('pageshow',()=>{if(!adminKey)restoreRememberedAdmin()});
+
 
 
 function esc(value=''){return String(value??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
@@ -347,7 +370,7 @@ function renderAdminAiUsage(payload){
 async function loadAdminAiUsage(){
   if(adminAiUsageLoading||!adminKey)return;adminAiUsageLoading=true;
   const btn=$('aiUsageRefreshBtn');if(btn){btn.disabled=true;btn.textContent='Refreshing…';}
-  try{renderAdminAiUsage(await api('/api/admin/ai-usage'));}
+  try{renderAdminAiUsage(await api('/api/admin/ai-usage'));await Promise.all([loadAdminCallUsage(),loadAdminBilledCosts()]);}
   catch(err){if($('aiUsageRecent'))$('aiUsageRecent').innerHTML='<div class="admin-users-empty">Could not load AI usage.</div>';toast(err.message);}
   finally{adminAiUsageLoading=false;if(btn){btn.disabled=false;btn.textContent='Refresh usage';}}
 }
@@ -357,3 +380,64 @@ $('adminRefreshAllBtn')?.addEventListener('click',async()=>{
   try{await Promise.all([loadAdminUsers(true),loadAdminAiUsage(),loadAdminManualPayments()]);toast('Admin data refreshed');}
   finally{if(btn){btn.disabled=false;btn.textContent=old;}}
 });
+
+/* V15.8 call usage, measured API cost and provider billing. */
+function ensureAdminCallUsagePanels(){if($('adminCallUsagePanel'))return;const point=document.querySelector('[data-admin-panel="ai"] .ai-usage-grid');if(point)point.insertAdjacentHTML('beforebegin',"        <div class=\"premium-panel call-usage-panel\" id=\"adminCallUsagePanel\">\n          <div class=\"admin-users-heading\"><div><h3>Call usage and cost</h3><p class=\"admin-panel-copy\">See each customer\u2019s call time, credits used and API cost calculated from recorded usage. Monitoring starts with calls prepared after this update.</p></div></div>\n          <div class=\"admin-overview-grid call-usage-grid\">\n            <article class=\"admin-stat-card\"><span>Tracked calls</span><strong id=\"callUsageCount\">0</strong><small>Including prepared sessions</small></article>\n            <article class=\"admin-stat-card\"><span>Customer call time</span><strong id=\"callUsageDuration\">00:00</strong><small>Time in the customer\u2019s call</small></article>\n            <article class=\"admin-stat-card\"><span>Customer credits used</span><strong id=\"callUsageCredits\">0</strong><small>Unlimited accounts use 0 credits</small></article>\n            <article class=\"admin-stat-card\"><span>Calculated API cost</span><strong id=\"callUsageCost\">$0.0000</strong><small>Voice + recorded backend usage</small></article>\n          </div>\n          <p class=\"admin-panel-copy call-usage-note\" id=\"callUsageNote\">GPT-Live voice pricing: $0.05 per minute, billed per second. Setup includes a 15-second minimum that is credited against the session\u2019s duration. Per-call values are calculated costs, not individual invoice charges.</p>\n          <div class=\"call-usage-list\" id=\"callUsageRecent\"><div class=\"admin-users-empty\">No call usage recorded yet.</div></div>\n          <button class=\"btn btn-ghost hidden\" type=\"button\" id=\"callUsageMoreBtn\">Load older calls</button>\n        </div>\n        <div class=\"premium-panel call-billing-panel\" id=\"adminBilledCostsPanel\">\n          <div class=\"admin-users-heading\"><div><h3>OpenAI billed spend</h3><p class=\"admin-panel-copy\">Actual provider-reported spend, grouped by UTC day. These totals cover all API activity in the selected project or organization and can include other apps.</p></div><button class=\"btn btn-ghost\" type=\"button\" id=\"billedCostsRefreshBtn\">Refresh billed spend</button></div>\n          <div class=\"admin-overview-grid call-billing-grid\">\n            <article class=\"admin-stat-card\"><span>Billed today</span><strong id=\"billedCostsToday\">\u2014</strong><small>UTC day</small></article>\n            <article class=\"admin-stat-card\"><span>Billed last 30 days</span><strong id=\"billedCostsTotal\">\u2014</strong><small id=\"billedCostsScope\">Provider billing connection</small></article>\n          </div>\n          <p class=\"admin-panel-copy\" id=\"billedCostsStatus\">Checking billing connection\u2026</p>\n          <details class=\"call-billing-setup\"><summary>Connect provider billing</summary><p class=\"admin-panel-copy\">In Cloudflare\u2019s CallFocus runtime settings, add an OpenAI organization Admin API key as the secret <code>OPENAI_ADMIN_KEY</code>. Add <code>OPENAI_BILLING_PROJECT_ID</code> to filter billed spend to the CallFocus project. The key stays on the server. Your existing call API key continues to run calls.</p></details>\n        </div>\n");}
+ensureAdminCallUsagePanels();
+let adminCallUsageLoading=false,adminCallUsageCursor=null,adminCallUsageRows=[],adminBilledCostsLoading=false;
+function callUsageDuration(seconds){const n=Math.max(0,Math.floor(Number(seconds)||0)),h=Math.floor(n/3600),m=Math.floor(n%3600/60),s=n%60;return(h?String(h).padStart(2,'0')+':':'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')}
+function billedUsd(value){const n=Number(value)||0;return(n<0?'-':'')+fmtUsd(Math.abs(n));}
+function callUsageCredits(value){return Math.max(0,Number(value)||0).toLocaleString(undefined,{maximumFractionDigits:1})}
+function renderAdminCallUsage(payload,append=false){
+  const stats=payload?.stats||{};
+  $('callUsageCount').textContent=fmtInt(stats.calls);
+  $('callUsageDuration').textContent=callUsageDuration(stats.durationSeconds);
+  $('callUsageCredits').textContent=callUsageCredits(stats.creditsUsed);
+  $('callUsageCost').textContent=fmtUsd(stats.estimatedCostUsd);
+  adminCallUsageRows=append?[...adminCallUsageRows,...(payload.recent||[])]:payload.recent||[];
+  adminCallUsageRows=[...new Map(adminCallUsageRows.map(r=>[r.id,r])).values()];
+  adminCallUsageCursor=payload.nextCursor||null;
+  $('callUsageMoreBtn')?.classList.toggle('hidden',!adminCallUsageCursor);
+  const root=$('callUsageRecent');
+  if(!adminCallUsageRows.length){root.innerHTML='<div class="admin-users-empty">No call usage recorded yet. New calls will appear here after this update is deployed.</div>';return;}
+  root.innerHTML=adminCallUsageRows.map(r=>{
+    const final=r.closed===true;
+    const status=final?'Final API duration received':r.finalized?'Incomplete API finalization':r.started?'In progress':'Prepared session';
+    const apiTime=Number(r.billableSeconds??15);
+    const tokens=(r.backendResponses||[]).reduce((n,u)=>n+(Number(u.totalTokens)||0),0)+(Number(r.translationTokens)||0);
+    return `<article class="call-usage-item">
+      <div class="ai-usage-user call-usage-user"><strong>${esc(r.userName||'CallFocus user')}</strong><span>${esc(r.userEmail||'Unknown account')} · ${esc(new Date(r.createdAt).toLocaleString())}</span><span>${esc(r.title||r.callerName||'Call session')}</span></div>
+      <span class="call-usage-status">${esc(status)}</span>
+      <div class="ai-usage-metric"><span>Customer duration</span><strong>${callUsageDuration(r.durationSeconds)}</strong></div>
+      <div class="ai-usage-metric"><span>Customer credits</span><strong>${r.unlimitedCredit?'0 · Unlimited':callUsageCredits(r.creditsUsed)}</strong></div>
+      <div class="ai-usage-metric"><span>API billable time</span><strong>${apiTime.toFixed(2)} seconds</strong></div>
+      <div class="ai-usage-metric"><span>Voice cost</span><strong>${fmtUsd(r.voiceCostUsd)}</strong></div>
+      <div class="ai-usage-metric"><span>Backend / translation</span><strong>${fmtUsd(r.backendCostUsd)} · ${fmtInt(tokens)} tokens</strong></div>
+      <div class="ai-usage-metric"><span>Calculated API cost</span><strong>${fmtUsd(r.estimatedCostUsd)}${r.missingBackendPricing?' + unpriced backend usage':''}</strong></div>
+      ${!final?'<p class="call-usage-row-note">The final API duration has not been received. This amount uses the recorded duration so far, including any session-setup estimate.</p>':''}
+    </article>`;
+  }).join('');
+  if(stats.partial)$('callUsageNote').textContent='These totals cover the most recent tracked records. Per-call costs are calculated from recorded usage; provider-reported billed spend is shown separately below.';
+}
+async function loadAdminCallUsage(append=false){
+  if(adminCallUsageLoading||!adminKey)return;adminCallUsageLoading=true;
+  const btn=$('callUsageMoreBtn');if(btn)btn.disabled=true;
+  try{renderAdminCallUsage(await api('/api/admin/call-usage'+(append&&adminCallUsageCursor?'?cursor='+encodeURIComponent(adminCallUsageCursor):'')),append)}
+  catch(err){if(!append)$('callUsageRecent').innerHTML='<div class="admin-users-empty">Call usage is temporarily unavailable.</div>';}
+  finally{adminCallUsageLoading=false;if(btn)btn.disabled=false}
+}
+async function loadAdminBilledCosts(){
+  if(adminBilledCostsLoading||!adminKey)return;adminBilledCostsLoading=true;
+  const btn=$('billedCostsRefreshBtn');if(btn)btn.disabled=true;
+  try{
+    const b=await api('/api/admin/billed-costs');
+    $('billedCostsToday').textContent=b.available?billedUsd(b.todayUsd):'—';
+    $('billedCostsTotal').textContent=b.available?billedUsd(b.totalUsd):'—';
+    $('billedCostsScope').textContent=b.scope==='project'?'Selected project spend':'Organization spend · all projects';
+    $('billedCostsStatus').textContent=b.available?`Provider-reported spend for UTC days. Updated ${new Date(b.fetchedAt).toLocaleString()}. Billing can arrive later than call usage.${b.partial?' Some billing pages remain unavailable.':''}`:b.message||'The provider billing connection is not available.';
+  }catch{$('billedCostsStatus').textContent='Provider-reported billed spend is temporarily unavailable.'}
+  finally{adminBilledCostsLoading=false;if(btn)btn.disabled=false}
+}
+$('callUsageMoreBtn')?.addEventListener('click',()=>loadAdminCallUsage(true));
+$('billedCostsRefreshBtn')?.addEventListener('click',loadAdminBilledCosts);
+window.addEventListener('storage',e=>{if(e.key===ADMIN_SESSION_KEY&&!e.newValue){adminKey='';$('adminDashboard').classList.add('hidden');$('adminGate').classList.remove('hidden')}});
