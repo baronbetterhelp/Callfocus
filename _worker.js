@@ -1220,7 +1220,7 @@ function adminSignedSessionParts(token='') {
   if(!/^\d{10,16}$/.test(issued)||!/^[A-Za-z0-9_-]{16,160}$/.test(nonce)||!/^[a-f0-9]{64}$/i.test(signature))return null;
   return {issued,nonce,signature:signature.toLowerCase()};
 }
-async function hmacSha256Hex(secret,value){
+async function adminHmacSha256Hex(secret,value){
   const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(String(secret||'')),{name:'HMAC',hash:'SHA-256'},false,['sign']);
   const sig=await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(String(value||'')));
   return [...new Uint8Array(sig)].map(b=>b.toString(16).padStart(2,'0')).join('');
@@ -1228,7 +1228,7 @@ async function hmacSha256Hex(secret,value){
 async function createAdminSignedSession(env){
   const expected=String(env.CALLFOCUS_ADMIN_PASSCODE||'');
   if(!expected)throw new Error('Admin passcode is not configured.');
-  const issued=String(Date.now()),nonce=randomToken(28),signature=await hmacSha256Hex(expected,`${issued}.${nonce}`);
+  const issued=String(Date.now()),nonce=randomToken(28),signature=await adminHmacSha256Hex(expected,`${issued}.${nonce}`);
   return `session2:${issued}.${nonce}.${signature}`;
 }
 function adminCookieToken(request){
@@ -1243,7 +1243,7 @@ async function adminTokenAuthorized(token,env){
   if(supplied===expected)return true;
   const signed=adminSignedSessionParts(supplied);
   if(signed){
-    const expectedSig=await hmacSha256Hex(expected,`${signed.issued}.${signed.nonce}`);
+    const expectedSig=await adminHmacSha256Hex(expected,`${signed.issued}.${signed.nonce}`);
     if(expectedSig!==signed.signature)return false;
     if(env.CALLFOCUS_CONFIG){const revoked=await env.CALLFOCUS_CONFIG.get(`admin:revoked:${await sha256Hex(supplied)}`);if(revoked)return false;}
     return true;
@@ -4071,7 +4071,7 @@ export default {
     if (url.pathname === '/api/manual-payment/cancel') return safeCustomerRoute('manual-payment-cancel', () => handleManualPaymentCancel(request, env));
     if (url.pathname === '/api/manual-payment/status') return safeCustomerRoute('manual-payment-status', () => handleManualPaymentStatus(request, env));
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.29-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.30-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -4109,10 +4109,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.29-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.30-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.29-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.29-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.30-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.30-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -4122,16 +4122,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.29-test');
+      headers.set('X-CallFocus-Admin-Build', '15.30-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.29-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.30-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.29-test');
+      headers.set('X-CallFocus-Admin-Build', '15.30-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {
