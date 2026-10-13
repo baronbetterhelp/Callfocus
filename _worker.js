@@ -436,8 +436,127 @@ async function customerEmailIndexKey(email) {
 
 function customerUserKey(userId) { return `customer:user:${userId}`; }
 function customerDataKey(userId) { return `customer:data:${userId}`; }
+function customerNotificationKey(userId) { return `customer:notifications:${String(userId || '').trim()}`; }
 function customerPhoneIndexKey(phone) { return `customer:phone:${customerPhoneKey(phone)}`; }
 async function customerSessionKey(token) { return `customer:session:${await sha256Hex(token)}`; }
+
+
+// -----------------------------------------------------------------------------
+// V15.31 customer heads-up notifications
+// Stored separately from the main customer data object so an older browser tab
+// can never erase pending admin notifications during a full-account sync.
+// -----------------------------------------------------------------------------
+function cleanCustomerNoticeText(value = '', limit = 360) {
+  return String(value || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, limit);
+}
+function normalizeCustomerNoticeList(value) {
+  const rows = Array.isArray(value) ? value : [];
+  const cutoff = Date.now() - 45 * 24 * 60 * 60 * 1000;
+  return rows.filter(row => row && typeof row === 'object' && row.id)
+    .map(row => ({
+      id: String(row.id || '').slice(0, 140),
+      type: String(row.type || 'notice').slice(0, 60),
+      title: cleanCustomerNoticeText(row.title || 'CallFocus', 80),
+      message: cleanCustomerNoticeText(row.message || '', 360),
+      credits: Math.max(0, Number(row.credits) || 0),
+      createdAt: row.createdAt || null,
+      readAt: row.readAt || null
+    }))
+    .filter(row => {
+      if (!row.readAt) return true;
+      const time = Date.parse(row.readAt || row.createdAt || '');
+      return !Number.isFinite(time) || time >= cutoff;
+    })
+    .slice(0, 60);
+}
+async function appendCustomerNotification(env, userId, notice = {}) {
+  if (!env.CALLFOCUS_CONFIG || !userId) return null;
+  const key = customerNotificationKey(userId);
+  const existing = normalizeCustomerNoticeList(await env.CALLFOCUS_CONFIG.get(key, { type: 'json' }));
+  const row = {
+    id: String(notice.id || `notice-${Date.now()}-${crypto.randomUUID().slice(0, 10)}`),
+    type: String(notice.type || 'notice').slice(0, 60),
+    title: cleanCustomerNoticeText(notice.title || 'CallFocus', 80),
+    message: cleanCustomerNoticeText(notice.message || '', 360),
+    credits: Math.max(0, Number(notice.credits) || 0),
+    createdAt: notice.createdAt || new Date().toISOString(),
+    readAt: null
+  };
+  const next = [row, ...existing.filter(item => item.id !== row.id)].slice(0, 60);
+  await env.CALLFOCUS_CONFIG.put(key, JSON.stringify(next));
+  return row;
+}
+async function handleCustomerNotifications(request, env) {
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Session expired.', code: 'session_expired' }, 401);
+  const key = customerNotificationKey(auth.user.id);
+  if (request.method === 'GET') {
+    const rows = normalizeCustomerNoticeList(await env.CALLFOCUS_CONFIG.get(key, { type: 'json' }));
+    const unread = rows.filter(row => !row.readAt).slice(0, 10);
+    const data = (await env.CALLFOCUS_CONFIG.get(customerDataKey(auth.user.id), { type: 'json' })) || defaultCustomerData(auth.user.name);
+    return json({ ok: true, notifications: unread, wallet: normalizeServerWallet(data.wallet || {}) }, 200, { 'Cache-Control': 'no-store' });
+  }
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET, POST' } });
+  let body = {};
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const ids = [...new Set((Array.isArray(body?.ids) ? body.ids : []).map(v => String(v || '').trim()).filter(Boolean))].slice(0, 20);
+  if (!ids.length) return json({ ok: true });
+  const rows = normalizeCustomerNoticeList(await env.CALLFOCUS_CONFIG.get(key, { type: 'json' }));
+  const seen = new Set(ids);
+  const now = new Date().toISOString();
+  let changed = false;
+  for (const row of rows) {
+    if (seen.has(row.id) && !row.readAt) { row.readAt = now; changed = true; }
+  }
+  if (changed) await env.CALLFOCUS_CONFIG.put(key, JSON.stringify(rows));
+  return json({ ok: true });
+}
+
+async function deleteCustomerSessionsForUser(env, userId) {
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.list !== 'function') return;
+  let cursor = '';
+  do {
+    const page = await env.CALLFOCUS_CONFIG.list({ prefix: 'customer:session:', limit: 1000, ...(cursor ? { cursor } : {}) });
+    for (const entry of page.keys || []) {
+      try {
+        const session = await env.CALLFOCUS_CONFIG.get(entry.name, { type: 'json' });
+        if (String(session?.userId || '') === String(userId)) await env.CALLFOCUS_CONFIG.delete(entry.name);
+      } catch {}
+    }
+    cursor = page.list_complete ? '' : String(page.cursor || '');
+  } while (cursor);
+}
+
+async function deleteReferralDataForUser(env, user) {
+  if (!env.CALLFOCUS_CONFIG || !user?.id) return;
+  const userId = String(user.id);
+  try {
+    const inviteeRecord = await env.CALLFOCUS_CONFIG.get(referralInviteeKey(userId), { type: 'json' });
+    if (inviteeRecord?.referrerUserId) {
+      await env.CALLFOCUS_CONFIG.delete(referralReferrerEntryKey(inviteeRecord.referrerUserId, userId));
+    }
+    await env.CALLFOCUS_CONFIG.delete(referralInviteeKey(userId));
+  } catch {}
+  let cursor = '';
+  const prefix = referralReferrerPrefix(userId);
+  do {
+    let page;
+    try { page = await env.CALLFOCUS_CONFIG.list({ prefix, limit: 1000, ...(cursor ? { cursor } : {}) }); }
+    catch { break; }
+    for (const entry of page.keys || []) {
+      try {
+        const row = await env.CALLFOCUS_CONFIG.get(entry.name, { type: 'json' });
+        if (row?.inviteeUserId) {
+          const inviteeKey = referralInviteeKey(row.inviteeUserId);
+          const currentInvitee = await env.CALLFOCUS_CONFIG.get(inviteeKey, { type: 'json' });
+          if (String(currentInvitee?.referrerUserId || '') === userId) await env.CALLFOCUS_CONFIG.delete(inviteeKey);
+        }
+        await env.CALLFOCUS_CONFIG.delete(entry.name);
+      } catch {}
+    }
+    cursor = page.list_complete ? '' : String(page.cursor || '');
+  } while (cursor);
+}
 
 // -----------------------------------------------------------------------------
 // V15.14 referral program
@@ -1021,6 +1140,7 @@ async function handleCustomerDelete(request, env) {
   await Promise.all([
     env.CALLFOCUS_CONFIG.delete(customerUserKey(auth.user.id)),
     env.CALLFOCUS_CONFIG.delete(customerDataKey(auth.user.id)),
+    env.CALLFOCUS_CONFIG.delete(customerNotificationKey(auth.user.id)),
     env.CALLFOCUS_CONFIG.delete(emailKey),
     phoneKey.endsWith(':') ? Promise.resolve() : env.CALLFOCUS_CONFIG.delete(phoneKey),
     ownReferralCode ? env.CALLFOCUS_CONFIG.delete(referralCodeKey(ownReferralCode)) : Promise.resolve(),
@@ -1465,7 +1585,7 @@ async function handleAdminUserAction(request, env) {
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
   const userId = String(body?.userId || '').trim();
   const action = String(body?.action || '').trim().toLowerCase();
-  const allowed = ['disable_account','enable_account','remove_balance','grant_unlimited','revoke_unlimited'];
+  const allowed = ['disable_account','enable_account','remove_balance','grant_unlimited','revoke_unlimited','add_balance','delete_account'];
   if (!userId || !allowed.includes(action)) return json({ error: 'Invalid customer action.' }, 400);
   const user = await env.CALLFOCUS_CONFIG.get(customerUserKey(userId), { type: 'json' });
   if (!user?.id) return json({ error: 'Customer account not found.' }, 404);
@@ -1504,6 +1624,70 @@ async function handleAdminUserAction(request, env) {
     wallet.usage = wallet.usage.slice(0, 250);
     data.wallet = wallet;
     await env.CALLFOCUS_CONFIG.put(customerDataKey(user.id), JSON.stringify(data));
+  }
+
+  if (action === 'add_balance') {
+    let credits = Number(body?.credits);
+    if (!Number.isFinite(credits) || credits <= 0) return json({ error: 'Enter a credit amount greater than zero.' }, 400);
+    credits = Math.round(credits * 10) / 10;
+    const secondsAdded = callFocusSecondsForCredits(credits);
+    if (!Number.isFinite(secondsAdded) || !Number.isSafeInteger(secondsAdded) || secondsAdded <= 0) return json({ error: 'That credit amount cannot be safely added.' }, 400);
+    const wallet = normalizeServerWallet(data.wallet);
+    wallet.balanceSeconds = Math.max(0, Math.floor(Number(wallet.balanceSeconds) || 0)) + secondsAdded;
+    wallet.revision = Math.max(0, Number(wallet.revision) || 0) + 1;
+    const ledgerId = `admin-credit-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+    wallet.usage.unshift({
+      id: ledgerId,
+      type: 'admin_credit_grant',
+      credits,
+      seconds: secondsAdded,
+      createdAt: now,
+      note: 'Credits added by CallFocus admin'
+    });
+    wallet.usage = wallet.usage.slice(0, 250);
+    data.wallet = wallet;
+    await env.CALLFOCUS_CONFIG.put(customerDataKey(user.id), JSON.stringify(data));
+
+    const amountText = credits.toLocaleString(undefined, { maximumFractionDigits: 1 });
+    const customerName = String(user.name || 'there').trim().slice(0, 120) || 'there';
+    const template = cleanCustomerNoticeText(body?.message || 'You received {amount} credits courtesy of Baron.', 360);
+    const message = (template || 'You received {amount} credits courtesy of Baron.')
+      .replace(/\{amount\}/gi, amountText)
+      .replace(/\{customer\}|\{name\}/gi, customerName)
+      .slice(0, 360);
+    const notification = await appendCustomerNotification(env, user.id, {
+      type: 'admin_credit',
+      title: 'Credits added',
+      message,
+      credits,
+      createdAt: now
+    });
+    const refreshedConfig = await getConfig(env);
+    const unlimitedEmails = Array.isArray(refreshedConfig.unlimitedCreditEmails) ? refreshedConfig.unlimitedCreditEmails.map(normalizeCustomerEmail).filter(Boolean) : [];
+    return json({ ok: true, action, creditsAdded: credits, notification, user: adminUserSummary(user, data, unlimitedEmails), unlimitedCreditEmails: unlimitedEmails });
+  }
+
+  if (action === 'delete_account') {
+    const confirmEmail = normalizeCustomerEmail(body?.confirmEmail);
+    if (!confirmEmail || confirmEmail !== normalizeCustomerEmail(user.email)) return json({ error: 'Enter the customer email exactly to confirm deletion.' }, 400);
+    const emailKey = await customerEmailIndexKey(user.email);
+    const phoneKey = customerPhoneIndexKey(user.phone);
+    const ownReferralCode = normalizeReferralCode(user.referralCode || '');
+    let list = Array.isArray(config.unlimitedCreditEmails) ? config.unlimitedCreditEmails.map(normalizeCustomerEmail).filter(Boolean) : [];
+    list = list.filter(v => v !== normalizeCustomerEmail(user.email));
+    config = sanitizeConfig({ ...config, unlimitedCreditEmails: [...new Set(list)] });
+    await env.CALLFOCUS_CONFIG.put('global_config', JSON.stringify(config));
+    await deleteReferralDataForUser(env, user);
+    await deleteCustomerSessionsForUser(env, user.id);
+    await Promise.all([
+      env.CALLFOCUS_CONFIG.delete(customerUserKey(user.id)),
+      env.CALLFOCUS_CONFIG.delete(customerDataKey(user.id)),
+      env.CALLFOCUS_CONFIG.delete(customerNotificationKey(user.id)),
+      env.CALLFOCUS_CONFIG.delete(emailKey),
+      phoneKey.endsWith(':') ? Promise.resolve() : env.CALLFOCUS_CONFIG.delete(phoneKey),
+      ownReferralCode ? env.CALLFOCUS_CONFIG.delete(referralCodeKey(ownReferralCode)) : Promise.resolve()
+    ]);
+    return json({ ok: true, action, deletedUserId: user.id, deletedEmail: user.email, unlimitedCreditEmails: config.unlimitedCreditEmails || [] });
   }
 
   if (action === 'grant_unlimited' || action === 'revoke_unlimited') {
@@ -4058,6 +4242,7 @@ export default {
     if (url.pathname === '/api/auth/signout') return safeCustomerRoute('signout', () => handleCustomerSignout(request, env));
     if (url.pathname === '/api/auth/migrate') return handleCustomerMigration(request, env);
     if (url.pathname === '/api/account/data') return handleCustomerData(request, env);
+    if (url.pathname === '/api/account/notifications') return safeCustomerRoute('account-notifications', () => handleCustomerNotifications(request, env));
     if (url.pathname === '/api/referrals') return safeCustomerRoute('referrals', () => handleCustomerReferrals(request, env));
     if (url.pathname === '/api/account' && request.method === 'DELETE') return handleCustomerDelete(request, env);
     if (url.pathname === '/api/paystack/initialize') return safeCustomerRoute('paystack-initialize', () => handlePaystackInitialize(request, env));
@@ -4071,7 +4256,7 @@ export default {
     if (url.pathname === '/api/manual-payment/cancel') return safeCustomerRoute('manual-payment-cancel', () => handleManualPaymentCancel(request, env));
     if (url.pathname === '/api/manual-payment/status') return safeCustomerRoute('manual-payment-status', () => handleManualPaymentStatus(request, env));
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.30-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.31-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -4109,10 +4294,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.30-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.31-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.30-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.30-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.31-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.31-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -4122,16 +4307,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.30-test');
+      headers.set('X-CallFocus-Admin-Build', '15.31-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.30-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.31-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.30-test');
+      headers.set('X-CallFocus-Admin-Build', '15.31-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {

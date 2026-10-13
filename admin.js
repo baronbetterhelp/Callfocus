@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.30-test';
+const ADMIN_BUILD_VERSION='15.31-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -335,9 +335,19 @@ function renderAdminUsers(){
         <div><span>Verified funding</span><strong>${purchaseCount} payment${purchaseCount===1?'':'s'} · ₦${paid.toLocaleString(undefined,{maximumFractionDigits:2})}</strong><small>${esc(lastFunded)}</small></div>
       </div>
       <div class="admin-user-actions">
+        <button class="btn btn-ghost admin-add-credit-toggle" type="button" data-user-credit-toggle>Add balance</button>
         <button class="btn btn-ghost" type="button" data-user-action="${u.accountDisabled?'enable_account':'disable_account'}">${u.accountDisabled?'Enable account':'Disable account'}</button>
         <button class="btn btn-ghost" type="button" data-user-action="${u.unlimited?'revoke_unlimited':'grant_unlimited'}">${u.unlimited?'Turn off unlimited':'Give unlimited'}</button>
         <button class="btn admin-danger-btn" type="button" data-user-action="remove_balance" ${Number(u?.wallet?.balanceSeconds||0)<=0?'disabled':''}>Remove balance</button>
+        <button class="btn admin-danger-btn admin-delete-account-btn" type="button" data-user-action="delete_account">Delete account</button>
+      </div>
+      <div class="admin-credit-grant hidden" data-user-credit-panel>
+        <div class="admin-credit-grant-head"><strong>Add custom balance</strong><small>Credits are added directly to the customer wallet and are not counted as a paid purchase.</small></div>
+        <div class="admin-credit-grant-grid">
+          <label>Credits<input type="number" min="0.1" step="0.1" inputmode="decimal" placeholder="100" data-user-credit-amount /></label>
+          <label>Notification message<textarea rows="3" maxlength="360" data-user-credit-message>You received {amount} credits courtesy of Baron.</textarea><small>Use {amount} for the credit amount and {name} for the customer name.</small></label>
+        </div>
+        <button class="btn btn-primary" type="button" data-user-credit-submit>Add credits & send notification</button>
       </div>
     </article>`;
   }).join('');
@@ -365,24 +375,60 @@ function actionPrompt(action,user){
   if(action==='remove_balance')return `Remove the entire available balance from ${user.email}? Their verified payment history will remain recorded, so those payments will not be credited again automatically.`;
   if(action==='grant_unlimited')return `Give ${user.email} unlimited CallFocus access?`;
   if(action==='revoke_unlimited')return `Turn off unlimited access for ${user.email}? Their normal credit balance will remain.`;
+  if(action==='delete_account')return `Permanently delete ${user.email}? Their CallFocus account, saved callers, threads, saved information, wallet and active sessions will be removed. Payment audit records are not changed.`;
   return 'Apply this customer change?';
 }
 async function runAdminUserAction(card,button,action){
   const userId=card?.dataset?.adminUser; const user=adminUsers.find(u=>u.id===userId); if(!user)return;
-  if(!confirm(actionPrompt(action,user)))return;
+  let confirmEmail='';
+  if(action==='delete_account'){
+    if(!confirm(actionPrompt(action,user)))return;
+    confirmEmail=String(prompt(`Type the customer email exactly to confirm deletion:\n\n${user.email}`)||'').trim().toLowerCase();
+    if(confirmEmail!==String(user.email||'').trim().toLowerCase())return toast('Deletion cancelled · email did not match');
+  }else if(!confirm(actionPrompt(action,user)))return;
   const old=button.textContent;button.disabled=true;button.textContent='Working…';
   try{
-    const result=await api('/api/admin/user-action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,action})});
-    if(result.user){adminUsers=adminUsers.map(u=>u.id===result.user.id?result.user:u);renderAdminUsers();}
+    const result=await api('/api/admin/user-action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,action,confirmEmail})});
+    if(result.deletedUserId){adminUsers=adminUsers.filter(u=>u.id!==result.deletedUserId);renderAdminUsers();}
+    else if(result.user){adminUsers=adminUsers.map(u=>u.id===result.user.id?result.user:u);renderAdminUsers();}
     if(Array.isArray(result.unlimitedCreditEmails)){unlimitedCreditEmails=result.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail);saveBackup({...formPayload(),unlimitedCreditEmails:[...unlimitedCreditEmails]});}
-    const messages={disable_account:'Account disabled',enable_account:'Account enabled',remove_balance:'Balance removed',grant_unlimited:'Unlimited access enabled',revoke_unlimited:'Unlimited access removed'};
+    const messages={disable_account:'Account disabled',enable_account:'Account enabled',remove_balance:'Balance removed',grant_unlimited:'Unlimited access enabled',revoke_unlimited:'Unlimited access removed',delete_account:'Customer account deleted'};
     toast(messages[action]||'Customer updated');
+  }catch(err){toast(err.message);button.disabled=false;button.textContent=old;}
+}
+function toggleAdminCreditPanel(card,button){
+  const panel=card?.querySelector('[data-user-credit-panel]');if(!panel)return;
+  const opening=panel.classList.contains('hidden');
+  panel.classList.toggle('hidden',!opening);
+  if(button)button.textContent=opening?'Close add balance':'Add balance';
+  if(opening)card.querySelector('[data-user-credit-amount]')?.focus();
+}
+async function runAdminAddBalance(card,button){
+  const userId=card?.dataset?.adminUser;const user=adminUsers.find(u=>u.id===userId);if(!user)return;
+  const amountInput=card.querySelector('[data-user-credit-amount]');
+  const messageInput=card.querySelector('[data-user-credit-message]');
+  const credits=Number(amountInput?.value);
+  if(!Number.isFinite(credits)||credits<=0)return toast('Enter the number of credits to add');
+  const message=String(messageInput?.value||'').trim();
+  if(!confirm(`Add ${credits.toLocaleString(undefined,{maximumFractionDigits:1})} credits to ${user.email}?\n\nThe customer will receive the CallFocus notification shown in the message field.`))return;
+  const old=button.textContent;button.disabled=true;button.textContent='Adding…';
+  try{
+    const result=await api('/api/admin/user-action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,action:'add_balance',credits,message})});
+    if(result.user){adminUsers=adminUsers.map(u=>u.id===result.user.id?result.user:u);renderAdminUsers();}
+    toast(`${Number(result.creditsAdded||credits).toLocaleString(undefined,{maximumFractionDigits:1})} credits added · notification queued`);
   }catch(err){toast(err.message);button.disabled=false;button.textContent=old;}
 }
 $('adminUsersRefreshBtn')?.addEventListener('click',()=>loadAdminUsers(true));
 $('adminUsersMoreBtn')?.addEventListener('click',()=>loadAdminUsers(false));
 $('adminUsersSearch')?.addEventListener('input',renderAdminUsers);
-$('adminUsersList')?.addEventListener('click',e=>{const button=e.target.closest('[data-user-action]');if(!button)return;const card=button.closest('[data-admin-user]');runAdminUserAction(card,button,button.dataset.userAction);});
+$('adminUsersList')?.addEventListener('click',e=>{
+  const creditToggle=e.target.closest('[data-user-credit-toggle]');
+  if(creditToggle){toggleAdminCreditPanel(creditToggle.closest('[data-admin-user]'),creditToggle);return;}
+  const creditSubmit=e.target.closest('[data-user-credit-submit]');
+  if(creditSubmit){runAdminAddBalance(creditSubmit.closest('[data-admin-user]'),creditSubmit);return;}
+  const button=e.target.closest('[data-user-action]');if(!button)return;
+  const card=button.closest('[data-admin-user]');runAdminUserAction(card,button,button.dataset.userAction);
+});
 
 
 function manualStatusLabel(status=''){

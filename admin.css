@@ -780,3 +780,13 @@ html:not([data-theme="pearl"]) .quickstart-display-card{background:#121615;borde
 html:not([data-theme="pearl"]) .quickstart-channel-row{background:#101413;border-color:#29332f}
 html:not([data-theme="pearl"]) .quickstart-channel-row .admin-promo-enabled{background:#171c1a;border-color:#2c3834;color:#b7c9c3!important}
 @media(max-width:860px){.quickstart-display-grid{grid-template-columns:1fr}}
+
+
+/* =====================================================================
+   CallFocus V15.31 — customer balance grants + destructive account action
+   ===================================================================== */
+.admin-credit-grant{display:grid;gap:13px;padding:14px;border:1px solid #2a3531;border-radius:16px;background:#0c100f}
+.admin-credit-grant-head{display:grid;gap:4px}.admin-credit-grant-head strong{color:#eaf1ee;font-size:13px}.admin-credit-grant-head small{color:#76827e;font-size:10px;line-height:1.5}
+.admin-credit-grant-grid{display:grid;grid-template-columns:minmax(130px,.35fr) minmax(0,1fr);gap:11px}.admin-credit-grant-grid label{display:grid;gap:7px;color:#92a19c;font-size:10px;font-weight:750}.admin-credit-grant-grid input,.admin-credit-grant-grid textarea{width:100%;border:1px solid #2c3733;border-radius:13px;background:#101513;color:#edf4f1;padding:11px 12px;font:inherit;outline:none}.admin-credit-grant-grid textarea{resize:vertical;min-height:82px}.admin-credit-grant-grid input:focus,.admin-credit-grant-grid textarea:focus{border-color:#438d7e;box-shadow:0 0 0 3px rgba(67,141,126,.10)}.admin-credit-grant-grid label small{font-size:9px;color:#6f7d78;line-height:1.45}.admin-credit-grant>.btn{justify-self:start;min-height:41px}.admin-delete-account-btn{border-style:dashed!important}
+@media(max-width:760px){.admin-credit-grant-grid{grid-template-columns:1fr}.admin-credit-grant>.btn{width:100%}.admin-user-actions .admin-delete-account-btn{grid-column:1/-1}}
+.admin-page .admin-credit-grant{border-color:#dce7e3;background:#f6faf8}.admin-page .admin-credit-grant-head strong{color:#234e47}.admin-page .admin-credit-grant-head small{color:#7d8c87}.admin-page .admin-credit-grant-grid label{color:#647b75}.admin-page .admin-credit-grant-grid input,.admin-page .admin-credit-grant-grid textarea{border-color:#d7e4df;background:#fff;color:#17312e}.admin-page .admin-credit-grant-grid input:focus,.admin-page .admin-credit-grant-grid textarea:focus{border-color:#6bad9f;box-shadow:0 0 0 3px rgba(79,153,138,.10)}.admin-page .admin-credit-grant-grid label small{color:#899792}

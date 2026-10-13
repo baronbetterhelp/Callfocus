@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.30-test';
+  const BUILD='15.31-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -6429,4 +6429,77 @@ ${approvedPatterns}
     if((path==='/credits'||path==='/referrals')&&account)setTimeout(()=>load(true),120);
   };
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+})();
+
+
+/* =====================================================================
+   CallFocus V15.31 — server-backed customer heads-up notifications
+   ===================================================================== */
+(()=>{
+  const TOKEN_KEY='callfocus_server_session_v1';
+  const POLL_MS=8000;
+  let timer=null,inFlight=false,queue=[],showing=false;
+  const seen=new Set();
+
+  function token(){try{return localStorage.getItem(TOKEN_KEY)||''}catch{return ''}}
+  function ensureHost(){
+    let host=document.getElementById('cfHeadsUpHost');
+    if(host)return host;
+    host=document.createElement('div');host.id='cfHeadsUpHost';host.className='cf-headsup-host';host.setAttribute('aria-live','polite');host.setAttribute('aria-atomic','true');document.body.appendChild(host);return host;
+  }
+  function syncWallet(wallet){
+    try{
+      if(!wallet||typeof data==='undefined'||!data||typeof account==='undefined'||!account)return;
+      const serverRev=Math.max(0,Number(wallet.revision)||0),localRev=Math.max(0,Number(data.wallet?.revision)||0);
+      if(serverRev<localRev)return;
+      data.wallet=wallet;
+      try{writeJSON(accountDataKey(account.id),data)}catch{}
+      try{window.CallFocusCredits?.render?.()}catch{}
+      try{renderAccountUI?.();renderWorkspace?.()}catch{}
+    }catch{}
+  }
+  async function acknowledge(id){
+    const t=token();if(!t||!id)return;
+    try{await fetch('/api/account/notifications',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${t}`},body:JSON.stringify({ids:[id]}),cache:'no-store'})}catch{}
+  }
+  function displayCredits(value){const n=Math.max(0,Number(value)||0);return n.toLocaleString(undefined,{maximumFractionDigits:1})}
+  function showNext(){
+    if(showing||!queue.length)return;
+    const item=queue.shift();if(!item)return;
+    showing=true;seen.add(item.id);
+    const host=ensureHost();host.innerHTML='';
+    const card=document.createElement('button');card.type='button';card.className='cf-headsup-card';card.setAttribute('aria-label','CallFocus notification');
+    const icon=document.createElement('span');icon.className='cf-headsup-icon';const img=document.createElement('img');img.src='/logo.png?v=15.31-test';img.alt='';icon.appendChild(img);
+    const copy=document.createElement('span');copy.className='cf-headsup-copy';
+    const meta=document.createElement('span');meta.className='cf-headsup-meta';const brand=document.createElement('strong');brand.textContent='CallFocus';const now=document.createElement('small');now.textContent='now';meta.append(brand,now);
+    const message=document.createElement('span');message.className='cf-headsup-message';message.textContent=String(item.message||item.title||'You have a new CallFocus update.');
+    copy.append(meta,message);
+    if(Number(item.credits)>0){const amount=document.createElement('span');amount.className='cf-headsup-amount';amount.textContent=`+${displayCredits(item.credits)} credits added`;copy.appendChild(amount)}
+    card.append(icon,copy);host.appendChild(card);
+    requestAnimationFrame(()=>card.classList.add('is-visible'));
+    let closed=false;
+    const close=()=>{if(closed)return;closed=true;card.classList.remove('is-visible');acknowledge(item.id);setTimeout(()=>{card.remove();showing=false;showNext()},280)};
+    const auto=setTimeout(close,7000);
+    card.addEventListener('click',()=>{clearTimeout(auto);close();try{if(location.pathname!=='/credits')location.href='/credits'}catch{}});
+  }
+  async function poll({force=false}={}){
+    const t=token();if(!t||inFlight||(!force&&document.visibilityState==='hidden'))return;
+    inFlight=true;
+    try{
+      const res=await fetch('/api/account/notifications',{headers:{Authorization:`Bearer ${t}`},cache:'no-store'});
+      if(res.status===401||res.status===403){
+        try{if(typeof signOut==='function')signOut()}catch{}
+        return;
+      }
+      const payload=await res.json().catch(()=>({}));if(!res.ok)return;
+      syncWallet(payload.wallet);
+      for(const item of Array.isArray(payload.notifications)?payload.notifications:[]){if(item?.id&&!seen.has(item.id)&&!queue.some(row=>row.id===item.id))queue.push(item)}
+      showNext();
+    }catch{}finally{inFlight=false}
+  }
+  function start(){clearInterval(timer);timer=setInterval(()=>poll(),POLL_MS);setTimeout(()=>poll({force:true}),1300)}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});else start();
+  window.addEventListener('focus',()=>poll({force:true}));window.addEventListener('online',()=>poll({force:true}));window.addEventListener('pageshow',()=>poll({force:true}));
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')poll({force:true})});
+  window.CallFocusNotifications={refresh:()=>poll({force:true})};
 })();
