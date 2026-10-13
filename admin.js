@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.28-test';
+const ADMIN_BUILD_VERSION='15.29-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -20,7 +20,8 @@ const LIVE_ONLY_VOICES=new Set([...EXTRA_MALE_VOICES,...EXTRA_FEMALE_VOICES].map
 const $=id=>document.getElementById(id);
 const ADMIN_BACKUP_KEY='callfocus_admin_config_backup_v1';
 const ADMIN_SESSION_KEY='callfocus_admin_session_v158';
-function rememberAdminSession(token){if(!String(token||'').startsWith('session:'))return;localStorage.setItem(ADMIN_SESSION_KEY,token);sessionStorage.removeItem('callfocus_admin_key');}
+function isAdminSessionToken(token=''){const v=String(token||'');return v.startsWith('session:')||v.startsWith('session2:')}
+function rememberAdminSession(token){if(!isAdminSessionToken(token))return;localStorage.setItem(ADMIN_SESSION_KEY,token);sessionStorage.removeItem('callfocus_admin_key');}
 function forgetAdminSession(){localStorage.removeItem(ADMIN_SESSION_KEY);sessionStorage.removeItem('callfocus_admin_key');}
 let adminKey='';
 let currentConfig=null;
@@ -134,7 +135,7 @@ async function saveQuickStartDirect(){
     const result=await api('/api/admin/quick-start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({quickStart:quickStartPayload()})});
     if(currentConfig)currentConfig={...currentConfig,quickStart:result.quickStart,updatedAt:result.config?.updatedAt||currentConfig.updatedAt};
     fillQuickStart(result.quickStart||{});saveBackup({...formPayload(),quickStart:result.quickStart||quickStartPayload()});toast('Quick Start settings saved');return true;
-  }catch(err){toast(err.message||'Could not save Quick Start settings');return false}
+  }catch(err){if(err?.status===401||err?.status===403)toast('Your admin session needs to be renewed. Sign in once, then save again.');else toast(err.message||'Could not save Quick Start settings');return false}
   finally{if(btn){btn.disabled=false;btn.textContent=old}}
 }
 function fillQuickStart(value={}){
@@ -172,6 +173,7 @@ function bindQuickStartManager(){
   root?.addEventListener('click',event=>{const card=event.target.closest?.('[data-promo-id]');if(!card)return;const id=card.dataset.promoId;if(event.target.closest('[data-promo-delete]')){quickStartItems=quickStartItems.filter(row=>row.id!==id);renderCustomPromos();scheduleDraftBackup();toast('Promo removed. Save settings to publish the change.');return}if(event.target.closest('[data-promo-clear-logo]')){const row=quickStartItems.find(item=>item.id===id);if(row){row.logo='';renderCustomPromos();scheduleDraftBackup();toast('Logo removed. Save settings to publish the change.')}}});
 }
 
+function screenshotLimits(){const min=Math.max(1,Math.min(50,Math.round(Number($('adminAnalysisScreenshotMin')?.value)||20)));const max=Math.max(1,Math.min(50,Math.round(Number($('adminAnalysisScreenshotMax')?.value)||50)));return {min,max};}
 function renderScreenshotLimitsSummary(){const box=$('adminScreenshotLimitsSummary');if(!box)return;const {min,max}=screenshotLimits();box.innerHTML=min<=max?`Customers must upload between <strong>${min} and ${max} screenshot${max===1?'':'s'}</strong> before either generator can run. Allowed admin range: 1–50.`:`Minimum cannot be higher than maximum. Current values: <strong>${min}</strong> minimum and <strong>${max}</strong> maximum.`;box.classList.toggle('bad',min>max);}
 function formPayload(){const limits=screenshotLimits();return {customVoices:[...customVoices],unlimitedCreditEmails:[...unlimitedCreditEmails],siteTheme:$('adminSiteTheme').value||'black',serverOnline:$('adminServerOnline').checked,serverMessage:$('adminServerMessage').value.trim(),maleVoice:$('adminMaleVoice').value,femaleVoice:$('adminFemaleVoice').value,model:'gpt-live-1',speakingPace:$('adminSpeakingPace').value,speechStyle:$('adminSpeechStyle').value.trim(),instructions:$('adminInstructions').value.trim(),opening:$('adminOpening').value.trim(),speakFirst:$('adminSpeakFirst').checked,interruptions:$('adminInterruptions').checked,manualPaymentsEnabled:$('adminManualPaymentsEnabled')?.checked===true,manualPaymentBankName:$('adminManualBankName')?.value.trim()||'',manualPaymentAccountName:$('adminManualAccountName')?.value.trim()||'',manualPaymentAccountNumber:$('adminManualAccountNumber')?.value.replace(/[^0-9]/g,'')||'',manualPaymentNotificationEmail:$('adminManualPaymentEmail')?.value.trim().toLowerCase()||'support@callfocus.link',analysisScreenshotMin:limits.min,analysisScreenshotMax:limits.max,autoFillScreenshotLimit:limits.max,quickStart:quickStartPayload()}}
 function renderBackupStatus(storageConnected=true){const el=$('adminBackupStatus'),btn=$('restoreAdminBackupBtn');if(!el||!btn)return;const b=readBackup();btn.classList.toggle('hidden',!b?.config);if(!b?.config){el.textContent='A protected browser backup will also be kept automatically.';el.className='admin-backup-status';return}const when=b.savedAt?new Date(b.savedAt).toLocaleString():'recently';if(!storageConnected){el.textContent=`KV is disconnected, but your last admin settings are protected on this device (${when}). Reconnect KV, then restore and save.`;el.className='admin-backup-status warn'}else{el.textContent=`Protected browser backup available from ${when}.`;el.className='admin-backup-status good'}}
@@ -204,9 +206,24 @@ async function addUnlimitedUser(){
   const ok=await setUnlimitedUser('add',email,btn); if(ok&&input)input.value='';
 }
 function fill(config,storageConnected){currentConfig=config;customVoices=Array.isArray(config.customVoices)?config.customVoices:[];populateVoices();renderCustomVoiceLibrary();unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;if($('adminManualPaymentsEnabled'))$('adminManualPaymentsEnabled').checked=config.manualPaymentsEnabled===true;if($('adminManualBankName'))$('adminManualBankName').value=config.manualPaymentBankName||'';if($('adminManualAccountName'))$('adminManualAccountName').value=config.manualPaymentAccountName||'';if($('adminManualAccountNumber'))$('adminManualAccountNumber').value=config.manualPaymentAccountNumber||'';if($('adminManualPaymentEmail'))$('adminManualPaymentEmail').value=config.manualPaymentNotificationEmail||'support@callfocus.link';if($('adminAnalysisScreenshotMin'))$('adminAnalysisScreenshotMin').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMin)||20)));if($('adminAnalysisScreenshotMax'))$('adminAnalysisScreenshotMax').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMax)||Number(config.autoFillScreenshotLimit)||50)));fillQuickStart(config.quickStart||{});renderScreenshotLimitsSummary();$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);if($('adminDashStorage'))$('adminDashStorage').textContent=storageConnected?'Global storage connected':'Storage needs attention';renderServerState();renderBackupStatus(storageConnected)}
-async function api(path,options={}){const res=await fetch(path,{...options,headers:authHeaders(options.headers||{})});const type=res.headers.get('content-type')||'';const data=type.includes('application/json')?await res.json():await res.text();if(!res.ok)throw Object.assign(new Error(data?.error||data||'Request failed'),{status:res.status});return data}
+async function api(path,options={}){const res=await fetch(path,{credentials:'same-origin',...options,headers:authHeaders(options.headers||{})});const type=res.headers.get('content-type')||'';const data=type.includes('application/json')?await res.json():await res.text();if(!res.ok)throw Object.assign(new Error(data?.error||data||'Request failed'),{status:res.status});return data}
 async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{const auth=await api('/api/admin/login',{method:'POST'});adminKey=auth.adminToken||key;rememberAdminSession(adminKey);$('adminPasscode').value='';const result=await api('/api/admin/config');$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminUsers(true);loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadAdminManualPayments();}catch(err){adminKey='';if(err.status===401||err.status===403)forgetAdminSession();$('adminGateNote').textContent=err.message;toast(err.message)}}
-async function saveConfig(message='Global CallFocus settings saved'){const limits=screenshotLimits();if(limits.min>limits.max){renderScreenshotLimitsSummary();toast('Minimum screenshots cannot be higher than maximum screenshots');return false;}const payload=formPayload();saveBackup(payload);try{const result=await api('/api/admin/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});fill(result.config,true);saveBackup(result.config);toast(message);return true}catch(err){renderBackupStatus(false);toast(`${err.message} — your settings are protected on this device`);return false}}
+async function saveConfig(message='Global CallFocus settings saved'){
+  const btn=$('saveAdminBtn'),old=btn?.textContent||'Save global settings';
+  if(btn){btn.disabled=true;btn.textContent='Saving…'}
+  try{
+    const limits=screenshotLimits();
+    if(limits.min>limits.max){renderScreenshotLimitsSummary();toast('Minimum screenshots cannot be higher than maximum screenshots');return false;}
+    const payload=formPayload();saveBackup(payload);
+    const result=await api('/api/admin/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    fill(result.config,true);saveBackup(result.config);toast(message);return true;
+  }catch(err){
+    renderBackupStatus(false);
+    if(err?.status===401||err?.status===403)toast('Your admin session needs to be renewed. Sign in once, then save again.');
+    else toast(`${err.message||'Could not save global settings'} — your settings are protected on this device`);
+    return false;
+  }finally{if(btn){btn.disabled=false;btn.textContent=old}}
+}
 function restoreBackup(){const b=readBackup();if(!b?.config)return toast('No protected backup found');fill(b.config,!!currentConfig);toast('Protected settings loaded. Press Save global settings to write them to KV.')}
 function scheduleDraftBackup(){clearTimeout(draftTimer);draftTimer=setTimeout(()=>{try{saveBackup(formPayload())}catch{}},350)}
 async function previewVoice(kind,button){const voice=kind==='female'?$('adminFemaleVoice').value:$('adminMaleVoice').value;if(LIVE_ONLY_VOICES.has(voice)&&!String(voice).startsWith('voice_'))return toast('This is a GPT-Live-only voice. Save it and place a short test call to audition it.');const old=button.textContent;button.disabled=true;button.textContent='Preparing preview…';try{const res=await fetch('/api/admin/voice-preview',{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({voice,text:'Hi, this is a CallFocus voice preview. I am checking how natural this voice sounds in a relaxed phone conversation.'})});if(!res.ok){let message='Voice preview unavailable';try{message=(await res.json()).error||message}catch{}throw new Error(message)}const blob=await res.blob();if(previewUrl)URL.revokeObjectURL(previewUrl);previewUrl=URL.createObjectURL(blob);$('voicePreviewAudio').src=previewUrl;$('voicePreviewAudio').classList.remove('hidden');await $('voicePreviewAudio').play();}catch(err){toast(err.message)}finally{button.disabled=false;button.textContent=old}}
@@ -272,7 +289,7 @@ async function restoreRememberedAdmin(){
   restoringAdmin=true;adminKey=remembered;
   try{
     const r=await api('/api/admin/config');if(adminKey!==remembered)return;
-    if(!remembered.startsWith('session:')){const auth=await api('/api/admin/login',{method:'POST'});if(adminKey!==remembered)return;adminKey=auth.adminToken||remembered;rememberAdminSession(adminKey);}
+    if(!remembered.startsWith('session2:')){const auth=await api('/api/admin/login',{method:'POST'});if(adminKey!==remembered)return;adminKey=auth.adminToken||remembered;rememberAdminSession(adminKey);}
     $('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');
     const backup=readBackup();
     if(!r.storageConnected&&backup?.config)fill(backup.config,false);else{fill(r.config,r.storageConnected);if(r.storageConnected)saveBackup(r.config);}
