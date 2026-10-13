@@ -2161,7 +2161,7 @@ html:not([data-theme="pearl"]) .location-search-note{background:#171717;color:#8
 @media(max-width:640px){.location-clear{right:9px;width:29px;height:29px}.location-autocomplete input{padding-right:48px!important}}
 
 
-/* ===== CallFocus V15.9 — Home quick-start video + Telegram help hub ===== */
+/* ===== CallFocus V15.10 — Compact Telegram action in quick-start help hub ===== */
 .cf-help-hub{--cf-help-green:#1d7566;--cf-help-mint:#79d6c2;--cf-help-telegram:#229ed9;--cf-help-youtube:#ff0033;position:fixed;inset:0;z-index:125;pointer-events:none;visibility:hidden}
 .cf-help-hub[aria-hidden="false"]{visibility:visible}
 .cf-help-card,.cf-help-video-panel{position:absolute;left:50%;top:50%;opacity:0;pointer-events:none;transform:translate(-50%,-46%) scale(.88);transition:opacity .28s ease,transform .46s cubic-bezier(.2,.92,.22,1);backdrop-filter:blur(28px) saturate(125%);-webkit-backdrop-filter:blur(28px) saturate(125%)}
@@ -2189,10 +2189,6 @@ html:not([data-theme="pearl"]) .location-search-note{background:#171717;color:#8
 .cf-help-action>b{font:700 20px/1 Manrope,sans-serif;color:#8a9895;padding-right:2px}
 .cf-help-divider{display:flex;align-items:center;gap:10px;margin:16px 1px 13px;color:#9aa7a3;font:750 8px/1 Manrope,sans-serif;letter-spacing:.09em;text-transform:uppercase}
 .cf-help-divider:before,.cf-help-divider:after{content:"";height:1px;flex:1;background:linear-gradient(90deg,transparent,rgba(34,98,87,.13))}.cf-help-divider:after{background:linear-gradient(90deg,rgba(34,98,87,.13),transparent)}
-.cf-help-telegram-row{display:grid;grid-template-columns:45px minmax(0,1fr);gap:12px;align-items:center}
-.cf-help-telegram-mark{width:45px;height:45px;border-radius:15px;display:grid;place-items:center;background:linear-gradient(145deg,#35b5eb,var(--cf-help-telegram));color:#fff;box-shadow:0 10px 24px rgba(34,158,217,.22)}
-.cf-help-telegram-mark svg{width:25px;height:25px;transform:translateX(-1px)}
-.cf-help-telegram-row strong{display:block;color:#214740;font:800 12px/1.25 Manrope,sans-serif}.cf-help-telegram-row p{margin:4px 0 0;color:#7c8e89;font:520 9.5px/1.45 Manrope,sans-serif}
 .cf-help-telegram-action{border:1px solid rgba(34,158,217,.16);background:linear-gradient(135deg,#eef9fe,#fff);color:#174d61;box-shadow:0 9px 24px rgba(34,158,217,.08)}
 .cf-help-telegram-action-icon{background:linear-gradient(145deg,#35b5eb,var(--cf-help-telegram));color:#fff;box-shadow:0 7px 17px rgba(34,158,217,.18)}
 .cf-help-telegram-action-icon svg{width:22px;height:22px;transform:translateX(-1px)}
@@ -2222,15 +2218,15 @@ html:not([data-theme="pearl"]) .location-search-note{background:#171717;color:#8
 @keyframes cfHelpLogoTelegram{0%,43%{opacity:0;transform:scale(.74) rotate(10deg)}48%,95%{opacity:1;transform:scale(1) rotate(0)}100%{opacity:0;transform:scale(.74) rotate(10deg)}}
 html:not([data-theme="pearl"]) .cf-help-card,html:not([data-theme="pearl"]) .cf-help-video-panel{border-color:rgba(255,255,255,.1);background:linear-gradient(145deg,rgba(24,29,27,.985),rgba(14,18,17,.98));color:#e6f0ed;box-shadow:0 32px 90px rgba(0,0,0,.48)}
 html:not([data-theme="pearl"]) .cf-help-guide-icon{background:linear-gradient(145deg,#1c2b27,#25211c);color:#78c8b7;box-shadow:inset 0 0 0 1px rgba(121,214,194,.08)}
-html:not([data-theme="pearl"]) .cf-help-guide-copy strong,html:not([data-theme="pearl"]) .cf-help-telegram-row strong,html:not([data-theme="pearl"]) .cf-help-video-head>div strong{color:#e5f0ec}
-html:not([data-theme="pearl"]) .cf-help-guide-copy p,html:not([data-theme="pearl"]) .cf-help-telegram-row p,html:not([data-theme="pearl"]) .cf-help-action-copy small,html:not([data-theme="pearl"]) .cf-help-video-note{color:#8fa29c}
+html:not([data-theme="pearl"]) .cf-help-guide-copy strong,html:not([data-theme="pearl"]) .cf-help-video-head>div strong{color:#e5f0ec}
+html:not([data-theme="pearl"]) .cf-help-guide-copy p,html:not([data-theme="pearl"]) .cf-help-action-copy small,html:not([data-theme="pearl"]) .cf-help-video-note{color:#8fa29c}
 html:not([data-theme="pearl"]) .cf-help-watch{background:linear-gradient(135deg,#251c1f,#171918);border-color:rgba(255,80,105,.14);color:#f0eeee}
 html:not([data-theme="pearl"]) .cf-help-telegram-action{background:linear-gradient(135deg,#17262a,#171918);border-color:rgba(34,158,217,.16);color:#dbeef5}
 html:not([data-theme="pearl"]) .cf-help-video-head{background:rgba(21,25,24,.9);border-bottom-color:rgba(255,255,255,.08)}
 html:not([data-theme="pearl"]) .cf-help-close,html:not([data-theme="pearl"]) .cf-help-video-close{background:rgba(255,255,255,.07);color:#b7c9c4}
 html:not([data-theme="pearl"]) .cf-help-bubble{background:linear-gradient(145deg,#202825,#121716);border-color:rgba(255,255,255,.15)}
 html:not([data-theme="pearl"]) .cf-help-unread{border-color:#171d1b}
-@media(max-width:620px){.cf-help-card{width:calc(100vw - 22px);max-height:min(84dvh,700px);padding:17px;border-radius:23px}.cf-help-guide-head{grid-template-columns:50px minmax(0,1fr);gap:12px;padding-right:28px}.cf-help-guide-icon{width:50px;height:50px;border-radius:16px}.cf-help-guide-icon svg{width:28px;height:28px}.cf-help-guide-copy strong{font-size:16px}.cf-help-guide-copy p{font-size:9.5px}.cf-help-action{min-height:55px;margin-top:13px;border-radius:15px;grid-template-columns:36px minmax(0,1fr) auto;padding:9px 10px}.cf-help-action-icon{width:36px;height:36px}.cf-help-telegram-row{grid-template-columns:41px minmax(0,1fr);gap:10px}.cf-help-telegram-mark{width:41px;height:41px;border-radius:13px}.cf-help-video-panel{width:calc(100vw - 18px);border-radius:21px}.cf-help-video-head{min-height:61px;padding:11px 12px}.cf-help-video-note{font-size:8.5px;padding:9px 12px 11px}.cf-help-bubble{right:14px;bottom:max(18px,calc(env(safe-area-inset-bottom) + 12px));width:60px;height:60px}.cf-help-logo-stage{width:35px;height:35px}.cf-help-logo-youtube svg{width:29px}.cf-help-logo-telegram svg{width:29px;height:29px}}
+@media(max-width:620px){.cf-help-card{width:calc(100vw - 22px);max-height:min(84dvh,700px);padding:17px;border-radius:23px}.cf-help-guide-head{grid-template-columns:50px minmax(0,1fr);gap:12px;padding-right:28px}.cf-help-guide-icon{width:50px;height:50px;border-radius:16px}.cf-help-guide-icon svg{width:28px;height:28px}.cf-help-guide-copy strong{font-size:16px}.cf-help-guide-copy p{font-size:9.5px}.cf-help-action{min-height:55px;margin-top:13px;border-radius:15px;grid-template-columns:36px minmax(0,1fr) auto;padding:9px 10px}.cf-help-action-icon{width:36px;height:36px}.cf-help-video-panel{width:calc(100vw - 18px);border-radius:21px}.cf-help-video-head{min-height:61px;padding:11px 12px}.cf-help-video-note{font-size:8.5px;padding:9px 12px 11px}.cf-help-bubble{right:14px;bottom:max(18px,calc(env(safe-area-inset-bottom) + 12px));width:60px;height:60px}.cf-help-logo-stage{width:35px;height:35px}.cf-help-logo-youtube svg{width:29px}.cf-help-logo-telegram svg{width:29px;height:29px}}
 @media(max-height:600px){.cf-help-card{top:12px;transform:translate(-50%,0) scale(.9);max-height:calc(100dvh - 24px)}.cf-help-menu-open .cf-help-card{transform:translate(-50%,0) scale(1)}.cf-help-video-panel{max-height:calc(100dvh - 18px);overflow:auto}.cf-help-video-open .cf-help-video-panel{top:9px;transform:translate(-50%,0) scale(1)}}
 @media(prefers-reduced-motion:reduce){.cf-help-card,.cf-help-video-panel,.cf-help-bubble,.cf-help-action,.cf-help-unread{transition-duration:.01ms!important}.cf-help-bubble-ring,.cf-help-bubble:after,.cf-help-logo-youtube,.cf-help-logo-telegram{animation-duration:.01ms!important;animation-iteration-count:1!important}.cf-help-logo-youtube{opacity:1!important}.cf-help-logo-telegram{opacity:0!important}}
 

@@ -1,5 +1,5 @@
 # CallFocus
 
-Latest build: **V15.9 — Quick Start Video & Telegram Help Hub**.
+Latest build: **V15.10 — Compact Telegram Quick-Start Action**.
 
-Built on V15.8. See `README-V15.9.md` for the new Home onboarding/help experience.
+Built on V15.9. See `README-V15.10.md` for the targeted quick-start popup refinement.
