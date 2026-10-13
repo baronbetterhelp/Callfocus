@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.18-test';
+  const BUILD='15.19-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -220,7 +220,7 @@ function motionInit(){
     nodes.forEach(node=>{
       if(node.classList.contains('is-visible')) return;
       const r=node.getBoundingClientRect();
-      if(r.top < vh*.94 && r.bottom > -72) showNode(node);
+      if(r.top < vh*.96 && r.bottom > -96) showNode(node);
     });
   };
 
@@ -228,27 +228,78 @@ function motionInit(){
   if('IntersectionObserver' in window){
     observer = new IntersectionObserver(entries=>entries.forEach(entry=>{
       if(entry.isIntersecting){ showNode(entry.target); observer.unobserve(entry.target); }
-    }),{threshold:.04,rootMargin:'0px 0px -3% 0px'});
+    }),{threshold:.025,rootMargin:'100px 0px 120px 0px'});
     nodes.forEach(n=>observer.observe(n));
   }
 
-  let revealTick=false;
+  let revealTimer=0;
   const queueRevealCheck=()=>{
-    if(revealTick)return;
-    revealTick=true;
-    requestAnimationFrame(()=>{ revealVisible(); revealTick=false; });
+    clearTimeout(revealTimer);
+    revealTimer=setTimeout(revealVisible,140);
   };
   revealVisible();
   requestAnimationFrame(revealVisible);
-  setTimeout(revealVisible,140);
-  setTimeout(revealVisible,650);
-  window.addEventListener('scroll',queueRevealCheck,{passive:true});
+  setTimeout(revealVisible,180);
+  setTimeout(revealVisible,900);
+  // IntersectionObserver handles normal scrolling. The throttled fallback keeps
+  // older / quirky Safari builds safe without forcing layout on every frame.
+  if(!observer) window.addEventListener('scroll',queueRevealCheck,{passive:true});
   window.addEventListener('resize',queueRevealCheck,{passive:true});
   window.addEventListener('pageshow',queueRevealCheck,{passive:true});
 
   let ticking=false;
-  const syncParallax=()=>{ if(ticking)return; ticking=true; requestAnimationFrame(()=>{ const y=Math.min(window.scrollY||0,900), mobile=innerWidth<=620; page.style.setProperty('--cf-bg-shift',`${Math.round(y*(mobile?.009:.035))}px`); page.style.setProperty('--cf-copy-shift',`${Math.round(y*(mobile?-.002:-.012))}px`); page.style.setProperty('--cf-geo-shift',`${Math.round(y*(mobile?.006:.022))}px`); ticking=false; }); };
-  syncParallax(); window.addEventListener('scroll',syncParallax,{passive:true});
+  const syncParallax=()=>{
+    if(ticking)return;
+    if(innerWidth<=760){
+      page.style.setProperty('--cf-bg-shift','0px');
+      page.style.setProperty('--cf-copy-shift','0px');
+      page.style.setProperty('--cf-geo-shift','0px');
+      return;
+    }
+    ticking=true;
+    requestAnimationFrame(()=>{
+      const y=Math.min(window.scrollY||0,900);
+      page.style.setProperty('--cf-bg-shift',`${Math.round(y*.03)}px`);
+      page.style.setProperty('--cf-copy-shift',`${Math.round(y*-.010)}px`);
+      page.style.setProperty('--cf-geo-shift',`${Math.round(y*.018)}px`);
+      ticking=false;
+    });
+  };
+  syncParallax();
+  if(innerWidth>760) window.addEventListener('scroll',syncParallax,{passive:true});
+}
+
+function performanceMotionSchedulerInit(){
+  const page=$('pageRoot');
+  if(!page || !document.getElementById('page-home')) return;
+  const reduce=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const selectors=['.premium-hero','.cf-phone-hero-stage','.cf-story-section','.cf-story-card','.cf-stage-section','.cf-conversation-stage','.cf-bento-section','.cf-bento-card','.cf-motion-ribbon','.trust-row','.premium-section','.continuity-section','.feature-section','.home-cta'];
+  const zones=selectors.flatMap(sel=>qsa(sel)).filter((node,index,arr)=>arr.indexOf(node)===index);
+  if(!zones.length) return;
+  zones.forEach(zone=>zone.classList.add('cf-motion-zone'));
+  if(reduce){zones.forEach(zone=>zone.classList.add('cf-motion-active'));return;}
+  page.classList.add('motion-scheduled');
+  const activateVisible=()=>{
+    const vh=window.innerHeight||document.documentElement.clientHeight||0;
+    zones.forEach(zone=>{
+      const r=zone.getBoundingClientRect();
+      zone.classList.toggle('cf-motion-active',r.bottom>-220&&r.top<vh+260);
+    });
+  };
+  activateVisible();
+  if('IntersectionObserver' in window){
+    const io=new IntersectionObserver(entries=>entries.forEach(entry=>{
+      entry.target.classList.toggle('cf-motion-active',entry.isIntersecting);
+    }),{rootMargin:'260px 0px 260px 0px',threshold:0});
+    zones.forEach(zone=>io.observe(zone));
+  }else{
+    let t=0;
+    window.addEventListener('scroll',()=>{clearTimeout(t);t=setTimeout(activateVisible,160);},{passive:true});
+  }
+  document.addEventListener('visibilitychange',()=>{
+    page.classList.toggle('cf-page-hidden',document.hidden);
+    if(!document.hidden) requestAnimationFrame(activateVisible);
+  });
 }
 
 function visualTestMotionInit(){
@@ -578,7 +629,7 @@ function bind(){
   });
 }
 
-initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminLabels(); refreshPublicConfig(); renderWorkspace(); motionInit(); visualTestMotionInit(); showView('home',false);
+initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminLabels(); refreshPublicConfig(); renderWorkspace(); motionInit(); performanceMotionSchedulerInit(); visualTestMotionInit(); showView('home',false);
 
 /* V14.6: service worker retired for iOS Safari navigation stability. */
 
@@ -5775,7 +5826,7 @@ ${approvedPatterns}
 })();
 
 
-/* ===== CallFocus V15.18-test — Custom promo logos join floating-button rotation ===== */
+/* ===== CallFocus V15.16 — Custom promo logos join floating-button rotation ===== */
 (()=>{
   const DEFAULTS={
     youtubeEnabled:true,telegramEnabled:true,floatingButtonEnabled:true,appearDelaySeconds:2,autoHideSeconds:8,
