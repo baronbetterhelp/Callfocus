@@ -28,7 +28,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=15.11" />
+  <link rel="stylesheet" href="/callfocus.css?v=15.12" />
 </head>
 <body data-cf-document-view="credits">
   <div class="app-root home-page" id="pageRoot">
@@ -83,13 +83,8 @@
             <button data-mobile-route="home"><span class="menu-icon">⌂</span><span>Home<small>CallFocus overview</small></span></button>
             <button data-mobile-route="callers"><span class="menu-icon">◉</span><span>My Callers<small>Saved people and caller context</small></span></button>
             <button data-mobile-route="recent"><span class="menu-icon">◷</span><span>Recent Calls<small>Continue previous call threads</small></span></button>
-            <button data-mobile-route="avatar"><span class="menu-icon">◉</span><span>Live AI Avatar<small>Realtime face-to-face conversation</small></span></button>
             <button data-mobile-route="credits"><span class="menu-icon">◌</span><span>Call & Voice Credits<small>Shared balance, pricing and top-ups</small></span></button>
             <button data-mobile-route="profile"><span class="menu-icon">◎</span><span>My Profile<small>Your reusable information</small></span></button>
-          </div>
-          <div class="mobile-recent-shell">
-            <div class="mobile-recent-head"><strong>Recent calls</strong><small>Most recent first</small></div>
-            <div class="mobile-recent-list" id="mobileRecentList"></div>
           </div>
         </div>
       </div>
@@ -722,6 +717,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=15.11"></script>
+  <script src="/callfocus.js?v=15.12"></script>
 </body>
 </html>

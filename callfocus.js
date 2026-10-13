@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.11';
+  const BUILD='15.12';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -271,7 +271,7 @@ function renderRecentThreads(){
   if(selectedThreadId && threads.some(t=>t.id===selectedThreadId)) renderThreadDetail(selectedThreadId); else if(threads.length){ selectedThreadId=threads[0].id; renderRecentThreads(); } else $('threadDetailPanel').innerHTML='<div class="empty-thread-detail">Your recent calls will appear here after your first call.</div>';
 }
 function renderMobileRecents(){
-  const list=$('mobileRecentList'); if(!account||!data){ list.innerHTML='<div class="empty-state" style="border:0;border-radius:0;padding:18px">Sign in to see your recent calls.</div>'; return; }
+  const list=$('mobileRecentList'); if(!list)return; if(!account||!data){ list.innerHTML='<div class="empty-state" style="border:0;border-radius:0;padding:18px">Sign in to see your recent calls.</div>'; return; }
   const threads=sortedThreads(); list.innerHTML=threads.length?threads.map(t=>`<button class="mobile-recent-item" data-mobile-thread="${t.id}"><span class="mobile-recent-avatar">${esc(initials(t.callerName))}</span><span><strong>${esc(t.title)}</strong><small>${esc(t.callerName)} · ${esc(relativeTime(t.updatedAt))}</small></span></button>`).join(''):`<div class="empty-state" style="border:0;border-radius:0;padding:18px">No recent calls yet.</div>`;
 }
 function renderProfile(){ if(!account||!data)return; $('profileName').value=data.profile.name||account.name; $('profileRole').value=data.profile.role||''; $('profileAbout').value=data.profile.about||''; $('profileRules').value=data.profile.rules||''; }
