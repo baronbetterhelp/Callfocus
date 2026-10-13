@@ -16,7 +16,7 @@
     document.documentElement.dataset.theme='pearl';
     document.documentElement.style.colorScheme='light';
     try{history.scrollRestoration='manual';}catch{}
-    window.__CALLFOCUS_BUILD__='15.17-test';
+    window.__CALLFOCUS_BUILD__='15.18-test';
     (function(){
       const cleanPath=(location.pathname||'/').replace(/\/+$/,'')||'/';
       const topNow=()=>{try{window.scrollTo(0,0);}catch{}};
@@ -28,7 +28,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=15.17-test" />
+  <link rel="stylesheet" href="/callfocus.css?v=15.18-test" />
 </head>
 <body data-cf-document-view="recent">
   <div class="app-root home-page" id="pageRoot">
@@ -130,6 +130,33 @@
               <div class="hero-proof hero-enter hero-enter-4 hero-proof-spaced">
                 <div class="avatar-stack"><span>C</span><span>F</span><span>+</span></div>
                 <div><div class="proof-stars">★★★★★</div><small>Your context stays organized around each caller and call thread.</small></div>
+              </div>
+
+              <div class="cf-phone-hero-stage hero-enter hero-enter-4" aria-hidden="true">
+                <div class="cf-phone-stage-head">
+                  <div><span class="cf-phone-live-dot"></span><strong>Live continuity</strong></div>
+                  <small>Context is ready</small>
+                </div>
+                <div class="cf-phone-stage-canvas">
+                  <span class="cf-phone-orbit orbit-one"></span>
+                  <span class="cf-phone-orbit orbit-two"></span>
+                  <span class="cf-phone-orbit-dot dot-one"></span>
+                  <span class="cf-phone-orbit-dot dot-two"></span>
+                  <span class="cf-phone-orbit-dot dot-three"></span>
+                  <div class="cf-phone-caller-core">
+                    <span class="cf-phone-core-pulse"></span>
+                    <b>A</b>
+                    <strong>Alex</strong>
+                    <small>Conversation active</small>
+                  </div>
+                  <div class="cf-phone-signal signal-context"><i></i><span>Caller context</span><b>Ready</b></div>
+                  <div class="cf-phone-signal signal-time"><i></i><span>Local time</span><b>Matched</b></div>
+                  <div class="cf-phone-signal signal-memory"><i></i><span>Recent thread</span><b>Loaded</b></div>
+                </div>
+                <div class="cf-phone-wave" aria-hidden="true">
+                  <span style="--h:14px"></span><span style="--h:27px"></span><span style="--h:18px"></span><span style="--h:37px"></span><span style="--h:22px"></span><span style="--h:46px"></span><span style="--h:28px"></span><span style="--h:39px"></span><span style="--h:17px"></span><span style="--h:31px"></span><span style="--h:21px"></span><span style="--h:43px"></span><span style="--h:24px"></span><span style="--h:33px"></span><span style="--h:16px"></span>
+                </div>
+                <div class="cf-phone-stage-foot"><span>Listen naturally</span><span>Keep context</span><span>Continue later</span></div>
               </div>
             </div>
 
@@ -889,6 +916,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=15.17-test"></script>
+  <script src="/callfocus.js?v=15.18-test"></script>
 </body>
 </html>

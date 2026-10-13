@@ -1,7 +1,5 @@
 # CallFocus
 
-Experimental visual build: **V15.17 Visual Test — Long-Form Motion & Premium Home Experience**.
+Experimental visual build: **V15.18 Visual Test — Phone-First Cinematic Home**.
 
-This test build is based directly on **V15.16 — Custom Promo Logo Rotation**. V15.16 remains the latest approved stable base until this visual test is accepted.
-
-See `README-V15.17-TEST.md` for the presentation-only changes.
+Built on the V15.17 visual-test branch, which itself is based on stable V15.16. V15.16 remains the latest approved stable base unless this visual test is explicitly accepted. See `README-V15.18-TEST.md`.

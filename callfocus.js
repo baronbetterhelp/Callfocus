@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.17-test';
+  const BUILD='15.18-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -211,14 +211,45 @@ function motionInit(){
   const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   if(!reduce) requestAnimationFrame(()=>page.classList.add('motion-ready'));
   const nodes = qsa('[data-reveal]');
-  if(reduce || !('IntersectionObserver' in window)){ nodes.forEach(n=>n.classList.add('is-visible')); return; }
-  const observer = new IntersectionObserver(entries=>entries.forEach(entry=>{ if(entry.isIntersecting){ entry.target.classList.add('is-visible'); observer.unobserve(entry.target); } }),{threshold:.12,rootMargin:'0px 0px -2% 0px'});
-  nodes.forEach(n=>{ n.classList.add('reveal-pending'); observer.observe(n); });
+  const showNode=(node)=>{ if(!node || node.classList.contains('is-visible')) return; node.classList.add('is-visible'); };
+  if(reduce){ nodes.forEach(showNode); return; }
+
+  nodes.forEach(n=>n.classList.add('reveal-pending'));
+  const revealVisible=()=>{
+    const vh=Math.max(window.innerHeight||0,document.documentElement.clientHeight||0);
+    nodes.forEach(node=>{
+      if(node.classList.contains('is-visible')) return;
+      const r=node.getBoundingClientRect();
+      if(r.top < vh*.94 && r.bottom > -72) showNode(node);
+    });
+  };
+
+  let observer=null;
+  if('IntersectionObserver' in window){
+    observer = new IntersectionObserver(entries=>entries.forEach(entry=>{
+      if(entry.isIntersecting){ showNode(entry.target); observer.unobserve(entry.target); }
+    }),{threshold:.04,rootMargin:'0px 0px -3% 0px'});
+    nodes.forEach(n=>observer.observe(n));
+  }
+
+  let revealTick=false;
+  const queueRevealCheck=()=>{
+    if(revealTick)return;
+    revealTick=true;
+    requestAnimationFrame(()=>{ revealVisible(); revealTick=false; });
+  };
+  revealVisible();
+  requestAnimationFrame(revealVisible);
+  setTimeout(revealVisible,140);
+  setTimeout(revealVisible,650);
+  window.addEventListener('scroll',queueRevealCheck,{passive:true});
+  window.addEventListener('resize',queueRevealCheck,{passive:true});
+  window.addEventListener('pageshow',queueRevealCheck,{passive:true});
+
   let ticking=false;
-  const syncParallax=()=>{ if(ticking)return; ticking=true; requestAnimationFrame(()=>{ const y=Math.min(window.scrollY||0,900), mobile=innerWidth<=620; page.style.setProperty('--cf-bg-shift',`${Math.round(y*(mobile?.018:.035))}px`); page.style.setProperty('--cf-copy-shift',`${Math.round(y*(mobile?-.006:-.012))}px`); page.style.setProperty('--cf-geo-shift',`${Math.round(y*(mobile?.012:.022))}px`); ticking=false; }); };
+  const syncParallax=()=>{ if(ticking)return; ticking=true; requestAnimationFrame(()=>{ const y=Math.min(window.scrollY||0,900), mobile=innerWidth<=620; page.style.setProperty('--cf-bg-shift',`${Math.round(y*(mobile?.009:.035))}px`); page.style.setProperty('--cf-copy-shift',`${Math.round(y*(mobile?-.002:-.012))}px`); page.style.setProperty('--cf-geo-shift',`${Math.round(y*(mobile?.006:.022))}px`); ticking=false; }); };
   syncParallax(); window.addEventListener('scroll',syncParallax,{passive:true});
 }
-
 
 function visualTestMotionInit(){
   const reduce=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -5744,7 +5775,7 @@ ${approvedPatterns}
 })();
 
 
-/* ===== CallFocus V15.17-test — Custom promo logos join floating-button rotation ===== */
+/* ===== CallFocus V15.18-test — Custom promo logos join floating-button rotation ===== */
 (()=>{
   const DEFAULTS={
     youtubeEnabled:true,telegramEnabled:true,floatingButtonEnabled:true,appearDelaySeconds:2,autoHideSeconds:8,
