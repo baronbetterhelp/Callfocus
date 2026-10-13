@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.10';
+  const BUILD='15.11';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -5694,7 +5694,7 @@ ${approvedPatterns}
 })();
 
 
-/* ===== CallFocus V15.10 — Compact Telegram action in quick-start help hub ===== */
+/* ===== CallFocus V15.11 — Telegram quick-start icon aligned with YouTube action ===== */
 (()=>{
   const TELEGRAM_URL='https://t.me/callfocus';
   const YOUTUBE_VIDEO_ID='t91M_7QkMyA';
@@ -5809,7 +5809,7 @@ ${approvedPatterns}
             <svg viewBox="0 0 24 24" fill="none"><path d="M21.6 3.5 18.4 19c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6 12.8l-4.8-1.5c-1-.3-1-1 .2-1.5L20.2 2.6c.9-.3 1.7.2 1.4.9Z" fill="currentColor"/></svg>
           </span>
           <span class="cf-help-action-copy"><strong>Join the CallFocus Telegram channel</strong><small>Get updates, useful tools and CallFocus announcements</small></span>
-          <b aria-hidden="true">↗</b>
+          <b aria-hidden="true">›</b>
         </a>
       </aside>
 
