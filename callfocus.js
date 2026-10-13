@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.20-test';
+  const BUILD='15.21-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -33,6 +33,33 @@
   syncVisibility();
 
   window.CallFocusBuild=BUILD;
+})();
+
+/* ===== CallFocus V15.21 Visual Test — one-time guided CTA cue ===== */
+(()=>{
+  const init=()=>{
+    const directHome=(document.body?.dataset?.cfDocumentView||'home')==='home' || ((location.pathname||'/').replace(/\/+$/,'')||'/')==='/';
+    if(!directHome || !document.getElementById('page-home')) return;
+    const btn=document.getElementById('heroNewCallBtn');
+    if(!btn || btn.querySelector('.cf-hero-cursor-cue')) return;
+    const reduced=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    if(reduced) return;
+    const cue=document.createElement('span');
+    cue.className='cf-hero-cursor-cue';
+    cue.setAttribute('aria-hidden','true');
+    btn.appendChild(cue);
+    const run=()=>{
+      if(document.visibilityState!=='visible') return setTimeout(run,450);
+      btn.classList.add('cf-cursor-guide');
+      setTimeout(()=>{
+        btn.classList.remove('cf-cursor-guide');
+        cue.remove();
+      },2850);
+    };
+    setTimeout(run,1180);
+  };
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init,{once:true});
+  else init();
 })();
 
 /* ===== app.js ===== */

@@ -2909,3 +2909,179 @@ html[data-theme="pearl"] .home-page .premium-hero:after{opacity:.14!important}
   .home-page .proof-stars,
   .home-page .hero-proof .avatar-stack span{animation:none!important;transform:none!important}
 }
+
+
+/* ========================================================================
+   CallFocus V15.21 Visual Test — Stretch Dock + Guided CTA + Living Geometry
+   Experimental visual branch. Core product behavior unchanged.
+   ======================================================================== */
+
+/* The credit / create-account dock now opens with a deliberate stretch-fade
+   before settling into its low-cost idle motion. */
+.home-page .credit-dock{
+  transform-origin:right center;
+  animation:
+    cfCreditDockStretchIn .92s cubic-bezier(.18,.82,.24,1) both,
+    cfCreditPanelKinetic 7.4s ease-in-out 1.02s infinite!important;
+}
+.home-page .credit-dock-icon{
+  animation:cfDockIconSettle .9s cubic-bezier(.2,.78,.2,1) .08s both;
+}
+.home-page .credit-dock-copy{
+  animation:cfDockCopySettle .86s cubic-bezier(.2,.78,.2,1) .18s both;
+}
+.home-page .credit-dock-action{
+  animation:
+    cfDockActionSettle .82s cubic-bezier(.2,.78,.2,1) .28s both,
+    cfSmallButtonKinetic 5.4s ease-in-out 1.3s infinite!important;
+}
+
+/* A one-time cursor cue lands on Start a new call, gives the button a quick
+   mark/tap, then disappears. It is decorative only and never triggers a click. */
+.home-page .hero-primary{overflow:hidden!important}
+.cf-hero-cursor-cue{
+  position:absolute;
+  z-index:5;
+  right:16%;
+  top:50%;
+  width:22px;
+  height:26px;
+  pointer-events:none;
+  opacity:0;
+  transform:translate3d(34px,-34px,0) rotate(-8deg) scale(.82);
+  transform-origin:4px 3px;
+}
+.cf-hero-cursor-cue:before{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:#fff;
+  clip-path:polygon(4% 0,4% 88%,29% 67%,46% 100%,61% 92%,44% 61%,77% 61%);
+  filter:drop-shadow(0 2px 2px rgba(9,44,39,.22));
+}
+.cf-hero-cursor-cue:after{
+  content:"";
+  position:absolute;
+  left:-12px;
+  top:-11px;
+  width:40px;
+  height:40px;
+  border-radius:50%;
+  border:2px solid rgba(255,255,255,.82);
+  opacity:0;
+  transform:scale(.35);
+}
+.home-page .hero-primary.cf-cursor-guide .cf-hero-cursor-cue{
+  animation:cfHeroCursorGuide 2.35s cubic-bezier(.22,.74,.2,1) .12s both;
+}
+.home-page .hero-primary.cf-cursor-guide .cf-hero-cursor-cue:after{
+  animation:cfHeroCursorMark 2.35s ease-out .12s both;
+}
+.home-page .hero-primary.cf-cursor-guide{
+  animation:
+    cfPrimaryKinetic 4.9s cubic-bezier(.4,0,.2,1) infinite,
+    cfHeroButtonMarked 2.35s ease-out .12s 1!important;
+}
+
+/* Keep the Pearl geometry alive indefinitely without reintroducing glow-heavy
+   effects. These are transform-only, long-duration compositor animations. */
+.home-page .hero-architecture span{will-change:transform,opacity}
+.home-page .hero-architecture span:nth-child(1){animation:cfLivingRingOne 22s ease-in-out infinite alternate!important}
+.home-page .hero-architecture span:nth-child(2){animation:cfLivingRingTwo 27s ease-in-out -5s infinite alternate!important}
+.home-page .hero-architecture span:nth-child(3){animation:cfLivingRingThree 18s ease-in-out -3s infinite alternate!important}
+.home-page .hero-architecture span:nth-child(4){animation:cfLivingRingFour 14s ease-in-out -7s infinite alternate!important}
+.home-page .cf-hero-grid{
+  animation:cfLivingGrid 34s linear infinite!important;
+  will-change:transform;
+}
+
+@keyframes cfCreditDockStretchIn{
+  0%{opacity:0;transform:translate3d(22px,-8px,0) scaleX(.64) scaleY(.84)}
+  48%{opacity:1;transform:translate3d(-3px,1px,0) scaleX(1.055) scaleY(.965)}
+  72%{transform:translate3d(1px,0,0) scaleX(.985) scaleY(1.018)}
+  100%{opacity:1;transform:translate3d(0,0,0) scale(1)}
+}
+@keyframes cfDockIconSettle{
+  0%{opacity:0;transform:translate3d(10px,0,0) scale(.72) rotate(-8deg)}
+  65%{opacity:1;transform:translate3d(-1px,0,0) scale(1.04) rotate(2deg)}
+  100%{opacity:1;transform:none}
+}
+@keyframes cfDockCopySettle{
+  0%{opacity:0;transform:translate3d(14px,0,0)}
+  100%{opacity:1;transform:none}
+}
+@keyframes cfDockActionSettle{
+  0%{opacity:0;transform:scaleX(.78) translate3d(12px,0,0)}
+  70%{opacity:1;transform:scaleX(1.025) translate3d(-1px,0,0)}
+  100%{opacity:1;transform:none}
+}
+@keyframes cfHeroCursorGuide{
+  0%,8%{opacity:0;transform:translate3d(34px,-34px,0) rotate(-8deg) scale(.82)}
+  24%{opacity:1}
+  52%{opacity:1;transform:translate3d(2px,-2px,0) rotate(-4deg) scale(1)}
+  61%{opacity:1;transform:translate3d(1px,1px,0) rotate(-3deg) scale(.88)}
+  70%{opacity:1;transform:translate3d(0,0,0) rotate(-3deg) scale(1)}
+  84%{opacity:.9;transform:translate3d(-2px,2px,0) rotate(-2deg) scale(1)}
+  100%{opacity:0;transform:translate3d(-8px,6px,0) rotate(-1deg) scale(.92)}
+}
+@keyframes cfHeroCursorMark{
+  0%,48%{opacity:0;transform:scale(.35)}
+  58%{opacity:.92;transform:scale(.58)}
+  76%{opacity:.36;transform:scale(1.15)}
+  100%{opacity:0;transform:scale(1.45)}
+}
+@keyframes cfHeroButtonMarked{
+  0%,48%,100%{box-shadow:0 14px 34px rgba(20,92,79,.14)}
+  60%{box-shadow:0 14px 34px rgba(20,92,79,.14),0 0 0 3px rgba(255,255,255,.62),0 0 0 6px rgba(62,151,134,.18)}
+  76%{box-shadow:0 14px 34px rgba(20,92,79,.14),0 0 0 1px rgba(255,255,255,.2),0 0 0 3px rgba(62,151,134,.08)}
+}
+@keyframes cfLivingRingOne{
+  0%{transform:translate3d(0,0,0) scale(.985);opacity:.72}
+  100%{transform:translate3d(-18px,13px,0) scale(1.035);opacity:.92}
+}
+@keyframes cfLivingRingTwo{
+  0%{transform:translate3d(0,0,0) rotate(0deg);opacity:.68}
+  100%{transform:translate3d(14px,-10px,0) rotate(5deg);opacity:.9}
+}
+@keyframes cfLivingRingThree{
+  0%{transform:translate3d(0,0,0) scale(.96);opacity:.62}
+  100%{transform:translate3d(-10px,-8px,0) scale(1.05);opacity:.88}
+}
+@keyframes cfLivingRingFour{
+  0%{transform:translate3d(0,0,0) scale(.92);opacity:.55}
+  100%{transform:translate3d(8px,10px,0) scale(1.08);opacity:.84}
+}
+@keyframes cfLivingGrid{
+  0%{transform:translate3d(0,0,0)}
+  50%{transform:translate3d(10px,7px,0)}
+  100%{transform:translate3d(0,0,0)}
+}
+
+@media(max-width:760px){
+  /* V15.20 deliberately froze the geometry on phones. V15.21 brings it back
+     with slower transform-only motion so the page stays alive without lag. */
+  .home-page .hero-architecture{opacity:.46!important}
+  .home-page .hero-architecture span:nth-child(1){animation-duration:26s!important}
+  .home-page .hero-architecture span:nth-child(2){animation-duration:31s!important}
+  .home-page .hero-architecture span:nth-child(3){animation-duration:22s!important}
+  .home-page .hero-architecture span:nth-child(4){animation-duration:18s!important}
+  .home-page .cf-hero-grid{animation-duration:42s!important;opacity:.13!important}
+  .cf-hero-cursor-cue{right:13%;width:20px;height:24px}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .home-page .credit-dock,
+  .home-page .credit-dock-icon,
+  .home-page .credit-dock-copy,
+  .home-page .credit-dock-action,
+  .home-page .hero-architecture span,
+  .home-page .cf-hero-grid,
+  .home-page .hero-primary.cf-cursor-guide,
+  .home-page .hero-primary.cf-cursor-guide .cf-hero-cursor-cue,
+  .home-page .hero-primary.cf-cursor-guide .cf-hero-cursor-cue:after{
+    animation:none!important;
+    opacity:1;
+    transform:none;
+  }
+  .cf-hero-cursor-cue{display:none!important}
+}
