@@ -1707,6 +1707,70 @@ async function handleAdminUserAction(request, env) {
   return json({ ok: true, action, user: adminUserSummary(refreshedUser, refreshedData, unlimitedEmails), unlimitedCreditEmails: unlimitedEmails });
 }
 
+
+async function handleAdminGiftAll(request, env) {
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.list !== 'function' || typeof env.CALLFOCUS_CONFIG.put !== 'function') return json({ error: 'Global account storage is not connected.' }, 503);
+  let body = {};
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  let credits = Number(body?.credits);
+  if (!Number.isFinite(credits) || credits <= 0) return json({ error: 'Enter a credit amount greater than zero.' }, 400);
+  credits = Math.round(credits * 10) / 10;
+  const secondsAdded = callFocusSecondsForCredits(credits);
+  if (!Number.isFinite(secondsAdded) || !Number.isSafeInteger(secondsAdded) || secondsAdded <= 0) return json({ error: 'That credit amount cannot be safely added.' }, 400);
+  const requestId = String(body?.requestId || '').trim().replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 100);
+  if (requestId.length < 8) return json({ error: 'Gift request identifier is missing.' }, 400);
+  const template = cleanCustomerNoticeText(body?.message || 'You received {amount} credits courtesy of Baron.', 360) || 'You received {amount} credits courtesy of Baron.';
+  const amountText = credits.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  const ledgerId = `admin-gift-all:${requestId}`;
+  const noticeId = `admin-gift-all-notice:${requestId}`;
+  const now = new Date().toISOString();
+  let cursor = '';
+  let scanned = 0;
+  let credited = 0;
+  let duplicates = 0;
+  let failed = 0;
+  do {
+    let page;
+    try { page = await env.CALLFOCUS_CONFIG.list({ prefix: 'customer:user:', limit: 1000, ...(cursor ? { cursor } : {}) }); }
+    catch (error) { return json({ error: 'Could not list all customer accounts.', detail: String(error?.message || '').slice(0, 180), scanned, credited, duplicates, failed }, 500); }
+    const entries = Array.isArray(page?.keys) ? page.keys : [];
+    for (let start = 0; start < entries.length; start += 20) {
+      const batch = entries.slice(start, start + 20);
+      const results = await Promise.all(batch.map(async entry => {
+        try {
+          const user = await env.CALLFOCUS_CONFIG.get(entry.name, { type: 'json' });
+          if (!user?.id) return { skipped: true };
+          const data = await getCustomerDataForUpdate(env, user.id, user.name);
+          const wallet = normalizeServerWallet(data.wallet);
+          const alreadyApplied = wallet.usage.some(row => String(row?.id || '') === ledgerId);
+          if (!alreadyApplied) {
+            wallet.balanceSeconds = Math.max(0, Math.floor(Number(wallet.balanceSeconds) || 0)) + secondsAdded;
+            wallet.revision = Math.max(0, Number(wallet.revision) || 0) + 1;
+            wallet.usage.unshift({ id: ledgerId, type: 'admin_bulk_credit_gift', credits, seconds: secondsAdded, createdAt: now, note: 'Bulk credits gifted by CallFocus admin' });
+            wallet.usage = wallet.usage.slice(0, 250);
+            data.wallet = wallet;
+            await env.CALLFOCUS_CONFIG.put(customerDataKey(user.id), JSON.stringify(data));
+          }
+          const customerName = String(user.name || 'there').trim().slice(0, 120) || 'there';
+          const message = template.replace(/\{amount\}/gi, amountText).replace(/\{customer\}|\{name\}/gi, customerName).slice(0, 360);
+          await appendCustomerNotification(env, user.id, { id: noticeId, type: 'admin_bulk_credit', title: 'Credits added', message, credits, createdAt: now });
+          return { duplicate: alreadyApplied };
+        } catch { return { failed: true }; }
+      }));
+      for (const result of results) {
+        scanned++;
+        if (result?.failed) failed++;
+        else if (result?.duplicate) duplicates++;
+        else if (!result?.skipped) credited++;
+      }
+    }
+    cursor = page?.list_complete ? '' : String(page?.cursor || '');
+  } while (cursor);
+  return json({ ok: true, credits, scanned, credited, duplicates, failed, requestId });
+}
+
 async function handleAdminConfig(request, env) {
   if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method === 'GET') {
@@ -4256,7 +4320,7 @@ export default {
     if (url.pathname === '/api/manual-payment/cancel') return safeCustomerRoute('manual-payment-cancel', () => handleManualPaymentCancel(request, env));
     if (url.pathname === '/api/manual-payment/status') return safeCustomerRoute('manual-payment-status', () => handleManualPaymentStatus(request, env));
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.31-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.32-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -4271,6 +4335,7 @@ export default {
     if (url.pathname === '/api/admin/billed-costs') return handleAdminBilledCosts(request, env);
     if (url.pathname === '/api/call-usage') return safeCustomerRoute('call-usage', () => handleCallUsage(request, env));
     if (url.pathname === '/api/admin/user-action') return handleAdminUserAction(request, env);
+    if (url.pathname === '/api/admin/gift-all') return handleAdminGiftAll(request, env);
     if (url.pathname === '/api/admin/manual-payments') return handleAdminManualPayments(request, env);
     if (url.pathname === '/api/admin/manual-payment-action') return handleAdminManualPaymentAction(request, env);
     if (url.pathname === '/api/admin/manual-payment-receipt') return handleAdminManualPaymentReceipt(request, env);
@@ -4294,10 +4359,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.31-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.32-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.31-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.31-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.32-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.32-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -4307,16 +4372,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.31-test');
+      headers.set('X-CallFocus-Admin-Build', '15.32-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.31-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.32-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.31-test');
+      headers.set('X-CallFocus-Admin-Build', '15.32-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {

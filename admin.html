@@ -10,13 +10,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=15.31-test" />
+  <link rel="stylesheet" href="/admin.css?v=15.32-test" />
 </head>
 <body class="admin-page">
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="/admin">
-        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.31-test" alt="CallFocus" /></span>
+        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.32-test" alt="CallFocus" /></span>
         <span class="brand-copy"><strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong><small>Private system control</small></span>
       </a>
       <div class="header-actions"><a class="btn btn-ghost admin-back-link" href="/">Customer site</a></div>
@@ -87,8 +87,19 @@
         <div class="admin-section-heading"><span class="kicker">Customer management</span><h2>All CallFocus users</h2><p>Review every customer, balance, Paystack funding and account access.</p></div>
         <div class="premium-panel admin-users-panel">
           <div class="admin-users-heading">
-            <div><h3>Customer accounts</h3><p class="admin-panel-copy">Add custom credits with a customer notification, disable or restore access, control unlimited access, remove a balance, or permanently delete a customer account.</p></div>
-            <button class="btn btn-ghost" type="button" id="adminUsersRefreshBtn">Refresh users</button>
+            <div><h3>Customer accounts</h3><p class="admin-panel-copy">Add custom credits with a customer notification, disable or restore access, control unlimited access, remove a balance, permanently delete an account, or gift every customer at once.</p></div>
+            <div class="admin-users-heading-actions">
+              <button class="btn btn-ghost" type="button" id="adminGiftAllToggleBtn">Gift all customers</button>
+              <button class="btn btn-ghost" type="button" id="adminUsersRefreshBtn">Refresh users</button>
+            </div>
+          </div>
+          <div class="admin-bulk-gift hidden" id="adminBulkGiftPanel">
+            <div class="admin-bulk-gift-head"><div><strong>Gift every customer</strong><small>This affects every existing CallFocus customer account, not only the users currently loaded or shown by search.</small></div><button class="btn btn-ghost" type="button" id="adminBulkGiftCloseBtn">Close</button></div>
+            <div class="admin-bulk-gift-grid">
+              <label>Credits per customer<input id="adminBulkGiftAmount" type="number" min="0.1" step="0.1" inputmode="decimal" value="100" placeholder="100" /></label>
+              <label>Notification message<textarea id="adminBulkGiftMessage" rows="3" maxlength="360">You received {amount} credits courtesy of Baron.</textarea><small>Use {amount} for the credit amount and {name} for each customer's name.</small></label>
+            </div>
+            <button class="btn btn-primary" type="button" id="adminBulkGiftSubmitBtn">Gift every customer</button>
           </div>
           <div class="admin-users-tools">
             <label class="admin-users-search">Search users<input id="adminUsersSearch" type="search" autocomplete="off" placeholder="Name, email or phone" /></label>
@@ -293,6 +304,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=15.31-test"></script>
+  <script src="/admin.js?v=15.32-test"></script>
 </body>
 </html>

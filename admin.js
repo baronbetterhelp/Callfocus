@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.31-test';
+const ADMIN_BUILD_VERSION='15.32-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -418,6 +418,38 @@ async function runAdminAddBalance(card,button){
     toast(`${Number(result.creditsAdded||credits).toLocaleString(undefined,{maximumFractionDigits:1})} credits added · notification queued`);
   }catch(err){toast(err.message);button.disabled=false;button.textContent=old;}
 }
+
+function toggleAdminBulkGift(open){
+  const panel=$('adminBulkGiftPanel');const toggle=$('adminGiftAllToggleBtn');if(!panel)return;
+  const shouldOpen=typeof open==='boolean'?open:panel.classList.contains('hidden');
+  panel.classList.toggle('hidden',!shouldOpen);
+  if(toggle)toggle.textContent=shouldOpen?'Close gift all':'Gift all customers';
+  if(shouldOpen)$('adminBulkGiftAmount')?.focus();
+}
+async function runAdminGiftAll(){
+  const amountInput=$('adminBulkGiftAmount'),messageInput=$('adminBulkGiftMessage'),button=$('adminBulkGiftSubmitBtn');
+  const credits=Number(amountInput?.value);
+  if(!Number.isFinite(credits)||credits<=0)return toast('Enter the number of credits to gift each customer');
+  const message=String(messageInput?.value||'').trim();
+  const amountText=credits.toLocaleString(undefined,{maximumFractionDigits:1});
+  if(!confirm(`Gift ${amountText} credits to every CallFocus customer account?
+
+This affects all existing customers, including customers not currently loaded on this page. Each customer will receive the notification message shown here.`))return;
+  const old=button?.textContent;if(button){button.disabled=true;button.textContent='Gifting customers…';}
+  const requestId=(globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^a-zA-Z0-9_-]/g,'').slice(0,100);
+  try{
+    const result=await api('/api/admin/gift-all',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({credits,message,requestId})});
+    const credited=Number(result.credited||0),duplicates=Number(result.duplicates||0),failed=Number(result.failed||0);
+    const parts=[`${credited} customer${credited===1?'':'s'} gifted`];if(duplicates)parts.push(`${duplicates} already applied`);if(failed)parts.push(`${failed} failed`);
+    toast(parts.join(' · '));
+    await loadAdminUsers(true);
+  }catch(err){toast(err.message||'Could not gift all customers');}
+  finally{if(button){button.disabled=false;button.textContent=old||'Gift every customer';}}
+}
+$('adminGiftAllToggleBtn')?.addEventListener('click',()=>toggleAdminBulkGift());
+$('adminBulkGiftCloseBtn')?.addEventListener('click',()=>toggleAdminBulkGift(false));
+$('adminBulkGiftSubmitBtn')?.addEventListener('click',runAdminGiftAll);
+
 $('adminUsersRefreshBtn')?.addEventListener('click',()=>loadAdminUsers(true));
 $('adminUsersMoreBtn')?.addEventListener('click',()=>loadAdminUsers(false));
 $('adminUsersSearch')?.addEventListener('input',renderAdminUsers);

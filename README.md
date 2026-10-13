@@ -1,1 +1,1 @@
-CallFocus V15.31 Visual Test — Admin Customer Controls & Credit Notifications
+CallFocus V15.32 Visual Test — Swipe Notifications, Gift All & Compact Customer Cards
