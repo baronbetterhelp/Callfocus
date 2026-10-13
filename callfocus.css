@@ -3283,96 +3283,116 @@ html.cf-scroll-active .cf-help-bubble-ring{filter:none!important}
   }
 }
 
-/* ========================================================================
-   V15.27 — Home dark showcase alignment
-   Make the conversation stage section match the darker premium story cards,
-   and keep the home header in the same darker visual family.
-   ======================================================================== */
-html[data-theme="pearl"] .site-header{
-  background:rgba(8,10,10,.86);
-  border-bottom-color:rgba(133,188,176,.10);
-  box-shadow:0 14px 40px rgba(0,0,0,.26);
-  backdrop-filter:blur(24px) saturate(120%);
-  -webkit-backdrop-filter:blur(24px) saturate(120%);
-}
-html[data-theme="pearl"] .brand-wordmark span:first-child{color:#f4f7f6}
-html[data-theme="pearl"] .brand-focus{color:#62db43!important}
-html[data-theme="pearl"] .brand-copy small{color:#94a19d}
-html[data-theme="pearl"] .nav-anchor{color:#aeb8b5}
-html[data-theme="pearl"] .nav-anchor:hover,
-html[data-theme="pearl"] .nav-anchor.active{color:#fff}
-html[data-theme="pearl"] .header-signin{color:#e8ecea}
-html[data-theme="pearl"] .header-account-trigger,
-html[data-theme="pearl"] .icon-btn{background:#131818;border-color:rgba(255,255,255,.10);color:#f3f5f4}
-html[data-theme="pearl"] .header-account-avatar{background:#202826;border-color:rgba(255,255,255,.08);color:#f3f5f4}
-html[data-theme="pearl"] .header-account-dropdown{background:#101514;border-color:#27302e}
-html[data-theme="pearl"] .account-dropdown-profile{border-bottom-color:#232c2a}
-html[data-theme="pearl"] .header-account-dropdown button{color:#e3e8e5}
-html[data-theme="pearl"] .header-account-dropdown button:hover{background:#171f1d;color:#fff}
-html[data-theme="pearl"] .mobile-menu-wrap{background:rgba(0,0,0,.64)}
-html[data-theme="pearl"] .mobile-menu,
-html[data-theme="pearl"] .mobile-account-block,
-html[data-theme="pearl"] .mobile-recent-shell{background:#111514;border-color:#232b29;color:#eef2f0}
-html[data-theme="pearl"] .mobile-menu-main>button{color:#eef2f0;border-color:#232b29}
-html[data-theme="pearl"] .mobile-menu-main small,
-html[data-theme="pearl"] .mobile-recent-head small,
-html[data-theme="pearl"] .mobile-account-profile small{color:#818b88}
-html[data-theme="pearl"] .mobile-recent-item{color:#eef2f0;border-color:#1f2624}
-html[data-theme="pearl"] .mobile-recent-item:hover{background:#171d1c}
-html[data-theme="pearl"] .mobile-recent-avatar,
-html[data-theme="pearl"] .mobile-account-avatar{background:#1b2120;border-color:#2c3633;color:#eef2f0}
 
-html[data-theme="pearl"] .cf-stage-section{
-  background:linear-gradient(180deg,#090a0a 0%,#0b0f0e 45%,#090c0c 100%);
-  border-top-color:#191f1e;
-  border-bottom-color:#191f1e;
-  color:#fff;
+/* ========================================================================
+   CallFocus V15.27 Visual Test — Unified Dark Theme
+   Dark-theme header and cinematic sections now share one coherent charcoal
+   surface language. Pearl/light styling remains isolated and unchanged.
+   ======================================================================== */
+
+/* Dark header: override the older phone rule that forced a white header. */
+html:not([data-theme="pearl"]) .site-header{
+  background:#090b0b!important;
+  border-bottom-color:#1e2825!important;
+  box-shadow:0 10px 32px rgba(0,0,0,.22)!important;
+  color:#f5f7f6!important;
 }
-html[data-theme="pearl"] .cf-stage-section:before{
-  opacity:.18;
-  background-image:radial-gradient(rgba(188,230,220,.10) .8px,transparent .8px);
-  background-size:26px 26px;
-  mask-image:linear-gradient(90deg,#000,transparent 82%);
+html:not([data-theme="pearl"]) .site-header .brand-wordmark span:first-child{
+  color:#f6f8f7!important;
 }
-html[data-theme="pearl"] .cf-stage-light-a{background:rgba(56,160,140,.12)}
-html[data-theme="pearl"] .cf-stage-light-b{background:rgba(199,163,107,.08)}
-html[data-theme="pearl"] .cf-stage-copy h2{color:#f2f5f4}
-html[data-theme="pearl"] .cf-stage-copy p{color:#8b9693}
-html[data-theme="pearl"] .cf-stage-section .section-eyebrow{color:#64a99b}
-html[data-theme="pearl"] .cf-stage-tags span{
-  border-color:#2b3432;
-  background:rgba(255,255,255,.03);
-  color:#9ecbbf;
-  box-shadow:0 12px 28px rgba(0,0,0,.12);
+html:not([data-theme="pearl"]) .site-header .brand-focus{
+  color:#69d54b!important;
 }
-html[data-theme="pearl"] .cf-conversation-stage{
-  border-color:#262d2a;
-  background:radial-gradient(circle at 50% 45%,rgba(73,166,146,.12),transparent 30%),linear-gradient(150deg,rgba(19,23,22,.98),rgba(10,12,12,.98));
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 34px 80px rgba(0,0,0,.24);
+html:not([data-theme="pearl"]) .site-header .brand-copy small{
+  color:#94a19e!important;
 }
-html[data-theme="pearl"] .cf-stage-gridlines{
-  background-image:linear-gradient(rgba(185,229,220,.038) 1px,transparent 1px),linear-gradient(90deg,rgba(185,229,220,.038) 1px,transparent 1px);
+html:not([data-theme="pearl"]) .site-header .brand-logo-image{
+  filter:none!important;
+  opacity:1!important;
 }
-html[data-theme="pearl"] .cf-stage-ring{border-color:rgba(124,196,181,.12)}
-html[data-theme="pearl"] .cf-stage-center{
-  background:radial-gradient(circle at 35% 25%,#2f8f7d,#123e35 63%,#0a2d27);
-  border-color:rgba(153,224,208,.26);
-  box-shadow:0 0 0 14px rgba(68,156,139,.05),0 25px 70px rgba(0,0,0,.34);
+html:not([data-theme="pearl"]) .site-header .mobile-menu-btn,
+html:not([data-theme="pearl"]) .site-header .icon-btn{
+  background:#151918!important;
+  border-color:#2b3532!important;
+  color:#f5f7f6!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 8px 22px rgba(0,0,0,.18)!important;
 }
-html[data-theme="pearl"] .cf-stage-center strong{color:#f3f6f5}
-html[data-theme="pearl"] .cf-stage-status{color:#a9d9ce}
-html[data-theme="pearl"] .cf-mini-wave i{background:#8dd8c8}
-html[data-theme="pearl"] .cf-stage-person span{
-  background:rgba(9,38,33,.88);
-  border-color:rgba(155,217,205,.18);
-  color:#f3f6f5;
-  box-shadow:0 18px 42px rgba(0,0,0,.24);
+html:not([data-theme="pearl"]) .site-header .mobile-menu-btn:hover,
+html:not([data-theme="pearl"]) .site-header .icon-btn:hover{
+  background:#1b211f!important;
+  border-color:#3b4945!important;
 }
-html[data-theme="pearl"] .cf-stage-person small{color:#8fb7ae}
-html[data-theme="pearl"] .cf-stage-note{
-  border-color:rgba(173,222,212,.12);
-  background:rgba(7,29,25,.72);
-  box-shadow:0 15px 38px rgba(0,0,0,.16);
+
+/* Match the green-heavy cinematic stage to the charcoal story-card theme. */
+html:not([data-theme="pearl"]) .cf-stage-section{
+  background:linear-gradient(180deg,#0b0e0d 0%,#090b0b 48%,#080a0a 100%)!important;
+  border-top-color:#202925!important;
+  border-bottom-color:#202925!important;
+  color:#f3f6f5!important;
 }
-html[data-theme="pearl"] .cf-stage-note small{color:#6e9d93}
-html[data-theme="pearl"] .cf-stage-note strong{color:#d5e8e4}
+html:not([data-theme="pearl"]) .cf-stage-section:before{
+  opacity:.22!important;
+  background-image:radial-gradient(rgba(121,176,164,.10) .72px,transparent .72px)!important;
+}
+html:not([data-theme="pearl"]) .cf-stage-light-a{
+  background:rgba(38,112,98,.11)!important;
+}
+html:not([data-theme="pearl"]) .cf-stage-light-b{
+  background:rgba(166,127,70,.055)!important;
+}
+html:not([data-theme="pearl"]) .cf-stage-copy h2{
+  color:#f4f6f5!important;
+}
+html:not([data-theme="pearl"]) .cf-stage-copy p{
+  color:#8f9b98!important;
+}
+html:not([data-theme="pearl"]) .cf-stage-section .section-eyebrow{
+  color:#67b6a5!important;
+}
+html:not([data-theme="pearl"]) .cf-stage-tags span{
+  border-color:#2b3a36!important;
+  background:#121716!important;
+  color:#a9c5be!important;
+}
+html:not([data-theme="pearl"]) .cf-conversation-stage{
+  border-color:#2a3733!important;
+  background:
+    radial-gradient(circle at 50% 46%,rgba(49,135,118,.12),transparent 31%),
+    linear-gradient(150deg,#111514 0%,#0b0e0d 62%,#090b0b 100%)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035),0 28px 64px rgba(0,0,0,.30)!important;
+}
+html:not([data-theme="pearl"]) .cf-stage-gridlines{
+  opacity:.40!important;
+}
+html:not([data-theme="pearl"]) .cf-stage-ring{
+  border-color:rgba(103,170,156,.16)!important;
+}
+html:not([data-theme="pearl"]) .cf-stage-center{
+  background:radial-gradient(circle at 35% 30%,#2f8d7b,#175248 68%,#0e342e)!important;
+  border-color:rgba(116,199,182,.28)!important;
+  box-shadow:0 0 0 14px rgba(55,137,121,.055),0 20px 50px rgba(0,0,0,.32)!important;
+}
+html:not([data-theme="pearl"]) .cf-stage-person span{
+  background:#111615!important;
+  border-color:#2e403b!important;
+  color:#f4f6f5!important;
+}
+html:not([data-theme="pearl"]) .cf-stage-person small{
+  color:#8fa49e!important;
+}
+html:not([data-theme="pearl"]) .cf-stage-note{
+  background:#111615!important;
+  border-color:#293733!important;
+  box-shadow:0 12px 30px rgba(0,0,0,.22)!important;
+}
+
+@media(max-width:700px){
+  html:not([data-theme="pearl"]) .site-header{
+    background:#090b0b!important;
+    backdrop-filter:none!important;
+    -webkit-backdrop-filter:none!important;
+  }
+  html:not([data-theme="pearl"]) .cf-stage-section{
+    background:linear-gradient(180deg,#0b0e0d 0%,#090b0b 58%,#080a0a 100%)!important;
+  }
+}
