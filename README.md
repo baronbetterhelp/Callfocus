@@ -1,5 +1,7 @@
 # CallFocus
 
-Latest build: **V15.16 — Custom Promo Logo Rotation**.
+Experimental visual build: **V15.17 Visual Test — Long-Form Motion & Premium Home Experience**.
 
-Built directly on V15.15. See `README-V15.16.md` for the floating-button logo rotation refinement.
+This test build is based directly on **V15.16 — Custom Promo Logo Rotation**. V15.16 remains the latest approved stable base until this visual test is accepted.
+
+See `README-V15.17-TEST.md` for the presentation-only changes.

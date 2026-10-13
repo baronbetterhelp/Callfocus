@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.16';
+  const BUILD='15.17-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -217,6 +217,37 @@ function motionInit(){
   let ticking=false;
   const syncParallax=()=>{ if(ticking)return; ticking=true; requestAnimationFrame(()=>{ const y=Math.min(window.scrollY||0,900), mobile=innerWidth<=620; page.style.setProperty('--cf-bg-shift',`${Math.round(y*(mobile?.018:.035))}px`); page.style.setProperty('--cf-copy-shift',`${Math.round(y*(mobile?-.006:-.012))}px`); page.style.setProperty('--cf-geo-shift',`${Math.round(y*(mobile?.012:.022))}px`); ticking=false; }); };
   syncParallax(); window.addEventListener('scroll',syncParallax,{passive:true});
+}
+
+
+function visualTestMotionInit(){
+  const reduce=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const fine=window.matchMedia?.('(pointer:fine)').matches;
+  if(reduce || !fine) return;
+  qsa('[data-tilt]').forEach(card=>{
+    let frame=0;
+    const reset=()=>{
+      cancelAnimationFrame(frame);
+      card.style.transform='';
+      card.style.removeProperty('--shine-x');
+      card.style.removeProperty('--shine-y');
+    };
+    card.addEventListener('pointermove',event=>{
+      const r=card.getBoundingClientRect();
+      const x=Math.max(0,Math.min(1,(event.clientX-r.left)/Math.max(1,r.width)));
+      const y=Math.max(0,Math.min(1,(event.clientY-r.top)/Math.max(1,r.height)));
+      cancelAnimationFrame(frame);
+      frame=requestAnimationFrame(()=>{
+        const ry=(x-.5)*5.5;
+        const rx=(.5-y)*4.5;
+        card.style.transform=`perspective(1050px) rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) translateY(-2px)`;
+        card.style.setProperty('--shine-x',`${(x*100).toFixed(1)}%`);
+        card.style.setProperty('--shine-y',`${(y*100).toFixed(1)}%`);
+      });
+    });
+    card.addEventListener('pointerleave',reset);
+    card.addEventListener('pointercancel',reset);
+  });
 }
 
 function openModal(id){ $(id).classList.remove('hidden'); document.body.style.overflow='hidden'; }
@@ -516,7 +547,7 @@ function bind(){
   });
 }
 
-initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminLabels(); refreshPublicConfig(); renderWorkspace(); motionInit(); showView('home',false);
+initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminLabels(); refreshPublicConfig(); renderWorkspace(); motionInit(); visualTestMotionInit(); showView('home',false);
 
 /* V14.6: service worker retired for iOS Safari navigation stability. */
 
@@ -5713,7 +5744,7 @@ ${approvedPatterns}
 })();
 
 
-/* ===== CallFocus V15.16 — Custom promo logos join floating-button rotation ===== */
+/* ===== CallFocus V15.17-test — Custom promo logos join floating-button rotation ===== */
 (()=>{
   const DEFAULTS={
     youtubeEnabled:true,telegramEnabled:true,floatingButtonEnabled:true,appearDelaySeconds:2,autoHideSeconds:8,

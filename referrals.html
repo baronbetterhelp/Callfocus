@@ -16,7 +16,7 @@
     document.documentElement.dataset.theme='pearl';
     document.documentElement.style.colorScheme='light';
     try{history.scrollRestoration='manual';}catch{}
-    window.__CALLFOCUS_BUILD__='14.5';
+    window.__CALLFOCUS_BUILD__='15.17-test';
     (function(){
       const cleanPath=(location.pathname||'/').replace(/\/+$/,'')||'/';
       const topNow=()=>{try{window.scrollTo(0,0);}catch{}};
@@ -28,7 +28,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=15.16" />
+  <link rel="stylesheet" href="/callfocus.css?v=15.17-test" />
 </head>
 <body data-cf-document-view="referrals">
   <div class="app-root home-page" id="pageRoot">
@@ -96,6 +96,9 @@
       <section class="page-view" id="page-home" data-view="home">
         <section class="premium-hero" id="home">
           <div class="hero-media" aria-hidden="true">
+            <div class="cf-hero-aurora cf-hero-aurora-a"></div>
+            <div class="cf-hero-aurora cf-hero-aurora-b"></div>
+            <div class="cf-hero-grid" aria-hidden="true"></div>
             <div class="hero-media-overlay"></div>
             <div class="hero-architecture"><span></span><span></span><span></span><span></span></div>
           </div>
@@ -177,6 +180,121 @@
           </div>
         </section>
 
+
+        <section class="cf-story-section" aria-label="CallFocus conversation flow">
+          <div class="container cf-story-layout">
+            <div class="cf-story-intro reveal-card reveal-left" data-reveal>
+              <span class="section-eyebrow">Continuity, visualized</span>
+              <h2>From context to conversation to the next call.</h2>
+              <p>CallFocus keeps the setup, the live conversation and what comes next connected in one clear flow, so repeat calls feel familiar instead of starting from zero.</p>
+              <div class="cf-story-pills" aria-label="CallFocus flow">
+                <span>Prepare once</span><span>Talk naturally</span><span>Continue later</span>
+              </div>
+            </div>
+
+            <div class="cf-story-stack">
+              <article class="cf-story-card cf-story-card-context reveal-card reveal-right" data-reveal data-tilt>
+                <div class="cf-story-card-copy">
+                  <span class="cf-story-number">01</span>
+                  <div><small>Context in</small><h3>Everything important, organized before the call.</h3><p>About you, about the caller, conversation dynamics and what today is about stay separated but connected.</p></div>
+                </div>
+                <div class="cf-context-visual" aria-hidden="true">
+                  <div class="cf-context-core"><span>CF</span><small>Call context</small></div>
+                  <span class="cf-context-orbit orbit-1"></span><span class="cf-context-orbit orbit-2"></span>
+                  <div class="cf-context-chip chip-a"><i></i>About you</div>
+                  <div class="cf-context-chip chip-b"><i></i>About caller</div>
+                  <div class="cf-context-chip chip-c"><i></i>Dynamics</div>
+                  <div class="cf-context-chip chip-d"><i></i>Today</div>
+                </div>
+              </article>
+
+              <article class="cf-story-card cf-story-card-live reveal-card reveal-right" data-reveal data-tilt style="--delay:90ms">
+                <div class="cf-story-card-copy">
+                  <span class="cf-story-number">02</span>
+                  <div><small>Conversation live</small><h3>A calmer interface while the conversation moves.</h3><p>Voice, listening, pacing and call controls stay focused on the moment instead of turning the call into a dashboard.</p></div>
+                </div>
+                <div class="cf-live-visual" aria-hidden="true">
+                  <div class="cf-live-top"><span class="cf-live-dot"></span><strong>Live conversation</strong><small>connected</small></div>
+                  <div class="cf-wave-row">
+                    <span style="--h:24%"></span><span style="--h:52%"></span><span style="--h:78%"></span><span style="--h:42%"></span><span style="--h:90%"></span><span style="--h:62%"></span><span style="--h:34%"></span><span style="--h:72%"></span><span style="--h:96%"></span><span style="--h:54%"></span><span style="--h:38%"></span><span style="--h:82%"></span><span style="--h:47%"></span><span style="--h:68%"></span><span style="--h:30%"></span><span style="--h:74%"></span><span style="--h:58%"></span><span style="--h:88%"></span>
+                  </div>
+                  <div class="cf-live-caption"><span>Listen</span><b></b><span>Respond</span><b></b><span>Remember</span></div>
+                </div>
+              </article>
+
+              <article class="cf-story-card cf-story-card-memory reveal-card reveal-right" data-reveal data-tilt style="--delay:180ms">
+                <div class="cf-story-card-copy">
+                  <span class="cf-story-number">03</span>
+                  <div><small>Memory forward</small><h3>The next call already knows where the last one ended.</h3><p>Open the thread, add only what is new today and keep the familiar caller context ready for another conversation.</p></div>
+                </div>
+                <div class="cf-memory-visual" aria-hidden="true">
+                  <div class="cf-memory-line"></div>
+                  <div class="cf-memory-item active"><span>Now</span><div><strong>Today’s call</strong><small>New topic added</small></div></div>
+                  <div class="cf-memory-item"><span>1</span><div><strong>Previous call</strong><small>Context retained</small></div></div>
+                  <div class="cf-memory-item"><span>2</span><div><strong>Caller profile</strong><small>Reusable information</small></div></div>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="cf-stage-section">
+          <div class="cf-stage-light cf-stage-light-a" aria-hidden="true"></div>
+          <div class="cf-stage-light cf-stage-light-b" aria-hidden="true"></div>
+          <div class="container cf-stage-layout">
+            <div class="cf-stage-copy reveal-card reveal-left" data-reveal>
+              <span class="section-eyebrow">Built around human rhythm</span>
+              <h2>Less interface. More room for the conversation.</h2>
+              <p>The most important information stays close enough to guide the call, while the live experience stays quiet, responsive and focused on the person speaking.</p>
+              <div class="cf-stage-tags"><span>Natural pacing</span><span>Context aware</span><span>Repeat-call continuity</span></div>
+            </div>
+            <div class="cf-conversation-stage reveal-card reveal-scale" data-reveal data-tilt>
+              <div class="cf-stage-gridlines" aria-hidden="true"></div>
+              <div class="cf-stage-ring ring-a"></div><div class="cf-stage-ring ring-b"></div>
+              <div class="cf-stage-person person-a"><span>A</span><small>You</small></div>
+              <div class="cf-stage-person person-b"><span>C</span><small>Caller</small></div>
+              <div class="cf-stage-center">
+                <span class="cf-stage-status"><i></i> conversation active</span>
+                <strong>CallFocus</strong>
+                <div class="cf-mini-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              </div>
+              <div class="cf-stage-note note-a"><small>Context</small><strong>Ready before the call</strong></div>
+              <div class="cf-stage-note note-b"><small>Continuity</small><strong>Saved for next time</strong></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="cf-bento-section">
+          <div class="container">
+            <div class="premium-section-head cf-bento-head reveal-card" data-reveal>
+              <div><span class="section-eyebrow">A workspace around the call</span><h2>Useful detail, without visual clutter.</h2></div>
+              <p>CallFocus keeps the pieces that matter before, during and after a conversation in one consistent workspace.</p>
+            </div>
+            <div class="cf-bento-grid">
+              <article class="cf-bento-card cf-bento-wide reveal-card reveal-scale" data-reveal data-tilt>
+                <div class="cf-bento-copy"><span>Conversation memory</span><h3>Keep a thread alive across repeat calls.</h3><p>Saved information and recent-call context stay organized around the person instead of being rebuilt every time.</p></div>
+                <div class="cf-stack-visual" aria-hidden="true"><span class="stack-3"></span><span class="stack-2"></span><span class="stack-1"><i>Recent call</i><b>Continue from here</b><small>Context ready</small></span></div>
+              </article>
+              <article class="cf-bento-card reveal-card" data-reveal data-tilt style="--delay:70ms">
+                <div class="cf-bento-copy"><span>Worldwide time awareness</span><h3>Know where the call is happening.</h3><p>Caller locations and IANA time zones stay attached to the call setup.</p></div>
+                <div class="cf-globe-visual" aria-hidden="true"><i></i><i></i><i></i><b>Local time</b></div>
+              </article>
+              <article class="cf-bento-card reveal-card" data-reveal data-tilt style="--delay:120ms">
+                <div class="cf-bento-copy"><span>Voice profiles</span><h3>Choose the voice that fits the call.</h3><p>Use the available voices and saved profiles without changing the rest of the caller setup.</p></div>
+                <div class="cf-voice-visual" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+              </article>
+              <article class="cf-bento-card reveal-card" data-reveal data-tilt style="--delay:160ms">
+                <div class="cf-bento-copy"><span>Live translation transcript</span><h3>Follow the call in English when needed.</h3><p>The draggable transcript panel keeps translated call text available without taking over the call screen.</p></div>
+                <div class="cf-transcript-visual" aria-hidden="true"><span class="left">Live Caller</span><p>Good to hear your voice again.</p><span class="right">Caller</span><p class="right-p">Likewise, how have you been?</p></div>
+              </article>
+              <article class="cf-bento-card cf-bento-wide reveal-card reveal-scale" data-reveal data-tilt style="--delay:210ms">
+                <div class="cf-bento-copy"><span>One setup, many ways to continue</span><h3>Save information now. Call when you are ready.</h3><p>Prepare a complete setup, save it to the account, come back later and continue from the same foundation.</p></div>
+                <div class="cf-save-visual" aria-hidden="true"><span><i></i>Caller information</span><span><i></i>Conversation dynamics</span><span><i></i>Location & voice</span><b>Saved</b></div>
+              </article>
+            </div>
+          </div>
+        </section>
+
         <section class="premium-section" id="how-it-works">
           <div class="container">
             <div class="premium-section-head reveal-card" data-reveal>
@@ -216,6 +334,14 @@
               <article class="feature-card reveal-card" data-reveal><span>02</span><h3>Per-call time awareness</h3><p>Locations and time zones stay with each call thread, so they can be reused or changed when someone travels.</p></article>
               <article class="feature-card reveal-card" data-reveal><span>03</span><h3>Graceful call ending</h3><p>Request End asks the voice assistant to wrap up naturally in the tone of that day’s conversation before the call closes.</p></article>
             </div>
+          </div>
+        </section>
+
+
+        <section class="cf-motion-ribbon" aria-label="CallFocus flow">
+          <div class="cf-motion-ribbon-track" aria-hidden="true">
+            <div class="cf-motion-ribbon-set"><span>Prepare once</span><i>•</i><span>Call naturally</span><i>•</i><span>Keep the context</span><i>•</i><span>Continue later</span><i>•</i><span>Stay familiar</span><i>•</i></div>
+            <div class="cf-motion-ribbon-set"><span>Prepare once</span><i>•</i><span>Call naturally</span><i>•</i><span>Keep the context</span><i>•</i><span>Continue later</span><i>•</i><span>Stay familiar</span><i>•</i></div>
           </div>
         </section>
 
@@ -763,6 +889,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=15.16"></script>
+  <script src="/callfocus.js?v=15.17-test"></script>
 </body>
 </html>
