@@ -54,10 +54,17 @@ The Turn-taking and Natural delivery rules above are core CallFocus behavior and
 
 const DEFAULT_QUICK_START = Object.freeze({
   youtubeEnabled: true,
+  youtubePopupEnabled: true,
+  youtubeFloatingEnabled: true,
   telegramEnabled: true,
+  telegramPopupEnabled: true,
+  telegramFloatingEnabled: true,
+  popupEnabled: true,
+  popupAppearDelaySeconds: 2,
+  popupAutoHideSeconds: 8,
   floatingButtonEnabled: true,
-  appearDelaySeconds: 2,
-  autoHideSeconds: 8,
+  floatingAppearDelaySeconds: 10,
+  floatingAutoHideSeconds: null,
   panelEyebrow: 'CallFocus quick start',
   panelTitle: 'Learn how to use CallFocus',
   panelMessage: 'Watch the step-by-step guide to see how to prepare your caller information, choose your call setup and start a CallFocus conversation.',
@@ -85,6 +92,19 @@ function sanitizePromoLogo(value = '') {
   return '';
 }
 
+function sanitizeQuickSeconds(value, fallback = 0) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.round(Math.max(0, n) * 10) / 10;
+}
+
+function sanitizeOptionalQuickSeconds(value, fallback = null) {
+  if (value === null || value === undefined || String(value).trim() === '') return fallback;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n * 10) / 10;
+}
+
 function sanitizeQuickStartConfig(input = {}) {
   const src = input && typeof input === 'object' ? input : {};
   const seen = new Set();
@@ -103,6 +123,8 @@ function sanitizeQuickStartConfig(input = {}) {
     customItems.push({
       id,
       enabled: raw.enabled !== false,
+      popupEnabled: raw.popupEnabled !== false,
+      floatingEnabled: raw.floatingEnabled !== false,
       title: title || 'CallFocus update',
       message,
       link,
@@ -110,15 +132,34 @@ function sanitizeQuickStartConfig(input = {}) {
     });
     if (customItems.length >= 8) break;
   }
-  const appear = Math.max(0, Math.min(120, Number(src.appearDelaySeconds ?? DEFAULT_QUICK_START.appearDelaySeconds) || 0));
-  const hideRaw = Number(src.autoHideSeconds ?? DEFAULT_QUICK_START.autoHideSeconds);
-  const autoHide = Number.isFinite(hideRaw) ? Math.max(0, Math.min(300, hideRaw)) : DEFAULT_QUICK_START.autoHideSeconds;
+
+  const legacyAppear = sanitizeQuickSeconds(src.appearDelaySeconds, DEFAULT_QUICK_START.popupAppearDelaySeconds);
+  const legacyHide = sanitizeOptionalQuickSeconds(src.autoHideSeconds, DEFAULT_QUICK_START.popupAutoHideSeconds);
+  const popupAppear = sanitizeQuickSeconds(src.popupAppearDelaySeconds, legacyAppear);
+  const popupHide = Object.prototype.hasOwnProperty.call(src, 'popupAutoHideSeconds')
+    ? sanitizeOptionalQuickSeconds(src.popupAutoHideSeconds, null)
+    : legacyHide;
+  const floatingAppear = sanitizeQuickSeconds(src.floatingAppearDelaySeconds, legacyAppear + (legacyHide || 0));
+  const floatingHide = Object.prototype.hasOwnProperty.call(src, 'floatingAutoHideSeconds')
+    ? sanitizeOptionalQuickSeconds(src.floatingAutoHideSeconds, null)
+    : null;
+
   return {
     youtubeEnabled: src.youtubeEnabled !== false,
+    youtubePopupEnabled: src.youtubePopupEnabled !== false,
+    youtubeFloatingEnabled: src.youtubeFloatingEnabled !== false,
     telegramEnabled: src.telegramEnabled !== false,
+    telegramPopupEnabled: src.telegramPopupEnabled !== false,
+    telegramFloatingEnabled: src.telegramFloatingEnabled !== false,
+    popupEnabled: src.popupEnabled !== false,
+    popupAppearDelaySeconds: popupAppear,
+    popupAutoHideSeconds: popupHide,
     floatingButtonEnabled: src.floatingButtonEnabled !== false,
-    appearDelaySeconds: Math.round(appear * 10) / 10,
-    autoHideSeconds: Math.round(autoHide * 10) / 10,
+    floatingAppearDelaySeconds: floatingAppear,
+    floatingAutoHideSeconds: floatingHide,
+    // Legacy aliases keep older cached frontends safe during a deployment transition.
+    appearDelaySeconds: popupAppear,
+    autoHideSeconds: popupHide || 0,
     panelEyebrow: String(src.panelEyebrow || DEFAULT_QUICK_START.panelEyebrow).trim().slice(0, 60),
     panelTitle: String(src.panelTitle || DEFAULT_QUICK_START.panelTitle).trim().slice(0, 120),
     panelMessage: String(src.panelMessage || DEFAULT_QUICK_START.panelMessage).trim().slice(0, 320),
@@ -3986,7 +4027,7 @@ export default {
     if (url.pathname === '/api/manual-payment/cancel') return safeCustomerRoute('manual-payment-cancel', () => handleManualPaymentCancel(request, env));
     if (url.pathname === '/api/manual-payment/status') return safeCustomerRoute('manual-payment-status', () => handleManualPaymentStatus(request, env));
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.27-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.28-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -4024,10 +4065,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.27-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.28-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.27-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.27-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.28-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.28-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -4037,16 +4078,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.27-test');
+      headers.set('X-CallFocus-Admin-Build', '15.28-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.27-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.28-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.27-test');
+      headers.set('X-CallFocus-Admin-Build', '15.28-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {

@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.27-test';
+const ADMIN_BUILD_VERSION='15.28-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -68,36 +68,110 @@ async function saveScreenshotLimitsDirect(){
 }
 
 const QUICK_START_ADMIN_DEFAULTS={
-  youtubeEnabled:true,telegramEnabled:true,floatingButtonEnabled:true,appearDelaySeconds:2,autoHideSeconds:8,
+  youtubeEnabled:true,youtubePopupEnabled:true,youtubeFloatingEnabled:true,
+  telegramEnabled:true,telegramPopupEnabled:true,telegramFloatingEnabled:true,
+  popupEnabled:true,popupAppearDelaySeconds:2,popupAutoHideSeconds:8,
+  floatingButtonEnabled:true,floatingAppearDelaySeconds:10,floatingAutoHideSeconds:null,
   panelEyebrow:'CallFocus quick start',panelTitle:'Learn how to use CallFocus',
   panelMessage:'Watch the step-by-step guide to see how to prepare your caller information, choose your call setup and start a CallFocus conversation.',
   youtubeTitle:'Watch how to use CallFocus',youtubeMessage:'Open the video guide here without leaving CallFocus',youtubeUrl:'https://youtu.be/t91M_7QkMyA',
   telegramTitle:'Join the CallFocus Telegram channel',telegramMessage:'Get updates, useful tools and CallFocus announcements',telegramUrl:'https://t.me/callfocus',customItems:[]
 };
-function normalizeQuickStartAdmin(value={}){const q={...QUICK_START_ADMIN_DEFAULTS,...(value&&typeof value==='object'?value:{})};q.customItems=(Array.isArray(q.customItems)?q.customItems:[]).slice(0,8).map((row,index)=>({id:String(row?.id||`promo_${index+1}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,48)||`promo_${index+1}`,enabled:row?.enabled!==false,title:String(row?.title||'CallFocus update').slice(0,120),message:String(row?.message||'').slice(0,260),link:String(row?.link||'').slice(0,1200),logo:String(row?.logo||row?.logoDataUrl||'').slice(0,500000)}));return q}
-function quickStartPayload(){return {youtubeEnabled:$('adminQuickYoutubeEnabled')?.checked!==false,telegramEnabled:$('adminQuickTelegramEnabled')?.checked!==false,floatingButtonEnabled:$('adminQuickFloatingEnabled')?.checked!==false,appearDelaySeconds:Math.max(0,Math.min(120,Number($('adminQuickAppearSeconds')?.value)||0)),autoHideSeconds:Math.max(0,Math.min(300,Number($('adminQuickHideSeconds')?.value)||0)),panelEyebrow:$('adminQuickEyebrow')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.panelEyebrow,panelTitle:$('adminQuickTitle')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.panelTitle,panelMessage:$('adminQuickMessage')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.panelMessage,youtubeTitle:$('adminQuickYoutubeTitle')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.youtubeTitle,youtubeMessage:$('adminQuickYoutubeMessage')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.youtubeMessage,youtubeUrl:$('adminQuickYoutubeUrl')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.youtubeUrl,telegramTitle:$('adminQuickTelegramTitle')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.telegramTitle,telegramMessage:$('adminQuickTelegramMessage')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.telegramMessage,telegramUrl:$('adminQuickTelegramUrl')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.telegramUrl,customItems:quickStartItems.map(row=>({...row}))}}
+function quickSeconds(value,fallback=0){const n=Number(value);return Number.isFinite(n)?Math.max(0,Math.round(n*10)/10):fallback}
+function quickOptionalSeconds(value,fallback=null){if(value===null||value===undefined||String(value).trim()==='')return fallback;const n=Number(value);return Number.isFinite(n)&&n>0?Math.round(n*10)/10:null}
+function normalizeQuickStartAdmin(value={}){
+  const src=value&&typeof value==='object'?value:{};
+  const q={...QUICK_START_ADMIN_DEFAULTS,...src};
+  const legacyAppear=quickSeconds(src.appearDelaySeconds,QUICK_START_ADMIN_DEFAULTS.popupAppearDelaySeconds);
+  const legacyHide=quickOptionalSeconds(src.autoHideSeconds,QUICK_START_ADMIN_DEFAULTS.popupAutoHideSeconds);
+  q.popupEnabled=src.popupEnabled!==false;
+  q.popupAppearDelaySeconds=quickSeconds(src.popupAppearDelaySeconds,legacyAppear);
+  q.popupAutoHideSeconds=Object.prototype.hasOwnProperty.call(src,'popupAutoHideSeconds')?quickOptionalSeconds(src.popupAutoHideSeconds,null):legacyHide;
+  q.floatingButtonEnabled=src.floatingButtonEnabled!==false;
+  q.floatingAppearDelaySeconds=quickSeconds(src.floatingAppearDelaySeconds,legacyAppear+(legacyHide||0));
+  q.floatingAutoHideSeconds=Object.prototype.hasOwnProperty.call(src,'floatingAutoHideSeconds')?quickOptionalSeconds(src.floatingAutoHideSeconds,null):null;
+  q.youtubePopupEnabled=src.youtubePopupEnabled!==false;q.youtubeFloatingEnabled=src.youtubeFloatingEnabled!==false;
+  q.telegramPopupEnabled=src.telegramPopupEnabled!==false;q.telegramFloatingEnabled=src.telegramFloatingEnabled!==false;
+  q.customItems=(Array.isArray(q.customItems)?q.customItems:[]).slice(0,8).map((row,index)=>({
+    id:String(row?.id||`promo_${index+1}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,48)||`promo_${index+1}`,
+    enabled:row?.enabled!==false,popupEnabled:row?.popupEnabled!==false,floatingEnabled:row?.floatingEnabled!==false,
+    title:String(row?.title||'CallFocus update').slice(0,120),message:String(row?.message||'').slice(0,260),link:String(row?.link||'').slice(0,1200),logo:String(row?.logo||row?.logoDataUrl||'').slice(0,500000)
+  }));
+  return q;
+}
+function quickStartPayload(){
+  const popupCloseRaw=$('adminQuickPopupHideSeconds')?.value??'';
+  const floatingCloseRaw=$('adminQuickFloatingHideSeconds')?.value??'';
+  return {
+    popupEnabled:$('adminQuickPopupEnabled')?.checked!==false,
+    popupAppearDelaySeconds:quickSeconds($('adminQuickPopupAppearSeconds')?.value,0),
+    popupAutoHideSeconds:quickOptionalSeconds(popupCloseRaw,null),
+    floatingButtonEnabled:$('adminQuickFloatingEnabled')?.checked!==false,
+    floatingAppearDelaySeconds:quickSeconds($('adminQuickFloatingAppearSeconds')?.value,0),
+    floatingAutoHideSeconds:quickOptionalSeconds(floatingCloseRaw,null),
+    youtubeEnabled:$('adminQuickYoutubeEnabled')?.checked!==false,
+    youtubePopupEnabled:$('adminQuickYoutubePopupEnabled')?.checked!==false,
+    youtubeFloatingEnabled:$('adminQuickYoutubeFloatingEnabled')?.checked!==false,
+    telegramEnabled:$('adminQuickTelegramEnabled')?.checked!==false,
+    telegramPopupEnabled:$('adminQuickTelegramPopupEnabled')?.checked!==false,
+    telegramFloatingEnabled:$('adminQuickTelegramFloatingEnabled')?.checked!==false,
+    panelEyebrow:$('adminQuickEyebrow')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.panelEyebrow,
+    panelTitle:$('adminQuickTitle')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.panelTitle,
+    panelMessage:$('adminQuickMessage')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.panelMessage,
+    youtubeTitle:$('adminQuickYoutubeTitle')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.youtubeTitle,
+    youtubeMessage:$('adminQuickYoutubeMessage')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.youtubeMessage,
+    youtubeUrl:$('adminQuickYoutubeUrl')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.youtubeUrl,
+    telegramTitle:$('adminQuickTelegramTitle')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.telegramTitle,
+    telegramMessage:$('adminQuickTelegramMessage')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.telegramMessage,
+    telegramUrl:$('adminQuickTelegramUrl')?.value.trim()||QUICK_START_ADMIN_DEFAULTS.telegramUrl,
+    customItems:quickStartItems.map(row=>({...row}))
+  };
+}
 async function saveQuickStartDirect(){
   const btn=$('saveQuickStartBtn'),old=btn?.textContent||'Save Quick Start settings';
   if(btn){btn.disabled=true;btn.textContent='Saving…'}
   try{
     const result=await api('/api/admin/quick-start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({quickStart:quickStartPayload()})});
     if(currentConfig)currentConfig={...currentConfig,quickStart:result.quickStart,updatedAt:result.config?.updatedAt||currentConfig.updatedAt};
-    fillQuickStart(result.quickStart||{});
-    saveBackup({...formPayload(),quickStart:result.quickStart||quickStartPayload()});
-    toast('Quick Start settings saved');
-    return true;
+    fillQuickStart(result.quickStart||{});saveBackup({...formPayload(),quickStart:result.quickStart||quickStartPayload()});toast('Quick Start settings saved');return true;
   }catch(err){toast(err.message||'Could not save Quick Start settings');return false}
   finally{if(btn){btn.disabled=false;btn.textContent=old}}
 }
-function fillQuickStart(value={}){const q=normalizeQuickStartAdmin(value);if($('adminQuickYoutubeEnabled'))$('adminQuickYoutubeEnabled').checked=q.youtubeEnabled!==false;if($('adminQuickTelegramEnabled'))$('adminQuickTelegramEnabled').checked=q.telegramEnabled!==false;if($('adminQuickFloatingEnabled'))$('adminQuickFloatingEnabled').checked=q.floatingButtonEnabled!==false;if($('adminQuickAppearSeconds'))$('adminQuickAppearSeconds').value=q.appearDelaySeconds;if($('adminQuickHideSeconds'))$('adminQuickHideSeconds').value=q.autoHideSeconds;if($('adminQuickEyebrow'))$('adminQuickEyebrow').value=q.panelEyebrow;if($('adminQuickTitle'))$('adminQuickTitle').value=q.panelTitle;if($('adminQuickMessage'))$('adminQuickMessage').value=q.panelMessage;if($('adminQuickYoutubeTitle'))$('adminQuickYoutubeTitle').value=q.youtubeTitle;if($('adminQuickYoutubeMessage'))$('adminQuickYoutubeMessage').value=q.youtubeMessage;if($('adminQuickYoutubeUrl'))$('adminQuickYoutubeUrl').value=q.youtubeUrl;if($('adminQuickTelegramTitle'))$('adminQuickTelegramTitle').value=q.telegramTitle;if($('adminQuickTelegramMessage'))$('adminQuickTelegramMessage').value=q.telegramMessage;if($('adminQuickTelegramUrl'))$('adminQuickTelegramUrl').value=q.telegramUrl;quickStartItems=q.customItems.map(row=>({...row}));renderCustomPromos()}
+function fillQuickStart(value={}){
+  const q=normalizeQuickStartAdmin(value);
+  if($('adminQuickPopupEnabled'))$('adminQuickPopupEnabled').checked=q.popupEnabled!==false;
+  if($('adminQuickPopupAppearSeconds'))$('adminQuickPopupAppearSeconds').value=q.popupAppearDelaySeconds;
+  if($('adminQuickPopupHideSeconds'))$('adminQuickPopupHideSeconds').value=q.popupAutoHideSeconds??'';
+  if($('adminQuickFloatingEnabled'))$('adminQuickFloatingEnabled').checked=q.floatingButtonEnabled!==false;
+  if($('adminQuickFloatingAppearSeconds'))$('adminQuickFloatingAppearSeconds').value=q.floatingAppearDelaySeconds;
+  if($('adminQuickFloatingHideSeconds'))$('adminQuickFloatingHideSeconds').value=q.floatingAutoHideSeconds??'';
+  if($('adminQuickYoutubeEnabled'))$('adminQuickYoutubeEnabled').checked=q.youtubeEnabled!==false;
+  if($('adminQuickYoutubePopupEnabled'))$('adminQuickYoutubePopupEnabled').checked=q.youtubePopupEnabled!==false;
+  if($('adminQuickYoutubeFloatingEnabled'))$('adminQuickYoutubeFloatingEnabled').checked=q.youtubeFloatingEnabled!==false;
+  if($('adminQuickTelegramEnabled'))$('adminQuickTelegramEnabled').checked=q.telegramEnabled!==false;
+  if($('adminQuickTelegramPopupEnabled'))$('adminQuickTelegramPopupEnabled').checked=q.telegramPopupEnabled!==false;
+  if($('adminQuickTelegramFloatingEnabled'))$('adminQuickTelegramFloatingEnabled').checked=q.telegramFloatingEnabled!==false;
+  if($('adminQuickEyebrow'))$('adminQuickEyebrow').value=q.panelEyebrow;if($('adminQuickTitle'))$('adminQuickTitle').value=q.panelTitle;if($('adminQuickMessage'))$('adminQuickMessage').value=q.panelMessage;
+  if($('adminQuickYoutubeTitle'))$('adminQuickYoutubeTitle').value=q.youtubeTitle;if($('adminQuickYoutubeMessage'))$('adminQuickYoutubeMessage').value=q.youtubeMessage;if($('adminQuickYoutubeUrl'))$('adminQuickYoutubeUrl').value=q.youtubeUrl;
+  if($('adminQuickTelegramTitle'))$('adminQuickTelegramTitle').value=q.telegramTitle;if($('adminQuickTelegramMessage'))$('adminQuickTelegramMessage').value=q.telegramMessage;if($('adminQuickTelegramUrl'))$('adminQuickTelegramUrl').value=q.telegramUrl;
+  quickStartItems=q.customItems.map(row=>({...row}));renderCustomPromos();
+}
 function promoId(){try{return `promo_${crypto.randomUUID().replace(/-/g,'').slice(0,16)}`}catch{return `promo_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,8)}`}}
 function promoInitial(row){return String(row?.title||'C').trim().slice(0,1).toUpperCase()||'C'}
-function renderCustomPromos(){const root=$('adminCustomPromos');if(!root)return;if(!quickStartItems.length){root.innerHTML='<div class="admin-users-empty">No custom popup messages yet.</div>';return}root.innerHTML=quickStartItems.map((row,index)=>`<article class="admin-custom-promo" data-promo-id="${esc(row.id)}"><div class="admin-custom-promo-head"><div class="admin-custom-promo-title"><span class="admin-custom-promo-preview">${row.logo?`<img src="${esc(row.logo)}" alt="" />`:esc(promoInitial(row))}</span><span><strong>${esc(row.title||`Popup message ${index+1}`)}</strong><small>Custom popup item ${index+1}</small></span></div><div class="admin-custom-promo-actions"><label class="admin-promo-enabled"><span>On</span><input type="checkbox" data-promo-field="enabled" ${row.enabled!==false?'checked':''} /></label><button class="admin-promo-delete" type="button" data-promo-delete>Delete</button></div></div><div class="form-grid two"><label>Title<input data-promo-field="title" maxlength="120" value="${esc(row.title||'')}" placeholder="New CallFocus update" /></label><label>Destination link<input data-promo-field="link" maxlength="1200" value="${esc(row.link||'')}" placeholder="https://..." /></label></div><label>Short message<textarea data-promo-field="message" rows="3" maxlength="260" placeholder="What should customers know?">${esc(row.message||'')}</textarea></label><div class="admin-promo-logo-row"><label>Logo picture<input type="file" data-promo-logo accept="image/png,image/jpeg,image/webp,image/gif" /></label><button class="btn btn-ghost admin-promo-clear-logo" type="button" data-promo-clear-logo ${row.logo?'':'disabled'}>Remove logo</button></div><div class="admin-promo-meta">The card can stay saved while switched off. Deleting it removes it after you save settings.</div></article>`).join('')}
+function renderCustomPromos(){
+  const root=$('adminCustomPromos');if(!root)return;
+  if(!quickStartItems.length){root.innerHTML='<div class="admin-users-empty">No custom promos yet.</div>';return}
+  root.innerHTML=quickStartItems.map((row,index)=>`<article class="admin-custom-promo" data-promo-id="${esc(row.id)}"><div class="admin-custom-promo-head"><div class="admin-custom-promo-title"><span class="admin-custom-promo-preview">${row.logo?`<img src="${esc(row.logo)}" alt="" />`:esc(promoInitial(row))}</span><span><strong>${esc(row.title||`Promo ${index+1}`)}</strong><small>Custom promo ${index+1}</small></span></div><button class="admin-promo-delete" type="button" data-promo-delete>Delete</button></div><div class="quickstart-channel-row custom"><label class="admin-promo-enabled"><span>Promo on</span><input type="checkbox" data-promo-field="enabled" ${row.enabled!==false?'checked':''} /></label><label class="admin-promo-enabled"><span>Popup</span><input type="checkbox" data-promo-field="popupEnabled" ${row.popupEnabled!==false?'checked':''} /></label><label class="admin-promo-enabled"><span>Floating</span><input type="checkbox" data-promo-field="floatingEnabled" ${row.floatingEnabled!==false?'checked':''} /></label></div><div class="form-grid two"><label>Title<input data-promo-field="title" maxlength="120" value="${esc(row.title||'')}" placeholder="New CallFocus update" /></label><label>Destination link<input data-promo-field="link" maxlength="1200" value="${esc(row.link||'')}" placeholder="https://..." /></label></div><label>Short message<textarea data-promo-field="message" rows="3" maxlength="260" placeholder="What should customers know?">${esc(row.message||'')}</textarea></label><div class="admin-promo-logo-row"><label>Logo picture<input type="file" data-promo-logo accept="image/png,image/jpeg,image/webp,image/gif" /></label><button class="btn btn-ghost admin-promo-clear-logo" type="button" data-promo-clear-logo ${row.logo?'':'disabled'}>Remove logo</button></div><div class="admin-promo-meta">Turn the promo on, then choose Popup, Floating, or both. Leaving both display methods off keeps the promo saved but not shown.</div></article>`).join('');
+}
 async function promoLogoData(file){if(!file||!String(file.type||'').startsWith('image/'))throw new Error('Choose a PNG, JPG or WebP image.');if(file.size>8*1024*1024)throw new Error('Logo image must be under 8 MB.');const url=URL.createObjectURL(file);try{const img=await new Promise((resolve,reject)=>{const el=new Image();el.onload=()=>resolve(el);el.onerror=()=>reject(new Error('Could not read that logo image.'));el.src=url});const side=Math.min(192,Math.max(img.naturalWidth||1,img.naturalHeight||1));const scale=Math.min(1,side/Math.max(img.naturalWidth||1,img.naturalHeight||1));const w=Math.max(1,Math.round((img.naturalWidth||1)*scale)),h=Math.max(1,Math.round((img.naturalHeight||1)*scale));const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;canvas.getContext('2d',{alpha:true}).drawImage(img,0,0,w,h);let data=canvas.toDataURL('image/webp',.86);if(data.length>450000)data=canvas.toDataURL('image/jpeg',.78);if(data.length>500000)throw new Error('Logo is still too large after resizing. Try a simpler image.');return data}finally{URL.revokeObjectURL(url)}}
-function addCustomPromo(){if(quickStartItems.length>=8)return toast('You can add up to 8 custom popup messages');quickStartItems.push({id:promoId(),enabled:true,title:'CallFocus update',message:'',link:'',logo:''});renderCustomPromos();scheduleDraftBackup();setTimeout(()=>document.querySelector('.admin-custom-promo:last-child input[data-promo-field="title"]')?.focus(),0)}
-function bindQuickStartManager(){const root=$('adminCustomPromos');$('adminAddPromoBtn')?.addEventListener('click',addCustomPromo);$('saveQuickStartBtn')?.addEventListener('click',saveQuickStartDirect);root?.addEventListener('input',event=>{const card=event.target.closest?.('[data-promo-id]');if(!card)return;const row=quickStartItems.find(item=>item.id===card.dataset.promoId);if(!row)return;const field=event.target.dataset.promoField;if(!field)return;if(field==='enabled')row.enabled=event.target.checked;else row[field]=event.target.value;scheduleDraftBackup()});root?.addEventListener('change',async event=>{const card=event.target.closest?.('[data-promo-id]');if(!card)return;const row=quickStartItems.find(item=>item.id===card.dataset.promoId);if(!row)return;if(event.target.matches('[data-promo-field="enabled"]')){row.enabled=event.target.checked;scheduleDraftBackup();return}if(event.target.matches('[data-promo-logo]')){const file=event.target.files?.[0];event.target.value='';if(!file)return;try{row.logo=await promoLogoData(file);renderCustomPromos();scheduleDraftBackup();toast('Logo prepared. Save Quick Start settings to publish it.')}catch(err){toast(err.message)}}});root?.addEventListener('click',event=>{const card=event.target.closest?.('[data-promo-id]');if(!card)return;const id=card.dataset.promoId;if(event.target.closest('[data-promo-delete]')){quickStartItems=quickStartItems.filter(row=>row.id!==id);renderCustomPromos();scheduleDraftBackup();toast('Popup message removed. Save settings to publish the change.');return}if(event.target.closest('[data-promo-clear-logo]')){const row=quickStartItems.find(item=>item.id===id);if(row){row.logo='';renderCustomPromos();scheduleDraftBackup()}}})}
+function addCustomPromo(){if(quickStartItems.length>=8)return toast('You can add up to 8 custom promos');quickStartItems.push({id:promoId(),enabled:true,popupEnabled:true,floatingEnabled:true,title:'CallFocus update',message:'',link:'',logo:''});renderCustomPromos();scheduleDraftBackup();setTimeout(()=>document.querySelector('.admin-custom-promo:last-child input[data-promo-field="title"]')?.focus(),0)}
+function bindQuickStartManager(){
+  const root=$('adminCustomPromos');$('adminAddPromoBtn')?.addEventListener('click',addCustomPromo);$('saveQuickStartBtn')?.addEventListener('click',saveQuickStartDirect);
+  root?.addEventListener('input',event=>{const card=event.target.closest?.('[data-promo-id]');if(!card)return;const row=quickStartItems.find(item=>item.id===card.dataset.promoId);if(!row)return;const field=event.target.dataset.promoField;if(!field)return;if(['enabled','popupEnabled','floatingEnabled'].includes(field))row[field]=event.target.checked;else row[field]=event.target.value;scheduleDraftBackup()});
+  root?.addEventListener('change',async event=>{const card=event.target.closest?.('[data-promo-id]');if(!card)return;const row=quickStartItems.find(item=>item.id===card.dataset.promoId);if(!row)return;if(event.target.matches('[data-promo-field="enabled"],[data-promo-field="popupEnabled"],[data-promo-field="floatingEnabled"]')){row[event.target.dataset.promoField]=event.target.checked;scheduleDraftBackup();return}if(event.target.matches('[data-promo-logo]')){const file=event.target.files?.[0];event.target.value='';if(!file)return;try{row.logo=await promoLogoData(file);renderCustomPromos();scheduleDraftBackup();toast('Logo prepared. Save Quick Start settings to publish it.')}catch(err){toast(err.message)}}});
+  root?.addEventListener('click',event=>{const card=event.target.closest?.('[data-promo-id]');if(!card)return;const id=card.dataset.promoId;if(event.target.closest('[data-promo-delete]')){quickStartItems=quickStartItems.filter(row=>row.id!==id);renderCustomPromos();scheduleDraftBackup();toast('Promo removed. Save settings to publish the change.');return}if(event.target.closest('[data-promo-clear-logo]')){const row=quickStartItems.find(item=>item.id===id);if(row){row.logo='';renderCustomPromos();scheduleDraftBackup();toast('Logo removed. Save settings to publish the change.')}}});
+}
 
-function screenshotLimits(){const min=Math.max(1,Math.min(50,Math.round(Number($('adminAnalysisScreenshotMin')?.value)||20)));const max=Math.max(1,Math.min(50,Math.round(Number($('adminAnalysisScreenshotMax')?.value)||50)));return {min,max};}
 function renderScreenshotLimitsSummary(){const box=$('adminScreenshotLimitsSummary');if(!box)return;const {min,max}=screenshotLimits();box.innerHTML=min<=max?`Customers must upload between <strong>${min} and ${max} screenshot${max===1?'':'s'}</strong> before either generator can run. Allowed admin range: 1–50.`:`Minimum cannot be higher than maximum. Current values: <strong>${min}</strong> minimum and <strong>${max}</strong> maximum.`;box.classList.toggle('bad',min>max);}
 function formPayload(){const limits=screenshotLimits();return {customVoices:[...customVoices],unlimitedCreditEmails:[...unlimitedCreditEmails],siteTheme:$('adminSiteTheme').value||'black',serverOnline:$('adminServerOnline').checked,serverMessage:$('adminServerMessage').value.trim(),maleVoice:$('adminMaleVoice').value,femaleVoice:$('adminFemaleVoice').value,model:'gpt-live-1',speakingPace:$('adminSpeakingPace').value,speechStyle:$('adminSpeechStyle').value.trim(),instructions:$('adminInstructions').value.trim(),opening:$('adminOpening').value.trim(),speakFirst:$('adminSpeakFirst').checked,interruptions:$('adminInterruptions').checked,manualPaymentsEnabled:$('adminManualPaymentsEnabled')?.checked===true,manualPaymentBankName:$('adminManualBankName')?.value.trim()||'',manualPaymentAccountName:$('adminManualAccountName')?.value.trim()||'',manualPaymentAccountNumber:$('adminManualAccountNumber')?.value.replace(/[^0-9]/g,'')||'',manualPaymentNotificationEmail:$('adminManualPaymentEmail')?.value.trim().toLowerCase()||'support@callfocus.link',analysisScreenshotMin:limits.min,analysisScreenshotMax:limits.max,autoFillScreenshotLimit:limits.max,quickStart:quickStartPayload()}}
 function renderBackupStatus(storageConnected=true){const el=$('adminBackupStatus'),btn=$('restoreAdminBackupBtn');if(!el||!btn)return;const b=readBackup();btn.classList.toggle('hidden',!b?.config);if(!b?.config){el.textContent='A protected browser backup will also be kept automatically.';el.className='admin-backup-status';return}const when=b.savedAt?new Date(b.savedAt).toLocaleString():'recently';if(!storageConnected){el.textContent=`KV is disconnected, but your last admin settings are protected on this device (${when}). Reconnect KV, then restore and save.`;el.className='admin-backup-status warn'}else{el.textContent=`Protected browser backup available from ${when}.`;el.className='admin-backup-status good'}}
@@ -188,7 +262,7 @@ populateVoices();
 document.querySelectorAll('[data-site-theme]').forEach(btn=>btn.addEventListener('click',()=>{const value=btn.dataset.siteTheme==='pearl'?'pearl':'black';$('adminSiteTheme').value=value;document.querySelectorAll('[data-site-theme]').forEach(x=>{const on=x===btn;x.classList.toggle('active',on);x.setAttribute('aria-pressed',String(on));});scheduleDraftBackup()}));
 $('adminGateBtn').onclick=login;$('adminPasscode').addEventListener('keydown',e=>{if(e.key==='Enter')login()});$('adminServerOnline').onchange=()=>{renderServerState();scheduleDraftBackup()};$('saveAdminBtn').onclick=()=>saveConfig();$('saveScreenshotLimitsBtn')?.addEventListener('click',saveScreenshotLimitsDirect);$('restoreAdminBackupBtn')?.addEventListener('click',restoreBackup);$('adminLockBtn').onclick=()=>{const key=adminKey;forgetAdminSession();adminKey='';fetch('/api/admin/logout',{method:'POST',headers:{'X-CallFocus-Admin-Key':key},keepalive:true}).catch(()=>{});location.reload()};document.querySelectorAll('[data-preview]').forEach(btn=>btn.onclick=()=>previewVoice(btn.dataset.preview,btn));
 ['adminServerMessage','adminMaleVoice','adminFemaleVoice','adminSpeakingPace','adminSpeechStyle','adminInstructions','adminOpening','adminSpeakFirst','adminInterruptions','adminAnalysisScreenshotMin','adminAnalysisScreenshotMax'].forEach(id=>$(id)?.addEventListener('input',()=>{if(id==='adminAnalysisScreenshotMin'||id==='adminAnalysisScreenshotMax')renderScreenshotLimitsSummary();scheduleDraftBackup();}));
-['adminQuickYoutubeEnabled','adminQuickTelegramEnabled','adminQuickFloatingEnabled','adminQuickAppearSeconds','adminQuickHideSeconds','adminQuickEyebrow','adminQuickTitle','adminQuickMessage','adminQuickYoutubeTitle','adminQuickYoutubeMessage','adminQuickYoutubeUrl','adminQuickTelegramTitle','adminQuickTelegramMessage','adminQuickTelegramUrl'].forEach(id=>$(id)?.addEventListener('input',scheduleDraftBackup));
+['adminQuickPopupEnabled','adminQuickPopupAppearSeconds','adminQuickPopupHideSeconds','adminQuickFloatingEnabled','adminQuickFloatingAppearSeconds','adminQuickFloatingHideSeconds','adminQuickYoutubeEnabled','adminQuickYoutubePopupEnabled','adminQuickYoutubeFloatingEnabled','adminQuickTelegramEnabled','adminQuickTelegramPopupEnabled','adminQuickTelegramFloatingEnabled','adminQuickEyebrow','adminQuickTitle','adminQuickMessage','adminQuickYoutubeTitle','adminQuickYoutubeMessage','adminQuickYoutubeUrl','adminQuickTelegramTitle','adminQuickTelegramMessage','adminQuickTelegramUrl'].forEach(id=>$(id)?.addEventListener('input',scheduleDraftBackup));
 bindQuickStartManager();
 (async()=>{try{const r=await fetch('/api/app-version',{cache:'no-store'});const d=await r.json();if(String(d?.version||'')&&String(d.version)!==ADMIN_BUILD_VERSION&&!sessionStorage.getItem('callfocus_admin_reload_'+d.version)){sessionStorage.setItem('callfocus_admin_reload_'+d.version,'1');location.replace('/admin?build='+encodeURIComponent(d.version)+'&t='+Date.now());}}catch{}})();
 let restoringAdmin=false;

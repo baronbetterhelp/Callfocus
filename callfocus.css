@@ -3396,3 +3396,8 @@ html:not([data-theme="pearl"]) .cf-stage-note{
     background:linear-gradient(180deg,#0b0e0d 0%,#090b0b 58%,#080a0a 100%)!important;
   }
 }
+
+
+/* V15.28: popup panel and floating promo tab can be visible together. */
+.cf-help-menu-open.cf-help-bubble-open .cf-help-bubble{opacity:1!important;transform:scale(1)!important;pointer-events:auto!important}
+.cf-help-video-open .cf-help-bubble{opacity:0!important;transform:scale(.56)!important;pointer-events:none!important}

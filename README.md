@@ -1,1 +1,1 @@
-CallFocus V15.27 Visual Test — Unified Dark Theme
+CallFocus V15.28 Visual Test — Independent Promo Display Scheduling

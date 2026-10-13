@@ -764,3 +764,19 @@ html[data-theme="pearl"] .premium-footer .footer-links a:hover{
 html:not([data-theme="pearl"]) .quickstart-switch-card,html:not([data-theme="pearl"]) .quickstart-builtin-card,html:not([data-theme="pearl"]) .admin-custom-promo{background:#141817;border-color:#29332f;color:#d7e5e0!important}html:not([data-theme="pearl"]) .quickstart-switch-card strong,html:not([data-theme="pearl"]) .quickstart-builtin-head strong,html:not([data-theme="pearl"]) .admin-custom-promo-title strong{color:#e3efeb}html:not([data-theme="pearl"]) .quickstart-switch-card small,html:not([data-theme="pearl"]) .quickstart-builtin-head small,html:not([data-theme="pearl"]) .admin-custom-promo-title small{color:#8fa09a}
 @media(max-width:860px){.quickstart-toggle-grid{grid-template-columns:1fr}.quickstart-builtins-grid{grid-template-columns:1fr}}
 @media(max-width:620px){.admin-custom-promo-head{align-items:flex-start;flex-direction:column}.admin-custom-promo-actions{width:100%;justify-content:space-between}.admin-promo-logo-row{grid-template-columns:1fr}.admin-promo-clear-logo{width:100%}}
+
+
+/* CallFocus V15.28 — independent popup / floating promo controls */
+.quickstart-display-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:4px}
+.quickstart-display-card{display:grid;gap:12px;padding:13px;border:1px solid #dfe8e4;border-radius:19px;background:linear-gradient(145deg,#fbfdfc,#f5f9f7)}
+.quickstart-display-card.popup{box-shadow:inset 0 0 0 1px rgba(44,127,111,.025)}
+.quickstart-display-card.floating{box-shadow:inset 0 0 0 1px rgba(36,158,217,.025)}
+.quickstart-display-switch{margin:0!important;border:0!important;box-shadow:none!important;background:transparent!important;padding:4px 3px!important}
+.quickstart-display-card .quickstart-time-grid{margin:0}
+.quickstart-channel-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;border:1px solid #e2eae7;border-radius:13px;background:rgba(246,250,248,.82)}
+.quickstart-channel-row .admin-promo-enabled{padding:7px 9px;border:1px solid #e1eae6;border-radius:999px;background:#fff}
+.quickstart-channel-row.custom{margin-top:-2px}
+html:not([data-theme="pearl"]) .quickstart-display-card{background:#121615;border-color:#29332f}
+html:not([data-theme="pearl"]) .quickstart-channel-row{background:#101413;border-color:#29332f}
+html:not([data-theme="pearl"]) .quickstart-channel-row .admin-promo-enabled{background:#171c1a;border-color:#2c3834;color:#b7c9c3!important}
+@media(max-width:860px){.quickstart-display-grid{grid-template-columns:1fr}}
