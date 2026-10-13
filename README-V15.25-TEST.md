@@ -1,4 +1,4 @@
-# CallFocus V15.25 Visual Test — Dark Theme Panel Cleanup
+# CallFocus V15.26 Visual Test — Theme-Locked Home Panels
 
 Built directly on **V15.24 Visual Test**. Stable V15.16 remains the approved stable base unless a visual-test branch is explicitly promoted.
 
@@ -15,4 +15,4 @@ Calls, credits, payments, referrals, authentication, saved information, Quick St
 
 ## Build
 
-`15.25-test`
+`15.26-test`
