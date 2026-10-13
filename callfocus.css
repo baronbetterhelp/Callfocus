@@ -2161,22 +2161,78 @@ html:not([data-theme="pearl"]) .location-search-note{background:#171717;color:#8
 @media(max-width:640px){.location-clear{right:9px;width:29px;height:29px}.location-autocomplete input{padding-right:48px!important}}
 
 
-/* ===== CallFocus V15.1 — Home-only Telegram channel promo ===== */
-.cf-telegram-promo{--tg:#229ed9;position:fixed;inset:0;z-index:125;pointer-events:none;visibility:hidden}
-.cf-telegram-promo[aria-hidden="false"]{visibility:visible}
-.cf-telegram-card{position:absolute;left:50%;bottom:max(24px,calc(env(safe-area-inset-bottom) + 16px));width:min(440px,calc(100vw - 28px));display:grid;grid-template-columns:52px minmax(0,1fr);gap:13px;align-items:start;padding:16px 16px 15px;border:1px solid rgba(255,255,255,.62);border-radius:23px;background:linear-gradient(145deg,rgba(255,255,255,.98),rgba(244,250,249,.96));color:#163d37;box-shadow:0 24px 70px rgba(21,64,57,.22),0 4px 18px rgba(21,64,57,.1);backdrop-filter:blur(24px) saturate(130%);-webkit-backdrop-filter:blur(24px) saturate(130%);transform:translate(-50%,38px) scale(.76);transform-origin:50% 100%;opacity:0;pointer-events:none;transition:opacity .34s ease,transform .48s cubic-bezier(.2,.9,.2,1)}
-.cf-telegram-popup-open .cf-telegram-card{opacity:1;transform:translate(-50%,0) scale(1);pointer-events:auto}
-.cf-telegram-card-icon{width:52px;height:52px;border-radius:17px;display:grid;place-items:center;background:linear-gradient(145deg,#2cb5ec,var(--tg));color:#fff;box-shadow:0 10px 24px rgba(34,158,217,.28)}
-.cf-telegram-card-icon svg{width:29px;height:29px;transform:translateX(-1px)}
-.cf-telegram-card-copy{padding:2px 28px 0 0;min-width:0}.cf-telegram-eyebrow{display:block;margin-bottom:4px;color:#308873;font:800 8px/1.2 Manrope,sans-serif;letter-spacing:.12em;text-transform:uppercase}.cf-telegram-card-copy strong{display:block;color:#153f37;font:800 16px/1.2 Manrope,sans-serif;letter-spacing:-.35px}.cf-telegram-card-copy p{margin:6px 0 0;color:#6d827d;font:500 10px/1.55 Manrope,sans-serif}
-.cf-telegram-card-close{position:absolute;top:10px;right:10px;width:29px;height:29px;border:0;border-radius:50%;background:rgba(28,91,80,.07);color:#52756f;display:grid;place-items:center;padding:0;font-size:19px;line-height:1;cursor:pointer}
-.cf-telegram-join{grid-column:1/-1;min-height:43px;border-radius:14px;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:1px;background:linear-gradient(135deg,#2eb2e8,#229ed9);color:#fff!important;text-decoration:none!important;font:800 11px/1 Manrope,sans-serif;box-shadow:0 10px 23px rgba(34,158,217,.22);transition:transform .18s ease,filter .18s ease}.cf-telegram-join:hover{filter:brightness(1.04);transform:translateY(-1px)}.cf-telegram-join b{font-size:14px}
-.cf-telegram-bubble{position:absolute;right:18px;bottom:max(24px,calc(env(safe-area-inset-bottom) + 16px));width:60px;height:60px;border:1px solid rgba(255,255,255,.78);border-radius:50%;display:grid;place-items:center;padding:0;background:linear-gradient(145deg,#2cb5ec,#229ed9);color:#fff;box-shadow:0 15px 34px rgba(15,85,116,.31),inset 0 1px rgba(255,255,255,.25);opacity:0;transform:scale(.55);pointer-events:none;cursor:grab;touch-action:none;transition:opacity .28s ease,transform .42s cubic-bezier(.18,.95,.24,1),box-shadow .2s ease}
-.cf-telegram-bubble svg{width:31px;height:31px;transform:translateX(-1px)}.cf-telegram-bubble span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%)}
-.cf-telegram-bubble-open .cf-telegram-bubble{opacity:1;transform:scale(1);pointer-events:auto}.cf-telegram-bubble.is-dragging{cursor:grabbing;transition:none;box-shadow:0 22px 42px rgba(15,85,116,.35),inset 0 1px rgba(255,255,255,.25)}
-.cf-telegram-popup-open .cf-telegram-bubble{opacity:0;transform:scale(.55);pointer-events:none}
-@media(max-width:560px){.cf-telegram-card{bottom:max(18px,calc(env(safe-area-inset-bottom) + 12px));width:calc(100vw - 22px);border-radius:21px;padding:14px;grid-template-columns:47px minmax(0,1fr);gap:11px}.cf-telegram-card-icon{width:47px;height:47px;border-radius:15px}.cf-telegram-card-icon svg{width:26px;height:26px}.cf-telegram-card-copy{padding-right:25px}.cf-telegram-card-copy strong{font-size:14px}.cf-telegram-card-copy p{font-size:9px;line-height:1.5}.cf-telegram-join{min-height:42px}.cf-telegram-bubble{right:14px;bottom:max(18px,calc(env(safe-area-inset-bottom) + 12px));width:57px;height:57px}.cf-telegram-bubble svg{width:29px;height:29px}}
-@media(prefers-reduced-motion:reduce){.cf-telegram-card,.cf-telegram-bubble,.cf-telegram-join{transition-duration:.01ms!important}}
+/* ===== CallFocus V15.9 — Home quick-start video + Telegram help hub ===== */
+.cf-help-hub{--cf-help-green:#1d7566;--cf-help-mint:#79d6c2;--cf-help-telegram:#229ed9;--cf-help-youtube:#ff0033;position:fixed;inset:0;z-index:125;pointer-events:none;visibility:hidden}
+.cf-help-hub[aria-hidden="false"]{visibility:visible}
+.cf-help-card,.cf-help-video-panel{position:absolute;left:50%;top:50%;opacity:0;pointer-events:none;transform:translate(-50%,-46%) scale(.88);transition:opacity .28s ease,transform .46s cubic-bezier(.2,.92,.22,1);backdrop-filter:blur(28px) saturate(125%);-webkit-backdrop-filter:blur(28px) saturate(125%)}
+.cf-help-card{width:min(520px,calc(100vw - 30px));max-height:min(86dvh,760px);overflow:auto;padding:21px;border:1px solid rgba(255,255,255,.72);border-radius:28px;background:linear-gradient(145deg,rgba(255,255,255,.985),rgba(244,250,248,.97));color:#153e37;box-shadow:0 32px 90px rgba(20,64,56,.24),0 8px 26px rgba(20,64,56,.11)}
+.cf-help-menu-open .cf-help-card{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
+.cf-help-close,.cf-help-video-close{position:absolute;z-index:3;top:12px;right:12px;width:32px;height:32px;border:0;border-radius:50%;display:grid;place-items:center;padding:0;background:rgba(28,91,80,.075);color:#4d756d;font:500 21px/1 Manrope,sans-serif;cursor:pointer;transition:background .18s ease,transform .18s ease}
+.cf-help-close:hover,.cf-help-video-close:hover{background:rgba(28,91,80,.13);transform:scale(1.04)}
+.cf-help-guide-head{display:grid;grid-template-columns:58px minmax(0,1fr);gap:14px;align-items:start;padding:2px 32px 3px 0}
+.cf-help-guide-icon{width:58px;height:58px;border-radius:19px;display:grid;place-items:center;background:linear-gradient(145deg,#e7f5f1,#fff8ed);color:#247d6e;box-shadow:inset 0 0 0 1px rgba(35,118,103,.1),0 9px 24px rgba(32,98,86,.09)}
+.cf-help-guide-icon svg{width:31px;height:31px}
+.cf-help-guide-copy{min-width:0;padding-top:2px}
+.cf-help-eyebrow{display:block;margin-bottom:5px;color:#3d8d7f;font:800 8px/1.2 Manrope,sans-serif;letter-spacing:.13em;text-transform:uppercase}
+.cf-help-guide-copy strong{display:block;color:#153e37;font:800 19px/1.2 Manrope,sans-serif;letter-spacing:-.45px}
+.cf-help-guide-copy p{margin:7px 0 0;color:#6c817c;font:520 10.5px/1.58 Manrope,sans-serif}
+.cf-help-action{width:100%;min-height:58px;margin-top:15px;padding:10px 12px;border-radius:17px;display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:11px;align-items:center;text-align:left;text-decoration:none!important;cursor:pointer;transition:transform .18s ease,box-shadow .18s ease,filter .18s ease}
+.cf-help-action:hover{transform:translateY(-1px);filter:brightness(1.015)}
+.cf-help-watch{border:1px solid rgba(255,0,51,.12);background:linear-gradient(135deg,#fff7f8,#fff);color:#183f38;box-shadow:0 9px 24px rgba(105,42,54,.07)}
+.cf-help-action-icon{width:38px;height:38px;border-radius:12px;display:grid;place-items:center}
+.cf-help-youtube-mark{color:var(--cf-help-youtube)}
+.cf-help-action-icon.cf-help-youtube-mark{background:#fff;box-shadow:inset 0 0 0 1px rgba(255,0,51,.08)}
+.cf-help-youtube-mark svg{width:25px;height:18px;display:block}
+.cf-help-action-copy{display:block;min-width:0}
+.cf-help-action-copy strong{display:block;color:inherit;font:800 11.5px/1.25 Manrope,sans-serif}
+.cf-help-action-copy small{display:block;margin-top:3px;color:#81908d;font:550 9px/1.35 Manrope,sans-serif}
+.cf-help-action>b{font:700 20px/1 Manrope,sans-serif;color:#8a9895;padding-right:2px}
+.cf-help-divider{display:flex;align-items:center;gap:10px;margin:16px 1px 13px;color:#9aa7a3;font:750 8px/1 Manrope,sans-serif;letter-spacing:.09em;text-transform:uppercase}
+.cf-help-divider:before,.cf-help-divider:after{content:"";height:1px;flex:1;background:linear-gradient(90deg,transparent,rgba(34,98,87,.13))}.cf-help-divider:after{background:linear-gradient(90deg,rgba(34,98,87,.13),transparent)}
+.cf-help-telegram-row{display:grid;grid-template-columns:45px minmax(0,1fr);gap:12px;align-items:center}
+.cf-help-telegram-mark{width:45px;height:45px;border-radius:15px;display:grid;place-items:center;background:linear-gradient(145deg,#35b5eb,var(--cf-help-telegram));color:#fff;box-shadow:0 10px 24px rgba(34,158,217,.22)}
+.cf-help-telegram-mark svg{width:25px;height:25px;transform:translateX(-1px)}
+.cf-help-telegram-row strong{display:block;color:#214740;font:800 12px/1.25 Manrope,sans-serif}.cf-help-telegram-row p{margin:4px 0 0;color:#7c8e89;font:520 9.5px/1.45 Manrope,sans-serif}
+.cf-help-telegram-action{border:1px solid rgba(34,158,217,.16);background:linear-gradient(135deg,#eef9fe,#fff);color:#174d61;box-shadow:0 9px 24px rgba(34,158,217,.08)}
+.cf-help-telegram-action-icon{background:linear-gradient(145deg,#35b5eb,var(--cf-help-telegram));color:#fff;box-shadow:0 7px 17px rgba(34,158,217,.18)}
+.cf-help-telegram-action-icon svg{width:22px;height:22px;transform:translateX(-1px)}
+.cf-help-video-panel{width:min(780px,calc(100vw - 26px));overflow:hidden;border:1px solid rgba(255,255,255,.7);border-radius:26px;background:linear-gradient(145deg,rgba(255,255,255,.99),rgba(242,248,246,.98));box-shadow:0 34px 100px rgba(14,42,37,.3),0 8px 26px rgba(14,42,37,.14)}
+.cf-help-video-open .cf-help-video-panel{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
+.cf-help-video-head{position:relative;min-height:66px;display:grid;grid-template-columns:34px minmax(0,1fr) 34px;gap:11px;align-items:center;padding:13px 15px;border-bottom:1px solid rgba(37,92,82,.09);background:rgba(255,255,255,.72)}
+.cf-help-video-head>.cf-help-youtube-mark{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:#fff7f8;box-shadow:inset 0 0 0 1px rgba(255,0,51,.08)}
+.cf-help-video-head>div strong{display:block;color:#173f38;font:800 13px/1.2 Manrope,sans-serif;letter-spacing:-.2px}.cf-help-video-head>div .cf-help-eyebrow{margin-bottom:3px}
+.cf-help-video-close{position:static;justify-self:end}
+.cf-help-video-shell{position:relative;width:100%;aspect-ratio:16/9;background:#090b0b;overflow:hidden}
+.cf-help-video-frame{position:absolute;inset:0;width:100%;height:100%;border:0;background:#090b0b}
+.cf-help-video-note{margin:0;padding:11px 16px 13px;color:#82918e;text-align:center;font:550 9px/1.45 Manrope,sans-serif}
+.cf-help-bubble{position:absolute;right:18px;bottom:max(24px,calc(env(safe-area-inset-bottom) + 16px));width:64px;height:64px;border:1px solid rgba(255,255,255,.9);border-radius:50%;display:grid;place-items:center;padding:0;background:linear-gradient(145deg,rgba(255,255,255,.99),rgba(237,247,244,.98));color:#fff;box-shadow:0 16px 38px rgba(18,74,65,.25),inset 0 1px rgba(255,255,255,.7);opacity:0;transform:scale(.56);pointer-events:none;cursor:grab;touch-action:none;transition:opacity .28s ease,transform .42s cubic-bezier(.18,.95,.24,1),box-shadow .2s ease}
+.cf-help-bubble-ring{position:absolute;inset:-6px;border:2px solid rgba(67,177,154,.16);border-top-color:#42af98;border-right-color:rgba(255,0,51,.5);border-radius:50%;animation:cfHelpRingSpin 2.6s linear infinite;pointer-events:none;filter:drop-shadow(0 0 7px rgba(72,185,160,.18))}
+.cf-help-bubble:after{content:"";position:absolute;inset:-11px;border:1px solid rgba(73,179,157,.14);border-radius:50%;animation:cfHelpPulse 2.2s ease-in-out infinite;pointer-events:none}
+.cf-help-logo-stage{position:relative;width:38px;height:38px;display:grid;place-items:center}
+.cf-help-logo{position:absolute;inset:0;display:grid;place-items:center;transition:opacity .4s ease,transform .4s ease}
+.cf-help-logo-youtube{color:var(--cf-help-youtube);animation:cfHelpLogoYoutube 6s ease-in-out infinite}.cf-help-logo-youtube svg{width:31px;height:23px}
+.cf-help-logo-telegram{color:var(--cf-help-telegram);animation:cfHelpLogoTelegram 6s ease-in-out infinite}.cf-help-logo-telegram svg{width:31px;height:31px;transform:translateX(-1px)}
+.cf-help-unread{position:absolute;right:-3px;top:-4px;min-width:21px;height:21px;padding:0 5px;border:2px solid #fff;border-radius:999px;display:grid;place-items:center;background:#e42f4f;color:#fff;font:850 10px/1 Manrope,sans-serif;box-shadow:0 5px 13px rgba(173,31,57,.26);transition:opacity .2s ease,transform .2s ease}.cf-help-unread.is-read{opacity:0;transform:scale(.55);pointer-events:none}
+.cf-help-sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+.cf-help-bubble-open .cf-help-bubble{opacity:1;transform:scale(1);pointer-events:auto}.cf-help-bubble.is-dragging{cursor:grabbing;transition:none;box-shadow:0 23px 46px rgba(18,74,65,.32),inset 0 1px rgba(255,255,255,.7)}
+.cf-help-menu-open .cf-help-bubble,.cf-help-video-open .cf-help-bubble{opacity:0;transform:scale(.56);pointer-events:none}
+@keyframes cfHelpRingSpin{to{transform:rotate(360deg)}}
+@keyframes cfHelpPulse{0%,100%{transform:scale(.94);opacity:.45}50%{transform:scale(1.08);opacity:.9}}
+@keyframes cfHelpLogoYoutube{0%,43%{opacity:1;transform:scale(1) rotate(0)}48%,95%{opacity:0;transform:scale(.74) rotate(-10deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
+@keyframes cfHelpLogoTelegram{0%,43%{opacity:0;transform:scale(.74) rotate(10deg)}48%,95%{opacity:1;transform:scale(1) rotate(0)}100%{opacity:0;transform:scale(.74) rotate(10deg)}}
+html:not([data-theme="pearl"]) .cf-help-card,html:not([data-theme="pearl"]) .cf-help-video-panel{border-color:rgba(255,255,255,.1);background:linear-gradient(145deg,rgba(24,29,27,.985),rgba(14,18,17,.98));color:#e6f0ed;box-shadow:0 32px 90px rgba(0,0,0,.48)}
+html:not([data-theme="pearl"]) .cf-help-guide-icon{background:linear-gradient(145deg,#1c2b27,#25211c);color:#78c8b7;box-shadow:inset 0 0 0 1px rgba(121,214,194,.08)}
+html:not([data-theme="pearl"]) .cf-help-guide-copy strong,html:not([data-theme="pearl"]) .cf-help-telegram-row strong,html:not([data-theme="pearl"]) .cf-help-video-head>div strong{color:#e5f0ec}
+html:not([data-theme="pearl"]) .cf-help-guide-copy p,html:not([data-theme="pearl"]) .cf-help-telegram-row p,html:not([data-theme="pearl"]) .cf-help-action-copy small,html:not([data-theme="pearl"]) .cf-help-video-note{color:#8fa29c}
+html:not([data-theme="pearl"]) .cf-help-watch{background:linear-gradient(135deg,#251c1f,#171918);border-color:rgba(255,80,105,.14);color:#f0eeee}
+html:not([data-theme="pearl"]) .cf-help-telegram-action{background:linear-gradient(135deg,#17262a,#171918);border-color:rgba(34,158,217,.16);color:#dbeef5}
+html:not([data-theme="pearl"]) .cf-help-video-head{background:rgba(21,25,24,.9);border-bottom-color:rgba(255,255,255,.08)}
+html:not([data-theme="pearl"]) .cf-help-close,html:not([data-theme="pearl"]) .cf-help-video-close{background:rgba(255,255,255,.07);color:#b7c9c4}
+html:not([data-theme="pearl"]) .cf-help-bubble{background:linear-gradient(145deg,#202825,#121716);border-color:rgba(255,255,255,.15)}
+html:not([data-theme="pearl"]) .cf-help-unread{border-color:#171d1b}
+@media(max-width:620px){.cf-help-card{width:calc(100vw - 22px);max-height:min(84dvh,700px);padding:17px;border-radius:23px}.cf-help-guide-head{grid-template-columns:50px minmax(0,1fr);gap:12px;padding-right:28px}.cf-help-guide-icon{width:50px;height:50px;border-radius:16px}.cf-help-guide-icon svg{width:28px;height:28px}.cf-help-guide-copy strong{font-size:16px}.cf-help-guide-copy p{font-size:9.5px}.cf-help-action{min-height:55px;margin-top:13px;border-radius:15px;grid-template-columns:36px minmax(0,1fr) auto;padding:9px 10px}.cf-help-action-icon{width:36px;height:36px}.cf-help-telegram-row{grid-template-columns:41px minmax(0,1fr);gap:10px}.cf-help-telegram-mark{width:41px;height:41px;border-radius:13px}.cf-help-video-panel{width:calc(100vw - 18px);border-radius:21px}.cf-help-video-head{min-height:61px;padding:11px 12px}.cf-help-video-note{font-size:8.5px;padding:9px 12px 11px}.cf-help-bubble{right:14px;bottom:max(18px,calc(env(safe-area-inset-bottom) + 12px));width:60px;height:60px}.cf-help-logo-stage{width:35px;height:35px}.cf-help-logo-youtube svg{width:29px}.cf-help-logo-telegram svg{width:29px;height:29px}}
+@media(max-height:600px){.cf-help-card{top:12px;transform:translate(-50%,0) scale(.9);max-height:calc(100dvh - 24px)}.cf-help-menu-open .cf-help-card{transform:translate(-50%,0) scale(1)}.cf-help-video-panel{max-height:calc(100dvh - 18px);overflow:auto}.cf-help-video-open .cf-help-video-panel{top:9px;transform:translate(-50%,0) scale(1)}}
+@media(prefers-reduced-motion:reduce){.cf-help-card,.cf-help-video-panel,.cf-help-bubble,.cf-help-action,.cf-help-unread{transition-duration:.01ms!important}.cf-help-bubble-ring,.cf-help-bubble:after,.cf-help-logo-youtube,.cf-help-logo-telegram{animation-duration:.01ms!important;animation-iteration-count:1!important}.cf-help-logo-youtube{opacity:1!important}.cf-help-logo-telegram{opacity:0!important}}
 
 /* ===== CallFocus V15.2 — low-memory Dynamics screenshot selection ===== */
 .dynamics-thumb-safe{aspect-ratio:auto;min-height:92px;padding:11px 8px 9px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;text-align:center;background:linear-gradient(145deg,rgba(239,247,244,.96),rgba(255,251,244,.96));overflow:visible}

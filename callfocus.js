@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.8';
+  const BUILD='15.9';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -5694,17 +5694,22 @@ ${approvedPatterns}
 })();
 
 
-/* ===== CallFocus V15.1 — Home-only Telegram channel promo ===== */
+/* ===== CallFocus V15.9 — Home quick-start video + Telegram help hub ===== */
 (()=>{
   const TELEGRAM_URL='https://t.me/callfocus';
-  const FIRST_OPEN_DELAY=10000;
-  const POPUP_DURATION=5000;
+  const YOUTUBE_VIDEO_ID='t91M_7QkMyA';
+  const YOUTUBE_EMBED_URL=`https://www.youtube-nocookie.com/embed/${YOUTUBE_VIDEO_ID}?autoplay=1&rel=0&playsinline=1&modestbranding=1`;
+  const FIRST_OPEN_DELAY=2000;
+  const INTRO_DURATION=8000;
   let introShown=false;
   let introTimer=0;
   let collapseTimer=0;
   let widget=null;
   let bubble=null;
   let card=null;
+  let videoPanel=null;
+  let videoFrame=null;
+  let unreadBadge=null;
   let suppressNextClick=false;
 
   const isHome=()=>{
@@ -5712,33 +5717,60 @@ ${approvedPatterns}
     return !!home?.classList.contains('active') && (((location.pathname||'/').replace(/\/+$/,'')||'/')==='/');
   };
   const clearTimers=()=>{clearTimeout(introTimer);clearTimeout(collapseTimer);introTimer=collapseTimer=0;};
+  const stopVideo=()=>{
+    if(!videoFrame)return;
+    videoFrame.removeAttribute('src');
+  };
+  const setAriaState=state=>{
+    if(!widget)return;
+    widget.setAttribute('aria-hidden',state==='hidden'?'true':'false');
+    card?.setAttribute('aria-hidden',state==='menu'?'false':'true');
+    videoPanel?.setAttribute('aria-hidden',state==='video'?'false':'true');
+    bubble?.setAttribute('aria-hidden',state==='bubble'?'false':'true');
+  };
+  const setState=state=>{
+    if(!widget)return;
+    widget.classList.remove('cf-help-menu-open','cf-help-bubble-open','cf-help-video-open');
+    if(state==='menu')widget.classList.add('cf-help-menu-open');
+    if(state==='bubble')widget.classList.add('cf-help-bubble-open');
+    if(state==='video')widget.classList.add('cf-help-video-open');
+    setAriaState(state);
+  };
+  const markRead=()=>{
+    if(unreadBadge)unreadBadge.classList.add('is-read');
+    if(bubble)bubble.setAttribute('aria-label','Open CallFocus help and updates');
+  };
   const hideAll=()=>{
     clearTimers();
-    if(!widget)return;
-    widget.classList.remove('cf-telegram-popup-open','cf-telegram-bubble-open');
-    widget.setAttribute('aria-hidden','true');
+    stopVideo();
+    setState('hidden');
   };
   const showBubble=()=>{
     if(!widget||!isHome())return;
-    clearTimeout(collapseTimer); collapseTimer=0;
-    widget.setAttribute('aria-hidden','false');
-    widget.classList.remove('cf-telegram-popup-open');
-    requestAnimationFrame(()=>widget.classList.add('cf-telegram-bubble-open'));
+    clearTimeout(collapseTimer);collapseTimer=0;
+    stopVideo();
+    setState('bubble');
   };
-  const openPopup=()=>{
+  const openMenu=({autoClose=false}={})=>{
     if(!widget||!isHome())return;
     introShown=true;
-    clearTimeout(introTimer); clearTimeout(collapseTimer);
-    widget.setAttribute('aria-hidden','false');
-    widget.classList.remove('cf-telegram-bubble-open');
-    requestAnimationFrame(()=>widget.classList.add('cf-telegram-popup-open'));
-    collapseTimer=setTimeout(showBubble,POPUP_DURATION);
+    clearTimeout(introTimer);clearTimeout(collapseTimer);
+    stopVideo();
+    setState('menu');
+    if(autoClose)collapseTimer=setTimeout(showBubble,INTRO_DURATION);
+  };
+  const openVideo=()=>{
+    if(!widget||!isHome())return;
+    clearTimers();
+    markRead();
+    if(videoFrame&&!videoFrame.getAttribute('src'))videoFrame.setAttribute('src',YOUTUBE_EMBED_URL);
+    setState('video');
   };
   const scheduleIntro=()=>{
     clearTimeout(introTimer);
     if(!isHome())return;
-    if(introShown){ showBubble(); return; }
-    introTimer=setTimeout(()=>{ if(isHome())openPopup(); },FIRST_OPEN_DELAY);
+    if(introShown){showBubble();return;}
+    introTimer=setTimeout(()=>{if(isHome())openMenu({autoClose:true});},FIRST_OPEN_DELAY);
   };
   const syncToRoute=()=>{
     if(isHome())scheduleIntro();
@@ -5746,46 +5778,100 @@ ${approvedPatterns}
   };
 
   function createWidget(){
-    if(document.getElementById('cfTelegramPromo'))return;
+    if(document.getElementById('cfCallFocusHelpHub'))return;
     widget=document.createElement('div');
-    widget.id='cfTelegramPromo';
-    widget.className='cf-telegram-promo';
+    widget.id='cfCallFocusHelpHub';
+    widget.className='cf-help-hub';
     widget.setAttribute('aria-hidden','true');
     widget.innerHTML=`
-      <aside class="cf-telegram-card" role="dialog" aria-label="Join the CallFocus Telegram channel">
-        <button class="cf-telegram-card-close" type="button" aria-label="Minimize Telegram update">×</button>
-        <span class="cf-telegram-card-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M21.6 3.5 18.4 19c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6 12.8l-4.8-1.5c-1-.3-1-1 .2-1.5L20.2 2.6c.9-.3 1.7.2 1.4.9Z" fill="currentColor"/></svg>
-        </span>
-        <div class="cf-telegram-card-copy">
-          <span class="cf-telegram-eyebrow">CallFocus on Telegram</span>
-          <strong>Join our Telegram channel for more updates</strong>
-          <p>Get CallFocus updates, new features, useful tools and important announcements in one place.</p>
+      <aside class="cf-help-card" role="dialog" aria-label="Learn CallFocus and get updates" aria-hidden="true">
+        <button class="cf-help-close" type="button" aria-label="Minimize CallFocus help">×</button>
+        <div class="cf-help-guide-head">
+          <span class="cf-help-guide-icon" aria-hidden="true">
+            <svg viewBox="0 0 28 28" fill="none"><rect x="3" y="5" width="22" height="18" rx="6" fill="currentColor" opacity=".13"/><path d="m12 10 7 4-7 4v-8Z" fill="currentColor"/><path d="M7.7 7.8A8.8 8.8 0 0 1 14 5.2c2.5 0 4.8 1 6.4 2.6M20.3 20.2A8.8 8.8 0 0 1 14 22.8a8.8 8.8 0 0 1-6.3-2.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </span>
+          <div class="cf-help-guide-copy">
+            <span class="cf-help-eyebrow">CallFocus quick start</span>
+            <strong>Learn how to use CallFocus</strong>
+            <p>Watch the step-by-step guide to see how to prepare your caller information, choose your call setup and start a CallFocus conversation.</p>
+          </div>
         </div>
-        <a class="cf-telegram-join" href="${TELEGRAM_URL}" target="_blank" rel="noopener noreferrer">
-          <span>Join Telegram channel</span><b aria-hidden="true">↗</b>
+        <button class="cf-help-action cf-help-watch" type="button">
+          <span class="cf-help-action-icon cf-help-youtube-mark" aria-hidden="true">
+            <svg viewBox="0 0 28 20"><path d="M27.4 3.2A3.5 3.5 0 0 0 25 0.7C22.9 0 14 0 14 0S5.1 0 3 .7A3.5 3.5 0 0 0 .6 3.2 36.5 36.5 0 0 0 0 10a36.5 36.5 0 0 0 .6 6.8A3.5 3.5 0 0 0 3 19.3c2.1.7 11 .7 11 .7s8.9 0 11-.7a3.5 3.5 0 0 0 2.4-2.5A36.5 36.5 0 0 0 28 10a36.5 36.5 0 0 0-.6-6.8Z" fill="currentColor"/><path d="m11.2 14.3 7.3-4.3-7.3-4.3v8.6Z" fill="#fff"/></svg>
+          </span>
+          <span class="cf-help-action-copy"><strong>Watch how to use CallFocus</strong><small>Open the video guide here without leaving CallFocus</small></span>
+          <b aria-hidden="true">›</b>
+        </button>
+        <div class="cf-help-divider"><span>And stay updated</span></div>
+        <div class="cf-help-telegram-row">
+          <span class="cf-help-telegram-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M21.6 3.5 18.4 19c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6 12.8l-4.8-1.5c-1-.3-1-1 .2-1.5L20.2 2.6c.9-.3 1.7.2 1.4.9Z" fill="currentColor"/></svg>
+          </span>
+          <div><strong>Join the CallFocus Telegram channel</strong><p>Get feature updates, useful work tools and important CallFocus announcements.</p></div>
+        </div>
+        <a class="cf-help-action cf-help-telegram-action" href="${TELEGRAM_URL}" target="_blank" rel="noopener noreferrer">
+          <span class="cf-help-action-icon cf-help-telegram-action-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M21.6 3.5 18.4 19c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6 12.8l-4.8-1.5c-1-.3-1-1 .2-1.5L20.2 2.6c.9-.3 1.7.2 1.4.9Z" fill="currentColor"/></svg>
+          </span>
+          <span class="cf-help-action-copy"><strong>Join Telegram channel</strong><small>Open the official CallFocus channel</small></span>
+          <b aria-hidden="true">↗</b>
         </a>
       </aside>
-      <button class="cf-telegram-bubble" type="button" aria-label="Open CallFocus Telegram update">
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21.6 3.5 18.4 19c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6 12.8l-4.8-1.5c-1-.3-1-1 .2-1.5L20.2 2.6c.9-.3 1.7.2 1.4.9Z" fill="currentColor"/></svg>
-        <span>Telegram</span>
+
+      <section class="cf-help-video-panel" role="dialog" aria-label="How to use CallFocus video guide" aria-hidden="true">
+        <div class="cf-help-video-head">
+          <span class="cf-help-youtube-mark" aria-hidden="true">
+            <svg viewBox="0 0 28 20"><path d="M27.4 3.2A3.5 3.5 0 0 0 25 0.7C22.9 0 14 0 14 0S5.1 0 3 .7A3.5 3.5 0 0 0 .6 3.2 36.5 36.5 0 0 0 0 10a36.5 36.5 0 0 0 .6 6.8A3.5 3.5 0 0 0 3 19.3c2.1.7 11 .7 11 .7s8.9 0 11-.7a3.5 3.5 0 0 0 2.4-2.5A36.5 36.5 0 0 0 28 10a36.5 36.5 0 0 0-.6-6.8Z" fill="currentColor"/><path d="m11.2 14.3 7.3-4.3-7.3-4.3v8.6Z" fill="#fff"/></svg>
+          </span>
+          <div><span class="cf-help-eyebrow">Video guide</span><strong>How to use CallFocus</strong></div>
+          <button class="cf-help-video-close" type="button" aria-label="Close video guide">×</button>
+        </div>
+        <div class="cf-help-video-shell">
+          <iframe class="cf-help-video-frame" title="How to use CallFocus" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+        </div>
+        <p class="cf-help-video-note">Close the guide at any time to return it to the floating CallFocus help button.</p>
+      </section>
+
+      <button class="cf-help-bubble" type="button" aria-label="Open CallFocus help and updates, 1 unread" aria-hidden="true">
+        <span class="cf-help-bubble-ring" aria-hidden="true"></span>
+        <span class="cf-help-logo-stage" aria-hidden="true">
+          <span class="cf-help-logo cf-help-logo-youtube">
+            <svg viewBox="0 0 28 20"><path d="M27.4 3.2A3.5 3.5 0 0 0 25 0.7C22.9 0 14 0 14 0S5.1 0 3 .7A3.5 3.5 0 0 0 .6 3.2 36.5 36.5 0 0 0 0 10a36.5 36.5 0 0 0 .6 6.8A3.5 3.5 0 0 0 3 19.3c2.1.7 11 .7 11 .7s8.9 0 11-.7a3.5 3.5 0 0 0 2.4-2.5A36.5 36.5 0 0 0 28 10a36.5 36.5 0 0 0-.6-6.8Z" fill="currentColor"/><path d="m11.2 14.3 7.3-4.3-7.3-4.3v8.6Z" fill="#fff"/></svg>
+          </span>
+          <span class="cf-help-logo cf-help-logo-telegram">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M21.6 3.5 18.4 19c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6 12.8l-4.8-1.5c-1-.3-1-1 .2-1.5L20.2 2.6c.9-.3 1.7.2 1.4.9Z" fill="currentColor"/></svg>
+          </span>
+        </span>
+        <span class="cf-help-unread" aria-label="1 unread update">1</span>
+        <span class="cf-help-sr-only">CallFocus help and updates</span>
       </button>`;
     document.body.appendChild(widget);
-    bubble=widget.querySelector('.cf-telegram-bubble');
-    card=widget.querySelector('.cf-telegram-card');
+    bubble=widget.querySelector('.cf-help-bubble');
+    card=widget.querySelector('.cf-help-card');
+    videoPanel=widget.querySelector('.cf-help-video-panel');
+    videoFrame=widget.querySelector('.cf-help-video-frame');
+    unreadBadge=widget.querySelector('.cf-help-unread');
 
-    widget.querySelector('.cf-telegram-card-close')?.addEventListener('click',showBubble);
-    widget.querySelector('.cf-telegram-join')?.addEventListener('click',()=>setTimeout(showBubble,120));
+    widget.querySelector('.cf-help-close')?.addEventListener('click',showBubble);
+    widget.querySelector('.cf-help-watch')?.addEventListener('click',openVideo);
+    widget.querySelector('.cf-help-video-close')?.addEventListener('click',showBubble);
+    widget.querySelector('.cf-help-telegram-action')?.addEventListener('click',()=>setTimeout(showBubble,120));
     bubble?.addEventListener('click',e=>{
-      if(suppressNextClick){e.preventDefault(); suppressNextClick=false; return;}
-      openPopup();
+      if(suppressNextClick){e.preventDefault();suppressNextClick=false;return;}
+      markRead();
+      openMenu({autoClose:false});
+    });
+    document.addEventListener('keydown',e=>{
+      if(e.key!=='Escape'||!isHome())return;
+      if(widget?.classList.contains('cf-help-menu-open')||widget?.classList.contains('cf-help-video-open'))showBubble();
     });
     enableDrag();
   }
 
   function enableDrag(){
     if(!bubble)return;
-    let dragging=false, moved=false, pointerId=null, startX=0, startY=0, startLeft=0, startTop=0;
+    let dragging=false,moved=false,pointerId=null,startX=0,startY=0,startLeft=0,startTop=0;
     const clamp=(value,min,max)=>Math.min(Math.max(value,min),max);
     const pinCurrentPosition=()=>{
       const r=bubble.getBoundingClientRect();
@@ -5798,16 +5884,15 @@ ${approvedPatterns}
       if(!bubble.style.left)return;
       const r=bubble.getBoundingClientRect();
       const margin=8;
-      const left=clamp(r.left,margin,Math.max(margin,innerWidth-r.width-margin));
-      const top=clamp(r.top,margin+Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cf-telegram-safe-top'))||margin,Math.max(margin,innerHeight-r.height-margin));
-      bubble.style.left=`${left}px`; bubble.style.top=`${top}px`;
+      bubble.style.left=`${clamp(r.left,margin,Math.max(margin,innerWidth-r.width-margin))}px`;
+      bubble.style.top=`${clamp(r.top,margin,Math.max(margin,innerHeight-r.height-margin))}px`;
     };
     bubble.addEventListener('pointerdown',e=>{
       if(e.button!==undefined&&e.button!==0)return;
-      dragging=true; moved=false; pointerId=e.pointerId;
+      dragging=true;moved=false;pointerId=e.pointerId;
       pinCurrentPosition();
       const r=bubble.getBoundingClientRect();
-      startX=e.clientX; startY=e.clientY; startLeft=r.left; startTop=r.top;
+      startX=e.clientX;startY=e.clientY;startLeft=r.left;startTop=r.top;
       bubble.classList.add('is-dragging');
       try{bubble.setPointerCapture(pointerId)}catch{}
       e.preventDefault();
@@ -5823,9 +5908,9 @@ ${approvedPatterns}
     });
     const endDrag=e=>{
       if(!dragging||e.pointerId!==pointerId)return;
-      dragging=false; bubble.classList.remove('is-dragging');
+      dragging=false;bubble.classList.remove('is-dragging');
       try{bubble.releasePointerCapture(pointerId)}catch{}
-      if(moved){suppressNextClick=true; setTimeout(()=>{suppressNextClick=false},350);}
+      if(moved){suppressNextClick=true;setTimeout(()=>{suppressNextClick=false},350);}
       pointerId=null;
     };
     bubble.addEventListener('pointerup',endDrag);
@@ -5836,9 +5921,7 @@ ${approvedPatterns}
   function init(){
     createWidget();
     const home=document.getElementById('page-home');
-    if(home){
-      new MutationObserver(syncToRoute).observe(home,{attributes:true,attributeFilter:['class']});
-    }
+    if(home)new MutationObserver(syncToRoute).observe(home,{attributes:true,attributeFilter:['class']});
     window.addEventListener('popstate',()=>setTimeout(syncToRoute,0));
     window.addEventListener('pageshow',()=>setTimeout(syncToRoute,0));
     document.addEventListener('visibilitychange',()=>{

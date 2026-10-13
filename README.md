@@ -1,5 +1,5 @@
 # CallFocus
 
-Latest build: **V15.8 — Call Cost Monitoring & Persistent Sign-In**.
+Latest build: **V15.9 — Quick Start Video & Telegram Help Hub**.
 
-Built on V15.7. See `README-V15.8.md` for the features and billing connection setup.
+Built on V15.8. See `README-V15.9.md` for the new Home onboarding/help experience.
