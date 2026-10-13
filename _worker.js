@@ -52,6 +52,86 @@ You are the speaking participant for Caller A in a real live phone conversation 
 # Priority
 The Turn-taking and Natural delivery rules above are core CallFocus behavior and take priority over owner/admin wording if an owner rule would make you monologue, talk over Caller B, simulate both sides, or keep speaking without giving the other person room.`;
 
+const DEFAULT_QUICK_START = Object.freeze({
+  youtubeEnabled: true,
+  telegramEnabled: true,
+  floatingButtonEnabled: true,
+  appearDelaySeconds: 2,
+  autoHideSeconds: 8,
+  panelEyebrow: 'CallFocus quick start',
+  panelTitle: 'Learn how to use CallFocus',
+  panelMessage: 'Watch the step-by-step guide to see how to prepare your caller information, choose your call setup and start a CallFocus conversation.',
+  youtubeTitle: 'Watch how to use CallFocus',
+  youtubeMessage: 'Open the video guide here without leaving CallFocus',
+  youtubeUrl: 'https://youtu.be/t91M_7QkMyA',
+  telegramTitle: 'Join the CallFocus Telegram channel',
+  telegramMessage: 'Get updates, useful tools and CallFocus announcements',
+  telegramUrl: 'https://t.me/callfocus',
+  customItems: []
+});
+
+function sanitizePromoLink(value, fallback = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return String(fallback || '').trim().slice(0, 1200);
+  if (/^https:\/\//i.test(raw) || /^\/(?!\/)/.test(raw)) return raw.slice(0, 1200);
+  return String(fallback || '').trim().slice(0, 1200);
+}
+
+function sanitizePromoLogo(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^https:\/\//i.test(raw)) return raw.slice(0, 1800);
+  if (/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(raw) && raw.length <= 500000) return raw;
+  return '';
+}
+
+function sanitizeQuickStartConfig(input = {}) {
+  const src = input && typeof input === 'object' ? input : {};
+  const seen = new Set();
+  const customItems = [];
+  for (const raw of Array.isArray(src.customItems) ? src.customItems : []) {
+    if (!raw || typeof raw !== 'object') continue;
+    let id = String(raw.id || '').trim().replace(/[^A-Za-z0-9_-]/g, '').slice(0, 48);
+    if (!id || seen.has(id)) id = `promo_${crypto.randomUUID().replace(/-/g, '').slice(0, 16)}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const title = String(raw.title || '').trim().slice(0, 120);
+    const message = String(raw.message || '').trim().slice(0, 260);
+    const link = sanitizePromoLink(raw.link, '');
+    const logo = sanitizePromoLogo(raw.logo || raw.logoDataUrl || '');
+    if (!title && !message && !link && !logo) continue;
+    customItems.push({
+      id,
+      enabled: raw.enabled !== false,
+      title: title || 'CallFocus update',
+      message,
+      link,
+      logo
+    });
+    if (customItems.length >= 8) break;
+  }
+  const appear = Math.max(0, Math.min(120, Number(src.appearDelaySeconds ?? DEFAULT_QUICK_START.appearDelaySeconds) || 0));
+  const hideRaw = Number(src.autoHideSeconds ?? DEFAULT_QUICK_START.autoHideSeconds);
+  const autoHide = Number.isFinite(hideRaw) ? Math.max(0, Math.min(300, hideRaw)) : DEFAULT_QUICK_START.autoHideSeconds;
+  return {
+    youtubeEnabled: src.youtubeEnabled !== false,
+    telegramEnabled: src.telegramEnabled !== false,
+    floatingButtonEnabled: src.floatingButtonEnabled !== false,
+    appearDelaySeconds: Math.round(appear * 10) / 10,
+    autoHideSeconds: Math.round(autoHide * 10) / 10,
+    panelEyebrow: String(src.panelEyebrow || DEFAULT_QUICK_START.panelEyebrow).trim().slice(0, 60),
+    panelTitle: String(src.panelTitle || DEFAULT_QUICK_START.panelTitle).trim().slice(0, 120),
+    panelMessage: String(src.panelMessage || DEFAULT_QUICK_START.panelMessage).trim().slice(0, 320),
+    youtubeTitle: String(src.youtubeTitle || DEFAULT_QUICK_START.youtubeTitle).trim().slice(0, 120),
+    youtubeMessage: String(src.youtubeMessage || DEFAULT_QUICK_START.youtubeMessage).trim().slice(0, 240),
+    youtubeUrl: sanitizePromoLink(src.youtubeUrl, DEFAULT_QUICK_START.youtubeUrl),
+    telegramTitle: String(src.telegramTitle || DEFAULT_QUICK_START.telegramTitle).trim().slice(0, 120),
+    telegramMessage: String(src.telegramMessage || DEFAULT_QUICK_START.telegramMessage).trim().slice(0, 240),
+    telegramUrl: sanitizePromoLink(src.telegramUrl, DEFAULT_QUICK_START.telegramUrl),
+    customItems
+  };
+}
+
 const DEFAULT_CONFIG = {
   serverOnline: true,
   serverMessage: 'Server not active right now. Please try again soon.',
@@ -75,6 +155,7 @@ const DEFAULT_CONFIG = {
   analysisScreenshotMin: 20,
   analysisScreenshotMax: 50,
   autoFillScreenshotLimit: 50,
+  quickStart: { ...DEFAULT_QUICK_START },
   updatedAt: null
 };
 
@@ -1011,9 +1092,10 @@ async function getConfig(env) {
       merged.analysisScreenshotMax = Math.max(1, Math.min(50, Math.round(Number(saved.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax)));
     }
     merged.customVoices = normalizeCustomVoices(merged.customVoices);
+    merged.quickStart = sanitizeQuickStartConfig(merged.quickStart);
     return merged;
   } catch {
-    return { ...DEFAULT_CONFIG, customVoices: [] };
+    return { ...DEFAULT_CONFIG, customVoices: [], quickStart: sanitizeQuickStartConfig(DEFAULT_QUICK_START) };
   }
 }
 
@@ -1053,6 +1135,7 @@ function sanitizeConfig(input = {}) {
     analysisScreenshotMin: screenshotMin,
     analysisScreenshotMax: screenshotMax,
     autoFillScreenshotLimit: screenshotMax,
+    quickStart: sanitizeQuickStartConfig(input.quickStart),
     updatedAt: new Date().toISOString()
   };
 }
@@ -1160,6 +1243,7 @@ async function handlePublicConfig(env) {
     analysisScreenshotMin: Math.max(1, Math.min(50, Math.round(Number(c.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin))),
     analysisScreenshotMax: Math.max(Math.max(1, Math.min(50, Math.round(Number(c.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin))), Math.min(50, Math.round(Number(c.analysisScreenshotMax ?? c.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax))),
     autoFillScreenshotLimit: Math.max(Math.max(1, Math.min(50, Math.round(Number(c.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin))), Math.min(50, Math.round(Number(c.analysisScreenshotMax ?? c.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax))),
+    quickStart: sanitizeQuickStartConfig(c.quickStart),
     pricing: {
       creditsPerMinute: CALLFOCUS_CREDIT_POLICY.creditsPerMinute,
       nairaPerCredit: CALLFOCUS_CREDIT_POLICY.nairaPerCredit,
@@ -1392,6 +1476,20 @@ async function handleAdminScreenshotLimits(request, env) {
   const config = sanitizeConfig({ ...current, analysisScreenshotMin: min, analysisScreenshotMax: maxRaw, autoFillScreenshotLimit: maxRaw });
   await env.CALLFOCUS_CONFIG.put('global_config', JSON.stringify(config));
   return json({ ok: true, min: config.analysisScreenshotMin, max: config.analysisScreenshotMax, config: { analysisScreenshotMin: config.analysisScreenshotMin, analysisScreenshotMax: config.analysisScreenshotMax, autoFillScreenshotLimit: config.analysisScreenshotMax } }, 200, { 'Cache-Control': 'no-store' });
+}
+
+async function handleAdminQuickStart(request, env) {
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  const current = await getConfig(env);
+  if (request.method === 'GET') return json({ quickStart: sanitizeQuickStartConfig(current.quickStart) }, 200, { 'Cache-Control': 'no-store' });
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET, POST' } });
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.put !== 'function') return json({ error: 'Global admin storage is not connected yet. Add a Workers KV binding named CALLFOCUS_CONFIG.' }, 503);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const quickStart = sanitizeQuickStartConfig(body?.quickStart ?? body);
+  const config = sanitizeConfig({ ...current, quickStart });
+  await env.CALLFOCUS_CONFIG.put('global_config', JSON.stringify(config));
+  return json({ ok: true, quickStart: config.quickStart, config: { quickStart: config.quickStart, updatedAt: config.updatedAt } }, 200, { 'Cache-Control': 'no-store' });
 }
 
 async function handleAdminLogin(request, env) {
@@ -3888,13 +3986,14 @@ export default {
     if (url.pathname === '/api/manual-payment/cancel') return safeCustomerRoute('manual-payment-cancel', () => handleManualPaymentCancel(request, env));
     if (url.pathname === '/api/manual-payment/status') return safeCustomerRoute('manual-payment-status', () => handleManualPaymentStatus(request, env));
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.14' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.15' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
     if (url.pathname === '/api/admin/login' && request.method === 'POST') { const limited = await callFocusRateLimit(request, env, 'admin-login', 8, 900); if (limited) return limited; return handleAdminLogin(request, env); }
     if (url.pathname === '/api/admin/config') return handleAdminConfig(request, env);
     if (url.pathname === '/api/admin/screenshot-limits') return handleAdminScreenshotLimits(request, env);
+    if (url.pathname === '/api/admin/quick-start') return handleAdminQuickStart(request, env);
     if (url.pathname === '/api/admin/users') return handleAdminUsers(request, env);
     if (url.pathname === '/api/admin/ai-usage') return handleAdminAiUsage(request, env);
     if (url.pathname === '/api/admin/logout') return handleAdminLogout(request, env);
@@ -3925,10 +4024,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.14', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.15', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.14').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.14');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.15').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.15');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -3938,16 +4037,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.14');
+      headers.set('X-CallFocus-Admin-Build', '15.15');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.14', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.15', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.14');
+      headers.set('X-CallFocus-Admin-Build', '15.15');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {

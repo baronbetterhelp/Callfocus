@@ -1,5 +1,5 @@
 # CallFocus
 
-Latest build: **V15.14 — Referral Rewards**.
+Latest build: **V15.15 — Admin-Controlled Quick Start & Promo Manager**.
 
-Built directly on V15.13. See `README-V15.14.md` for the referral signup, first-deposit reward, and My Referrals workflow.
+Built directly on V15.14. See `README-V15.15.md` for the new Quick Start, popup timing, floating-button and custom promo controls.

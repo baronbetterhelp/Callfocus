@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.14';
+  const BUILD='15.15';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -5713,238 +5713,90 @@ ${approvedPatterns}
 })();
 
 
-/* ===== CallFocus V15.11 — Telegram quick-start icon aligned with YouTube action ===== */
+/* ===== CallFocus V15.15 — Admin-controlled Quick Start & promo manager ===== */
 (()=>{
-  const TELEGRAM_URL='https://t.me/callfocus';
-  const YOUTUBE_VIDEO_ID='t91M_7QkMyA';
-  const YOUTUBE_EMBED_URL=`https://www.youtube-nocookie.com/embed/${YOUTUBE_VIDEO_ID}?autoplay=1&rel=0&playsinline=1&modestbranding=1`;
-  const FIRST_OPEN_DELAY=2000;
-  const INTRO_DURATION=8000;
-  let introShown=false;
-  let introTimer=0;
-  let collapseTimer=0;
-  let widget=null;
-  let bubble=null;
-  let card=null;
-  let videoPanel=null;
-  let videoFrame=null;
-  let unreadBadge=null;
-  let suppressNextClick=false;
-
-  const isHome=()=>{
-    const home=document.getElementById('page-home');
-    return !!home?.classList.contains('active') && (((location.pathname||'/').replace(/\/+$/,'')||'/')==='/');
+  const DEFAULTS={
+    youtubeEnabled:true,telegramEnabled:true,floatingButtonEnabled:true,appearDelaySeconds:2,autoHideSeconds:8,
+    panelEyebrow:'CallFocus quick start',panelTitle:'Learn how to use CallFocus',
+    panelMessage:'Watch the step-by-step guide to see how to prepare your caller information, choose your call setup and start a CallFocus conversation.',
+    youtubeTitle:'Watch how to use CallFocus',youtubeMessage:'Open the video guide here without leaving CallFocus',youtubeUrl:'https://youtu.be/t91M_7QkMyA',
+    telegramTitle:'Join the CallFocus Telegram channel',telegramMessage:'Get updates, useful tools and CallFocus announcements',telegramUrl:'https://t.me/callfocus',customItems:[]
   };
-  const clearTimers=()=>{clearTimeout(introTimer);clearTimeout(collapseTimer);introTimer=collapseTimer=0;};
-  const stopVideo=()=>{
-    if(!videoFrame)return;
-    videoFrame.removeAttribute('src');
+  const bootAt=Date.now();
+  let settings={...DEFAULTS};
+  let introShown=false,introTimer=0,collapseTimer=0,widget=null,bubble=null,card=null,videoPanel=null,videoFrame=null,unreadBadge=null,suppressNextClick=false;
+  const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+  const safeLink=value=>{const raw=String(value||'').trim();return /^https:\/\//i.test(raw)||/^\/(?!\/)/.test(raw)?raw:''};
+  const normalize=value=>{
+    const q={...DEFAULTS,...(value&&typeof value==='object'?value:{})};
+    q.appearDelaySeconds=Math.max(0,Math.min(120,Number(q.appearDelaySeconds)||0));
+    q.autoHideSeconds=Math.max(0,Math.min(300,Number(q.autoHideSeconds)||0));
+    q.customItems=(Array.isArray(q.customItems)?q.customItems:[]).filter(row=>row&&row.enabled!==false).slice(0,8).map(row=>({id:String(row.id||''),enabled:true,title:String(row.title||'CallFocus update'),message:String(row.message||''),link:safeLink(row.link),logo:String(row.logo||'')}));
+    return q;
   };
-  const setAriaState=state=>{
+  const activeItems=()=>{const rows=[];if(settings.youtubeEnabled!==false)rows.push({type:'youtube'});if(settings.telegramEnabled!==false)rows.push({type:'telegram'});settings.customItems.forEach(row=>rows.push({type:'custom',row}));return rows};
+  const hasItems=()=>activeItems().length>0;
+  const isHome=()=>{const home=document.getElementById('page-home');return !!home?.classList.contains('active')&&(((location.pathname||'/').replace(/\/+$/,'')||'/')==='/')};
+  const clearTimers=()=>{clearTimeout(introTimer);clearTimeout(collapseTimer);introTimer=collapseTimer=0};
+  const stopVideo=()=>{if(videoFrame)videoFrame.removeAttribute('src')};
+  const youtubeId=url=>{try{const raw=String(url||'').trim();if(!raw)return'';const u=new URL(raw,location.origin);if(u.hostname.includes('youtu.be'))return u.pathname.split('/').filter(Boolean)[0]||'';if(u.hostname.includes('youtube.com')||u.hostname.includes('youtube-nocookie.com')){if(u.searchParams.get('v'))return u.searchParams.get('v');const parts=u.pathname.split('/').filter(Boolean);const pos=parts.findIndex(v=>['embed','shorts','live'].includes(v));if(pos>=0)return parts[pos+1]||''}}catch{}return''};
+  const youtubeEmbed=()=>{const id=youtubeId(settings.youtubeUrl);return id?`https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0&playsinline=1&modestbranding=1`:''};
+  const setAriaState=state=>{if(!widget)return;widget.setAttribute('aria-hidden',state==='hidden'?'true':'false');card?.setAttribute('aria-hidden',state==='menu'?'false':'true');videoPanel?.setAttribute('aria-hidden',state==='video'?'false':'true');bubble?.setAttribute('aria-hidden',state==='bubble'?'false':'true')};
+  const setState=state=>{if(!widget)return;widget.classList.remove('cf-help-menu-open','cf-help-bubble-open','cf-help-video-open');if(state==='menu')widget.classList.add('cf-help-menu-open');if(state==='bubble')widget.classList.add('cf-help-bubble-open');if(state==='video')widget.classList.add('cf-help-video-open');setAriaState(state)};
+  const markRead=()=>{if(unreadBadge)unreadBadge.classList.add('is-read');if(bubble)bubble.setAttribute('aria-label','Open CallFocus help and updates')};
+  const hideAll=()=>{clearTimers();stopVideo();setState('hidden')};
+  const showBubble=()=>{if(!widget||!isHome()||settings.floatingButtonEnabled===false||!hasItems())return hideAll();clearTimeout(collapseTimer);collapseTimer=0;stopVideo();setState('bubble')};
+  const closePanel=()=>{if(settings.floatingButtonEnabled!==false&&hasItems()&&isHome())showBubble();else hideAll()};
+  const openMenu=({autoClose=false}={})=>{if(!widget||!isHome()||!hasItems())return hideAll();introShown=true;clearTimeout(introTimer);clearTimeout(collapseTimer);stopVideo();setState('menu');if(autoClose&&settings.autoHideSeconds>0)collapseTimer=setTimeout(closePanel,settings.autoHideSeconds*1000)};
+  const openVideo=()=>{if(!widget||!isHome()||settings.youtubeEnabled===false)return;const embed=youtubeEmbed();if(!embed){const href=safeLink(settings.youtubeUrl);if(href)window.open(href,'_blank','noopener,noreferrer');return}clearTimers();markRead();if(videoFrame)videoFrame.setAttribute('src',embed);setState('video')};
+  const scheduleIntro=()=>{clearTimeout(introTimer);if(!isHome()||!hasItems())return hideAll();if(introShown){if(settings.floatingButtonEnabled!==false)showBubble();return}const target=Math.max(0,settings.appearDelaySeconds*1000);const remaining=Math.max(0,target-(Date.now()-bootAt));introTimer=setTimeout(()=>{if(isHome())openMenu({autoClose:true})},remaining)};
+  const syncToRoute=()=>{if(isHome())scheduleIntro();else hideAll()};
+  const genericLogo=()=>`<svg viewBox="0 0 28 28" fill="none"><rect x="3" y="5" width="22" height="18" rx="6" fill="currentColor" opacity=".13"/><path d="m12 10 7 4-7 4v-8Z" fill="currentColor"/></svg>`;
+  const youtubeLogo=()=>`<svg viewBox="0 0 28 20"><path d="M27.4 3.2A3.5 3.5 0 0 0 25 0.7C22.9 0 14 0 14 0S5.1 0 3 .7A3.5 3.5 0 0 0 .6 3.2 36.5 36.5 0 0 0 0 10a36.5 36.5 0 0 0 .6 6.8A3.5 3.5 0 0 0 3 19.3c2.1.7 11 .7 11 .7s8.9 0 11-.7a3.5 3.5 0 0 0 2.4-2.5A36.5 36.5 0 0 0 28 10a36.5 36.5 0 0 0-.6-6.8Z" fill="currentColor"/><path d="m11.2 14.3 7.3-4.3-7.3-4.3v8.6Z" fill="#fff"/></svg>`;
+  const telegramLogo=()=>`<svg viewBox="0 0 24 24" fill="none"><path d="M21.6 3.5 18.4 19c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6 12.8l-4.8-1.5c-1-.3-1-1 .2-1.5L20.2 2.6c.9-.3 1.7.2 1.4.9Z" fill="currentColor"/></svg>`;
+  const customIcon=row=>row.logo?`<img src="${esc(row.logo)}" alt="" />`:`<span>${esc(String(row.title||'C').trim().slice(0,1).toUpperCase()||'C')}</span>`;
+  const actionMarkup=()=>{
+    const parts=[];
+    if(settings.youtubeEnabled!==false)parts.push(`<button class="cf-help-action cf-help-watch" type="button"><span class="cf-help-action-icon cf-help-youtube-mark" aria-hidden="true">${youtubeLogo()}</span><span class="cf-help-action-copy"><strong>${esc(settings.youtubeTitle)}</strong><small>${esc(settings.youtubeMessage)}</small></span><b aria-hidden="true">›</b></button>`);
+    const secondary=[];
+    if(settings.telegramEnabled!==false){const href=safeLink(settings.telegramUrl)||'https://t.me/callfocus';secondary.push(`<a class="cf-help-action cf-help-telegram-action" href="${esc(href)}" target="_blank" rel="noopener noreferrer"><span class="cf-help-action-icon cf-help-telegram-action-icon" aria-hidden="true">${telegramLogo()}</span><span class="cf-help-action-copy"><strong>${esc(settings.telegramTitle)}</strong><small>${esc(settings.telegramMessage)}</small></span><b aria-hidden="true">›</b></a>`)}
+    settings.customItems.forEach(row=>{const href=safeLink(row.link);const tag=href?'a':'div';const attrs=href?` href="${esc(href)}" target="_blank" rel="noopener noreferrer"`:'';secondary.push(`<${tag} class="cf-help-action cf-help-custom-action"${attrs} data-custom-promo="${esc(row.id)}"><span class="cf-help-action-icon cf-help-custom-action-icon" aria-hidden="true">${customIcon(row)}</span><span class="cf-help-action-copy"><strong>${esc(row.title)}</strong><small>${esc(row.message)}</small></span>${href?'<b aria-hidden="true">›</b>':''}</${tag}>`)});
+    if(secondary.length){if(parts.length)parts.push('<div class="cf-help-divider"><span>And stay updated</span></div>');parts.push(...secondary)}
+    return parts.join('');
+  };
+  const bubbleLogos=()=>{const logos=[];if(settings.youtubeEnabled!==false)logos.push(`<span class="cf-help-logo cf-help-logo-youtube">${youtubeLogo()}</span>`);if(settings.telegramEnabled!==false)logos.push(`<span class="cf-help-logo cf-help-logo-telegram">${telegramLogo()}</span>`);if(!logos.length&&settings.customItems.length){const row=settings.customItems[0];logos.push(`<span class="cf-help-logo cf-help-logo-custom">${customIcon(row)}</span>`)}if(!logos.length)logos.push(`<span class="cf-help-logo cf-help-logo-custom">${genericLogo()}</span>`);return `<span class="cf-help-logo-stage ${logos.length===1?'is-single':''}" aria-hidden="true">${logos.join('')}</span>`};
+  function renderWidget(){
     if(!widget)return;
-    widget.setAttribute('aria-hidden',state==='hidden'?'true':'false');
-    card?.setAttribute('aria-hidden',state==='menu'?'false':'true');
-    videoPanel?.setAttribute('aria-hidden',state==='video'?'false':'true');
-    bubble?.setAttribute('aria-hidden',state==='bubble'?'false':'true');
-  };
-  const setState=state=>{
-    if(!widget)return;
-    widget.classList.remove('cf-help-menu-open','cf-help-bubble-open','cf-help-video-open');
-    if(state==='menu')widget.classList.add('cf-help-menu-open');
-    if(state==='bubble')widget.classList.add('cf-help-bubble-open');
-    if(state==='video')widget.classList.add('cf-help-video-open');
-    setAriaState(state);
-  };
-  const markRead=()=>{
-    if(unreadBadge)unreadBadge.classList.add('is-read');
-    if(bubble)bubble.setAttribute('aria-label','Open CallFocus help and updates');
-  };
-  const hideAll=()=>{
-    clearTimers();
-    stopVideo();
-    setState('hidden');
-  };
-  const showBubble=()=>{
-    if(!widget||!isHome())return;
-    clearTimeout(collapseTimer);collapseTimer=0;
-    stopVideo();
-    setState('bubble');
-  };
-  const openMenu=({autoClose=false}={})=>{
-    if(!widget||!isHome())return;
-    introShown=true;
-    clearTimeout(introTimer);clearTimeout(collapseTimer);
-    stopVideo();
-    setState('menu');
-    if(autoClose)collapseTimer=setTimeout(showBubble,INTRO_DURATION);
-  };
-  const openVideo=()=>{
-    if(!widget||!isHome())return;
-    clearTimers();
-    markRead();
-    if(videoFrame&&!videoFrame.getAttribute('src'))videoFrame.setAttribute('src',YOUTUBE_EMBED_URL);
-    setState('video');
-  };
-  const scheduleIntro=()=>{
-    clearTimeout(introTimer);
-    if(!isHome())return;
-    if(introShown){showBubble();return;}
-    introTimer=setTimeout(()=>{if(isHome())openMenu({autoClose:true});},FIRST_OPEN_DELAY);
-  };
-  const syncToRoute=()=>{
-    if(isHome())scheduleIntro();
-    else hideAll();
-  };
-
-  function createWidget(){
-    if(document.getElementById('cfCallFocusHelpHub'))return;
-    widget=document.createElement('div');
-    widget.id='cfCallFocusHelpHub';
-    widget.className='cf-help-hub';
-    widget.setAttribute('aria-hidden','true');
-    widget.innerHTML=`
-      <aside class="cf-help-card" role="dialog" aria-label="Learn CallFocus and get updates" aria-hidden="true">
-        <button class="cf-help-close" type="button" aria-label="Minimize CallFocus help">×</button>
-        <div class="cf-help-guide-head">
-          <span class="cf-help-guide-icon" aria-hidden="true">
-            <svg viewBox="0 0 28 28" fill="none"><rect x="3" y="5" width="22" height="18" rx="6" fill="currentColor" opacity=".13"/><path d="m12 10 7 4-7 4v-8Z" fill="currentColor"/><path d="M7.7 7.8A8.8 8.8 0 0 1 14 5.2c2.5 0 4.8 1 6.4 2.6M20.3 20.2A8.8 8.8 0 0 1 14 22.8a8.8 8.8 0 0 1-6.3-2.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-          </span>
-          <div class="cf-help-guide-copy">
-            <span class="cf-help-eyebrow">CallFocus quick start</span>
-            <strong>Learn how to use CallFocus</strong>
-            <p>Watch the step-by-step guide to see how to prepare your caller information, choose your call setup and start a CallFocus conversation.</p>
-          </div>
-        </div>
-        <button class="cf-help-action cf-help-watch" type="button">
-          <span class="cf-help-action-icon cf-help-youtube-mark" aria-hidden="true">
-            <svg viewBox="0 0 28 20"><path d="M27.4 3.2A3.5 3.5 0 0 0 25 0.7C22.9 0 14 0 14 0S5.1 0 3 .7A3.5 3.5 0 0 0 .6 3.2 36.5 36.5 0 0 0 0 10a36.5 36.5 0 0 0 .6 6.8A3.5 3.5 0 0 0 3 19.3c2.1.7 11 .7 11 .7s8.9 0 11-.7a3.5 3.5 0 0 0 2.4-2.5A36.5 36.5 0 0 0 28 10a36.5 36.5 0 0 0-.6-6.8Z" fill="currentColor"/><path d="m11.2 14.3 7.3-4.3-7.3-4.3v8.6Z" fill="#fff"/></svg>
-          </span>
-          <span class="cf-help-action-copy"><strong>Watch how to use CallFocus</strong><small>Open the video guide here without leaving CallFocus</small></span>
-          <b aria-hidden="true">›</b>
-        </button>
-        <div class="cf-help-divider"><span>And stay updated</span></div>
-        <a class="cf-help-action cf-help-telegram-action" href="${TELEGRAM_URL}" target="_blank" rel="noopener noreferrer">
-          <span class="cf-help-action-icon cf-help-telegram-action-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M21.6 3.5 18.4 19c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6 12.8l-4.8-1.5c-1-.3-1-1 .2-1.5L20.2 2.6c.9-.3 1.7.2 1.4.9Z" fill="currentColor"/></svg>
-          </span>
-          <span class="cf-help-action-copy"><strong>Join the CallFocus Telegram channel</strong><small>Get updates, useful tools and CallFocus announcements</small></span>
-          <b aria-hidden="true">›</b>
-        </a>
-      </aside>
-
-      <section class="cf-help-video-panel" role="dialog" aria-label="How to use CallFocus video guide" aria-hidden="true">
-        <div class="cf-help-video-head">
-          <span class="cf-help-youtube-mark" aria-hidden="true">
-            <svg viewBox="0 0 28 20"><path d="M27.4 3.2A3.5 3.5 0 0 0 25 0.7C22.9 0 14 0 14 0S5.1 0 3 .7A3.5 3.5 0 0 0 .6 3.2 36.5 36.5 0 0 0 0 10a36.5 36.5 0 0 0 .6 6.8A3.5 3.5 0 0 0 3 19.3c2.1.7 11 .7 11 .7s8.9 0 11-.7a3.5 3.5 0 0 0 2.4-2.5A36.5 36.5 0 0 0 28 10a36.5 36.5 0 0 0-.6-6.8Z" fill="currentColor"/><path d="m11.2 14.3 7.3-4.3-7.3-4.3v8.6Z" fill="#fff"/></svg>
-          </span>
-          <div><span class="cf-help-eyebrow">Video guide</span><strong>How to use CallFocus</strong></div>
-          <button class="cf-help-video-close" type="button" aria-label="Close video guide">×</button>
-        </div>
-        <div class="cf-help-video-shell">
-          <iframe class="cf-help-video-frame" title="How to use CallFocus" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
-        </div>
-        <p class="cf-help-video-note">Close the guide at any time to return it to the floating CallFocus help button.</p>
-      </section>
-
-      <button class="cf-help-bubble" type="button" aria-label="Open CallFocus help and updates, 1 unread" aria-hidden="true">
-        <span class="cf-help-bubble-ring" aria-hidden="true"></span>
-        <span class="cf-help-logo-stage" aria-hidden="true">
-          <span class="cf-help-logo cf-help-logo-youtube">
-            <svg viewBox="0 0 28 20"><path d="M27.4 3.2A3.5 3.5 0 0 0 25 0.7C22.9 0 14 0 14 0S5.1 0 3 .7A3.5 3.5 0 0 0 .6 3.2 36.5 36.5 0 0 0 0 10a36.5 36.5 0 0 0 .6 6.8A3.5 3.5 0 0 0 3 19.3c2.1.7 11 .7 11 .7s8.9 0 11-.7a3.5 3.5 0 0 0 2.4-2.5A36.5 36.5 0 0 0 28 10a36.5 36.5 0 0 0-.6-6.8Z" fill="currentColor"/><path d="m11.2 14.3 7.3-4.3-7.3-4.3v8.6Z" fill="#fff"/></svg>
-          </span>
-          <span class="cf-help-logo cf-help-logo-telegram">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M21.6 3.5 18.4 19c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6 12.8l-4.8-1.5c-1-.3-1-1 .2-1.5L20.2 2.6c.9-.3 1.7.2 1.4.9Z" fill="currentColor"/></svg>
-          </span>
-        </span>
-        <span class="cf-help-unread" aria-label="1 unread update">1</span>
-        <span class="cf-help-sr-only">CallFocus help and updates</span>
-      </button>`;
-    document.body.appendChild(widget);
-    bubble=widget.querySelector('.cf-help-bubble');
-    card=widget.querySelector('.cf-help-card');
-    videoPanel=widget.querySelector('.cf-help-video-panel');
-    videoFrame=widget.querySelector('.cf-help-video-frame');
-    unreadBadge=widget.querySelector('.cf-help-unread');
-
-    widget.querySelector('.cf-help-close')?.addEventListener('click',showBubble);
+    widget.innerHTML=`<aside class="cf-help-card" role="dialog" aria-label="CallFocus quick start and updates" aria-hidden="true"><button class="cf-help-close" type="button" aria-label="Minimize CallFocus help">×</button><div class="cf-help-guide-head"><span class="cf-help-guide-icon" aria-hidden="true">${genericLogo()}</span><div class="cf-help-guide-copy"><span class="cf-help-eyebrow">${esc(settings.panelEyebrow)}</span><strong>${esc(settings.panelTitle)}</strong><p>${esc(settings.panelMessage)}</p></div></div>${actionMarkup()}</aside><section class="cf-help-video-panel" role="dialog" aria-label="How to use CallFocus video guide" aria-hidden="true"><div class="cf-help-video-head"><span class="cf-help-youtube-mark" aria-hidden="true">${youtubeLogo()}</span><div><span class="cf-help-eyebrow">Video guide</span><strong>${esc(settings.youtubeTitle)}</strong></div><button class="cf-help-video-close" type="button" aria-label="Close video guide">×</button></div><div class="cf-help-video-shell"><iframe class="cf-help-video-frame" title="How to use CallFocus" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div><p class="cf-help-video-note">Close the guide at any time to return to CallFocus.</p></section><button class="cf-help-bubble" type="button" aria-label="Open CallFocus help and updates, 1 unread" aria-hidden="true"><span class="cf-help-bubble-ring" aria-hidden="true"></span>${bubbleLogos()}<span class="cf-help-unread" aria-label="1 unread update">1</span><span class="cf-help-sr-only">CallFocus help and updates</span></button>`;
+    bubble=widget.querySelector('.cf-help-bubble');card=widget.querySelector('.cf-help-card');videoPanel=widget.querySelector('.cf-help-video-panel');videoFrame=widget.querySelector('.cf-help-video-frame');unreadBadge=widget.querySelector('.cf-help-unread');
+    widget.querySelector('.cf-help-close')?.addEventListener('click',closePanel);
     widget.querySelector('.cf-help-watch')?.addEventListener('click',openVideo);
-    widget.querySelector('.cf-help-video-close')?.addEventListener('click',showBubble);
-    widget.querySelector('.cf-help-telegram-action')?.addEventListener('click',()=>setTimeout(showBubble,120));
-    bubble?.addEventListener('click',e=>{
-      if(suppressNextClick){e.preventDefault();suppressNextClick=false;return;}
-      markRead();
-      openMenu({autoClose:false});
-    });
-    document.addEventListener('keydown',e=>{
-      if(e.key!=='Escape'||!isHome())return;
-      if(widget?.classList.contains('cf-help-menu-open')||widget?.classList.contains('cf-help-video-open'))showBubble();
-    });
+    widget.querySelector('.cf-help-video-close')?.addEventListener('click',closePanel);
+    widget.querySelector('.cf-help-telegram-action')?.addEventListener('click',()=>setTimeout(closePanel,120));
+    widget.querySelectorAll('.cf-help-custom-action[href]').forEach(link=>link.addEventListener('click',()=>setTimeout(closePanel,120)));
+    bubble?.addEventListener('click',e=>{if(suppressNextClick){e.preventDefault();suppressNextClick=false;return}markRead();openMenu({autoClose:false})});
     enableDrag();
   }
-
+  function createWidget(){
+    if(document.getElementById('cfCallFocusHelpHub'))return;
+    widget=document.createElement('div');widget.id='cfCallFocusHelpHub';widget.className='cf-help-hub';widget.setAttribute('aria-hidden','true');document.body.appendChild(widget);renderWidget();
+    document.addEventListener('keydown',e=>{if(e.key!=='Escape'||!isHome())return;if(widget?.classList.contains('cf-help-menu-open')||widget?.classList.contains('cf-help-video-open'))closePanel()});
+    const home=document.getElementById('page-home');if(home)new MutationObserver(syncToRoute).observe(home,{attributes:true,attributeFilter:['class']});
+  }
   function enableDrag(){
     if(!bubble)return;
     let dragging=false,moved=false,pointerId=null,startX=0,startY=0,startLeft=0,startTop=0;
     const clamp=(value,min,max)=>Math.min(Math.max(value,min),max);
-    const pinCurrentPosition=()=>{
-      const r=bubble.getBoundingClientRect();
-      bubble.style.left=`${r.left}px`;
-      bubble.style.top=`${r.top}px`;
-      bubble.style.right='auto';
-      bubble.style.bottom='auto';
-    };
-    const keepInsideViewport=()=>{
-      if(!bubble.style.left)return;
-      const r=bubble.getBoundingClientRect();
-      const margin=8;
-      bubble.style.left=`${clamp(r.left,margin,Math.max(margin,innerWidth-r.width-margin))}px`;
-      bubble.style.top=`${clamp(r.top,margin,Math.max(margin,innerHeight-r.height-margin))}px`;
-    };
-    bubble.addEventListener('pointerdown',e=>{
-      if(e.button!==undefined&&e.button!==0)return;
-      dragging=true;moved=false;pointerId=e.pointerId;
-      pinCurrentPosition();
-      const r=bubble.getBoundingClientRect();
-      startX=e.clientX;startY=e.clientY;startLeft=r.left;startTop=r.top;
-      bubble.classList.add('is-dragging');
-      try{bubble.setPointerCapture(pointerId)}catch{}
-      e.preventDefault();
-    });
-    bubble.addEventListener('pointermove',e=>{
-      if(!dragging||e.pointerId!==pointerId)return;
-      const dx=e.clientX-startX,dy=e.clientY-startY;
-      if(Math.hypot(dx,dy)>5)moved=true;
-      const r=bubble.getBoundingClientRect(),margin=8;
-      bubble.style.left=`${clamp(startLeft+dx,margin,Math.max(margin,innerWidth-r.width-margin))}px`;
-      bubble.style.top=`${clamp(startTop+dy,margin,Math.max(margin,innerHeight-r.height-margin))}px`;
-      e.preventDefault();
-    });
-    const endDrag=e=>{
-      if(!dragging||e.pointerId!==pointerId)return;
-      dragging=false;bubble.classList.remove('is-dragging');
-      try{bubble.releasePointerCapture(pointerId)}catch{}
-      if(moved){suppressNextClick=true;setTimeout(()=>{suppressNextClick=false},350);}
-      pointerId=null;
-    };
-    bubble.addEventListener('pointerup',endDrag);
-    bubble.addEventListener('pointercancel',endDrag);
-    window.addEventListener('resize',keepInsideViewport,{passive:true});
+    const pinCurrentPosition=()=>{const r=bubble.getBoundingClientRect();bubble.style.left=`${r.left}px`;bubble.style.top=`${r.top}px`;bubble.style.right='auto';bubble.style.bottom='auto'};
+    const keepInsideViewport=()=>{if(!bubble.style.left)return;const r=bubble.getBoundingClientRect(),margin=8;bubble.style.left=`${clamp(r.left,margin,Math.max(margin,innerWidth-r.width-margin))}px`;bubble.style.top=`${clamp(r.top,margin,Math.max(margin,innerHeight-r.height-margin))}px`};
+    bubble.addEventListener('pointerdown',e=>{if(e.button!==undefined&&e.button!==0)return;dragging=true;moved=false;pointerId=e.pointerId;pinCurrentPosition();const r=bubble.getBoundingClientRect();startX=e.clientX;startY=e.clientY;startLeft=r.left;startTop=r.top;bubble.classList.add('is-dragging');try{bubble.setPointerCapture(pointerId)}catch{}e.preventDefault()});
+    bubble.addEventListener('pointermove',e=>{if(!dragging||e.pointerId!==pointerId)return;const dx=e.clientX-startX,dy=e.clientY-startY;if(Math.hypot(dx,dy)>5)moved=true;const r=bubble.getBoundingClientRect(),margin=8;bubble.style.left=`${clamp(startLeft+dx,margin,Math.max(margin,innerWidth-r.width-margin))}px`;bubble.style.top=`${clamp(startTop+dy,margin,Math.max(margin,innerHeight-r.height-margin))}px`;e.preventDefault()});
+    const finish=e=>{if(!dragging||e.pointerId!==pointerId)return;dragging=false;bubble.classList.remove('is-dragging');try{bubble.releasePointerCapture(pointerId)}catch{}if(moved){suppressNextClick=true;setTimeout(()=>{suppressNextClick=false},350)}pointerId=null};
+    bubble.addEventListener('pointerup',finish);bubble.addEventListener('pointercancel',finish);window.addEventListener('resize',keepInsideViewport,{passive:true});
   }
-
-  function init(){
-    createWidget();
-    const home=document.getElementById('page-home');
-    if(home)new MutationObserver(syncToRoute).observe(home,{attributes:true,attributeFilter:['class']});
-    window.addEventListener('popstate',()=>setTimeout(syncToRoute,0));
-    window.addEventListener('pageshow',()=>setTimeout(syncToRoute,0));
-    document.addEventListener('visibilitychange',()=>{
-      if(document.visibilityState==='visible')syncToRoute();
-      else clearTimers();
-    });
-    syncToRoute();
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
-  else init();
+  const load=async()=>{try{const res=await fetch('/api/public-config',{cache:'no-store'});if(res.ok){const payload=await res.json();settings=normalize(payload.quickStart)}}catch{}createWidget();if(!hasItems())return hideAll();syncToRoute()};
+  window.addEventListener('popstate',()=>setTimeout(syncToRoute,0));window.addEventListener('pageshow',()=>setTimeout(syncToRoute,0));document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')syncToRoute();else clearTimers()});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',load,{once:true});else load();
 })();
 
 

@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=15.14" />
+  <link rel="stylesheet" href="/admin.css?v=15.15" />
 </head>
 <body class="admin-page">
   <header class="site-header">
@@ -48,6 +48,7 @@
           <button class="admin-tab" type="button" data-admin-tab="voice" aria-selected="false"><span>◉</span>Voice</button>
           <button class="admin-tab" type="button" data-admin-tab="behavior" aria-selected="false"><span>≋</span>Behavior</button>
           <button class="admin-tab" type="button" data-admin-tab="appearance" aria-selected="false"><span>◌</span>Appearance</button>
+          <button class="admin-tab" type="button" data-admin-tab="promos" aria-selected="false"><span>▤</span>Quick Start</button>
           <button class="admin-tab" type="button" data-admin-tab="diagnostics" aria-selected="false"><span>⚙</span>Diagnostics</button>
         </div>
       </nav>
@@ -211,6 +212,56 @@
         </div>
       </section>
 
+      <section class="admin-tab-panel" data-admin-panel="promos">
+        <div class="admin-section-heading"><span class="kicker">Home popup controls</span><h2>Quick Start & promo manager</h2><p>Control the YouTube guide, Telegram card, floating button, popup timing and your own custom messages independently.</p></div>
+
+        <div class="premium-panel form-panel admin-quickstart-controls">
+          <div class="admin-users-heading"><div><h3>Visibility</h3><p class="admin-panel-copy">Each switch is independent. Turning off both built-in cards does not affect any custom promo messages you add below.</p></div></div>
+          <div class="quickstart-toggle-grid">
+            <label class="quickstart-switch-card"><span><strong>YouTube guide</strong><small>Show the video-guide card in the popup.</small></span><input id="adminQuickYoutubeEnabled" type="checkbox" checked /></label>
+            <label class="quickstart-switch-card"><span><strong>Telegram</strong><small>Show the Telegram channel card in the popup.</small></span><input id="adminQuickTelegramEnabled" type="checkbox" checked /></label>
+            <label class="quickstart-switch-card"><span><strong>Floating button</strong><small>Keep the animated floating button after the popup closes.</small></span><input id="adminQuickFloatingEnabled" type="checkbox" checked /></label>
+          </div>
+          <div class="form-grid two quickstart-time-grid">
+            <label>Popup appears after (seconds)<input id="adminQuickAppearSeconds" type="number" min="0" max="120" step="0.5" inputmode="decimal" value="2" /></label>
+            <label>Popup disappears after (seconds)<input id="adminQuickHideSeconds" type="number" min="0" max="300" step="0.5" inputmode="decimal" value="8" /></label>
+          </div>
+          <div class="admin-recommendation">Set disappear time to <strong>0</strong> if you want the popup to stay open until the customer closes it or selects an item.</div>
+        </div>
+
+        <div class="premium-panel form-panel">
+          <div class="admin-users-heading"><div><h3>Popup heading</h3><p class="admin-panel-copy">Change the main text shown at the top of the popup without editing the website.</p></div></div>
+          <label>Small heading<input id="adminQuickEyebrow" maxlength="60" placeholder="CallFocus quick start" /></label>
+          <label>Main heading<input id="adminQuickTitle" maxlength="120" placeholder="Learn how to use CallFocus" /></label>
+          <label>Intro message<textarea id="adminQuickMessage" rows="4" maxlength="320" placeholder="Short explanation shown above the popup actions"></textarea></label>
+        </div>
+
+        <div class="premium-panel form-panel">
+          <div class="admin-users-heading"><div><h3>Built-in popup items</h3><p class="admin-panel-copy">You can also change the wording or destination for the existing YouTube and Telegram items.</p></div></div>
+          <div class="quickstart-builtins-grid">
+            <article class="quickstart-builtin-card youtube">
+              <div class="quickstart-builtin-head"><span class="quickstart-brand-mark youtube">▶</span><div><strong>YouTube guide</strong><small>Uses the YouTube switch above.</small></div></div>
+              <label>Title<input id="adminQuickYoutubeTitle" maxlength="120" /></label>
+              <label>Short message<textarea id="adminQuickYoutubeMessage" rows="3" maxlength="240"></textarea></label>
+              <label>YouTube link<input id="adminQuickYoutubeUrl" type="url" maxlength="1200" placeholder="https://youtu.be/..." /></label>
+            </article>
+            <article class="quickstart-builtin-card telegram">
+              <div class="quickstart-builtin-head"><span class="quickstart-brand-mark telegram">➤</span><div><strong>Telegram</strong><small>Uses the Telegram switch above.</small></div></div>
+              <label>Title<input id="adminQuickTelegramTitle" maxlength="120" /></label>
+              <label>Short message<textarea id="adminQuickTelegramMessage" rows="3" maxlength="240"></textarea></label>
+              <label>Telegram link<input id="adminQuickTelegramUrl" type="url" maxlength="1200" placeholder="https://t.me/callfocus" /></label>
+            </article>
+          </div>
+        </div>
+
+        <div class="premium-panel form-panel admin-custom-promos-panel">
+          <div class="admin-users-heading"><div><h3>Custom popup messages</h3><p class="admin-panel-copy">Add your own action cards to the same popup. Each one can have its own message, destination link, logo and on/off switch.</p></div><button class="btn btn-ghost" type="button" id="adminAddPromoBtn">Add popup message</button></div>
+          <div class="admin-custom-promos" id="adminCustomPromos"><div class="admin-users-empty">No custom popup messages yet.</div></div>
+          <div class="admin-recommendation">Logo uploads are resized on this device before saving. Use a square PNG, JPG or WebP for the cleanest result.</div>
+          <button class="btn btn-primary admin-inline-save" type="button" id="saveQuickStartBtn">Save Quick Start settings</button>
+        </div>
+      </section>
+
       <section class="admin-tab-panel" data-admin-panel="diagnostics">
         <div class="admin-section-heading"><span class="kicker">Diagnostics</span><h2>System checks</h2><p>Check GPT-Live access, OpenAI configuration, KV storage and the latest live-session result.</p></div>
         <div class="premium-panel">
@@ -225,6 +276,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=15.14"></script>
+  <script src="/admin.js?v=15.15"></script>
 </body>
 </html>
