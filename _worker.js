@@ -8,7 +8,8 @@ const CALLFOCUS_CREDIT_POLICY = Object.freeze({
   nairaPerCredit: 10,
   minimumPurchaseCredits: 300,
   purchaseStepCredits: 50,
-  starterCredits: 75
+  starterCredits: 75,
+  referralRewardCredits: 100
 });
 const CALLFOCUS_SECONDS_PER_CREDIT = 60 / CALLFOCUS_CREDIT_POLICY.creditsPerMinute;
 function callFocusSecondsForCredits(credits) {
@@ -285,8 +286,10 @@ function publicCustomerUser(user) {
   };
 }
 
-function defaultCustomerData(name = '') {
+function defaultCustomerData(name = '', options = {}) {
   const now = new Date().toISOString();
+  const starterCredits = Math.max(0, Math.round(Number(options?.starterCredits) || 0));
+  const starterGranted = starterCredits > 0;
   return {
     profile: { name: String(name || ''), role: '', about: '', rules: '' },
     callers: [],
@@ -295,10 +298,10 @@ function defaultCustomerData(name = '') {
     wallet: {
       version: 2,
       revision: 0,
-      balanceSeconds: callFocusSecondsForCredits(CALLFOCUS_CREDIT_POLICY.starterCredits),
-      starterGranted: true,
-      starterGrantedAt: now,
-      starterGrantMode: 'server_account_signup',
+      balanceSeconds: callFocusSecondsForCredits(starterCredits),
+      starterGranted,
+      starterGrantedAt: starterGranted ? now : null,
+      starterGrantMode: starterGranted ? String(options?.starterGrantMode || 'referral_signup_bonus') : 'referral_required',
       purchases: [],
       usage: []
     }
@@ -313,6 +316,209 @@ function customerUserKey(userId) { return `customer:user:${userId}`; }
 function customerDataKey(userId) { return `customer:data:${userId}`; }
 function customerPhoneIndexKey(phone) { return `customer:phone:${customerPhoneKey(phone)}`; }
 async function customerSessionKey(token) { return `customer:session:${await sha256Hex(token)}`; }
+
+// -----------------------------------------------------------------------------
+// V15.14 referral program
+// Existing balances are never converted. A valid referral code gives the new
+// account the existing 75-credit starter bonus. The referrer earns 100 credits
+// once, after the referred account's first confirmed deposit.
+// -----------------------------------------------------------------------------
+const REFERRAL_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const REFERRAL_LIST_LIMIT = 500;
+function normalizeReferralCode(value = '') { return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 16); }
+function referralCodeKey(code) { return `referral:code:${normalizeReferralCode(code)}`; }
+function referralInviteeKey(userId) { return `referral:invitee:${String(userId || '').trim()}`; }
+function referralReferrerPrefix(userId) { return `referral:referrer:${String(userId || '').trim()}:invitee:`; }
+function referralReferrerEntryKey(referrerUserId, inviteeUserId) { return `${referralReferrerPrefix(referrerUserId)}${String(inviteeUserId || '').trim()}`; }
+function referralRewardId(inviteeUserId) { return `referral-reward:${String(inviteeUserId || '').trim()}`; }
+
+function makeReferralCode() {
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  let code = 'CF';
+  for (const byte of bytes) code += REFERRAL_CODE_ALPHABET[byte % REFERRAL_CODE_ALPHABET.length];
+  return code;
+}
+
+async function ensureCustomerReferralCode(env, user) {
+  if (!env.CALLFOCUS_CONFIG || !user?.id) return '';
+  let code = normalizeReferralCode(user.referralCode || '');
+  if (code) {
+    const mapped = await env.CALLFOCUS_CONFIG.get(referralCodeKey(code));
+    if (!mapped || String(mapped) === String(user.id)) {
+      if (!mapped) await env.CALLFOCUS_CONFIG.put(referralCodeKey(code), String(user.id));
+      return code;
+    }
+    code = '';
+  }
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const candidate = makeReferralCode();
+    if (await env.CALLFOCUS_CONFIG.get(referralCodeKey(candidate))) continue;
+    user.referralCode = candidate;
+    user.updatedAt = new Date().toISOString();
+    await env.CALLFOCUS_CONFIG.put(customerUserKey(user.id), JSON.stringify(user));
+    await env.CALLFOCUS_CONFIG.put(referralCodeKey(candidate), String(user.id));
+    return candidate;
+  }
+  throw new Error('Could not generate a referral code right now.');
+}
+
+async function resolveReferralCode(env, value) {
+  const code = normalizeReferralCode(value);
+  if (!code) return null;
+  const userId = await env.CALLFOCUS_CONFIG.get(referralCodeKey(code));
+  if (!userId) return null;
+  const user = await env.CALLFOCUS_CONFIG.get(customerUserKey(userId), { type: 'json' });
+  if (!user || user.accountDisabled === true) return null;
+  return { code, userId: String(user.id), user };
+}
+
+async function writeReferralLink(env, { referrer, invitee, code, starterCredits }) {
+  if (!referrer?.id || !invitee?.id || !code) return null;
+  const now = new Date().toISOString();
+  const record = {
+    version: 1,
+    referrerUserId: String(referrer.id),
+    inviteeUserId: String(invitee.id),
+    inviteeName: String(invitee.name || 'CallFocus user').slice(0, 120),
+    referralCode: normalizeReferralCode(code),
+    signedUpAt: now,
+    signupBonusCredits: Math.max(0, Number(starterCredits) || 0),
+    signupBonusGrantedAt: now,
+    firstDepositAt: null,
+    firstDepositProvider: '',
+    firstDepositReference: '',
+    rewardCredits: CALLFOCUS_CREDIT_POLICY.referralRewardCredits,
+    rewardGrantedAt: null
+  };
+  await Promise.all([
+    env.CALLFOCUS_CONFIG.put(referralInviteeKey(invitee.id), JSON.stringify(record)),
+    env.CALLFOCUS_CONFIG.put(referralReferrerEntryKey(referrer.id, invitee.id), JSON.stringify(record))
+  ]);
+  return record;
+}
+
+async function updateReferralRecord(env, record) {
+  if (!record?.referrerUserId || !record?.inviteeUserId) return;
+  await Promise.all([
+    env.CALLFOCUS_CONFIG.put(referralInviteeKey(record.inviteeUserId), JSON.stringify(record)),
+    env.CALLFOCUS_CONFIG.put(referralReferrerEntryKey(record.referrerUserId, record.inviteeUserId), JSON.stringify(record))
+  ]);
+}
+
+async function awardReferralRewardAfterDeposit(env, inviteeUserId, payment = {}) {
+  if (!env.CALLFOCUS_CONFIG || !inviteeUserId) return { awarded: false, reason: 'no_referral' };
+  const record = await env.CALLFOCUS_CONFIG.get(referralInviteeKey(inviteeUserId), { type: 'json' });
+  if (!record?.referrerUserId) return { awarded: false, reason: 'no_referral' };
+  const referrer = await env.CALLFOCUS_CONFIG.get(customerUserKey(record.referrerUserId), { type: 'json' });
+  if (!referrer) return { awarded: false, reason: 'referrer_not_found' };
+
+  const rewardCredits = Math.max(0, Number(record.rewardCredits) || CALLFOCUS_CREDIT_POLICY.referralRewardCredits);
+  const rewardReference = referralRewardId(inviteeUserId);
+  const data = await getCustomerDataForUpdate(env, referrer.id, referrer.name);
+  const wallet = normalizeServerWallet(data.wallet);
+  const existing = wallet.purchases.find(p => String(p?.reference || p?.id || '') === rewardReference);
+  const now = new Date().toISOString();
+
+  if (!existing) {
+    const secondsAdded = callFocusSecondsForCredits(rewardCredits);
+    wallet.balanceSeconds = Math.max(0, Math.floor(Number(wallet.balanceSeconds) || 0)) + secondsAdded;
+    wallet.revision = Math.max(0, Number(wallet.revision) || 0) + 1;
+    wallet.purchases.unshift({
+      id: rewardReference,
+      reference: rewardReference,
+      provider: 'referral_reward',
+      channel: String(payment.provider || 'referral'),
+      amountNaira: 0,
+      credits: rewardCredits,
+      seconds: secondsAdded,
+      inviteeUserId: String(inviteeUserId),
+      createdAt: now
+    });
+    wallet.purchases = wallet.purchases.slice(0, 250);
+    data.wallet = wallet;
+    await env.CALLFOCUS_CONFIG.put(customerDataKey(referrer.id), JSON.stringify(data));
+  }
+
+  record.firstDepositAt = record.firstDepositAt || String(payment.at || now);
+  record.firstDepositProvider = record.firstDepositProvider || String(payment.provider || 'payment').slice(0, 60);
+  record.firstDepositReference = record.firstDepositReference || String(payment.reference || '').slice(0, 180);
+  record.rewardCredits = rewardCredits;
+  record.rewardGrantedAt = record.rewardGrantedAt || now;
+  await updateReferralRecord(env, record);
+  return { awarded: !existing, duplicate: !!existing, credits: rewardCredits, referrerUserId: referrer.id, wallet };
+}
+
+async function safeAwardReferralAfterDeposit(env, inviteeUserId, payment = {}) {
+  try { return await awardReferralRewardAfterDeposit(env, inviteeUserId, payment); }
+  catch (error) {
+    console.error('CallFocus referral reward failed', error?.stack || error?.message || error);
+    return { awarded: false, reason: 'reward_update_failed' };
+  }
+}
+
+async function listReferralRecords(env, referrerUserId) {
+  const prefix = referralReferrerPrefix(referrerUserId);
+  const rows = [];
+  let cursor;
+  do {
+    const listOptions = { prefix, limit: Math.min(1000, REFERRAL_LIST_LIMIT) };
+    if (cursor) listOptions.cursor = cursor;
+    const page = await env.CALLFOCUS_CONFIG.list(listOptions);
+    for (const key of page.keys || []) {
+      const row = await env.CALLFOCUS_CONFIG.get(key.name, { type: 'json' });
+      if (row?.inviteeUserId) rows.push(row);
+      if (rows.length >= REFERRAL_LIST_LIMIT) break;
+    }
+    cursor = rows.length >= REFERRAL_LIST_LIMIT ? null : (page.list_complete ? null : page.cursor);
+  } while (cursor);
+  rows.sort((a,b) => String(b.signedUpAt || '').localeCompare(String(a.signedUpAt || '')));
+  return rows;
+}
+
+async function handleCustomerReferrals(request, env) {
+  if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Sign in again to view referrals.', code: 'session_expired' }, 401);
+  const code = await ensureCustomerReferralCode(env, auth.user);
+  const rows = await listReferralRecords(env, auth.user.id);
+  const data = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
+
+  // If a wallet reward was written but the paired referral record update was
+  // interrupted, reconcile the display/status from the idempotent wallet ledger.
+  const rewardPurchases = new Map((Array.isArray(data?.wallet?.purchases) ? data.wallet.purchases : [])
+    .filter(p => String(p?.provider || '').toLowerCase() === 'referral_reward')
+    .map(p => [String(p?.reference || p?.id || ''), p]));
+  for (const row of rows) {
+    if (row.rewardGrantedAt) continue;
+    const purchase = rewardPurchases.get(referralRewardId(row.inviteeUserId));
+    if (!purchase) continue;
+    row.rewardGrantedAt = purchase.createdAt || new Date().toISOString();
+    row.rewardCredits = Math.max(0, Number(purchase.credits) || CALLFOCUS_CREDIT_POLICY.referralRewardCredits);
+    row.firstDepositAt = row.firstDepositAt || row.rewardGrantedAt;
+    row.firstDepositProvider = row.firstDepositProvider || String(purchase.channel || 'payment').slice(0, 60);
+    try { await updateReferralRecord(env, row); } catch {}
+  }
+  const earned = rows.filter(row => !!row.rewardGrantedAt);
+  return json({
+    ok: true,
+    code,
+    signupBonusCredits: CALLFOCUS_CREDIT_POLICY.starterCredits,
+    rewardCredits: CALLFOCUS_CREDIT_POLICY.referralRewardCredits,
+    totalReferrals: rows.length,
+    rewardedReferrals: earned.length,
+    creditsEarned: earned.length * CALLFOCUS_CREDIT_POLICY.referralRewardCredits,
+    referrals: rows.slice(0, 200).map(row => ({
+      inviteeUserId: row.inviteeUserId,
+      name: String(row.inviteeName || 'CallFocus user'),
+      signedUpAt: row.signedUpAt || null,
+      deposited: !!row.firstDepositAt,
+      firstDepositAt: row.firstDepositAt || null,
+      rewardGrantedAt: row.rewardGrantedAt || null,
+      rewardCredits: row.rewardGrantedAt ? Math.max(0, Number(row.rewardCredits) || CALLFOCUS_CREDIT_POLICY.referralRewardCredits) : 0
+    })),
+    wallet: data.wallet
+  });
+}
 
 async function readCustomerUserByEmail(env, email) {
   if (!env.CALLFOCUS_CONFIG) return null;
@@ -378,10 +584,13 @@ function validateCustomerSignupBody(body) {
   const email = normalizeCustomerEmail(body?.email);
   const phone = normalizeCustomerPhone(body?.phone);
   const password = String(body?.password || '');
-  if (!name || !email || !phone || !password) return { error: 'Complete every account field.' };
+  const referralRaw = String(body?.referralCode || '').trim();
+  const referralCode = normalizeReferralCode(referralRaw);
+  if (!name || !email || !phone || !password) return { error: 'Complete every required account field.' };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: 'Enter a valid email address.' };
   if (password.length < 8) return { error: 'Use at least 8 characters for your password.' };
-  return { name, email, phone, password };
+  if (referralRaw && (referralCode.length < 6 || referralCode.length > 16)) return { error: 'Enter a valid referral code.' };
+  return { name, email, phone, password, referralCode };
 }
 
 async function ensureCustomerIdentityAvailable(env, email, phone) {
@@ -393,9 +602,14 @@ async function ensureCustomerIdentityAvailable(env, email, phone) {
   return { emailKey, phoneKey };
 }
 
-async function createCustomerAccount(env, { name, email, phone, passwordRecord, emailVerified = false }) {
+async function createCustomerAccount(env, { name, email, phone, passwordRecord, emailVerified = false, referralCode = '' }) {
   const available = await ensureCustomerIdentityAvailable(env, email, phone);
   if (available.error) return { error: available.error, status: available.status };
+  let referral = null;
+  if (referralCode) {
+    referral = await resolveReferralCode(env, referralCode);
+    if (!referral) return { error: 'That referral code is not valid. Check the code and try again.', status: 400 };
+  }
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const user = {
@@ -407,15 +621,20 @@ async function createCustomerAccount(env, { name, email, phone, passwordRecord, 
     createdAt: now,
     updatedAt: now
   };
-  const data = defaultCustomerData(name);
+  const data = defaultCustomerData(name, {
+    starterCredits: referral ? CALLFOCUS_CREDIT_POLICY.starterCredits : 0,
+    starterGrantMode: referral ? 'referral_signup_bonus' : 'referral_required'
+  });
   await Promise.all([
     env.CALLFOCUS_CONFIG.put(customerUserKey(id), JSON.stringify(user)),
     env.CALLFOCUS_CONFIG.put(available.emailKey, id),
     env.CALLFOCUS_CONFIG.put(available.phoneKey, id),
     env.CALLFOCUS_CONFIG.put(customerDataKey(id), JSON.stringify(data))
   ]);
+  await ensureCustomerReferralCode(env, user);
+  if (referral) await writeReferralLink(env, { referrer: referral.user, invitee: user, code: referral.code, starterCredits: CALLFOCUS_CREDIT_POLICY.starterCredits });
   const token = await createCustomerSession(env, user);
-  return { ok: true, token, user, data };
+  return { ok: true, token, user, data, referred: !!referral };
 }
 
 async function handleCustomerSignup(request, env) {
@@ -458,6 +677,9 @@ async function handleCustomerSignupRequest(request, env) {
 
   const available = await ensureCustomerIdentityAvailable(env, fields.email, fields.phone);
   if (available.error) return json({ error: available.error }, available.status || 400);
+  if (fields.referralCode && !(await resolveReferralCode(env, fields.referralCode))) {
+    return json({ error: 'That referral code is not valid. Check the code and try again.', code: 'referral_code_invalid' }, 400);
+  }
 
   const passwordRecord = await buildCustomerPasswordRecord(fields.password);
   if (!callFocusEmailConfigured(env)) {
@@ -469,6 +691,7 @@ async function handleCustomerSignupRequest(request, env) {
     name: fields.name,
     email: fields.email,
     phone: fields.phone,
+    referralCode: fields.referralCode || '',
     passwordRecord,
     codeHash: await customerCodeHash(fields.email, code, 'signup'),
     createdAt: new Date().toISOString()
@@ -642,7 +865,7 @@ async function handleCustomerData(request, env) {
     const serverRevision = Math.max(0, Number(currentServerData.wallet?.revision) || 0);
     const incomingRevision = Math.max(0, Number(incoming.wallet?.revision) || 0);
     const serverFundingRefs = wallet => new Set((Array.isArray(wallet?.purchases) ? wallet.purchases : [])
-      .filter(p => ['paystack','manual_bank_transfer'].includes(String(p?.provider || '').toLowerCase()))
+      .filter(p => ['paystack','manual_bank_transfer','referral_reward'].includes(String(p?.provider || '').toLowerCase()))
       .map(p => String(p?.reference || p?.id || '').trim())
       .filter(Boolean));
     const currentFundingRefs = serverFundingRefs(currentServerData.wallet);
@@ -672,11 +895,13 @@ async function handleCustomerDelete(request, env) {
   if (!auth) return json({ error: 'Session expired.', code: 'session_expired' }, 401);
   const emailKey = await customerEmailIndexKey(auth.user.email);
   const phoneKey = customerPhoneIndexKey(auth.user.phone);
+  const ownReferralCode = normalizeReferralCode(auth.user.referralCode || '');
   await Promise.all([
     env.CALLFOCUS_CONFIG.delete(customerUserKey(auth.user.id)),
     env.CALLFOCUS_CONFIG.delete(customerDataKey(auth.user.id)),
     env.CALLFOCUS_CONFIG.delete(emailKey),
     phoneKey.endsWith(':') ? Promise.resolve() : env.CALLFOCUS_CONFIG.delete(phoneKey),
+    ownReferralCode ? env.CALLFOCUS_CONFIG.delete(referralCodeKey(ownReferralCode)) : Promise.resolve(),
     env.CALLFOCUS_CONFIG.delete(await customerSessionKey(auth.token))
   ]);
   return json({ ok: true });
@@ -941,6 +1166,8 @@ async function handlePublicConfig(env) {
       minimumPurchaseCredits: CALLFOCUS_CREDIT_POLICY.minimumPurchaseCredits,
       purchaseStepCredits: CALLFOCUS_CREDIT_POLICY.purchaseStepCredits,
       starterCredits: CALLFOCUS_CREDIT_POLICY.starterCredits,
+      starterCreditsReferralOnly: true,
+      referralRewardCredits: CALLFOCUS_CREDIT_POLICY.referralRewardCredits,
       secondsPerCredit: CALLFOCUS_SECONDS_PER_CREDIT
     }
   });
@@ -1786,9 +2013,9 @@ function normalizeServerWallet(wallet, now = new Date().toISOString()) {
   const w = wallet && typeof wallet === 'object' && !Array.isArray(wallet) ? { ...wallet } : {};
   w.version = Math.max(2, Number(w.version || 1));
   w.balanceSeconds = Math.max(0, Math.floor(Number(w.balanceSeconds) || 0));
-  w.starterGranted = w.starterGranted !== false;
-  w.starterGrantedAt = w.starterGrantedAt || now;
-  w.starterGrantMode = w.starterGrantMode || 'server_account_signup';
+  if (typeof w.starterGranted !== 'boolean') w.starterGranted = true; // backwards compatibility for pre-referral wallets
+  w.starterGrantedAt = w.starterGranted ? (w.starterGrantedAt || now) : (w.starterGrantedAt || null);
+  w.starterGrantMode = w.starterGrantMode || (w.starterGranted ? 'server_account_signup' : 'referral_required');
   w.purchases = Array.isArray(w.purchases) ? w.purchases.slice(0, 250) : [];
   w.usage = Array.isArray(w.usage) ? w.usage.slice(0, 250) : [];
   w.revision = Math.max(0, Math.floor(Number(w.revision) || 0));
@@ -1973,7 +2200,11 @@ async function creditVerifiedPaystackTransaction(env, transaction = {}) {
     // ledger. If an earlier race left the marker behind but the wallet lost the
     // purchase, restore the verified payment once instead of permanently
     // treating the transaction as a duplicate.
-    return reconcileProcessedPaystackTransaction(env, transaction, already);
+    const result = await reconcileProcessedPaystackTransaction(env, transaction, already);
+    const referralReward = await safeAwardReferralAfterDeposit(env, already.userId, {
+      provider: 'paystack', reference, at: transaction?.paid_at || transaction?.paidAt || already?.at || new Date().toISOString()
+    });
+    return { ...result, referralReward };
   }
 
   const resolved = await resolvePaystackUserId(env, transaction);
@@ -1999,7 +2230,8 @@ async function creditVerifiedPaystackTransaction(env, transaction = {}) {
   if (existingPurchase) {
     const record = { userId: user.id, reference, credits: Number(existingPurchase.credits || credits), secondsAdded: Number(existingPurchase.seconds || secondsAdded), amountNaira, duplicate: true, at: existingPurchase.createdAt || new Date().toISOString() };
     await env.CALLFOCUS_CONFIG.put(paystackProcessedKey(reference), JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 365 });
-    return { credited: false, duplicate: true, record };
+    const referralReward = await safeAwardReferralAfterDeposit(env, user.id, { provider: 'paystack', reference, at: transaction?.paid_at || transaction?.paidAt || record.at });
+    return { credited: false, duplicate: true, record, referralReward };
   }
 
   const now = new Date().toISOString();
@@ -2024,7 +2256,8 @@ async function creditVerifiedPaystackTransaction(env, transaction = {}) {
   await env.CALLFOCUS_CONFIG.put(customerDataKey(user.id), JSON.stringify(data));
   await env.CALLFOCUS_CONFIG.put(paystackProcessedKey(reference), JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 365 });
   if (reference) await env.CALLFOCUS_CONFIG.delete(paystackPendingKey(reference));
-  return { credited: true, record, wallet };
+  const referralReward = await safeAwardReferralAfterDeposit(env, user.id, { provider: 'paystack', reference, at: transaction?.paid_at || transaction?.paidAt || now });
+  return { credited: true, record, wallet, referralReward };
 }
 
 async function handlePaystackInitialize(request, env) {
@@ -3471,7 +3704,8 @@ async function applyManualPaymentDecision(env, id, action, reason = '') {
   if (!record) return { error: 'Manual payment not found.', status: 404 };
   if (decision === 'approve' && record.status === 'approved') {
     const data = await getCustomerDataForUpdate(env, record.userId, record.customerName);
-    return { ok: true, duplicate: true, payment: manualPaymentAdmin(record), wallet: data.wallet };
+    const referralReward = await safeAwardReferralAfterDeposit(env, record.userId, { provider: 'manual_bank_transfer', reference: record.id, at: record.approvedAt || record.submittedAt || new Date().toISOString() });
+    return { ok: true, duplicate: true, payment: manualPaymentAdmin(record), wallet: data.wallet, referralReward };
   }
   if (record.status !== 'pending_confirmation') return { error: 'Only submitted payments awaiting confirmation can be changed.', status: 409, payment: manualPaymentAdmin(record) };
   const now = new Date().toISOString();
@@ -3504,7 +3738,8 @@ async function applyManualPaymentDecision(env, id, action, reason = '') {
     await putManualPaymentRecord(env, record);
     await invalidateManualPaymentDecisionTokens(env, record);
     await sendManualPaymentDecisionEmail(env, record, true);
-    return { ok: true, payment: manualPaymentAdmin(record), wallet };
+    const referralReward = await safeAwardReferralAfterDeposit(env, user.id, { provider: 'manual_bank_transfer', reference: record.id, at: now });
+    return { ok: true, payment: manualPaymentAdmin(record), wallet, referralReward };
   }
   record.status = 'rejected';
   record.rejectedAt = now;
@@ -3640,6 +3875,7 @@ export default {
     if (url.pathname === '/api/auth/signout') return safeCustomerRoute('signout', () => handleCustomerSignout(request, env));
     if (url.pathname === '/api/auth/migrate') return handleCustomerMigration(request, env);
     if (url.pathname === '/api/account/data') return handleCustomerData(request, env);
+    if (url.pathname === '/api/referrals') return safeCustomerRoute('referrals', () => handleCustomerReferrals(request, env));
     if (url.pathname === '/api/account' && request.method === 'DELETE') return handleCustomerDelete(request, env);
     if (url.pathname === '/api/paystack/initialize') return safeCustomerRoute('paystack-initialize', () => handlePaystackInitialize(request, env));
     if (url.pathname === '/api/paystack/verify') return safeCustomerRoute('paystack-verify', () => handlePaystackVerify(request, env));
@@ -3652,7 +3888,7 @@ export default {
     if (url.pathname === '/api/manual-payment/cancel') return safeCustomerRoute('manual-payment-cancel', () => handleManualPaymentCancel(request, env));
     if (url.pathname === '/api/manual-payment/status') return safeCustomerRoute('manual-payment-status', () => handleManualPaymentStatus(request, env));
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.13' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.14' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -3689,10 +3925,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.13', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.14', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.13').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.13');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.14').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.14');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -3702,16 +3938,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.13');
+      headers.set('X-CallFocus-Admin-Build', '15.14');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.13', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.14', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.13');
+      headers.set('X-CallFocus-Admin-Build', '15.14');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {
@@ -3719,6 +3955,7 @@ export default {
       '/avatar': '/avatar.html',
       '/voice-notes': '/voice-notes.html',
       '/credits': '/credits.html',
+      '/referrals': '/referrals.html',
       '/callers': '/callers.html',
       '/recent-calls': '/recent-calls.html',
       '/profile': '/profile.html',

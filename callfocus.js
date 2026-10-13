@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.13';
+  const BUILD='15.14';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -48,7 +48,9 @@ const CALLFOCUS_PRICING_FALLBACK = Object.freeze({
   nairaPerCredit: 10,
   minimumPurchaseCredits: 300,
   purchaseStepCredits: 50,
-  starterCredits: 75
+  starterCredits: 75,
+  starterCreditsReferralOnly: true,
+  referralRewardCredits: 100
 });
 window.CallFocusPricing = { ...CALLFOCUS_PRICING_FALLBACK };
 function applyPublicPricing(pricing = {}){
@@ -58,7 +60,9 @@ function applyPublicPricing(pricing = {}){
     nairaPerCredit: numberOr(pricing.nairaPerCredit, CALLFOCUS_PRICING_FALLBACK.nairaPerCredit),
     minimumPurchaseCredits: Math.max(1, Math.round(numberOr(pricing.minimumPurchaseCredits, CALLFOCUS_PRICING_FALLBACK.minimumPurchaseCredits))),
     purchaseStepCredits: Math.max(1, Math.round(numberOr(pricing.purchaseStepCredits, CALLFOCUS_PRICING_FALLBACK.purchaseStepCredits))),
-    starterCredits: Math.max(0, Math.round(Number.isFinite(Number(pricing.starterCredits))?Number(pricing.starterCredits):CALLFOCUS_PRICING_FALLBACK.starterCredits))
+    starterCredits: Math.max(0, Math.round(Number.isFinite(Number(pricing.starterCredits))?Number(pricing.starterCredits):CALLFOCUS_PRICING_FALLBACK.starterCredits)),
+    starterCreditsReferralOnly: pricing.starterCreditsReferralOnly !== false,
+    referralRewardCredits: Math.max(0, Math.round(Number.isFinite(Number(pricing.referralRewardCredits))?Number(pricing.referralRewardCredits):CALLFOCUS_PRICING_FALLBACK.referralRewardCredits))
   };
   if(typeof window.CallFocusSyncPricingUI==='function') window.CallFocusSyncPricingUI();
 }
@@ -300,11 +304,11 @@ function setRecentCallsListMode(showList){
 }
 
 function showView(view, scroll=true){
-  if(['avatar','callers','recent','profile','settings'].includes(view) && !account){ requireAccount({type:'route',route:view},'Create an account or sign in to open your saved CallFocus workspace.'); return; }
+  if(['avatar','callers','recent','profile','settings','referrals'].includes(view) && !account){ requireAccount({type:'route',route:view},'Create an account or sign in to open your saved CallFocus workspace.'); return; }
   if(view==='recent') setRecentCallsListMode(true);
   activeView=view; qsa('.page-view').forEach(p=>p.classList.toggle('active',p.dataset.view===view)); qsa('.nav-anchor').forEach(n=>n.classList.toggle('active',n.dataset.route===view));
   closeMobileMenu(); $('headerAccountDropdown').classList.add('hidden');
-  if(view==='recent') renderRecentThreads(); if(view==='profile')renderProfile(); if(view==='settings')renderSettings();
+  if(view==='recent') renderRecentThreads(); if(view==='profile')renderProfile(); if(view==='settings')renderSettings(); if(view==='referrals'||view==='credits')window.CallFocusRenderReferrals?.();
   if(scroll) window.scrollTo({top:0,behavior:'smooth'});
 }
 function openMobileMenu(){ $('mobileMenuWrap').classList.remove('hidden'); $('mobileMenuBtn').setAttribute('aria-expanded','true'); $('mobileMenuBtn').querySelector('.menu-glyph').textContent='×'; renderMobileAccount(); renderMobileRecents(); }
@@ -1916,6 +1920,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     get nairaPer100Credits(){ return 100 * Math.max(0, Number(window.CallFocusPricing?.nairaPerCredit)||CALLFOCUS_PRICING_FALLBACK.nairaPerCredit); },
     get minimumPurchaseCredits(){ return Math.max(1, Math.round(Number(window.CallFocusPricing?.minimumPurchaseCredits)||CALLFOCUS_PRICING_FALLBACK.minimumPurchaseCredits)); },
     get starterCredits(){ const n=Number(window.CallFocusPricing?.starterCredits); return Math.max(0, Math.round(Number.isFinite(n)?n:CALLFOCUS_PRICING_FALLBACK.starterCredits)); },
+    get referralRewardCredits(){ const n=Number(window.CallFocusPricing?.referralRewardCredits); return Math.max(0, Math.round(Number.isFinite(n)?n:CALLFOCUS_PRICING_FALLBACK.referralRewardCredits)); },
     get starterSeconds(){ return Math.round(this.starterCredits * 60 / this.creditsPerMinute); },
     lowCreditEndSeconds: 12
   });
@@ -1987,10 +1992,13 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     if(custom){ custom.min=String(CREDIT_RULES.minimumPurchaseCredits); if(Number(custom.value)<CREDIT_RULES.minimumPurchaseCredits) custom.value=String(CREDIT_RULES.minimumPurchaseCredits); }
     if($('creditAmountError')) $('creditAmountError').textContent=`Minimum purchase is ${CREDIT_RULES.minimumPurchaseCredits.toLocaleString()} credits.`;
     qsa('.credit-custom-card > div:first-child small').forEach(el=>el.textContent=`Enter ${CREDIT_RULES.minimumPurchaseCredits.toLocaleString()} credits or more.`);
-    qsa('.credit-starter-note p').forEach(el=>el.innerHTML=`Each new account receives <b>${CREDIT_RULES.starterCredits.toLocaleString()} starter credits</b> (${pricingDuration(CREDIT_RULES.starterSeconds)} of shared audio time), usable for either live calls or voice notes.`);
-    qsa('#signupPhone + .field-help').forEach(el=>el.textContent=`Used to help identify your account. New accounts receive ${CREDIT_RULES.starterCredits.toLocaleString()} starter credits.`);
+    qsa('.credit-starter-note p').forEach(el=>el.innerHTML=`New accounts receive <b>${CREDIT_RULES.starterCredits.toLocaleString()} free credits</b> only when a valid referral code is used at signup. No deposit is required for the new-user bonus.`);
+    qsa('#signupPhone + .field-help').forEach(el=>el.textContent='Used to help identify your account.');
+    qsa('#signupReferralCode + .field-help').forEach(el=>el.textContent=`Use a valid referral code to receive ${CREDIT_RULES.starterCredits.toLocaleString()} free credits when your account is created.`);
+    qsa('.referral-credit-copy h2').forEach(el=>el.textContent=`Share CallFocus. Earn ${CREDIT_RULES.referralRewardCredits.toLocaleString()} credits.`);
+    qsa('.referral-credit-copy p').forEach(el=>el.textContent=`Your referral code is created automatically. A new user gets ${CREDIT_RULES.starterCredits.toLocaleString()} free credits when they sign up with it. You receive ${CREDIT_RULES.referralRewardCredits.toLocaleString()} credits after their first confirmed deposit.`);
     qsa('[id="voiceNoteCreditRate"]').forEach(el=>{ if(!account||!data) el.textContent=rateText(); else if(!isUnlimitedAccount()) el.textContent=`Shared with live calls · ${rateText()}`; });
-    if($('creditDockBalance')&&!account) $('creditDockBalance').textContent=`${CREDIT_RULES.starterCredits.toLocaleString()} starter credits included`;
+    if($('creditDockBalance')&&!account) $('creditDockBalance').textContent=`Use a referral code for ${CREDIT_RULES.starterCredits.toLocaleString()} free credits`;
     updateCreditCheckoutSummary();
   }
   window.CallFocusSyncPricingUI=syncCreditPricingUI;
@@ -2073,8 +2081,8 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     const label=$('creditDockLabel'), balance=$('creditDockBalance'), action=$('creditDockAction');
     if(!label||!balance||!action) return;
     if(!account||!data){
-      label.textContent='Starter call credit';
-      balance.textContent=`${CREDIT_RULES.starterCredits.toLocaleString()} starter credits included`;
+      label.textContent='Referral signup bonus';
+      balance.textContent=`Use a referral code for ${CREDIT_RULES.starterCredits.toLocaleString()} free credits`;
       action.textContent='Create account';
       return;
     }
@@ -2276,7 +2284,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
 
   // UI interactions.
   $('creditDockAction')?.addEventListener('click',()=>{
-    if(!account) return showAuth('signup',null,`Create an account to receive ${CREDIT_RULES.starterCredits.toLocaleString()} starter credits.`);
+    if(!account) return showAuth('signup',null,`Create an account. Use a valid referral code to receive ${CREDIT_RULES.starterCredits.toLocaleString()} free credits.`);
     if(isUnlimitedAccount()) return toast('This account has unlimited CallFocus credit.');
     showView('credits');
   });
@@ -3590,6 +3598,16 @@ ${approvedPatterns}
     return String(input||'').replace(/\D/g,'').slice(0,6);
   }
 
+  function applyReferralFromUrl(){
+    const input=$v('signupReferralCode');
+    if(!input||input.value.trim())return;
+    const raw=new URLSearchParams(location.search).get('ref')||'';
+    const code=String(raw).trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16);
+    if(code.length>=6)input.value=code;
+  }
+  applyReferralFromUrl();
+  window.addEventListener('pageshow',applyReferralFromUrl);
+
   document.querySelectorAll('.password-eye').forEach(button=>{
     button.addEventListener('click',()=>{
       const input=$v(button.dataset.passwordTarget);
@@ -3607,13 +3625,14 @@ ${approvedPatterns}
     const name=$v('signupName')?.value.trim()||'';
     const email=$v('signupEmail')?.value.trim().toLowerCase()||'';
     const phone=$v('signupPhone')?.value.trim()||'';
+    const referralCode=String($v('signupReferralCode')?.value||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16);
     const password=$v('signupPassword')?.value||'';
     const confirm=$v('signupConfirm')?.value||'';
     if(!name||!email||!phone||!password||!confirm){toast('Complete every account field');return;}
     if(password.length<8){toast('Use at least 8 characters for your password');return;}
     if(password!==confirm){toast('Passwords do not match');return;}
 
-    pendingSignup={name,email,phone,password};
+    pendingSignup={name,email,phone,password,referralCode};
     setBusy(submit,true,resend?'Resending…':'Creating…');
     authStatus('', 'info', 'authModal');
     try{
@@ -4220,8 +4239,8 @@ ${approvedPatterns}
 /* ===== v11.28-router.js ===== */
 /* CallFocus V11.28 — multi-route navigation, preserving V11.23 Recent Calls exactly */
 (()=>{
-  const ROUTES={home:'/', avatar:'/avatar', 'voice-notes':'/voice-notes', credits:'/credits', callers:'/callers', recent:'/recent-calls', profile:'/profile', settings:'/settings'};
-  const PROTECTED=new Set(['avatar','voice-notes','credits','callers','recent','profile','settings']);
+  const ROUTES={home:'/', avatar:'/avatar', 'voice-notes':'/voice-notes', credits:'/credits', referrals:'/referrals', callers:'/callers', recent:'/recent-calls', profile:'/profile', settings:'/settings'};
+  const PROTECTED=new Set(['avatar','voice-notes','credits','referrals','callers','recent','profile','settings']);
   const SERVER_TOKEN_KEY='callfocus_server_session_v1';
   const oldShow=typeof showView==='function'?showView:null;
   const oldSelect=typeof selectThread==='function'?selectThread:null;
@@ -4259,7 +4278,7 @@ ${approvedPatterns}
   }
 
   function ensureBack(){
-    const pages=['callers','recent','profile','settings'];
+    const pages=['callers','recent','referrals','profile','settings'];
     for(const v of pages){
       const head=document.querySelector(`#page-${v} .app-page-head`);
       if(!head||head.querySelector('[data-cf-route-back]'))continue;
@@ -6334,4 +6353,90 @@ ${approvedPatterns}
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')report(stateFor(),{force:true});else flush()});
   window.addEventListener('online',flush);window.addEventListener('pageshow',flush);
   setTimeout(flush,1200);
+})();
+
+
+/* ===== CallFocus V15.14 — referral program ===== */
+(()=>{
+  const TOKEN_KEY='callfocus_server_session_v1';
+  let cache=null, loading=null;
+  const escRef=value=>String(value??'').replace(/[&<>'"]/g,ch=>({
+    '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'
+  }[ch]));
+  const referralUrl=code=>`${location.origin}/?ref=${encodeURIComponent(String(code||''))}`;
+  const humanDate=value=>{try{return value?new Date(value).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):''}catch{return ''}};
+
+  function status(message='',type='info'){
+    const el=document.getElementById('referralsStatus');if(!el)return;
+    el.textContent=message;el.dataset.type=type;el.classList.toggle('hidden',!message);
+  }
+  function syncWallet(payload){
+    if(!payload?.wallet||!account||!data)return;
+    const serverRev=Math.max(0,Number(payload.wallet.revision)||0), localRev=Math.max(0,Number(data.wallet?.revision)||0);
+    if(serverRev>=localRev){
+      data.wallet=payload.wallet;
+      try{writeJSON(accountDataKey(account.id),data)}catch{}
+      try{window.CallFocusCredits?.render?.()}catch{}
+      try{renderAccountUI?.();renderWorkspace?.()}catch{}
+    }
+  }
+  function render(payload){
+    if(!payload?.ok)return;
+    cache=payload;syncWallet(payload);
+    const code=String(payload.code||'');const link=referralUrl(code);
+    qsa('[data-referral-code]').forEach(el=>el.textContent=code||'Unavailable');
+    qsa('[data-referral-link]').forEach(el=>el.textContent=link);
+    const total=document.getElementById('referralTotalCount');if(total)total.textContent=Number(payload.totalReferrals||0).toLocaleString();
+    const rewarded=document.getElementById('referralRewardedCount');if(rewarded)rewarded.textContent=Number(payload.rewardedReferrals||0).toLocaleString();
+    const earned=document.getElementById('referralCreditsEarned');if(earned)earned.textContent=`${Number(payload.creditsEarned||0).toLocaleString()} credits`;
+    const list=document.getElementById('referralsList');
+    if(list){
+      const rows=Array.isArray(payload.referrals)?payload.referrals:[];
+      list.innerHTML=rows.length?rows.map(row=>{
+        const paid=!!row.deposited;
+        const reward=Number(row.rewardCredits||payload.rewardCredits||100).toLocaleString();
+        return `<article class="referral-row"><div class="referral-avatar">${escRef((row.name||'R').trim().slice(0,1).toUpperCase()||'R')}</div><div class="referral-row-copy"><strong>${escRef(row.name||'CallFocus user')}</strong><span>Joined ${escRef(humanDate(row.signedUpAt)||'recently')}</span></div><div class="referral-row-status ${paid?'earned':'waiting'}"><strong>${paid?`+${reward} credits`:'Waiting for deposit'}</strong><small>${paid?'Reward added to your balance':'They already received their signup bonus'}</small></div></article>`;
+      }).join(''):`<div class="referrals-empty"><strong>No referrals yet</strong><span>Share your code or referral link. When someone signs up with it, they will appear here.</span></div>`;
+    }
+    status('');
+  }
+  async function load(force=false){
+    if(!account)return null;
+    if(cache&&!force){render(cache);return cache}
+    if(loading)return loading;
+    const token=localStorage.getItem(TOKEN_KEY)||'';
+    if(!token){status('Sign in again to load your referrals.','error');return null}
+    status('Loading referrals...');
+    loading=(async()=>{
+      try{
+        const res=await fetch('/api/referrals',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
+        const payload=await res.json().catch(()=>({}));
+        if(!res.ok)throw new Error(payload?.error||'Could not load referrals.');
+        render(payload);return payload;
+      }catch(error){status(error?.message||'Could not load referrals.','error');return null}
+      finally{loading=null}
+    })();
+    return loading;
+  }
+  async function copyCode(){
+    const payload=await load();if(!payload?.code)return;
+    try{await navigator.clipboard.writeText(payload.code);toast('Referral code copied')}catch{toast(`Referral code: ${payload.code}`)}
+  }
+  async function shareReferral(){
+    const payload=await load();if(!payload?.code)return;
+    const url=referralUrl(payload.code);
+    const text=`Use my CallFocus referral code ${payload.code} when you sign up and get ${Number(payload.signupBonusCredits||75).toLocaleString()} free credits.`;
+    if(navigator.share){try{await navigator.share({title:'CallFocus referral',text,url});return}catch(error){if(error?.name==='AbortError')return}}
+    try{await navigator.clipboard.writeText(`${text} ${url}`);toast('Referral link copied')}catch{toast('Referral link ready to share')}
+  }
+  document.addEventListener('click',event=>{
+    const copy=event.target.closest?.('[data-referral-copy]');if(copy){event.preventDefault();copyCode();return}
+    const share=event.target.closest?.('[data-referral-share]');if(share){event.preventDefault();shareReferral();return}
+  });
+  window.CallFocusRenderReferrals=()=>load(true);
+  const boot=()=>{
+    const path=(location.pathname||'/').replace(/\/+$/,'')||'/';
+    if((path==='/credits'||path==='/referrals')&&account)setTimeout(()=>load(true),120);
+  };
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
 })();

@@ -28,7 +28,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=15.13" />
+  <link rel="stylesheet" href="/callfocus.css?v=15.14" />
 </head>
 <body data-cf-document-view="credits">
   <div class="app-root home-page" id="pageRoot">
@@ -67,6 +67,7 @@
                 <small id="dropdownEmail">user@example.com</small>
               </div>
               <button data-account-route="credits">Call & voice credits</button>
+              <button data-account-route="referrals">My referrals</button>
               <button data-account-route="settings">Account settings</button>
               <button data-account-route="profile">My profile</button>
               <button id="dropdownSignOutBtn">Sign out</button>
@@ -84,6 +85,7 @@
             <button data-mobile-route="callers"><span class="menu-icon">◉</span><span>My Callers<small>Saved people and caller context</small></span></button>
             <button data-mobile-route="recent"><span class="menu-icon">◷</span><span>Recent Calls<small>Continue previous call threads</small></span></button>
             <button data-mobile-route="credits"><span class="menu-icon">◌</span><span>Call & Voice Credits<small>Shared balance, pricing and top-ups</small></span></button>
+            <button data-mobile-route="referrals"><span class="menu-icon">R</span><span>My Referrals<small>Share your code and track earned credits</small></span></button>
             <button data-mobile-route="profile"><span class="menu-icon">◎</span><span>My Profile<small>Your reusable information</small></span></button>
           </div>
         </div>
@@ -104,7 +106,7 @@
               </div>
               <div class="credit-dock-copy">
                 <span id="creditDockLabel">Starter call & voice credit</span>
-                <strong id="creditDockBalance">75 starter credits included</strong>
+                <strong id="creditDockBalance">Referral code unlocks 75 free credits</strong>
               </div>
               <button class="credit-dock-action" id="creditDockAction" type="button">View credits</button>
             </div>
@@ -401,6 +403,20 @@
             <div class="credit-rate-card"><span>Standard rate</span><strong>100 credits = 1 minute</strong><small>100 credits = ₦1,000 = 1 minute</small></div>
           </div>
 
+          <section class="referral-credit-card" id="referralCreditCard">
+            <div class="referral-credit-copy">
+              <span class="section-eyebrow">Refer & earn</span>
+              <h2>Share CallFocus. Earn 100 credits.</h2>
+              <p>Your referral code is created automatically. A new user gets 75 free credits when they sign up with it. You receive 100 credits after their first confirmed deposit.</p>
+            </div>
+            <div class="referral-credit-code">
+              <span>Your referral code</span>
+              <strong data-referral-code>Loading…</strong>
+              <div class="referral-credit-actions"><button type="button" data-referral-copy>Copy code</button><button type="button" data-referral-share>Share</button></div>
+            </div>
+            <button class="referral-credit-view" type="button" data-route="referrals">My referrals</button>
+          </section>
+
           <section class="paystack-transfer-card hidden" id="paystackTransferCard" aria-hidden="true">
             <div class="paystack-transfer-head">
               <div><span class="section-eyebrow">Bank transfer</span><h2>Your reusable payment account</h2><p>Use one Paystack virtual account for future CallFocus top-ups. Verified transfers are converted to shared call and voice-note credit automatically.</p></div>
@@ -446,8 +462,37 @@
 
           <div class="credit-starter-note">
             <div class="credit-starter-icon">01</div>
-            <div><strong>New-user starter credit</strong><p>Each new account receives <b>75 starter credits</b> (45 seconds of shared audio time), usable for either live calls or voice notes.</p></div>
+            <div><strong>Referral signup bonus</strong><p>New accounts receive <b>75 free credits</b> only when a valid referral code is used at signup. No deposit is required for the new-user bonus.</p></div>
           </div>
+        </div>
+      </section>
+
+      <section class="page-view app-page referrals-page" id="page-referrals" data-view="referrals">
+        <div class="container app-page-inner referrals-shell">
+          <div class="app-page-head">
+            <div><span class="section-eyebrow">Refer & earn</span><h1>My Referrals</h1><p>Share your personal code. Referred users receive 75 free credits at signup, and you earn 100 credits after each person makes their first confirmed deposit.</p></div>
+          </div>
+
+          <section class="referrals-hero-card">
+            <div class="referrals-code-panel">
+              <span>Your referral code</span>
+              <strong data-referral-code>Loading…</strong>
+              <small>Share this code or your referral link. Your 100-credit reward is issued once per referred account after its first confirmed deposit.</small>
+              <div class="referrals-share-actions"><button class="btn btn-primary" type="button" data-referral-share>Share referral</button><button class="btn btn-ghost" type="button" data-referral-copy>Copy code</button></div>
+              <div class="referrals-link" data-referral-link>https://callfocus.link/</div>
+            </div>
+            <div class="referrals-stats">
+              <div><span>Total referrals</span><strong id="referralTotalCount">0</strong></div>
+              <div><span>Deposited</span><strong id="referralRewardedCount">0</strong></div>
+              <div><span>Credits earned</span><strong id="referralCreditsEarned">0</strong></div>
+            </div>
+          </section>
+
+          <section class="referrals-list-card">
+            <div class="referrals-list-head"><div><span class="section-eyebrow">Referral activity</span><h2>Your referrals</h2></div><small>Newest first</small></div>
+            <div class="referrals-status hidden" id="referralsStatus"></div>
+            <div class="referrals-list" id="referralsList"><div class="referrals-empty">Loading your referrals…</div></div>
+          </section>
         </div>
       </section>
 
@@ -520,7 +565,8 @@
       <form class="auth-form" id="signupForm">
         <label>Full name<input id="signupName" autocomplete="name" placeholder="Your name" /></label>
         <label>Email address<input id="signupEmail" type="email" autocomplete="email" placeholder="you@example.com" /></label>
-        <label>Mobile number<input id="signupPhone" type="tel" autocomplete="tel" inputmode="tel" placeholder="e.g. +234 803 000 0000" /><small class="field-help">Used to help identify your account. New accounts receive 75 starter credits.</small></label>
+        <label>Mobile number<input id="signupPhone" type="tel" autocomplete="tel" inputmode="tel" placeholder="e.g. +234 803 000 0000" /><small class="field-help">Used to help identify your account.</small></label>
+        <label>Referral code <span class="optional">Optional</span><input id="signupReferralCode" autocomplete="off" autocapitalize="characters" maxlength="16" placeholder="e.g. CF7K4P9M" /><small class="field-help">Use a valid referral code to receive 75 free credits when your account is created.</small></label>
         <label>Password<div class="password-input-shell"><input id="signupPassword" type="password" autocomplete="new-password" placeholder="At least 8 characters" /><button class="password-eye" type="button" data-password-target="signupPassword" aria-label="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg></button></div></label>
         <label>Confirm password<div class="password-input-shell"><input id="signupConfirm" type="password" autocomplete="new-password" placeholder="Repeat password" /><button class="password-eye" type="button" data-password-target="signupConfirm" aria-label="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg></button></div></label>
         <button class="btn btn-primary full" type="submit" id="signupSubmitBtn">Create account</button>
@@ -717,6 +763,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=15.13"></script>
+  <script src="/callfocus.js?v=15.14"></script>
 </body>
 </html>
