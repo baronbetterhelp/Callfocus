@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.21-test';
+  const BUILD='15.22-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -274,26 +274,12 @@ function motionInit(){
   window.addEventListener('resize',queueRevealCheck,{passive:true});
   window.addEventListener('pageshow',queueRevealCheck,{passive:true});
 
-  let ticking=false;
-  const syncParallax=()=>{
-    if(ticking)return;
-    if(innerWidth<=760){
-      page.style.setProperty('--cf-bg-shift','0px');
-      page.style.setProperty('--cf-copy-shift','0px');
-      page.style.setProperty('--cf-geo-shift','0px');
-      return;
-    }
-    ticking=true;
-    requestAnimationFrame(()=>{
-      const y=Math.min(window.scrollY||0,900);
-      page.style.setProperty('--cf-bg-shift',`${Math.round(y*.03)}px`);
-      page.style.setProperty('--cf-copy-shift',`${Math.round(y*-.010)}px`);
-      page.style.setProperty('--cf-geo-shift',`${Math.round(y*.018)}px`);
-      ticking=false;
-    });
-  };
-  syncParallax();
-  if(innerWidth>760) window.addEventListener('scroll',syncParallax,{passive:true});
+  // V15.22: remove scroll-driven parallax. The visual branch already has
+  // independent compositor animations, and tying transforms to scroll created
+  // avoidable work on Safari during fast swipes.
+  page.style.setProperty('--cf-bg-shift','0px');
+  page.style.setProperty('--cf-copy-shift','0px');
+  page.style.setProperty('--cf-geo-shift','0px');
 }
 
 function performanceMotionSchedulerInit(){
@@ -317,7 +303,7 @@ function performanceMotionSchedulerInit(){
   if('IntersectionObserver' in window){
     const io=new IntersectionObserver(entries=>entries.forEach(entry=>{
       entry.target.classList.toggle('cf-motion-active',entry.isIntersecting);
-    }),{rootMargin:'260px 0px 260px 0px',threshold:0});
+    }),{rootMargin:'120px 0px 140px 0px',threshold:0});
     zones.forEach(zone=>io.observe(zone));
   }else{
     let t=0;
@@ -327,6 +313,32 @@ function performanceMotionSchedulerInit(){
     page.classList.toggle('cf-page-hidden',document.hidden);
     if(!document.hidden) requestAnimationFrame(activateVisible);
   });
+}
+
+function smoothScrollPerformanceInit(){
+  const root=document.documentElement;
+  const page=$('pageRoot');
+  if(!page || !document.getElementById('page-home')) return;
+  let clearTimer=0;
+  let raf=0;
+  const markScrolling=()=>{
+    if(raf) return;
+    raf=requestAnimationFrame(()=>{
+      raf=0;
+      root.classList.add('cf-scroll-active');
+      clearTimeout(clearTimer);
+      clearTimer=setTimeout(()=>root.classList.remove('cf-scroll-active'),120);
+    });
+  };
+  window.addEventListener('scroll',markScrolling,{passive:true});
+  window.addEventListener('touchmove',markScrolling,{passive:true});
+  window.addEventListener('touchend',()=>{
+    clearTimeout(clearTimer);
+    clearTimer=setTimeout(()=>root.classList.remove('cf-scroll-active'),70);
+  },{passive:true});
+  document.addEventListener('visibilitychange',()=>{
+    if(document.hidden) root.classList.remove('cf-scroll-active');
+  },{passive:true});
 }
 
 function visualTestMotionInit(){
@@ -656,7 +668,7 @@ function bind(){
   });
 }
 
-initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminLabels(); refreshPublicConfig(); renderWorkspace(); motionInit(); performanceMotionSchedulerInit(); visualTestMotionInit(); showView('home',false);
+initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminLabels(); refreshPublicConfig(); renderWorkspace(); motionInit(); performanceMotionSchedulerInit(); smoothScrollPerformanceInit(); if('requestIdleCallback' in window){requestIdleCallback(()=>visualTestMotionInit(),{timeout:900});}else{setTimeout(()=>visualTestMotionInit(),220);} showView('home',false);
 
 /* V14.6: service worker retired for iOS Safari navigation stability. */
 

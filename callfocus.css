@@ -3085,3 +3085,90 @@ html[data-theme="pearl"] .home-page .premium-hero:after{opacity:.14!important}
   }
   .cf-hero-cursor-cue{display:none!important}
 }
+
+
+/* ========================================================================
+   CallFocus V15.22 Visual Test — Smooth Scroll & Fast Paint Pass
+   Preserve the V15.21 motion language while reducing work during scrolling.
+   ======================================================================== */
+
+/* Long sections below the fold are skipped by the renderer until they are
+   close to the viewport. The intrinsic estimates keep the scroll track stable. */
+.home-page .cf-story-section{content-visibility:auto;contain-intrinsic-size:auto 1280px}
+.home-page .cf-stage-section{content-visibility:auto;contain-intrinsic-size:auto 760px}
+.home-page .cf-bento-section{content-visibility:auto;contain-intrinsic-size:auto 1650px}
+.home-page .premium-section{content-visibility:auto;contain-intrinsic-size:auto 820px}
+.home-page .continuity-section{content-visibility:auto;contain-intrinsic-size:auto 760px}
+.home-page .feature-section{content-visibility:auto;contain-intrinsic-size:auto 820px}
+.home-page .cf-motion-ribbon{content-visibility:auto;contain-intrinsic-size:auto 86px}
+.home-page .home-cta{content-visibility:auto;contain-intrinsic-size:auto 420px}
+
+/* Avoid holding GPU layers for geometry that is not currently moving on-screen. */
+.home-page .hero-architecture span,
+.home-page .cf-hero-grid{will-change:auto!important}
+.home-page .premium-hero.cf-motion-active .hero-architecture span,
+.home-page .premium-hero.cf-motion-active .cf-hero-grid{will-change:transform!important}
+
+/* While the finger is actively moving the page, prioritize scrolling over
+   decorative movement. The animations resume roughly a tenth of a second
+   after scrolling stops, so the design still feels alive at rest. */
+html.cf-scroll-active .home-page .hero-architecture span,
+html.cf-scroll-active .home-page .cf-hero-grid,
+html.cf-scroll-active .home-page .premium-copy h1 .cf-hero-line,
+html.cf-scroll-active .home-page .premium-copy h1 em,
+html.cf-scroll-active .home-page .premium-copy h1 em:after,
+html.cf-scroll-active .home-page .premium-copy>p,
+html.cf-scroll-active .home-page .premium-copy>p:before,
+html.cf-scroll-active .home-page .hero-badge,
+html.cf-scroll-active .home-page .credit-dock,
+html.cf-scroll-active .home-page .credit-dock-icon,
+html.cf-scroll-active .home-page .credit-dock-copy,
+html.cf-scroll-active .home-page .credit-dock-action,
+html.cf-scroll-active .home-page .hero-primary,
+html.cf-scroll-active .home-page .hero-primary:before,
+html.cf-scroll-active .home-page .hero-quick-actions .btn,
+html.cf-scroll-active .home-page .hero-quick-actions .voice-note-launch-icon,
+html.cf-scroll-active .home-page .hero-quick-actions .btn>span:not(.voice-note-launch-icon),
+html.cf-scroll-active .home-page .hero-proof .avatar-stack span,
+html.cf-scroll-active .home-page .proof-stars,
+html.cf-scroll-active .cf-help-bubble-ring,
+html.cf-scroll-active .cf-help-bubble:after{
+  animation-play-state:paused!important;
+}
+
+/* Fixed UI should stay cheap while Safari is compositing the scrolling page. */
+html.cf-scroll-active .cf-help-bubble{box-shadow:0 8px 20px rgba(18,74,65,.14),inset 0 1px rgba(255,255,255,.7)!important}
+html.cf-scroll-active .cf-help-bubble-ring{filter:none!important}
+
+@media(max-width:760px){
+  /* The large masked grid was one of the most expensive moving hero layers on
+     iPhone. Keep it visible, but use a simpler unmasked compositor layer. */
+  .home-page .cf-hero-grid{
+    -webkit-mask-image:none!important;
+    mask-image:none!important;
+    opacity:.08!important;
+    background-size:68px 68px!important;
+  }
+  /* Keep panel motion, but remove redundant child animations on the three
+     quick-tool cards. This cuts several simultaneous timelines without making
+     the controls look static. */
+  .home-page .hero-quick-actions .voice-note-launch-icon,
+  .home-page .hero-quick-actions .btn>span:not(.voice-note-launch-icon){animation:none!important}
+  .home-page .hero-proof .avatar-stack span:nth-child(n+2){animation:none!important}
+  .home-page .proof-stars{animation:none!important}
+  .cf-help-bubble-ring{filter:none!important}
+  .home-page .cf-story-card,
+  .home-page .cf-bento-card,
+  .home-page .cf-conversation-stage{box-shadow:0 14px 34px rgba(38,79,72,.065)!important}
+}
+
+@supports not (content-visibility:auto){
+  .home-page .cf-story-section,
+  .home-page .cf-stage-section,
+  .home-page .cf-bento-section,
+  .home-page .premium-section,
+  .home-page .continuity-section,
+  .home-page .feature-section,
+  .home-page .cf-motion-ribbon,
+  .home-page .home-cta{content-visibility:visible}
+}
