@@ -2693,3 +2693,219 @@ html[data-theme="pearl"] .premium-hero:before{background:linear-gradient(112deg,
   .hero-credit-row .credit-dock{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:rgba(255,255,255,.96)!important}
   .cf-story-card:after{filter:none!important;-webkit-filter:none!important}
 }
+
+
+/* ========================================================================
+   CallFocus V15.20 Visual Test — Kinetic Content, Lower Lighting
+   Less glow on the hero; more motion in copy, cards and controls.
+   ======================================================================== */
+
+/* Tone down the cinematic lighting. Keep the Pearl geometry visible, but let
+   content motion carry the first-screen experience. */
+.home-page .premium-hero:before{display:none!important}
+.home-page .cf-hero-aurora-a{opacity:.10!important;animation-duration:24s!important}
+.home-page .cf-hero-aurora-b{opacity:.055!important;animation-duration:28s!important}
+html[data-theme="pearl"] .home-page .premium-hero:after{opacity:.14!important}
+.home-page .hero-badge:after,
+.home-page .hero-primary:after,
+.home-page .credit-dock:after{display:none!important}
+
+/* Headline becomes the main animation. It stays readable and uses only
+   transform/opacity, avoiding repaint-heavy glow sweeps. */
+.home-page .premium-copy h1 .cf-hero-line{
+  display:inline-block;
+  transform-origin:left center;
+  will-change:transform;
+  animation:cfHeroLineKinetic 7.2s cubic-bezier(.4,0,.2,1) infinite;
+}
+.home-page .premium-copy h1 .cf-hero-line-2{animation-delay:-2.25s}
+.home-page .premium-copy h1 .cf-hero-line-3{animation-delay:-4.5s}
+.home-page .premium-copy h1 em{
+  color:#bf8c49!important;
+  background:none!important;
+  -webkit-background-clip:initial!important;
+  background-clip:initial!important;
+  animation:cfContinuationKinetic 6.4s cubic-bezier(.4,0,.2,1) infinite!important;
+  will-change:transform;
+}
+.home-page .premium-copy h1 em:after{
+  background:#4f9588!important;
+  opacity:.42!important;
+  animation:cfContinuationUnderline 5.6s ease-in-out infinite!important;
+}
+
+/* The copy itself gets a gentle physical rhythm, not a lighting treatment. */
+.home-page .premium-copy>p{
+  animation:cfCopySettle 8.4s ease-in-out infinite;
+  will-change:transform;
+}
+.home-page .premium-copy>p:before{
+  background:#5c9b90!important;
+  opacity:.58;
+  animation:cfCopyRailKinetic 5.2s ease-in-out infinite!important;
+}
+.home-page .hero-badge{
+  animation:cfBadgeKinetic 5.8s ease-in-out infinite;
+  will-change:transform;
+}
+
+/* Panels and buttons move as objects. The movement is intentionally small so
+   it feels premium rather than bouncy. */
+.home-page .credit-dock{
+  animation:cfCreditPanelKinetic 6.8s ease-in-out infinite!important;
+  will-change:transform;
+}
+.home-page .credit-dock-copy strong{
+  display:block;
+  animation:cfCreditTextKinetic 6.8s ease-in-out infinite;
+}
+.home-page .credit-dock-action{
+  animation:cfSmallButtonKinetic 5.2s ease-in-out -1.4s infinite;
+  transform-origin:center;
+}
+.home-page .hero-primary{
+  animation:cfPrimaryKinetic 4.9s cubic-bezier(.4,0,.2,1) infinite!important;
+  will-change:transform;
+}
+.home-page .hero-primary:before{
+  content:"";
+  position:absolute;
+  top:50%;right:24px;
+  width:7px;height:7px;
+  border-top:2px solid rgba(255,255,255,.72);
+  border-right:2px solid rgba(255,255,255,.72);
+  transform:translate(-4px,-50%) rotate(45deg);
+  animation:cfCtaArrowKinetic 2.9s ease-in-out infinite;
+  pointer-events:none;
+}
+.home-page .hero-quick-actions .btn{
+  animation:cfQuickPanelKinetic 6.2s ease-in-out infinite;
+  will-change:transform;
+}
+.home-page .hero-quick-actions .btn:nth-child(2){animation-delay:-2.05s}
+.home-page .hero-quick-actions .btn:nth-child(3){animation-delay:-4.1s}
+.home-page .hero-quick-actions .btn:before{
+  display:none!important;
+}
+.home-page .hero-quick-actions .voice-note-launch-icon{
+  animation:cfQuickIconKinetic 4.6s ease-in-out infinite!important;
+}
+.home-page .hero-quick-actions .btn:nth-child(2) .voice-note-launch-icon{animation-delay:-1.5s!important}
+.home-page .hero-quick-actions .btn:nth-child(3) .voice-note-launch-icon{animation-delay:-3s!important}
+.home-page .hero-quick-actions .btn>span:not(.voice-note-launch-icon){
+  display:block;
+  animation:cfQuickTextKinetic 6.2s ease-in-out infinite;
+}
+.home-page .hero-quick-actions .btn:nth-child(2)>span:not(.voice-note-launch-icon){animation-delay:-2.05s}
+.home-page .hero-quick-actions .btn:nth-child(3)>span:not(.voice-note-launch-icon){animation-delay:-4.1s}
+
+/* Proof remains alive with movement, but drops the former glow pulse. */
+.home-page .proof-stars{animation:cfStarsKinetic 5.8s ease-in-out infinite!important}
+.home-page .hero-proof .avatar-stack span{animation:cfProofKinetic 6.6s ease-in-out infinite!important}
+.home-page .hero-proof .avatar-stack span:nth-child(2){animation-delay:-2.2s!important}
+.home-page .hero-proof .avatar-stack span:nth-child(3){animation-delay:-4.4s!important}
+
+@keyframes cfHeroLineKinetic{
+  0%,100%{transform:translate3d(0,0,0) scale(1)}
+  22%{transform:translate3d(0,-2px,0) scale(1.006)}
+  42%{transform:translate3d(2px,0,0) scale(1)}
+  68%{transform:translate3d(0,1px,0) scale(.998)}
+}
+@keyframes cfContinuationKinetic{
+  0%,100%{transform:translate3d(0,0,0) scale(1)}
+  42%{transform:translate3d(3px,-2px,0) scale(1.012)}
+  70%{transform:translate3d(0,1px,0) scale(1)}
+}
+@keyframes cfContinuationUnderline{
+  0%,100%{transform:scaleX(.44);opacity:.30}
+  48%{transform:scaleX(.92);opacity:.58}
+}
+@keyframes cfCopySettle{
+  0%,100%{transform:translate3d(0,0,0)}
+  48%{transform:translate3d(2px,0,0)}
+}
+@keyframes cfCopyRailKinetic{
+  0%,100%{transform:scaleY(.55);opacity:.42}
+  50%{transform:scaleY(1);opacity:.68}
+}
+@keyframes cfBadgeKinetic{
+  0%,100%{transform:translate3d(0,0,0)}
+  50%{transform:translate3d(3px,-2px,0)}
+}
+@keyframes cfCreditPanelKinetic{
+  0%,100%{transform:translate3d(0,0,0)}
+  48%{transform:translate3d(0,-3px,0)}
+}
+@keyframes cfCreditTextKinetic{
+  0%,100%{transform:translate3d(0,0,0)}
+  50%{transform:translate3d(2px,0,0)}
+}
+@keyframes cfSmallButtonKinetic{
+  0%,100%{transform:translate3d(0,0,0) scale(1)}
+  50%{transform:translate3d(0,-1px,0) scale(1.008)}
+}
+@keyframes cfPrimaryKinetic{
+  0%,100%{transform:translate3d(0,0,0) scale(1)}
+  44%{transform:translate3d(0,-2px,0) scale(1.006)}
+  58%{transform:translate3d(0,0,0) scale(1)}
+}
+@keyframes cfCtaArrowKinetic{
+  0%,100%{transform:translate(-5px,-50%) rotate(45deg);opacity:.45}
+  50%{transform:translate(1px,-50%) rotate(45deg);opacity:.9}
+}
+@keyframes cfQuickPanelKinetic{
+  0%,100%{transform:translate3d(0,0,0)}
+  50%{transform:translate3d(0,-3px,0)}
+}
+@keyframes cfQuickIconKinetic{
+  0%,100%{transform:translate3d(0,0,0) scale(.97) rotate(0deg);opacity:.78}
+  50%{transform:translate3d(0,-2px,0) scale(1.06) rotate(4deg);opacity:1}
+}
+@keyframes cfQuickTextKinetic{
+  0%,100%{transform:translate3d(0,0,0)}
+  50%{transform:translate3d(0,-1px,0)}
+}
+@keyframes cfStarsKinetic{
+  0%,100%{transform:translate3d(0,0,0);opacity:.84}
+  50%{transform:translate3d(2px,-1px,0);opacity:1}
+}
+@keyframes cfProofKinetic{
+  0%,100%{transform:translate3d(0,0,0)}
+  50%{transform:translate3d(0,-2px,0)}
+}
+
+@media(max-width:760px){
+  /* On phones, remove nearly all large-area light animation. */
+  .home-page .cf-hero-aurora-a,
+  .home-page .cf-hero-aurora-b,
+  html[data-theme="pearl"] .home-page .premium-hero:after{display:none!important}
+  .home-page .hero-architecture{opacity:.48!important}
+  .home-page .hero-architecture span{animation:none!important}
+  .home-page .premium-copy h1 .cf-hero-line{display:block}
+  .home-page .premium-copy h1 .cf-hero-line-1{animation-duration:7.6s}
+  .home-page .premium-copy h1 .cf-hero-line-2{animation-duration:8s}
+  .home-page .premium-copy h1 .cf-hero-line-3{animation-duration:7.2s}
+  .home-page .hero-primary:before{right:20px}
+  .home-page .hero-primary{animation-duration:5.6s!important}
+  .home-page .credit-dock{animation-duration:7.6s!important}
+  .home-page .hero-quick-actions .btn{animation-duration:7s}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .home-page .premium-copy h1 .cf-hero-line,
+  .home-page .premium-copy h1 em,
+  .home-page .premium-copy h1 em:after,
+  .home-page .premium-copy>p,
+  .home-page .premium-copy>p:before,
+  .home-page .hero-badge,
+  .home-page .credit-dock,
+  .home-page .credit-dock-copy strong,
+  .home-page .credit-dock-action,
+  .home-page .hero-primary,
+  .home-page .hero-primary:before,
+  .home-page .hero-quick-actions .btn,
+  .home-page .hero-quick-actions .voice-note-launch-icon,
+  .home-page .hero-quick-actions .btn>span:not(.voice-note-launch-icon),
+  .home-page .proof-stars,
+  .home-page .hero-proof .avatar-stack span{animation:none!important;transform:none!important}
+}

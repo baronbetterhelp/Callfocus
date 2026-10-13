@@ -16,7 +16,7 @@
     document.documentElement.dataset.theme='pearl';
     document.documentElement.style.colorScheme='light';
     try{history.scrollRestoration='manual';}catch{}
-    window.__CALLFOCUS_BUILD__='15.19-test';
+    window.__CALLFOCUS_BUILD__='15.20-test';
     (function(){
       const cleanPath=(location.pathname||'/').replace(/\/+$/,'')||'/';
       const topNow=()=>{try{window.scrollTo(0,0);}catch{}};
@@ -28,7 +28,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=15.19-test" />
+  <link rel="stylesheet" href="/callfocus.css?v=15.20-test" />
 </head>
 <body data-cf-document-view="referrals">
   <div class="app-root home-page" id="pageRoot">
@@ -117,7 +117,7 @@
           <div class="container premium-hero-inner">
             <div class="hero-copy premium-copy">
               <div class="hero-badge hero-enter hero-enter-1"><span class="badge-dot"></span> Realtime calls with context</div>
-              <h1 class="hero-enter hero-enter-2">Give every conversation a better <em>continuation.</em></h1>
+              <h1 class="hero-enter hero-enter-2"><span class="cf-hero-line cf-hero-line-1">Give every</span> <span class="cf-hero-line cf-hero-line-2">conversation a</span> <span class="cf-hero-line cf-hero-line-3">better</span> <em>continuation.</em></h1>
               <p class="hero-enter hero-enter-3">Set the full context once for a new person. On future calls, open the recent call thread, add only what is new today, and continue from where the conversation left off.</p>
               <div class="hero-actions hero-enter hero-enter-4">
                 <button class="btn btn-primary hero-primary" id="heroNewCallBtn">Start a new call</button>
@@ -916,6 +916,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=15.19-test"></script>
+  <script src="/callfocus.js?v=15.20-test"></script>
 </body>
 </html>
