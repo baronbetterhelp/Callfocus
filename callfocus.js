@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.15';
+  const BUILD='15.16';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -5713,7 +5713,7 @@ ${approvedPatterns}
 })();
 
 
-/* ===== CallFocus V15.15 — Admin-controlled Quick Start & promo manager ===== */
+/* ===== CallFocus V15.16 — Custom promo logos join floating-button rotation ===== */
 (()=>{
   const DEFAULTS={
     youtubeEnabled:true,telegramEnabled:true,floatingButtonEnabled:true,appearDelaySeconds:2,autoHideSeconds:8,
@@ -5725,6 +5725,7 @@ ${approvedPatterns}
   const bootAt=Date.now();
   let settings={...DEFAULTS};
   let introShown=false,introTimer=0,collapseTimer=0,widget=null,bubble=null,card=null,videoPanel=null,videoFrame=null,unreadBadge=null,suppressNextClick=false;
+  let bubbleLogoTimer=0,bubbleLogoIndex=0;
   const esc=value=>String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
   const safeLink=value=>{const raw=String(value||'').trim();return /^https:\/\//i.test(raw)||/^\/(?!\/)/.test(raw)?raw:''};
   const normalize=value=>{
@@ -5738,17 +5739,31 @@ ${approvedPatterns}
   const hasItems=()=>activeItems().length>0;
   const isHome=()=>{const home=document.getElementById('page-home');return !!home?.classList.contains('active')&&(((location.pathname||'/').replace(/\/+$/,'')||'/')==='/')};
   const clearTimers=()=>{clearTimeout(introTimer);clearTimeout(collapseTimer);introTimer=collapseTimer=0};
+  const stopBubbleLogoRotation=()=>{clearInterval(bubbleLogoTimer);bubbleLogoTimer=0};
+  const startBubbleLogoRotation=()=>{
+    stopBubbleLogoRotation();
+    const logos=[...(bubble?.querySelectorAll('.cf-help-logo')||[])];
+    if(!logos.length)return;
+    bubbleLogoIndex=0;
+    logos.forEach((logo,index)=>logo.classList.toggle('is-current',index===0));
+    const reduceMotion=window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    if(logos.length<2||reduceMotion)return;
+    bubbleLogoTimer=setInterval(()=>{
+      bubbleLogoIndex=(bubbleLogoIndex+1)%logos.length;
+      logos.forEach((logo,index)=>logo.classList.toggle('is-current',index===bubbleLogoIndex));
+    },3000);
+  };
   const stopVideo=()=>{if(videoFrame)videoFrame.removeAttribute('src')};
   const youtubeId=url=>{try{const raw=String(url||'').trim();if(!raw)return'';const u=new URL(raw,location.origin);if(u.hostname.includes('youtu.be'))return u.pathname.split('/').filter(Boolean)[0]||'';if(u.hostname.includes('youtube.com')||u.hostname.includes('youtube-nocookie.com')){if(u.searchParams.get('v'))return u.searchParams.get('v');const parts=u.pathname.split('/').filter(Boolean);const pos=parts.findIndex(v=>['embed','shorts','live'].includes(v));if(pos>=0)return parts[pos+1]||''}}catch{}return''};
   const youtubeEmbed=()=>{const id=youtubeId(settings.youtubeUrl);return id?`https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}?autoplay=1&rel=0&playsinline=1&modestbranding=1`:''};
   const setAriaState=state=>{if(!widget)return;widget.setAttribute('aria-hidden',state==='hidden'?'true':'false');card?.setAttribute('aria-hidden',state==='menu'?'false':'true');videoPanel?.setAttribute('aria-hidden',state==='video'?'false':'true');bubble?.setAttribute('aria-hidden',state==='bubble'?'false':'true')};
   const setState=state=>{if(!widget)return;widget.classList.remove('cf-help-menu-open','cf-help-bubble-open','cf-help-video-open');if(state==='menu')widget.classList.add('cf-help-menu-open');if(state==='bubble')widget.classList.add('cf-help-bubble-open');if(state==='video')widget.classList.add('cf-help-video-open');setAriaState(state)};
   const markRead=()=>{if(unreadBadge)unreadBadge.classList.add('is-read');if(bubble)bubble.setAttribute('aria-label','Open CallFocus help and updates')};
-  const hideAll=()=>{clearTimers();stopVideo();setState('hidden')};
-  const showBubble=()=>{if(!widget||!isHome()||settings.floatingButtonEnabled===false||!hasItems())return hideAll();clearTimeout(collapseTimer);collapseTimer=0;stopVideo();setState('bubble')};
+  const hideAll=()=>{clearTimers();stopBubbleLogoRotation();stopVideo();setState('hidden')};
+  const showBubble=()=>{if(!widget||!isHome()||settings.floatingButtonEnabled===false||!hasItems())return hideAll();clearTimeout(collapseTimer);collapseTimer=0;stopVideo();setState('bubble');startBubbleLogoRotation()};
   const closePanel=()=>{if(settings.floatingButtonEnabled!==false&&hasItems()&&isHome())showBubble();else hideAll()};
-  const openMenu=({autoClose=false}={})=>{if(!widget||!isHome()||!hasItems())return hideAll();introShown=true;clearTimeout(introTimer);clearTimeout(collapseTimer);stopVideo();setState('menu');if(autoClose&&settings.autoHideSeconds>0)collapseTimer=setTimeout(closePanel,settings.autoHideSeconds*1000)};
-  const openVideo=()=>{if(!widget||!isHome()||settings.youtubeEnabled===false)return;const embed=youtubeEmbed();if(!embed){const href=safeLink(settings.youtubeUrl);if(href)window.open(href,'_blank','noopener,noreferrer');return}clearTimers();markRead();if(videoFrame)videoFrame.setAttribute('src',embed);setState('video')};
+  const openMenu=({autoClose=false}={})=>{if(!widget||!isHome()||!hasItems())return hideAll();introShown=true;clearTimeout(introTimer);clearTimeout(collapseTimer);stopBubbleLogoRotation();stopVideo();setState('menu');if(autoClose&&settings.autoHideSeconds>0)collapseTimer=setTimeout(closePanel,settings.autoHideSeconds*1000)};
+  const openVideo=()=>{if(!widget||!isHome()||settings.youtubeEnabled===false)return;const embed=youtubeEmbed();if(!embed){const href=safeLink(settings.youtubeUrl);if(href)window.open(href,'_blank','noopener,noreferrer');return}clearTimers();stopBubbleLogoRotation();markRead();if(videoFrame)videoFrame.setAttribute('src',embed);setState('video')};
   const scheduleIntro=()=>{clearTimeout(introTimer);if(!isHome()||!hasItems())return hideAll();if(introShown){if(settings.floatingButtonEnabled!==false)showBubble();return}const target=Math.max(0,settings.appearDelaySeconds*1000);const remaining=Math.max(0,target-(Date.now()-bootAt));introTimer=setTimeout(()=>{if(isHome())openMenu({autoClose:true})},remaining)};
   const syncToRoute=()=>{if(isHome())scheduleIntro();else hideAll()};
   const genericLogo=()=>`<svg viewBox="0 0 28 28" fill="none"><rect x="3" y="5" width="22" height="18" rx="6" fill="currentColor" opacity=".13"/><path d="m12 10 7 4-7 4v-8Z" fill="currentColor"/></svg>`;
@@ -5764,7 +5779,14 @@ ${approvedPatterns}
     if(secondary.length){if(parts.length)parts.push('<div class="cf-help-divider"><span>And stay updated</span></div>');parts.push(...secondary)}
     return parts.join('');
   };
-  const bubbleLogos=()=>{const logos=[];if(settings.youtubeEnabled!==false)logos.push(`<span class="cf-help-logo cf-help-logo-youtube">${youtubeLogo()}</span>`);if(settings.telegramEnabled!==false)logos.push(`<span class="cf-help-logo cf-help-logo-telegram">${telegramLogo()}</span>`);if(!logos.length&&settings.customItems.length){const row=settings.customItems[0];logos.push(`<span class="cf-help-logo cf-help-logo-custom">${customIcon(row)}</span>`)}if(!logos.length)logos.push(`<span class="cf-help-logo cf-help-logo-custom">${genericLogo()}</span>`);return `<span class="cf-help-logo-stage ${logos.length===1?'is-single':''}" aria-hidden="true">${logos.join('')}</span>`};
+  const bubbleLogos=()=>{
+    const logos=[];
+    if(settings.youtubeEnabled!==false)logos.push(`<span class="cf-help-logo cf-help-logo-youtube">${youtubeLogo()}</span>`);
+    if(settings.telegramEnabled!==false)logos.push(`<span class="cf-help-logo cf-help-logo-telegram">${telegramLogo()}</span>`);
+    settings.customItems.forEach(row=>logos.push(`<span class="cf-help-logo cf-help-logo-custom" data-promo-logo="${esc(row.id)}">${customIcon(row)}</span>`));
+    if(!logos.length)logos.push(`<span class="cf-help-logo cf-help-logo-custom">${genericLogo()}</span>`);
+    return `<span class="cf-help-logo-stage ${logos.length===1?'is-single':''}" aria-hidden="true">${logos.map((logo,index)=>index===0?logo.replace('cf-help-logo ','cf-help-logo is-current '):logo).join('')}</span>`;
+  };
   function renderWidget(){
     if(!widget)return;
     widget.innerHTML=`<aside class="cf-help-card" role="dialog" aria-label="CallFocus quick start and updates" aria-hidden="true"><button class="cf-help-close" type="button" aria-label="Minimize CallFocus help">×</button><div class="cf-help-guide-head"><span class="cf-help-guide-icon" aria-hidden="true">${genericLogo()}</span><div class="cf-help-guide-copy"><span class="cf-help-eyebrow">${esc(settings.panelEyebrow)}</span><strong>${esc(settings.panelTitle)}</strong><p>${esc(settings.panelMessage)}</p></div></div>${actionMarkup()}</aside><section class="cf-help-video-panel" role="dialog" aria-label="How to use CallFocus video guide" aria-hidden="true"><div class="cf-help-video-head"><span class="cf-help-youtube-mark" aria-hidden="true">${youtubeLogo()}</span><div><span class="cf-help-eyebrow">Video guide</span><strong>${esc(settings.youtubeTitle)}</strong></div><button class="cf-help-video-close" type="button" aria-label="Close video guide">×</button></div><div class="cf-help-video-shell"><iframe class="cf-help-video-frame" title="How to use CallFocus" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div><p class="cf-help-video-note">Close the guide at any time to return to CallFocus.</p></section><button class="cf-help-bubble" type="button" aria-label="Open CallFocus help and updates, 1 unread" aria-hidden="true"><span class="cf-help-bubble-ring" aria-hidden="true"></span>${bubbleLogos()}<span class="cf-help-unread" aria-label="1 unread update">1</span><span class="cf-help-sr-only">CallFocus help and updates</span></button>`;

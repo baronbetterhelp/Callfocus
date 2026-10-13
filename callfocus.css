@@ -2298,3 +2298,10 @@ html:not([data-theme="pearl"]) .referral-credit-card,html:not([data-theme="pearl
 .cf-help-logo-stage.is-single .cf-help-logo{opacity:1!important;transform:none!important;animation:none!important}
 .cf-help-logo-custom{color:#2a8978;animation:none;opacity:1}.cf-help-logo-custom img{width:34px;height:34px;border-radius:11px;object-fit:cover;display:block}.cf-help-logo-custom>span{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:linear-gradient(145deg,#e7f5f1,#fff8ed);color:#267c6d;font:850 14px/1 Manrope,sans-serif}.cf-help-logo-custom svg{width:31px;height:31px}
 html:not([data-theme="pearl"]) .cf-help-custom-action{background:linear-gradient(135deg,#182522,#171918);border-color:rgba(84,186,164,.15);color:#dceee9}html:not([data-theme="pearl"]) .cf-help-custom-action-icon{background:#1d2a26;color:#77c6b5}
+
+
+/* ===== CallFocus V15.16 — all active promo logos rotate in the floating help button ===== */
+.cf-help-logo{opacity:0;transform:scale(.72) rotate(10deg);animation:none!important}
+.cf-help-logo.is-current{opacity:1;transform:scale(1) rotate(0)}
+.cf-help-logo-stage.is-single .cf-help-logo{opacity:1!important;transform:none!important}
+@media(prefers-reduced-motion:reduce){.cf-help-logo{opacity:0!important;transform:none!important}.cf-help-logo.is-current,.cf-help-logo-stage.is-single .cf-help-logo{opacity:1!important}}
