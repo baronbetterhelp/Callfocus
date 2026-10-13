@@ -3415,3 +3415,29 @@ html:not([data-theme="pearl"]) .cf-stage-note{
 
 /* CallFocus V15.32 — swipe-dismiss customer heads-up */
 .cf-headsup-card{touch-action:none;user-select:none;-webkit-user-select:none;will-change:transform,opacity}
+
+
+/* ========================================================================
+   CallFocus V15.35 Visual Test — Hero Copy Alignment Cleanup
+   Removes the decorative copy rail and restores the paragraph to the full
+   mobile content width for cleaner line wrapping.
+   ======================================================================== */
+.home-page .premium-copy>p{
+  padding-left:0!important;
+  width:100%!important;
+  max-width:100%!important;
+}
+.home-page .premium-copy>p:before{
+  content:none!important;
+  display:none!important;
+}
+@media(max-width:620px){
+  .home-page .premium-copy>p{
+    padding-left:0!important;
+    max-width:none!important;
+    width:100%!important;
+    font-size:14px!important;
+    line-height:1.62!important;
+    letter-spacing:-.01em!important;
+  }
+}

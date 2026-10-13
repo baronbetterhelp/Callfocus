@@ -1,1 +1,1 @@
-CallFocus V15.33 Visual Test — Upward Swipe Notification Dismissal
+CallFocus V15.35 Visual Test — Hero Copy Alignment Cleanup

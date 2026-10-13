@@ -812,3 +812,100 @@ html:not([data-theme="pearl"]) .admin-bulk-gift{border-color:#2b3733;background:
   .admin-credit-grant{padding:11px!important;gap:10px!important}.admin-credit-grant-grid textarea{min-height:66px!important}
 }
 @media(max-width:390px){.admin-user-stats{grid-template-columns:1fr!important}.admin-user-actions{grid-template-columns:1fr 1fr!important}.admin-user-actions .admin-delete-account-btn{grid-column:auto!important}}
+
+/* ========================================================================
+   CallFocus V15.34 Visual Test — Mobile Payments Width Lock
+   Prevent manual-payment content from widening the iPhone admin viewport.
+   ======================================================================== */
+html,
+body.admin-page{
+  max-width:100%;
+  overflow-x:hidden;
+}
+
+.admin-tab-panel[data-admin-panel="payments"],
+.admin-tab-panel[data-admin-panel="payments"] > *,
+.manual-payment-settings-panel,
+.manual-payment-stats,
+.admin-manual-payments-panel,
+.admin-manual-payments-list,
+.admin-manual-payment-card,
+.admin-manual-payment-grid,
+.admin-manual-payment-grid > div,
+.admin-manual-payment-head,
+.admin-manual-payment-head > div{
+  min-width:0;
+  max-width:100%;
+}
+
+.admin-tab-panel[data-admin-panel="payments"]{
+  width:100%;
+  overflow-x:clip;
+}
+
+.admin-manual-payments-panel,
+.admin-manual-payments-list,
+.admin-manual-payment-card,
+.admin-manual-payment-grid{
+  width:100%;
+}
+
+.admin-manual-payment-card{
+  overflow:hidden;
+}
+
+.admin-manual-payment-head > div{
+  flex:1 1 auto;
+  overflow:hidden;
+}
+
+.admin-manual-payment-head > div strong,
+.admin-manual-payment-head > div span,
+.admin-manual-payment-head > div small,
+.admin-manual-payment-grid strong{
+  max-width:100%;
+  white-space:normal;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+}
+
+.admin-manual-payment-grid > div{
+  overflow:hidden;
+}
+
+@media(max-width:820px){
+  .admin-tab-panel[data-admin-panel="payments"] .premium-panel,
+  .admin-tab-panel[data-admin-panel="payments"] .admin-stat-card{
+    width:100%;
+    min-width:0;
+    max-width:100%;
+  }
+}
+
+@media(max-width:540px){
+  .admin-tab-panel[data-admin-panel="payments"]{
+    contain:inline-size;
+  }
+  .admin-manual-payment-head{
+    width:100%;
+  }
+  .admin-manual-payment-head .admin-user-badge{
+    align-self:flex-start;
+    max-width:100%;
+  }
+  .admin-manual-payment-grid{
+    grid-template-columns:minmax(0,1fr)!important;
+  }
+  .admin-manual-payment-grid > div{
+    width:100%;
+  }
+  .admin-manual-payment-card .admin-user-actions{
+    width:100%;
+    min-width:0;
+  }
+  .admin-manual-payment-card .admin-user-actions .btn,
+  .admin-manual-payment-card .admin-user-actions .admin-danger-btn{
+    min-width:0;
+    max-width:100%;
+  }
+}
