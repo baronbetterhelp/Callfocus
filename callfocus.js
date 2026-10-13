@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.32-test';
+  const BUILD='15.33-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -6469,7 +6469,7 @@ ${approvedPatterns}
     showing=true;seen.add(item.id);
     const host=ensureHost();host.innerHTML='';
     const card=document.createElement('button');card.type='button';card.className='cf-headsup-card';card.setAttribute('aria-label','CallFocus notification');
-    const icon=document.createElement('span');icon.className='cf-headsup-icon';const img=document.createElement('img');img.src='/logo.png?v=15.32-test';img.alt='';icon.appendChild(img);
+    const icon=document.createElement('span');icon.className='cf-headsup-icon';const img=document.createElement('img');img.src='/logo.png?v=15.33-test';img.alt='';icon.appendChild(img);
     const copy=document.createElement('span');copy.className='cf-headsup-copy';
     const meta=document.createElement('span');meta.className='cf-headsup-meta';const brand=document.createElement('strong');brand.textContent='CallFocus';const now=document.createElement('small');now.textContent='now';meta.append(brand,now);
     const message=document.createElement('span');message.className='cf-headsup-message';message.textContent=String(item.message||item.title||'You have a new CallFocus update.');
@@ -6477,11 +6477,15 @@ ${approvedPatterns}
     if(Number(item.credits)>0){const amount=document.createElement('span');amount.className='cf-headsup-amount';amount.textContent=`+${displayCredits(item.credits)} credits added`;copy.appendChild(amount)}
     card.append(icon,copy);host.appendChild(card);
     requestAnimationFrame(()=>card.classList.add('is-visible'));
-    let closed=false,dragging=false,suppressClick=false,startX=0,startY=0,lastX=0,auto=null;
+    let closed=false,dragging=false,dragAxis='',suppressClick=false,startX=0,startY=0,lastX=0,lastY=0,auto=null;
     const armAuto=(ms=7000)=>{clearTimeout(auto);auto=setTimeout(()=>close(),ms)};
     const close=(direction=0)=>{
       if(closed)return;closed=true;clearTimeout(auto);
-      if(direction){
+      if(direction==='up'){
+        card.style.transition='transform .22s cubic-bezier(.2,.8,.2,1), opacity .18s ease';
+        card.style.transform='translateY(-125%) scale(.97)';
+        card.style.opacity='0';
+      }else if(direction){
         card.style.transition='transform .24s ease, opacity .22s ease';
         card.style.transform=`translateX(${direction>0?'115vw':'-115vw'}) rotate(${direction>0?4:-4}deg)`;
         card.style.opacity='0';
@@ -6491,24 +6495,39 @@ ${approvedPatterns}
     armAuto();
     card.addEventListener('pointerdown',e=>{
       if(e.pointerType==='mouse'&&e.button!==0)return;
-      startX=lastX=e.clientX;startY=e.clientY;dragging=false;suppressClick=false;clearTimeout(auto);
+      startX=lastX=e.clientX;startY=lastY=e.clientY;dragging=false;dragAxis='';suppressClick=false;clearTimeout(auto);
       try{card.setPointerCapture(e.pointerId)}catch{}
     });
     card.addEventListener('pointermove',e=>{
       if(closed||!startX)return;
-      const dx=e.clientX-startX,dy=e.clientY-startY;lastX=e.clientX;
-      if(!dragging&&Math.abs(dx)>8&&Math.abs(dx)>Math.abs(dy)*1.15)dragging=true;
+      const dx=e.clientX-startX,dy=e.clientY-startY;lastX=e.clientX;lastY=e.clientY;
+      if(!dragging){
+        if(Math.abs(dx)>9&&Math.abs(dx)>Math.abs(dy)*1.15){dragging=true;dragAxis='x'}
+        else if(dy<-12&&Math.abs(dy)>Math.abs(dx)*1.20){dragging=true;dragAxis='up'}
+      }
       if(!dragging)return;
       suppressClick=true;e.preventDefault();
-      card.style.transition='none';card.style.transform=`translateX(${dx}px) rotate(${dx/42}deg)`;card.style.opacity=String(Math.max(.28,1-Math.abs(dx)/Math.max(220,card.offsetWidth)));
+      card.style.transition='none';
+      if(dragAxis==='up'){
+        const upward=Math.min(0,dy);
+        card.style.transform=`translateY(${upward}px) scale(${Math.max(.965,1-Math.abs(upward)/1800)})`;
+        card.style.opacity=String(Math.max(.26,1-Math.abs(upward)/150));
+      }else{
+        card.style.transform=`translateX(${dx}px) rotate(${dx/42}deg)`;
+        card.style.opacity=String(Math.max(.28,1-Math.abs(dx)/Math.max(220,card.offsetWidth)));
+      }
     });
     const finishSwipe=e=>{
       if(closed||!startX)return;
-      const dx=(e?.clientX??lastX)-startX;const threshold=Math.min(96,Math.max(62,card.offsetWidth*.24));
-      startX=0;startY=0;
-      if(dragging&&Math.abs(dx)>=threshold){suppressClick=true;close(dx>=0?1:-1);return;}
+      const endX=e?.clientX??lastX,endY=e?.clientY??lastY;
+      const dx=endX-startX,dy=endY-startY;
+      const horizontalThreshold=Math.min(96,Math.max(62,card.offsetWidth*.24));
+      const upwardThreshold=Math.min(88,Math.max(58,card.offsetHeight*.48));
+      startX=0;startY=0;lastX=0;lastY=0;
+      if(dragging&&dragAxis==='x'&&Math.abs(dx)>=horizontalThreshold){suppressClick=true;close(dx>=0?1:-1);return;}
+      if(dragging&&dragAxis==='up'&&dy<=-upwardThreshold&&Math.abs(dy)>Math.abs(dx)*1.15){suppressClick=true;close('up');return;}
       card.style.transition='transform .24s ease, opacity .2s ease';card.style.transform='';card.style.opacity='';
-      dragging=false;armAuto(5000);setTimeout(()=>{suppressClick=false},180);
+      dragging=false;dragAxis='';armAuto(5000);setTimeout(()=>{suppressClick=false},180);
     };
     card.addEventListener('pointerup',finishSwipe);card.addEventListener('pointercancel',finishSwipe);
     card.addEventListener('click',()=>{if(suppressClick)return;clearTimeout(auto);close();try{if(location.pathname!=='/credits')location.href='/credits'}catch{}});

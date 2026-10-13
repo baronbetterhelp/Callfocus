@@ -3414,4 +3414,4 @@ html:not([data-theme="pearl"]) .cf-stage-note{
 
 
 /* CallFocus V15.32 — swipe-dismiss customer heads-up */
-.cf-headsup-card{touch-action:pan-y;user-select:none;-webkit-user-select:none;will-change:transform,opacity}
+.cf-headsup-card{touch-action:none;user-select:none;-webkit-user-select:none;will-change:transform,opacity}
