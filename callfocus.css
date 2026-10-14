@@ -3540,3 +3540,35 @@ html:not([data-theme="pearl"]) .cf-stage-note{
     will-change:auto!important;
   }
 }
+
+
+/* ========================================================================
+   CallFocus V15.37 Visual Test — Story Cards Bottom-Up Reveal
+   The 01/02/03 long-form story cards now use the same vertical entrance style
+   as the lighter bento panels instead of sliding in from the side.
+   ======================================================================== */
+.home-page.motion-ready .cf-story-card.reveal-card.reveal-pending,
+.home-page.motion-ready .cf-story-card.reveal-card.reveal-pending.reveal-left,
+.home-page.motion-ready .cf-story-card.reveal-card.reveal-pending.reveal-right{
+  transform:translate3d(0,34px,0) scale(.978)!important;
+}
+.home-page.motion-ready .cf-story-card.reveal-card.reveal-pending[data-cf-reveal-dir="up"],
+.home-page.motion-ready .cf-story-card.reveal-card.reveal-pending.reveal-left[data-cf-reveal-dir="up"],
+.home-page.motion-ready .cf-story-card.reveal-card.reveal-pending.reveal-right[data-cf-reveal-dir="up"]{
+  transform:translate3d(0,-30px,0) scale(.978)!important;
+}
+.home-page.motion-ready .cf-story-card.reveal-card.reveal-pending.is-visible{
+  transform:translate3d(0,0,0) scale(1)!important;
+}
+@media(max-width:760px){
+  .home-page.motion-ready .cf-story-card.reveal-card.reveal-pending,
+  .home-page.motion-ready .cf-story-card.reveal-card.reveal-pending.reveal-left,
+  .home-page.motion-ready .cf-story-card.reveal-card.reveal-pending.reveal-right{
+    transform:translate3d(0,30px,0) scale(.98)!important;
+  }
+  .home-page.motion-ready .cf-story-card.reveal-card.reveal-pending[data-cf-reveal-dir="up"],
+  .home-page.motion-ready .cf-story-card.reveal-card.reveal-pending.reveal-left[data-cf-reveal-dir="up"],
+  .home-page.motion-ready .cf-story-card.reveal-card.reveal-pending.reveal-right[data-cf-reveal-dir="up"]{
+    transform:translate3d(0,-27px,0) scale(.98)!important;
+  }
+}
