@@ -3441,3 +3441,102 @@ html:not([data-theme="pearl"]) .cf-stage-note{
     letter-spacing:-.01em!important;
   }
 }
+
+
+/* ========================================================================
+   CallFocus V15.36 Visual Test — Noticeable Repeat Scroll Reveals
+   Panels now animate clearly every time they re-enter the viewport, whether
+   the customer is scrolling down or back up. Transform + opacity only keeps
+   the effect smooth on phone Safari.
+   ======================================================================== */
+.home-page.motion-ready .reveal-card.reveal-pending{
+  opacity:0;
+  transform:translate3d(0,34px,0) scale(.978);
+  transform-origin:50% 58%;
+  transition-property:opacity,transform!important;
+  transition-duration:.94s,1.02s!important;
+  transition-timing-function:cubic-bezier(.16,.72,.18,1),cubic-bezier(.16,.72,.18,1)!important;
+  transition-delay:var(--delay,0ms)!important;
+  filter:none!important;
+  -webkit-filter:none!important;
+  will-change:opacity,transform;
+}
+.home-page.motion-ready .reveal-card.reveal-pending[data-cf-reveal-dir="up"]{
+  transform:translate3d(0,-30px,0) scale(.978);
+}
+.home-page.motion-ready .reveal-card.reveal-pending.reveal-left{
+  transform:translate3d(-38px,8px,0) scale(.982);
+}
+.home-page.motion-ready .reveal-card.reveal-pending.reveal-right{
+  transform:translate3d(38px,8px,0) scale(.982);
+}
+.home-page.motion-ready .reveal-card.reveal-pending.reveal-left[data-cf-reveal-dir="up"]{
+  transform:translate3d(-38px,-8px,0) scale(.982);
+}
+.home-page.motion-ready .reveal-card.reveal-pending.reveal-right[data-cf-reveal-dir="up"]{
+  transform:translate3d(38px,-8px,0) scale(.982);
+}
+.home-page.motion-ready .reveal-card.reveal-pending.reveal-scale{
+  transform:translate3d(0,26px,0) scale(.955);
+}
+.home-page.motion-ready .reveal-card.reveal-pending.reveal-scale[data-cf-reveal-dir="up"]{
+  transform:translate3d(0,-24px,0) scale(.955);
+}
+.home-page.motion-ready .reveal-card.reveal-pending.is-visible,
+.home-page.motion-ready .reveal-card.reveal-pending.reveal-left.is-visible,
+.home-page.motion-ready .reveal-card.reveal-pending.reveal-right.is-visible,
+.home-page.motion-ready .reveal-card.reveal-pending.reveal-scale.is-visible{
+  opacity:1!important;
+  transform:translate3d(0,0,0) scale(1)!important;
+  will-change:auto;
+}
+
+/* Make the long-form panels feel intentionally staged instead of all landing
+   at once. Existing explicit --delay values still win. */
+.home-page .cf-story-card:nth-child(2),
+.home-page .process-card:nth-child(2),
+.home-page .feature-card:nth-child(2){--delay:90ms}
+.home-page .cf-story-card:nth-child(3),
+.home-page .process-card:nth-child(3),
+.home-page .feature-card:nth-child(3){--delay:170ms}
+.home-page .cf-bento-card:nth-child(even){--delay:90ms}
+.home-page .cf-bento-card:nth-child(odd){--delay:150ms}
+
+@media(max-width:760px){
+  .home-page.motion-ready .reveal-card.reveal-pending{
+    transform:translate3d(0,30px,0) scale(.98);
+    transition-duration:.88s,.96s!important;
+  }
+  .home-page.motion-ready .reveal-card.reveal-pending[data-cf-reveal-dir="up"]{
+    transform:translate3d(0,-27px,0) scale(.98);
+  }
+  .home-page.motion-ready .reveal-card.reveal-pending.reveal-left{
+    transform:translate3d(-30px,6px,0) scale(.984);
+  }
+  .home-page.motion-ready .reveal-card.reveal-pending.reveal-right{
+    transform:translate3d(30px,6px,0) scale(.984);
+  }
+  .home-page.motion-ready .reveal-card.reveal-pending.reveal-left[data-cf-reveal-dir="up"]{
+    transform:translate3d(-30px,-6px,0) scale(.984);
+  }
+  .home-page.motion-ready .reveal-card.reveal-pending.reveal-right[data-cf-reveal-dir="up"]{
+    transform:translate3d(30px,-6px,0) scale(.984);
+  }
+  .home-page.motion-ready .reveal-card.reveal-pending.reveal-scale{
+    transform:translate3d(0,22px,0) scale(.962);
+  }
+  .home-page.motion-ready .reveal-card.reveal-pending.reveal-scale[data-cf-reveal-dir="up"]{
+    transform:translate3d(0,-22px,0) scale(.962);
+  }
+}
+
+@media(prefers-reduced-motion:reduce){
+  .home-page .reveal-card,
+  .home-page .reveal-card.reveal-pending,
+  .home-page .reveal-card.reveal-pending.is-visible{
+    opacity:1!important;
+    transform:none!important;
+    transition:none!important;
+    will-change:auto!important;
+  }
+}

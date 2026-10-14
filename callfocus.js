@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.35-test';
+  const BUILD='15.36-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -236,47 +236,120 @@ function applyAdminLabels(){
 function motionInit(){
   const page = $('pageRoot');
   const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if(!page) return;
   if(!reduce) requestAnimationFrame(()=>page.classList.add('motion-ready'));
-  const nodes = qsa('[data-reveal]');
-  const showNode=(node)=>{ if(!node || node.classList.contains('is-visible')) return; node.classList.add('is-visible'); };
-  if(reduce){ nodes.forEach(showNode); return; }
 
-  nodes.forEach(n=>n.classList.add('reveal-pending'));
+  // V15.36: extend the scroll-reveal system to nearly every meaningful Home
+  // panel while keeping the animations compositor-friendly. Existing reveal
+  // classes are preserved, and missing panel hooks are added at runtime so the
+  // HTML remains backward compatible across the route copies.
+  const extraRevealSelectors=[
+    '.trust-row',
+    '.customer-home-panel .thread-preview-list',
+    '.cf-motion-ribbon',
+    '.cf-phone-hero-stage',
+    '.cf-story-intro',
+    '.cf-story-card',
+    '.cf-stage-copy',
+    '.cf-conversation-stage',
+    '.premium-section-head',
+    '.cf-bento-card',
+    '.process-card',
+    '.continuity-copy',
+    '.thread-demo',
+    '.feature-card',
+    '.home-cta-inner'
+  ];
+  extraRevealSelectors.forEach(selector=>{
+    qsa(selector).forEach((node,index)=>{
+      node.classList.add('reveal-card');
+      if(!node.hasAttribute('data-reveal')) node.setAttribute('data-reveal','');
+      if(!node.style.getPropertyValue('--delay') && index>0){
+        node.style.setProperty('--delay',`${Math.min((index%3)*80,160)}ms`);
+      }
+    });
+  });
+
+  const nodes = qsa('[data-reveal]');
+  if(!nodes.length) return;
+
+  let lastY=Math.max(0,window.scrollY||window.pageYOffset||0);
+  let scrollDirection='down';
+  const updateDirection=()=>{
+    const y=Math.max(0,window.scrollY||window.pageYOffset||0);
+    const delta=y-lastY;
+    if(Math.abs(delta)>3) scrollDirection=delta>0?'down':'up';
+    lastY=y;
+  };
+  window.addEventListener('scroll',updateDirection,{passive:true});
+
+  const prepareNode=(node)=>{
+    if(!node) return;
+    node.classList.add('reveal-pending');
+    if(!node.dataset.cfRevealDir) node.dataset.cfRevealDir='down';
+  };
+  const showNode=(node)=>{
+    if(!node) return;
+    node.dataset.cfRevealDir=scrollDirection;
+    // Restart only after the node has fully left the viewport. This avoids
+    // flicker at the observer boundary but lets the same panel animate again
+    // when the user scrolls back to it in either direction.
+    if(!node.classList.contains('is-visible')){
+      void node.offsetWidth;
+      node.classList.add('is-visible');
+    }
+  };
+  const hideNode=(node)=>{
+    if(!node || !node.classList.contains('is-visible')) return;
+    node.classList.remove('is-visible');
+  };
+
+  nodes.forEach(prepareNode);
+  if(reduce){ nodes.forEach(node=>node.classList.add('is-visible')); return; }
+
   const revealVisible=()=>{
     const vh=Math.max(window.innerHeight||0,document.documentElement.clientHeight||0);
     nodes.forEach(node=>{
-      if(node.classList.contains('is-visible')) return;
       const r=node.getBoundingClientRect();
-      if(r.top < vh*.96 && r.bottom > -96) showNode(node);
+      const enters=r.top < vh*.90 && r.bottom > vh*.10;
+      const fullyAway=r.bottom < -24 || r.top > vh+24;
+      if(enters) showNode(node);
+      else if(fullyAway) hideNode(node);
     });
   };
 
   let observer=null;
   if('IntersectionObserver' in window){
     observer = new IntersectionObserver(entries=>entries.forEach(entry=>{
-      if(entry.isIntersecting){ showNode(entry.target); observer.unobserve(entry.target); }
-    }),{threshold:.025,rootMargin:'100px 0px 120px 0px'});
+      if(entry.isIntersecting && entry.intersectionRatio>=.10){
+        showNode(entry.target);
+      }else if(!entry.isIntersecting){
+        hideNode(entry.target);
+      }
+    }),{
+      threshold:[0,.10,.24,.55],
+      rootMargin:'-3% 0px -6% 0px'
+    });
     nodes.forEach(n=>observer.observe(n));
   }
 
   let revealTimer=0;
   const queueRevealCheck=()=>{
     clearTimeout(revealTimer);
-    revealTimer=setTimeout(revealVisible,140);
+    revealTimer=setTimeout(revealVisible,90);
   };
   revealVisible();
   requestAnimationFrame(revealVisible);
-  setTimeout(revealVisible,180);
+  setTimeout(revealVisible,240);
   setTimeout(revealVisible,900);
-  // IntersectionObserver handles normal scrolling. The throttled fallback keeps
-  // older / quirky Safari builds safe without forcing layout on every frame.
+  // IntersectionObserver handles modern browsers. The fallback is deliberately
+  // throttled so older Safari builds still get repeat reveals without tying
+  // layout work to every scroll frame.
   if(!observer) window.addEventListener('scroll',queueRevealCheck,{passive:true});
   window.addEventListener('resize',queueRevealCheck,{passive:true});
   window.addEventListener('pageshow',queueRevealCheck,{passive:true});
 
-  // V15.22: remove scroll-driven parallax. The visual branch already has
-  // independent compositor animations, and tying transforms to scroll created
-  // avoidable work on Safari during fast swipes.
+  // Keep the performance pass from reintroducing scroll-driven parallax.
   page.style.setProperty('--cf-bg-shift','0px');
   page.style.setProperty('--cf-copy-shift','0px');
   page.style.setProperty('--cf-geo-shift','0px');
@@ -6469,7 +6542,7 @@ ${approvedPatterns}
     showing=true;seen.add(item.id);
     const host=ensureHost();host.innerHTML='';
     const card=document.createElement('button');card.type='button';card.className='cf-headsup-card';card.setAttribute('aria-label','CallFocus notification');
-    const icon=document.createElement('span');icon.className='cf-headsup-icon';const img=document.createElement('img');img.src='/logo.png?v=15.35-test';img.alt='';icon.appendChild(img);
+    const icon=document.createElement('span');icon.className='cf-headsup-icon';const img=document.createElement('img');img.src='/logo.png?v=15.36-test';img.alt='';icon.appendChild(img);
     const copy=document.createElement('span');copy.className='cf-headsup-copy';
     const meta=document.createElement('span');meta.className='cf-headsup-meta';const brand=document.createElement('strong');brand.textContent='CallFocus';const now=document.createElement('small');now.textContent='now';meta.append(brand,now);
     const message=document.createElement('span');message.className='cf-headsup-message';message.textContent=String(item.message||item.title||'You have a new CallFocus update.');
