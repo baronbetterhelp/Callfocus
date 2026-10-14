@@ -790,7 +790,7 @@ async function authenticatedCustomer(request, env) {
   const sessionAuthVersion = Number(session.authVersion || 1);
   if (userAuthVersion !== sessionAuthVersion) return null;
   // Upgrade an existing valid 30-day session without requiring another login.
-  if(session.persistent!==true){session.persistent=true;await env.CALLFOCUS_CONFIG.put(await customerSessionKey(token),JSON.stringify(session));}
+  if(session.persistent!==true){session.persistent=true;try{await env.CALLFOCUS_CONFIG.put(await customerSessionKey(token),JSON.stringify(session));}catch(error){console.warn('CallFocus session upgrade deferred',error?.message||error);}}
   return { token, session, user };
 }
 
@@ -1312,17 +1312,59 @@ function manualPaymentReady(config = {}) {
     && !!String(config?.manualPaymentAccountNumber || '').trim();
 }
 
-async function callFocusRateLimit(request, env, bucket, limit, windowSeconds) {
-  if (!env.CALLFOCUS_CONFIG) return null;
+// V15.44: keep a KV quota event from becoming a raw Cloudflare 1101 page.
+function isKvCapacityError(error) {
+  const text = String(error?.message || error || '').toLowerCase();
+  if (!text) return false;
+  const looksLikeKv = text.includes('kv') || text.includes('key-value') || text.includes('put') || text.includes('write');
+  const looksLikeCapacity = text.includes('429') || text.includes('quota') || text.includes('limit') || text.includes('exceeded') || text.includes('too many');
+  return looksLikeKv && looksLikeCapacity;
+}
+function storageCapacityResponse() {
+  return json({
+    error: 'CallFocus storage is temporarily at capacity. Please try again shortly.',
+    code: 'storage_capacity',
+    retryable: true
+  }, 503, { 'Cache-Control': 'no-store', 'Retry-After': '30' });
+}
+
+// High-frequency public helpers (location search / live translation) no longer burn a KV write per request.
+// This best-effort in-isolate limiter is intentionally used only for large-limit buckets.
+const CALLFOCUS_LOCAL_RATE = new Map();
+function callFocusLocalRateLimit(request, bucket, limit, windowSeconds) {
   const ip = String(request.headers.get('CF-Connecting-IP') || request.headers.get('X-Real-IP') || 'unknown').slice(0, 96);
   const windowId = Math.floor(Date.now() / 1000 / windowSeconds);
-  const digest = await sha256Hex(`${bucket}:${ip}`);
-  const key = `ratelimit:${bucket}:${windowId}:${digest.slice(0, 24)}`;
-  const current = Math.max(0, Number(await env.CALLFOCUS_CONFIG.get(key)) || 0);
-  if (current >= limit) {
+  const key = `${bucket}:${windowId}:${ip}`;
+  const now = Date.now();
+  if (CALLFOCUS_LOCAL_RATE.size > 4000) {
+    for (const [k,row] of CALLFOCUS_LOCAL_RATE) if (!row || row.expiresAt <= now) CALLFOCUS_LOCAL_RATE.delete(k);
+  }
+  const row = CALLFOCUS_LOCAL_RATE.get(key) || { count: 0, expiresAt: (windowId + 1) * windowSeconds * 1000 + 60000 };
+  if (row.count >= limit) {
     return new Response(JSON.stringify({ error: 'Too many attempts. Please wait a little and try again.', code: 'rate_limited' }), { status: 429, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Retry-After': String(windowSeconds) } });
   }
-  await env.CALLFOCUS_CONFIG.put(key, String(current + 1), { expirationTtl: windowSeconds + 60 });
+  row.count += 1; CALLFOCUS_LOCAL_RATE.set(key, row);
+  return null;
+}
+
+async function callFocusRateLimit(request, env, bucket, limit, windowSeconds) {
+  // Avoid thousands of KV writes from endpoints designed to be called repeatedly during normal use.
+  if (Number(limit) >= 100) return callFocusLocalRateLimit(request, bucket, limit, windowSeconds);
+  if (!env.CALLFOCUS_CONFIG) return null;
+  try {
+    const ip = String(request.headers.get('CF-Connecting-IP') || request.headers.get('X-Real-IP') || 'unknown').slice(0, 96);
+    const windowId = Math.floor(Date.now() / 1000 / windowSeconds);
+    const digest = await sha256Hex(`${bucket}:${ip}`);
+    const key = `ratelimit:${bucket}:${windowId}:${digest.slice(0, 24)}`;
+    const current = Math.max(0, Number(await env.CALLFOCUS_CONFIG.get(key)) || 0);
+    if (current >= limit) {
+      return new Response(JSON.stringify({ error: 'Too many attempts. Please wait a little and try again.', code: 'rate_limited' }), { status: 429, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'Retry-After': String(windowSeconds) } });
+    }
+    await env.CALLFOCUS_CONFIG.put(key, String(current + 1), { expirationTtl: windowSeconds + 60 });
+  } catch (error) {
+    // Rate limiting must never take the entire customer/account API down when KV is at capacity.
+    console.warn('CallFocus rate-limit storage unavailable; allowing request', bucket, error?.message || error);
+  }
   return null;
 }
 
@@ -1384,8 +1426,10 @@ async function handleAdminLogout(request,env){
   const tokens=[String(request.headers.get('X-CallFocus-Admin-Key')||''),adminCookieToken(request)].filter(Boolean);
   if(env.CALLFOCUS_CONFIG){
     for(const supplied of [...new Set(tokens)]){
-      if(supplied.startsWith('session:'))await env.CALLFOCUS_CONFIG.delete(`admin:session:${await sha256Hex(supplied.slice(8))}`);
-      if(supplied.startsWith('session2:'))await env.CALLFOCUS_CONFIG.put(`admin:revoked:${await sha256Hex(supplied)}`,'1');
+      try{
+        if(supplied.startsWith('session:'))await env.CALLFOCUS_CONFIG.delete(`admin:session:${await sha256Hex(supplied.slice(8))}`);
+        if(supplied.startsWith('session2:'))await env.CALLFOCUS_CONFIG.put(`admin:revoked:${await sha256Hex(supplied)}`,'1');
+      }catch(error){console.warn('CallFocus admin logout revocation deferred',error?.message||error)}
     }
   }
   return new Response(JSON.stringify({ok:true}),{status:200,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Set-Cookie':adminSessionCookie('',0)}});
@@ -1831,7 +1875,7 @@ async function handleAdminLogin(request, env) {
   if(!await adminAuthorized(request,env))return json({error:'Incorrect admin passcode.'},401);
   if(!env.CALLFOCUS_CONFIG)return json({error:'Account storage is not connected.'},503);
   const adminToken=await createAdminSignedSession(env);
-  await env.CALLFOCUS_CONFIG.put(`admin:issued:${await sha256Hex(adminToken)}`,JSON.stringify({createdAt:new Date().toISOString()}));
+  // session2 tokens are HMAC-signed and validated without an issuance lookup, so no KV write is required here.
   return new Response(JSON.stringify({ok:true,adminToken}),{status:200,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Set-Cookie':adminSessionCookie(adminToken)}});
 }
 
@@ -4305,16 +4349,17 @@ async function safeCustomerRoute(label, handler) {
     return await handler();
   } catch (error) {
     console.error(`CallFocus account route failed: ${label}`, error?.stack || error?.message || error);
+    if (isKvCapacityError(error)) return storageCapacityResponse();
     return json({
       error: 'The CallFocus account service hit a server error. Please try again.',
-      code: 'account_internal_error',
-      detail: String(error?.message || error || 'Unknown account error').slice(0, 220)
-    }, 500);
+      code: 'account_internal_error'
+    }, 500, { 'Cache-Control': 'no-store' });
   }
 }
 
 export default {
   async fetch(request, env) {
+    try {
     const url = new URL(request.url);
     if (url.pathname === '/api/auth/health' && request.method === 'GET') {
       return json({ ok: true, storageConnected: !!env.CALLFOCUS_CONFIG, passwordHashVersion: 3, passwordIterations: CUSTOMER_PASSWORD_ITERATIONS });
@@ -4343,7 +4388,7 @@ export default {
     if (url.pathname === '/api/manual-payment/cancel') return safeCustomerRoute('manual-payment-cancel', () => handleManualPaymentCancel(request, env));
     if (url.pathname === '/api/manual-payment/status') return safeCustomerRoute('manual-payment-status', () => handleManualPaymentStatus(request, env));
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.43-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.44-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -4382,10 +4427,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.43-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.44-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.43-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.43-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.44-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.44-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -4395,16 +4440,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.43-test');
+      headers.set('X-CallFocus-Admin-Build', '15.44-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.43-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.44-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.43-test');
+      headers.set('X-CallFocus-Admin-Build', '15.44-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {
@@ -4431,6 +4476,16 @@ export default {
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     return env.ASSETS.fetch(request);
+    } catch (error) {
+      console.error('CallFocus Worker request failed', error?.stack || error?.message || error);
+      const url = new URL(request.url);
+      if (url.pathname.startsWith('/api/')) {
+        if (isKvCapacityError(error)) return storageCapacityResponse();
+        return json({ error: 'CallFocus hit a temporary server error. Please try again.', code: 'server_error', retryable: true }, 500, { 'Cache-Control': 'no-store' });
+      }
+      try { return await env.ASSETS.fetch(request); } catch {}
+      return new Response('CallFocus is temporarily unavailable. Please try again.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
+    }
   }
 };
 
@@ -4439,6 +4494,7 @@ export default {
 const CALL_USAGE_RETENTION_SECONDS = 60 * 60 * 24 * 365;
 const LIVE_VOICE_RATE_USD_PER_MINUTE = 0.05;
 const LIVE_INITIALIZATION_SECONDS = 15;
+const CALL_USAGE_TELEMETRY_CHECKPOINT_MS = 120000;
 function callUsageIndexKey(id) { return `call_usage:id:${id}`; }
 function usageNumber(value, maximum = 86400) { const n = Number(value); return Number.isFinite(n) ? Math.max(0, Math.min(maximum, n)) : 0; }
 function callUsageMetadata(r) {
@@ -4525,7 +4581,12 @@ async function handleCallUsage(request,env) {
   const record=await env.CALLFOCUS_CONFIG.get(index.key,{type:'json'});
   if(!record||record.userId!==auth.user.id)return json({error:'Call usage not found.'},404);
   const sequence=Math.floor(usageNumber(body.sequence,1_000_000_000));
-  if(sequence<=Number(record.sequence||0))return json({ok:true,id,duplicate:true});
+  // Wallet ledger seconds are the authoritative idempotency guard. This lets us avoid rewriting
+  // the call-telemetry record on every wallet checkpoint while still rejecting truly old stored snapshots.
+  const storedSequence=Number(record.sequence||0);
+  if(sequence<=storedSequence)return json({ok:true,id,duplicate:true});
+  const wasStarted=record.started===true;
+  const storedUpdatedMs=Date.parse(record.updatedAt||record.createdAt||'');
   record.sequence=sequence;
   record.durationSeconds=Math.max(record.durationSeconds||0,usageNumber(body.durationSeconds));
   if(body.providerSeconds!==null&&body.providerSeconds!==undefined&&Number.isFinite(Number(body.providerSeconds))){record.providerSeconds=Math.max(record.providerSeconds||0,usageNumber(body.providerSeconds));record.usageSource='api_duration';}
@@ -4536,15 +4597,21 @@ async function handleCallUsage(request,env) {
   const seen=new Map((record.backendResponses||[]).map(r=>[r.id,r]));
   for(const raw of (Array.isArray(body.backendResponses)?body.backendResponses:[]).slice(0,100)){const item=cleanBackendUsage(raw);if(item&&!seen.has(item.id))seen.set(item.id,item);}
   record.backendResponses=[...seen.values()].slice(0,500);
-  record.updatedAt=new Date().toISOString();
+  const nowMs=Date.now();
+  record.updatedAt=new Date(nowMs).toISOString();
   if(record.finalized)record.completedAt=record.completedAt||record.updatedAt;
   const charge = await applyLiveCallWalletCharge(env, auth, record);
   record.unlimitedCredit = charge.unlimited === true;
   record.walletChargedSeconds = charge.unlimited ? 0 : Math.max(0, Number(charge.chargedSeconds) || 0);
   record.creditExhausted = charge.creditExhausted === true;
   record.creditsUsed = charge.unlimited ? 0 : Math.round((record.walletChargedSeconds / CALLFOCUS_SECONDS_PER_CREDIT) * 10) / 10;
-  await storeCallUsage(env,index.key,priceCallUsage(record));
-  return json({ok:true,id,estimatedCostUsd:record.estimatedCostUsd,wallet:charge.wallet,chargedSeconds:record.walletChargedSeconds,creditsUsed:record.creditsUsed,creditExhausted:record.creditExhausted,unlimitedCredit:record.unlimitedCredit});
+  if(!charge.unlimited) record.durationSeconds=Math.max(record.durationSeconds||0,record.walletChargedSeconds);
+  const priced=priceCallUsage(record);
+  const telemetryDue=!Number.isFinite(storedUpdatedMs)||(nowMs-storedUpdatedMs)>=CALL_USAGE_TELEMETRY_CHECKPOINT_MS;
+  const firstStartedCheckpoint=!wasStarted&&record.started===true;
+  const mustPersist=record.finalized===true||body.closed===true||firstStartedCheckpoint||telemetryDue;
+  if(mustPersist) await storeCallUsage(env,index.key,priced);
+  return json({ok:true,id,estimatedCostUsd:priced.estimatedCostUsd,wallet:charge.wallet,chargedSeconds:record.walletChargedSeconds,creditsUsed:record.creditsUsed,creditExhausted:record.creditExhausted,unlimitedCredit:record.unlimitedCredit,telemetryPersisted:mustPersist});
 }
 async function recordCallBackendUsage(env,auth,callUsageId,responseId,model,usage) {
   if(!callUsageId||!responseId||!env.CALLFOCUS_CONFIG)return;
@@ -4604,6 +4671,6 @@ async function handleAdminBilledCosts(request,env) {
     }
     const daily=buckets.map(b=>({date:new Date(b.start_time*1000).toISOString().slice(0,10),amountUsd:(b.results||[]).filter(r=>(!projectId||r.project_id===projectId)&&String(r.amount?.currency||'usd').toLowerCase()==='usd').reduce((s,r)=>s+(Number(r.amount?.value)||0),0)}));
     const result={ok:true,configured:true,available:true,scope:projectId?'project':'organization',projectId:projectId||null,totalUsd:daily.reduce((s,r)=>s+r.amountUsd,0),todayUsd:daily.filter(r=>r.date===new Date().toISOString().slice(0,10)).reduce((s,r)=>s+r.amountUsd,0),daily,fetchedAt:new Date().toISOString(),periodStart:new Date(start*1000).toISOString(),partial:!!nextPage};
-    await env.CALLFOCUS_CONFIG?.put(cacheKey,JSON.stringify(result),{expirationTtl:300});return json(result);
+    try{await env.CALLFOCUS_CONFIG?.put(cacheKey,JSON.stringify(result),{expirationTtl:300});}catch{}return json(result);
   }catch{return json({ok:true,configured:true,available:false,message:'OpenAI billed spend is temporarily unavailable.'})}
 }

@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.43-test';
+  const BUILD='15.44-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -6398,7 +6398,7 @@ ${approvedPatterns}
   }
   function report(s,{force=false}={}){
     if(!s)return;capture(s);
-    if(!force&&Date.now()-s.lastReportAt<10000)return;
+    if(!force&&Date.now()-s.lastReportAt<25000)return;
     s.lastReportAt=Date.now();s.sequence++;
     pending[s.id]={callUsageId:s.id,userId:s.userId,sequence:s.sequence,providerSeconds:s.providerSeconds,durationSeconds:s.durationSeconds,creditsUsed:s.creditsUsed,unlimitedCredit:!!s.unlimitedCredit,started:s.started,closed:s.closed,finalized:s.finalized,reason:s.reason,backendResponses:[...s.backend.values()].slice(-100)};
     storeQueue();flush();
@@ -6412,7 +6412,7 @@ ${approvedPatterns}
       for(const [id,body]of Object.entries(pending)){
         if(body.userId!==account?.id)continue;
         const res=await fetch('/api/call-usage',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify(body),keepalive:true,cache:'no-store'});
-        if(!res.ok)throw new Error('Call usage report will retry');
+        if(!res.ok){const err=new Error('Call usage report will retry');err.retryAfter=(res.status===429||res.status===503)?60000:30000;throw err;}
         const payload=await res.json().catch(()=>({}));
         if(payload?.wallet)window.CallFocusCredits?.applyAuthoritativeWallet?.(payload.wallet);
         if(payload?.creditExhausted&&live?.current?.callUsageId===id&&live?.started){
@@ -6421,8 +6421,8 @@ ${approvedPatterns}
         }
         if(pending[id]?.sequence===body.sequence)delete pending[id];storeQueue();
       }
-    }catch{retryFlush(10000)}
-    finally{flushing=false;if(Object.values(pending).some(b=>b.userId===account?.id)&&!retryTimer)retryFlush(1000)}
+    }catch(error){retryFlush(Number(error?.retryAfter)||30000)}
+    finally{flushing=false;if(Object.values(pending).some(b=>b.userId===account?.id)&&!retryTimer)retryFlush(5000)}
   }
   function backendEvent(s,event){
     if(!s)return;
@@ -6457,7 +6457,7 @@ ${approvedPatterns}
       const s=stateFor();
       if(!s||!live?.started){stopMeter();return;}
       report(s,{force:true});
-    },4000);
+    },30000);
   }
 
   const previousStartTimer=startTimer;
@@ -6622,7 +6622,7 @@ ${approvedPatterns}
     showing=true;seen.add(item.id);
     const host=ensureHost();host.innerHTML='';
     const card=document.createElement('button');card.type='button';card.className='cf-headsup-card';card.setAttribute('aria-label','CallFocus notification');
-    const icon=document.createElement('span');icon.className='cf-headsup-icon';const img=document.createElement('img');img.src='/logo.png?v=15.43-test';img.alt='';icon.appendChild(img);
+    const icon=document.createElement('span');icon.className='cf-headsup-icon';const img=document.createElement('img');img.src='/logo.png?v=15.44-test';img.alt='';icon.appendChild(img);
     const copy=document.createElement('span');copy.className='cf-headsup-copy';
     const meta=document.createElement('span');meta.className='cf-headsup-meta';const brand=document.createElement('strong');brand.textContent='CallFocus';const now=document.createElement('small');now.textContent='now';meta.append(brand,now);
     const message=document.createElement('span');message.className='cf-headsup-message';message.textContent=String(item.message||item.title||'You have a new CallFocus update.');
