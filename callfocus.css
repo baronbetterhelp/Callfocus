@@ -3629,3 +3629,114 @@ html[data-theme="pearl"] .cf-interrupt-now .cf-redirect-icon{background:#fff1cf;
 }
 @media(prefers-reduced-motion:reduce){.cf-redirect-action,.cf-redirect-icon svg{transition:none!important;animation:none!important}}
 
+
+/* ========================================================================
+   CallFocus V15.43 Visual Test — Curved Live Continuity Core &
+   Continuous Floating Ring Motion
+   ======================================================================== */
+
+.cf-phone-caller-core{
+  overflow:hidden;
+  isolation:isolate;
+  background:
+    radial-gradient(circle at 34% 24%,rgba(133,226,205,.92) 0 10%,rgba(133,226,205,0) 30%),
+    radial-gradient(circle at 50% 18%,rgba(255,255,255,.18),rgba(255,255,255,0) 42%),
+    linear-gradient(165deg,#319180 0%,#1d6f62 38%,#145148 67%,#103d37 100%)!important;
+  border:1px solid rgba(236,255,250,.34)!important;
+  box-shadow:
+    inset 0 1px 1px rgba(255,255,255,.28),
+    inset 0 18px 24px rgba(255,255,255,.10),
+    inset 0 -18px 22px rgba(5,36,31,.34),
+    0 18px 45px rgba(18,84,72,.25),
+    0 0 0 12px rgba(49,135,119,.06)!important;
+}
+.cf-phone-caller-core:before{
+  content:"";
+  position:absolute;
+  left:14px;
+  right:14px;
+  top:8px;
+  height:42%;
+  border-radius:50%;
+  background:radial-gradient(circle at 50% 0%,rgba(255,255,255,.32),rgba(255,255,255,.07) 42%,rgba(255,255,255,0) 76%);
+  pointer-events:none;
+  z-index:1;
+}
+.cf-phone-caller-core:after{
+  content:"";
+  position:absolute;
+  inset:3px;
+  border-radius:50%;
+  border:1px solid rgba(255,255,255,.12);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.05);
+  pointer-events:none;
+  z-index:1;
+}
+.cf-phone-core-pulse{
+  inset:-3px;
+  border-color:rgba(173,236,223,.58);
+  box-shadow:0 0 0 1px rgba(255,255,255,.04) inset;
+}
+
+.cf-help-bubble{overflow:visible}
+.cf-help-bubble-ring{
+  inset:-7px!important;
+  border:0!important;
+  background:conic-gradient(from -28deg,
+    rgba(89,214,189,.96) 0deg 74deg,
+    rgba(89,214,189,.12) 74deg 124deg,
+    rgba(255,132,166,.92) 124deg 186deg,
+    rgba(255,255,255,0) 186deg 256deg,
+    rgba(84,207,184,.84) 256deg 321deg,
+    rgba(255,255,255,.22) 321deg 360deg);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 4px),#000 calc(100% - 3px));
+  mask:radial-gradient(farthest-side,transparent calc(100% - 4px),#000 calc(100% - 3px));
+  filter:drop-shadow(0 0 10px rgba(82,207,183,.22));
+  will-change:transform;
+  transform:translateZ(0);
+}
+.cf-help-bubble-ring:before{
+  content:"";
+  position:absolute;
+  inset:5px;
+  border-radius:50%;
+  background:conic-gradient(from 136deg,
+    rgba(255,255,255,0) 0deg 208deg,
+    rgba(119,222,201,.22) 208deg 302deg,
+    rgba(255,156,182,.28) 302deg 360deg);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 1px));
+  mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 1px));
+  animation:cfHelpRingSpinReverse 3.8s linear infinite;
+}
+.cf-help-bubble:after{
+  inset:-13px!important;
+  border:0!important;
+  background:conic-gradient(from 95deg,
+    rgba(255,255,255,0) 0deg 116deg,
+    rgba(116,220,199,.18) 116deg 210deg,
+    rgba(255,153,179,.18) 210deg 282deg,
+    rgba(255,255,255,.08) 282deg 360deg);
+  -webkit-mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 1px));
+  mask:radial-gradient(farthest-side,transparent calc(100% - 2px),#000 calc(100% - 1px));
+  animation:cfHelpOrbitalFloat 5.8s linear infinite;
+  opacity:.95;
+  will-change:transform;
+}
+@keyframes cfHelpRingSpinReverse{to{transform:rotate(-360deg)}}
+@keyframes cfHelpOrbitalFloat{to{transform:rotate(360deg)}}
+html.cf-scroll-active .cf-help-bubble-ring,
+html.cf-scroll-active .cf-help-bubble-ring:before,
+html.cf-scroll-active .cf-help-bubble:after{
+  animation-play-state:running!important;
+}
+@media(max-width:760px){
+  .cf-help-bubble-ring{filter:drop-shadow(0 0 8px rgba(82,207,183,.18))!important}
+}
+@media(prefers-reduced-motion:reduce){
+  .cf-phone-caller-core:before,
+  .cf-phone-caller-core:after,
+  .cf-help-bubble-ring:before,
+  .cf-help-bubble:after{
+    animation:none!important;
+  }
+}
