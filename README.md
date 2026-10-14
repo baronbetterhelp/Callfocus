@@ -1,1 +1,1 @@
-CallFocus V15.40 Visual Test — Dual Redirect Controls
+CallFocus V15.41 Visual Test — GPT-Live-Safe Redirect Controls

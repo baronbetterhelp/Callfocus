@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.40-test';
+  const BUILD='15.41-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -6585,7 +6585,7 @@ ${approvedPatterns}
     showing=true;seen.add(item.id);
     const host=ensureHost();host.innerHTML='';
     const card=document.createElement('button');card.type='button';card.className='cf-headsup-card';card.setAttribute('aria-label','CallFocus notification');
-    const icon=document.createElement('span');icon.className='cf-headsup-icon';const img=document.createElement('img');img.src='/logo.png?v=15.40-test';img.alt='';icon.appendChild(img);
+    const icon=document.createElement('span');icon.className='cf-headsup-icon';const img=document.createElement('img');img.src='/logo.png?v=15.41-test';img.alt='';icon.appendChild(img);
     const copy=document.createElement('span');copy.className='cf-headsup-copy';
     const meta=document.createElement('span');meta.className='cf-headsup-meta';const brand=document.createElement('strong');brand.textContent='CallFocus';const now=document.createElement('small');now.textContent='now';meta.append(brand,now);
     const message=document.createElement('span');message.className='cf-headsup-message';message.textContent=String(item.message||item.title||'You have a new CallFocus update.');
@@ -6672,21 +6672,24 @@ ${approvedPatterns}
 
 
 /* =====================================================================
-   CallFocus V15.40 — dual redirect controls: natural + interrupt now
+   CallFocus V15.41 — GPT-Live-safe redirect controls
+   Uses only the session instruction/commentary event family already used
+   successfully by CallFocus natural ending. Control-event failures are
+   recoverable and must never tear down an otherwise healthy live call.
    ===================================================================== */
 (()=>{
   const NATURAL_COOLDOWN_MS=5000;
   const FORCE_COOLDOWN_MS=6500;
+  const FORCE_GUARD_MS=3500;
   let naturalCooldownUntil=0;
   let forceCooldownUntil=0;
-  let speechActive=false;
-  let responseActive=false;
   let naturalPending=false;
   let forceState=null;
   let captionTimer=null;
-  const controlledEvents=new Map();
+  let controlGuardUntil=0;
+  const controlIds=new Map();
 
-  function clean(value,limit=360){
+  function clean(value,limit=520){
     return String(value||'').replace(/\s+/g,' ').trim().slice(0,limit);
   }
   function controls(){return document.querySelector('#callScreen .call-controls')}
@@ -6701,97 +6704,109 @@ ${approvedPatterns}
     if(wrap)return wrap;
     const grid=controls();
     if(!grid)return null;
-    const old=document.getElementById('cfInterruptCallBtn');
-    if(old)old.remove();
+    document.getElementById('cfInterruptCallBtn')?.remove();
     wrap=document.createElement('div');
     wrap.id='cfRedirectControls';
     wrap.className='cf-redirect-controls hidden';
     wrap.innerHTML=`
       <button type="button" class="cf-redirect-action cf-redirect-natural" id="cfRedirectNaturalBtn" aria-label="Redirect naturally at the next opening">
         <span class="cf-redirect-icon">${svgNatural()}</span>
-        <span class="cf-redirect-copy"><strong>Redirect naturally</strong><small>Take over at the next opening</small></span>
+        <span class="cf-redirect-copy"><strong>Redirect naturally</strong><small>Take the next natural opening</small></span>
       </button>
       <button type="button" class="cf-redirect-action cf-interrupt-now" id="cfInterruptNowBtn" aria-label="Interrupt the speaker immediately and redirect the call">
         <span class="cf-redirect-icon">${svgForce()}</span>
         <span class="cf-redirect-copy"><strong>Interrupt now</strong><small>Cut in immediately</small></span>
       </button>`;
     grid.parentNode.insertBefore(wrap,grid);
-    naturalBtn().addEventListener('click',queueNaturalRedirect);
-    forceBtn().addEventListener('click',interruptImmediately);
+    naturalBtn()?.addEventListener('click',queueNaturalRedirect);
+    forceBtn()?.addEventListener('click',interruptImmediately);
     return wrap;
   }
 
+  function callIsReady(){
+    return !!(live?.started&&live?.connected&&live?.dc?.readyState==='open'&&!live?.graceful&&!live?.held);
+  }
   function setReady(ready){
-    const wrap=ensureControls();if(!wrap)return;
+    const wrap=ensureControls();
+    if(!wrap)return;
     wrap.classList.toggle('hidden',!ready);
-    naturalBtn().disabled=!ready;
-    forceBtn().disabled=!ready;
-    if(ready){resetNaturalButton();resetForceButton()}
+    resetNaturalButton();
+    resetForceButton();
   }
   function resetNaturalButton(){
     const btn=naturalBtn();if(!btn)return;
     btn.classList.remove('is-busy','is-queued');
     const strong=btn.querySelector('strong'),small=btn.querySelector('small');
-    if(strong)strong.textContent='Redirect naturally';
-    if(small)small.textContent='Take over at the next opening';
-    btn.disabled=!live?.started||live?.held||Date.now()<naturalCooldownUntil;
+    if(strong)strong.textContent=naturalPending?'Redirect queued':'Redirect naturally';
+    if(small)small.textContent=naturalPending?'Taking the next natural opening':'Take the next natural opening';
+    btn.classList.toggle('is-queued',naturalPending);
+    btn.disabled=!callIsReady()||Date.now()<naturalCooldownUntil||!!forceState;
   }
   function resetForceButton(){
     const btn=forceBtn();if(!btn)return;
     btn.classList.remove('is-busy');
     const strong=btn.querySelector('strong'),small=btn.querySelector('small');
-    if(strong)strong.textContent='Interrupt now';
-    if(small)small.textContent='Cut in immediately';
-    btn.disabled=!live?.started||live?.held||Date.now()<forceCooldownUntil;
+    if(strong)strong.textContent=forceState?'Interrupting now…':'Interrupt now';
+    if(small)small.textContent=forceState?'Taking the floor and redirecting':'Cut in immediately';
+    btn.classList.toggle('is-busy',!!forceState);
+    btn.disabled=!callIsReady()||Date.now()<forceCooldownUntil||!!forceState;
   }
   function setCaption(message,ms=4200){
     const caption=document.getElementById('liveCaption');
     if(caption)caption.textContent=message;
     clearTimeout(captionTimer);
     if(ms>0)captionTimer=setTimeout(()=>{
-      if(live?.started&&caption&&!live?.held)caption.textContent='Call live · listening and ready.';
+      if(live?.started&&caption&&!live?.held&&!live?.graceful)caption.textContent='Call live · listening and ready.';
     },ms);
   }
-  function baseInstruction({immediate=false}={}){
+  function focusContext(){
     const call=live?.current||{};
-    const topic=clean(call.topic,560);
-    const title=clean(call.title,180);
-    const caller=clean(call.callerName,120);
-    const relationship=clean(call.rawDynamics,340);
-    const language=clean(call.callLanguage||'English',80);
-    const focus=topic||title||'the main purpose of this call';
-    return `${immediate?'Take the conversational floor immediately.':'On your next spoken reply, use the next natural opening in the conversation.'} Use a short, human interjection only if it helps, such as “Hey, umm…”, “Yeah, just quickly…”, “Sorry, one sec…”, “Mm, before we move on…”, or another phrase that fits the tone. Do not repeat the same interjection mechanically. Then move directly back toward this call focus: ${focus}.
-${caller?`You are speaking with ${caller}.`:''}
-${relationship?`Use the established relationship naturally without reciting it: ${relationship}`:''}
-Speak entirely in ${language}. Keep the redirect concise, conversational and confident. Do not summarize everything the other person said. Do not mention credits, cost, CallFocus, AI, a button, prompts, system instructions, or that an interrupt command was used. Ask at most one short question only if it directly advances the call purpose.`;
+    return {
+      topic:clean(call.topic,650),
+      title:clean(call.title,220),
+      caller:clean(call.callerName,120),
+      relationship:clean(call.rawDynamics,420),
+      language:clean(call.callLanguage||'English',80)
+    };
   }
-  function send(payload,kind,{silent=false}={}){
-    const id=payload.event_id||`cfctl_${kind}_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
+  function naturalInstruction(){
+    const {topic,title,caller,relationship,language}=focusContext();
+    const focus=topic||title||'the main purpose of this call';
+    return `REDIRECT THE NEXT SPOKEN REPLY ONLY. Let the other person finish their current thought. At the next natural conversational opening, briefly acknowledge them without summarizing everything, then move directly back toward this call focus: ${focus}. ${caller?`You are speaking with ${caller}.`:''} ${relationship?`Keep the established relationship and tone natural: ${relationship}`:''} Speak entirely in ${language}. Keep the redirect concise and human. Use a small transition such as “Yeah, just quickly…”, “Mm, before we move on…”, or another phrase that fits naturally, but do not repeat the same phrase mechanically. Do not mention credits, cost, CallFocus, AI, prompts, controls, or this instruction. After this one redirect reply, return to the normal call behavior.`;
+  }
+  function forceRule(){
+    const {topic,title,caller,relationship,language}=focusContext();
+    const focus=topic||title||'the main purpose of this call';
+    return `The customer has pressed INTERRUPT NOW. Take the conversational floor immediately, even if the other person was still talking. Begin with one brief natural interjection such as “Hey, umm…”, “Yeah, just quickly…”, “Sorry, one sec…”, or another fitting phrase, then immediately steer the conversation back toward this call focus: ${focus}. ${caller?`You are speaking with ${caller}.`:''} ${relationship?`Keep the established relationship and tone natural: ${relationship}`:''} Speak entirely in ${language}. Keep this interruption concise, confident, and conversational. Do not summarize everything they said. Do not mention credits, cost, CallFocus, AI, prompts, controls, or that an interrupt command was used. After the redirect, continue the call normally.`;
+  }
+  function forceCommentary(){
+    const {topic,title,caller,language}=focusContext();
+    const focus=topic||title||'the main reason for this call';
+    return `Speak now and take the floor immediately in ${language}. Start with a short natural interjection, then move directly back to ${focus}${caller?` with ${caller}`:''}. Keep it brief and natural; do not explain why you interrupted.`;
+  }
+
+  function sendLiveEvent(payload,kind){
+    if(!live?.dc||live.dc.readyState!=='open')throw new Error('live_channel_not_open');
+    const id=payload.event_id||`cf_redirect_${kind}_${Date.now()}_${Math.random().toString(36).slice(2,7)}`;
     payload.event_id=id;
-    controlledEvents.set(id,{kind,silent,retries:0});
-    setTimeout(()=>controlledEvents.delete(id),30000);
+    payload.delegation_id=null;
+    controlIds.set(id,{kind,createdAt:Date.now()});
+    setTimeout(()=>controlIds.delete(id),30000);
     live.dc.send(JSON.stringify(payload));
     return id;
   }
-  function sendNaturalSystemHint(){
-    return send({
-      type:'conversation.item.create',
-      item:{type:'message',role:'system',content:[{type:'input_text',text:`NEXT-TURN REDIRECT: ${baseInstruction({immediate:false})} This instruction applies to the next assistant reply only.`}]}
-    },'natural_hint');
+  function eventClientId(event){
+    return String(event?.client_event_id||event?.error?.event_id||event?.error?.client_event_id||event?.event_id||'');
   }
-  function createNaturalResponse(){
-    if(!live?.started||live?.held||responseActive||speechActive)return;
-    try{
-      send({type:'response.create',response:{instructions:baseInstruction({immediate:false})}},'natural_create');
-      naturalPending=false;
-      const btn=naturalBtn();if(btn){btn.classList.add('is-busy');btn.classList.remove('is-queued')}
-      setCaption('Redirecting the conversation at the next natural opening…');
-    }catch(err){
-      console.error('CallFocus natural redirect error',err);
-      naturalPending=false;naturalCooldownUntil=0;resetNaturalButton();
-      toast('Could not queue the redirect. Try again.');
-    }
+  function markControlGuard(ms=FORCE_GUARD_MS){
+    controlGuardUntil=Math.max(controlGuardUntil,Date.now()+ms);
   }
+  function connectionStillHealthy(){
+    const dcOpen=live?.dc?.readyState==='open';
+    const state=String(live?.pc?.connectionState||'');
+    return dcOpen&&(!state||state==='connected'||state==='connecting'||state==='new');
+  }
+
   function queueNaturalRedirect(){
     if(!live?.started||!live?.connected||live?.dc?.readyState!=='open')return toast('The call must be live first');
     if(live?.graceful)return toast('The call is already ending');
@@ -6800,31 +6815,59 @@ Speak entirely in ${language}. Keep the redirect concise, conversational and con
     if(now<naturalCooldownUntil)return toast(`Natural redirect is ready again in ${Math.max(1,Math.ceil((naturalCooldownUntil-now)/1000))}s`);
     naturalCooldownUntil=now+NATURAL_COOLDOWN_MS;
     naturalPending=true;
-    const btn=naturalBtn();if(btn){btn.classList.add('is-queued');btn.disabled=true;const s=btn.querySelector('strong'),m=btn.querySelector('small');if(s)s.textContent='Redirect queued';if(m)m.textContent=speechActive?'Waiting for the speaker to finish':'Taking the next opening'}
-    try{sendNaturalSystemHint()}catch(err){console.error('CallFocus natural redirect hint error',err)}
-    if(!speechActive&&!responseActive)setTimeout(createNaturalResponse,120);
-    else setCaption('Redirect queued · CallFocus will take the next natural opening.',0);
-    setTimeout(()=>{if(live?.started&&Date.now()>=naturalCooldownUntil)resetNaturalButton()},NATURAL_COOLDOWN_MS+80);
+    markControlGuard(2500);
+    resetNaturalButton();
+    try{
+      sendLiveEvent({type:'session.instructions.append',content:naturalInstruction()},'natural_rule');
+      setCaption('Redirect queued · CallFocus will take the next natural opening.',0);
+    }catch(err){
+      console.error('CallFocus natural redirect send error',err);
+      naturalPending=false;
+      naturalCooldownUntil=0;
+      resetNaturalButton();
+      toast('Could not queue the redirect. The call is still connected.');
+    }
+    setTimeout(()=>{if(live?.started&&Date.now()>=naturalCooldownUntil)resetNaturalButton()},NATURAL_COOLDOWN_MS+100);
   }
 
-  function restoreMic(){
-    if(!forceState)return;
-    clearTimeout(forceState.fallbackTimer);
-    if(live?.stream)live.stream.getAudioTracks().forEach(track=>{track.enabled=!live.muted&&!live.held});
-    forceState=null;
-    resetForceButton();
+  function muteInputForForce(){
+    const tracks=live?.stream?.getAudioTracks?.()||[];
+    const previous=tracks.map(t=>t.enabled);
+    tracks.forEach(t=>{t.enabled=false});
+    return {tracks,previous};
   }
-  function createForcedResponse(){
+  function restoreForceMic(message='Immediate redirect delivered · listening resumed.'){
     const state=forceState;
-    if(!state||state.createSent||!live?.started||live?.dc?.readyState!=='open')return;
-    state.createSent=true;
-    const btn=forceBtn();if(btn){btn.classList.add('is-busy');const s=btn.querySelector('strong'),m=btn.querySelector('small');if(s)s.textContent='Interrupting now…';if(m)m.textContent='Taking the floor and redirecting'}
+    if(!state)return;
+    clearTimeout(state.commentaryFallback);
+    clearTimeout(state.safetyRestore);
+    clearTimeout(state.outputQuietTimer);
+    state.mic?.tracks?.forEach((track,index)=>{
+      track.enabled=live?.started&&!live?.muted&&!live?.held&&(state.mic.previous[index]!==false);
+    });
+    forceState=null;
+    const status=document.getElementById('liveStatus');
+    if(status&&live?.started)status.textContent='Connected to server · Listening';
+    setCaption(message,3600);
+    resetForceButton();
+    resetNaturalButton();
+  }
+  function scheduleForceMicRestore(delay=1200){
+    if(!forceState)return;
+    clearTimeout(forceState.outputQuietTimer);
+    forceState.outputQuietTimer=setTimeout(()=>restoreForceMic(),delay);
+  }
+  function sendForceCommentary(){
+    if(!forceState||forceState.commentarySent||!callIsReady())return;
+    forceState.commentarySent=true;
     try{
-      state.createEventId=send({type:'response.create',response:{instructions:baseInstruction({immediate:true})}},'force_create');
+      forceState.speakId=sendLiveEvent({type:'session.commentary.append',content:forceCommentary()},'force_speak');
       setCaption('Interrupting now and returning to the call purpose…',0);
     }catch(err){
-      console.error('CallFocus immediate interrupt create error',err);
-      forceCooldownUntil=0;restoreMic();toast('Could not interrupt the call. Try again.');
+      console.error('CallFocus force commentary send error',err);
+      forceCooldownUntil=0;
+      restoreForceMic('Could not interrupt. The call is still connected.');
+      toast('Could not interrupt. The call is still connected.');
     }
   }
   function interruptImmediately(){
@@ -6834,79 +6877,114 @@ Speak entirely in ${language}. Keep the redirect concise, conversational and con
     const now=Date.now();
     if(now<forceCooldownUntil)return toast(`Interrupt now is ready again in ${Math.max(1,Math.ceil((forceCooldownUntil-now)/1000))}s`);
     forceCooldownUntil=now+FORCE_COOLDOWN_MS;
-    naturalPending=false;resetNaturalButton();
-    const tracks=live.stream?.getAudioTracks?.()||[];
-    tracks.forEach(track=>{track.enabled=false});
-    forceState={createSent:false,createEventId:'',responseId:'',retried:false,fallbackTimer:null};
-    const btn=forceBtn();if(btn){btn.classList.add('is-busy');btn.disabled=true;const s=btn.querySelector('strong'),m=btn.querySelector('small');if(s)s.textContent='Cutting in…';if(m)m.textContent='Stopping the current listening turn'}
-    const status=document.getElementById('liveStatus');if(status)status.textContent='Connected to server · Interrupting now';
+    naturalPending=false;
+    markControlGuard(FORCE_GUARD_MS);
+    const mic=muteInputForForce();
+    forceState={ruleId:'',speakId:'',commentarySent:false,spoke:false,mic,commentaryFallback:null,safetyRestore:null,outputQuietTimer:null};
+    resetNaturalButton();resetForceButton();
+    const status=document.getElementById('liveStatus');
+    if(status)status.textContent='Connected to server · Interrupting now';
     try{
-      if(responseActive){
-        send({type:'response.cancel'},'force_cancel',{silent:true});
-        send({type:'output_audio_buffer.clear'},'force_output_clear',{silent:true});
-      }
-      send({type:'input_audio_buffer.clear'},'force_input_clear',{silent:true});
-      forceState.fallbackTimer=setTimeout(createForcedResponse,140);
+      forceState.ruleId=sendLiveEvent({type:'session.instructions.append',content:forceRule()},'force_rule');
+      // Do not depend on the acknowledgement arriving. The proven GPT-Live
+      // commentary event is our spoken trigger, so send it shortly afterward.
+      forceState.commentaryFallback=setTimeout(sendForceCommentary,220);
+      forceState.safetyRestore=setTimeout(()=>{
+        if(forceState)restoreForceMic(forceState.spoke?'Immediate redirect delivered · listening resumed.':'Interrupt request ended · listening resumed.');
+      },8500);
     }catch(err){
-      console.error('CallFocus immediate interrupt setup error',err);
-      forceCooldownUntil=0;restoreMic();toast('Could not interrupt the call. Try again.');
+      console.error('CallFocus immediate interrupt rule send error',err);
+      // The spoken commentary may still work even if the rule event could not be sent.
+      forceState.commentaryFallback=setTimeout(sendForceCommentary,80);
+      forceState.safetyRestore=setTimeout(()=>{if(forceState)restoreForceMic('Listening resumed.');},8500);
     }
-    setTimeout(()=>{if(live?.started&&Date.now()>=forceCooldownUntil&&!forceState)resetForceButton()},FORCE_COOLDOWN_MS+100);
+    setTimeout(()=>{if(live?.started&&Date.now()>=forceCooldownUntil&&!forceState)resetForceButton()},FORCE_COOLDOWN_MS+120);
   }
-
-  function eventClientId(event){return String(event?.error?.event_id||event?.client_event_id||event?.error?.client_event_id||'')}
-  function responseId(event){return String(event?.response?.id||event?.response_id||'')}
 
   const previousHandle=handleRealtimeEvent;
   handleRealtimeEvent=function(raw){
-    let event=null;try{event=typeof raw==='string'?JSON.parse(raw):raw}catch{}
-    if(event?.type==='input_audio_buffer.speech_started')speechActive=true;
-    if(event?.type==='input_audio_buffer.speech_stopped'){
-      speechActive=false;
-      if(naturalPending){
-        // Server VAD will normally create the next response automatically using our system hint.
-        // If no response appears, the short fallback below creates one explicitly.
-        setTimeout(()=>{if(naturalPending&&!responseActive&&!speechActive)createNaturalResponse()},420);
-      }
-    }
-    if(event?.type==='input_audio_buffer.cleared'&&forceState&&!forceState.createSent){
-      clearTimeout(forceState.fallbackTimer);
-      setTimeout(createForcedResponse,45);
-    }
-    if(event?.type==='response.created'){
-      responseActive=true;
-      if(forceState&&forceState.createSent&&!forceState.responseId)forceState.responseId=responseId(event);
-      if(naturalPending){naturalPending=false;const btn=naturalBtn();if(btn){btn.classList.add('is-busy');btn.classList.remove('is-queued')}}
-    }
-    if(event?.type==='response.done'){
-      responseActive=false;
-      if(forceState){
-        const rid=responseId(event);
-        if(!forceState.responseId||!rid||rid===forceState.responseId){
-          restoreMic();
-          setCaption('Immediate redirect delivered · listening resumed.');
-        }
-      }
-      if(!naturalPending){setTimeout(resetNaturalButton,80)}
-    }
+    let event=null;
+    try{event=typeof raw==='string'?JSON.parse(raw):raw}catch{}
+
     if(event?.type==='error'){
       const id=eventClientId(event);
-      const meta=id?controlledEvents.get(id):null;
-      if(meta){
-        controlledEvents.delete(id);
-        if(meta.kind==='force_create'&&forceState&&!forceState.retried){
-          forceState.retried=true;forceState.createSent=false;
-          setTimeout(createForcedResponse,220);
+      const meta=id?controlIds.get(id):null;
+      const withinGuard=Date.now()<controlGuardUntil;
+      if(meta||withinGuard){
+        if(id)controlIds.delete(id);
+        console.warn('CallFocus redirect control event rejected without disconnecting call',event?.error||event);
+        const kind=meta?.kind||'';
+        if(kind==='natural_rule'){
+          naturalPending=false;
+          naturalCooldownUntil=0;
+          resetNaturalButton();
+          setCaption('Redirect was not queued. The call is still connected.');
+          toast('Redirect was not queued. The call is still connected.');
           return;
         }
-        if(meta.kind==='natural_create'){
-          naturalPending=true;
-          setCaption('Redirect queued · waiting for the next natural opening.',0);
+        if(kind==='force_rule'){
+          // Continue to the spoken commentary fallback. Do not disconnect.
+          if(forceState&&!forceState.commentarySent){
+            clearTimeout(forceState.commentaryFallback);
+            forceState.commentaryFallback=setTimeout(sendForceCommentary,60);
+          }
           return;
         }
-        if(meta.silent)return;
+        if(kind==='force_speak'||forceState){
+          forceCooldownUntil=0;
+          restoreForceMic('Could not interrupt. The call is still connected.');
+          toast('Could not interrupt. The call is still connected.');
+          return;
+        }
+        // Unknown error arriving inside the very short redirect guard window:
+        // if the WebRTC/data channel is still healthy, do not let legacy handlers
+        // turn it into a false “Server unavailable” disconnect.
+        if(connectionStillHealthy()){
+          setCaption('The redirect control was not accepted. The call is still connected.');
+          return;
+        }
       }
     }
+
+    if(event?.type==='session.instructions.appended'){
+      const id=String(event?.client_event_id||'');
+      const meta=id?controlIds.get(id):null;
+      if(meta?.kind==='natural_rule'){
+        controlIds.delete(id);
+        setCaption('Redirect queued · taking the next natural opening.',0);
+      }
+      if(forceState&&id===forceState.ruleId){
+        controlIds.delete(id);
+        clearTimeout(forceState.commentaryFallback);
+        forceState.commentaryFallback=setTimeout(sendForceCommentary,25);
+      }
+    }
+    if(event?.type==='session.commentary.appended'&&forceState){
+      const id=String(event?.client_event_id||'');
+      if(id&&id===forceState.speakId){
+        controlIds.delete(id);
+        setCaption('Interrupting now…',0);
+      }
+    }
+    if(event?.type==='session.output_transcript.delta'&&event.delta){
+      if(naturalPending&&!forceState){
+        naturalPending=false;
+        setCaption('Redirect delivered · continuing the call.',3000);
+        resetNaturalButton();
+      }
+      if(forceState){
+        forceState.spoke=true;
+        const status=document.getElementById('liveStatus');
+        if(status)status.textContent='Connected to server · Speaking';
+        scheduleForceMicRestore(1350);
+      }
+    }
+    if(event?.type==='session.closed'){
+      // A genuinely closed session is not masked. Let the existing call lifecycle
+      // handle the transport state; only redirect-specific recoverable errors are intercepted.
+      controlGuardUntil=0;
+    }
+
     return previousHandle(raw);
   };
 
@@ -6918,12 +6996,16 @@ Speak entirely in ${language}. Keep the redirect concise, conversational and con
   };
   const previousStartCall=startCall;
   startCall=async function(call){
-    naturalCooldownUntil=0;forceCooldownUntil=0;speechActive=false;responseActive=false;naturalPending=false;forceState=null;clearTimeout(captionTimer);setReady(false);
+    naturalCooldownUntil=0;forceCooldownUntil=0;naturalPending=false;controlGuardUntil=0;controlIds.clear();
+    if(forceState)restoreForceMic('');
+    clearTimeout(captionTimer);setReady(false);
     return previousStartCall(call);
   };
   const previousCleanup=cleanupCall;
   cleanupCall=async function(save=true){
-    naturalPending=false;clearTimeout(captionTimer);restoreMic();setReady(false);
+    naturalPending=false;controlGuardUntil=0;controlIds.clear();clearTimeout(captionTimer);
+    if(forceState)restoreForceMic('');
+    setReady(false);
     return previousCleanup(save);
   };
 
