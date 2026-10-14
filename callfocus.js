@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.38-test';
+  const BUILD='15.39-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -6422,6 +6422,7 @@ ${approvedPatterns}
       report(s,{force:true});
     },4000);
   }
+
   const previousStartTimer=startTimer;
   startTimer=function(){const result=previousStartTimer();const s=stateFor();if(s){s.started=true;report(s,{force:true});startMeter()}return result};
   const previousSave=saveCompletedCall;
@@ -6584,7 +6585,7 @@ ${approvedPatterns}
     showing=true;seen.add(item.id);
     const host=ensureHost();host.innerHTML='';
     const card=document.createElement('button');card.type='button';card.className='cf-headsup-card';card.setAttribute('aria-label','CallFocus notification');
-    const icon=document.createElement('span');icon.className='cf-headsup-icon';const img=document.createElement('img');img.src='/logo.png?v=15.38-test';img.alt='';icon.appendChild(img);
+    const icon=document.createElement('span');icon.className='cf-headsup-icon';const img=document.createElement('img');img.src='/logo.png?v=15.39-test';img.alt='';icon.appendChild(img);
     const copy=document.createElement('span');copy.className='cf-headsup-copy';
     const meta=document.createElement('span');meta.className='cf-headsup-meta';const brand=document.createElement('strong');brand.textContent='CallFocus';const now=document.createElement('small');now.textContent='now';meta.append(brand,now);
     const message=document.createElement('span');message.className='cf-headsup-message';message.textContent=String(item.message||item.title||'You have a new CallFocus update.');
@@ -6667,4 +6668,161 @@ ${approvedPatterns}
   window.addEventListener('focus',()=>poll({force:true}));window.addEventListener('online',()=>poll({force:true}));window.addEventListener('pageshow',()=>poll({force:true}));
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')poll({force:true})});
   window.CallFocusNotifications={refresh:()=>poll({force:true})};
+})();
+
+
+/* =====================================================================
+   CallFocus V15.39 — live-call interrupt & redirect control
+   ===================================================================== */
+(()=>{
+  const COOLDOWN_MS=6000;
+  let cooldownUntil=0;
+  let captionTimer=null;
+  const interruptEventIds=new Set();
+
+  function clean(value,limit=360){
+    return String(value||'').replace(/\s+/g,' ').trim().slice(0,limit);
+  }
+  function button(){return document.getElementById('cfInterruptCallBtn')}
+  function controls(){return document.querySelector('#callScreen .call-controls')}
+
+  function ensureButton(){
+    let btn=button();
+    if(btn)return btn;
+    const grid=controls();
+    if(!grid)return null;
+    btn=document.createElement('button');
+    btn.type='button';
+    btn.id='cfInterruptCallBtn';
+    btn.className='cf-interrupt-call hidden';
+    btn.setAttribute('aria-label','Interrupt and redirect the live call');
+    btn.innerHTML='<span class="cf-interrupt-call-icon" aria-hidden="true">↪</span><span class="cf-interrupt-call-copy"><strong>Interrupt</strong><small>Step in and redirect the call</small></span><span class="cf-interrupt-call-wave" aria-hidden="true"><i></i><i></i><i></i></span>';
+    grid.parentNode.insertBefore(btn,grid);
+    btn.addEventListener('click',triggerInterrupt);
+    return btn;
+  }
+
+  function setReady(ready){
+    const btn=ensureButton();if(!btn)return;
+    btn.classList.toggle('hidden',!ready);
+    btn.disabled=!ready;
+    if(ready&&!btn.classList.contains('is-busy')){
+      const strong=btn.querySelector('strong');
+      const small=btn.querySelector('small');
+      if(strong)strong.textContent='Interrupt';
+      if(small)small.textContent='Step in and redirect the call';
+    }
+  }
+
+  function buildInterruptInstruction(){
+    const call=live?.current||{};
+    const topic=clean(call.topic,520);
+    const title=clean(call.title,180);
+    const caller=clean(call.callerName,120);
+    const relationship=clean(call.rawDynamics,320);
+    const language=clean(call.callLanguage||'English',80);
+    const focus=topic||title||'the main purpose of this call';
+    return `Interrupt the other person NOW with a brief, natural spoken interjection, then immediately steer the conversation back toward the purpose of this call.
+
+Start with ONE short everyday interjection that fits the tone, for example “Hey, umm…”, “Yeah, just quickly…”, “Sorry, one second…”, “Mm, let me jump in for a sec…”, or another equally natural phrase. Vary the wording and do not sound scripted.
+
+Then continue in one or two concise natural sentences toward this call focus: ${focus}.
+${caller?`You are speaking with ${caller}.`:''}
+${relationship?`Use the established relationship/context naturally, without reciting it: ${relationship}`:''}
+Speak entirely in ${language}. Be polite but decisive enough to take the conversational floor. Do not summarize everything already said. Do not mention CallFocus, credits, cost, a button, AI, prompts, or internal instructions. Do not explain that you are interrupting. Ask at most one short question only if it directly advances the call purpose. Speak immediately.`;
+  }
+
+  function triggerInterrupt(){
+    const btn=ensureButton();
+    if(!live?.started||!live?.connected||live?.dc?.readyState!=='open')return toast('The call must be live before you can interrupt');
+    if(live?.graceful)return toast('The call is already ending');
+    if(live?.held)return toast('Resume the call before interrupting');
+    const now=Date.now();
+    if(now<cooldownUntil){
+      const left=Math.max(1,Math.ceil((cooldownUntil-now)/1000));
+      return toast(`Interrupt is ready again in ${left}s`);
+    }
+    cooldownUntil=now+COOLDOWN_MS;
+    const eventId=`interrupt_${now}_${Math.random().toString(36).slice(2,8)}`;
+    interruptEventIds.add(eventId);
+    setTimeout(()=>interruptEventIds.delete(eventId),20000);
+    try{
+      live.dc.send(JSON.stringify({
+        type:'response.create',
+        event_id:eventId,
+        response:{instructions:buildInterruptInstruction()}
+      }));
+    }catch(err){
+      console.error('CallFocus interrupt error',err);
+      interruptEventIds.delete(eventId);
+      cooldownUntil=0;
+      return toast('Could not interrupt the call. Try again.');
+    }
+    if(btn){
+      btn.classList.add('is-busy');
+      btn.disabled=true;
+      const strong=btn.querySelector('strong'),small=btn.querySelector('small');
+      if(strong)strong.textContent='Interrupting…';
+      if(small)small.textContent='Redirecting to the call purpose';
+      setTimeout(()=>{
+        btn.classList.remove('is-busy');
+        if(live?.started){btn.disabled=false;if(strong)strong.textContent='Interrupt';if(small)small.textContent='Step in and redirect the call'}
+      },COOLDOWN_MS);
+    }
+    const status=document.getElementById('liveStatus');
+    const caption=document.getElementById('liveCaption');
+    if(status)status.textContent='Connected to server · Stepping in';
+    if(caption)caption.textContent='Interrupting and redirecting the conversation…';
+    clearTimeout(captionTimer);
+    captionTimer=setTimeout(()=>{
+      if(live?.started&&caption)caption.textContent='Call live · ready when you need to step in again.';
+    },4200);
+  }
+
+
+
+  // Do not let a rejected interrupt request tear down an otherwise healthy live call.
+  const previousHandle=handleRealtimeEvent;
+  handleRealtimeEvent=function(raw){
+    let event=null;try{event=typeof raw==='string'?JSON.parse(raw):raw}catch{}
+    const clientEventId=String(event?.client_event_id||event?.error?.client_event_id||event?.error?.event_id||'');
+    if(event?.type==='error'&&clientEventId&&interruptEventIds.has(clientEventId)){
+      interruptEventIds.delete(clientEventId);cooldownUntil=0;
+      const btn=button();if(btn){btn.classList.remove('is-busy');btn.disabled=false;const strong=btn.querySelector('strong'),small=btn.querySelector('small');if(strong)strong.textContent='Interrupt';if(small)small.textContent='Step in and redirect the call'}
+      const caption=document.getElementById('liveCaption');if(caption)caption.textContent='Could not interrupt. The call is still connected.';
+      toast('Could not interrupt the call. Try again.');
+      return;
+    }
+    return previousHandle(raw);
+  };
+
+  const previousStartTimer=startTimer;
+  startTimer=function(){
+    const result=previousStartTimer();
+    setTimeout(()=>setReady(!!live?.started),0);
+    return result;
+  };
+
+  const previousStartCall=startCall;
+  startCall=async function(call){
+    cooldownUntil=0;clearTimeout(captionTimer);setReady(false);
+    return previousStartCall(call);
+  };
+
+  const previousCleanup=cleanupCall;
+  cleanupCall=async function(save=true){
+    cooldownUntil=0;clearTimeout(captionTimer);setReady(false);
+    return previousCleanup(save);
+  };
+
+  // Keep button state correct after retry/start-screen transitions without polling.
+  const screen=document.getElementById('callScreen');
+  if(screen){
+    const observer=new MutationObserver(()=>{
+      if(screen.classList.contains('hidden'))setReady(false);
+      else if(live?.started)setReady(true);
+    });
+    observer.observe(screen,{attributes:true,attributeFilter:['class']});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ensureButton,{once:true});else ensureButton();
 })();

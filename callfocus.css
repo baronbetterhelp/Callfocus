@@ -3572,3 +3572,59 @@ html:not([data-theme="pearl"]) .cf-stage-note{
     transform:translate3d(0,-27px,0) scale(.98)!important;
   }
 }
+
+
+/* ========================================================================
+   CallFocus V15.39 Visual Test — Live Interrupt & Redirect control
+   ======================================================================== */
+.cf-interrupt-call{
+  width:min(430px,100%);
+  margin:4px auto 12px;
+  min-height:58px;
+  padding:9px 14px 9px 10px;
+  border:1px solid rgba(233,199,125,.34);
+  border-radius:19px;
+  background:linear-gradient(135deg,rgba(233,199,125,.12),rgba(255,255,255,.055));
+  color:#f5f3ed;
+  display:grid;
+  grid-template-columns:42px 1fr auto;
+  align-items:center;
+  gap:11px;
+  text-align:left;
+  box-shadow:0 14px 34px rgba(0,0,0,.20),inset 0 1px 0 rgba(255,255,255,.035);
+  transition:transform .18s ease,border-color .18s ease,background .18s ease,opacity .18s ease;
+  -webkit-tap-highlight-color:transparent;
+}
+.cf-interrupt-call.hidden{display:none!important}
+.cf-interrupt-call:not(:disabled):active{transform:scale(.985)}
+.cf-interrupt-call:disabled{opacity:.58;cursor:default}
+.cf-interrupt-call-icon{
+  width:42px;height:42px;border-radius:50%;display:grid;place-items:center;
+  background:linear-gradient(145deg,#e9c77d,#c89d4d);color:#111;font:800 20px/1 Manrope,sans-serif;
+  box-shadow:0 8px 20px rgba(196,153,74,.16)
+}
+.cf-interrupt-call-copy{display:grid;gap:2px;min-width:0}
+.cf-interrupt-call-copy strong{font:800 12px/1.15 Manrope,sans-serif;letter-spacing:.01em}
+.cf-interrupt-call-copy small{font-size:8px;line-height:1.35;color:#a9aaa8}
+.cf-interrupt-call-wave{height:24px;display:flex;align-items:center;gap:3px;padding-left:5px}
+.cf-interrupt-call-wave i{display:block;width:3px;border-radius:999px;background:#e9c77d;opacity:.7;height:8px}
+.cf-interrupt-call-wave i:nth-child(2){height:17px}.cf-interrupt-call-wave i:nth-child(3){height:11px}
+.cf-interrupt-call.is-busy .cf-interrupt-call-wave i{animation:cfInterruptWave .72s ease-in-out infinite alternate}
+.cf-interrupt-call.is-busy .cf-interrupt-call-wave i:nth-child(2){animation-delay:.12s}.cf-interrupt-call.is-busy .cf-interrupt-call-wave i:nth-child(3){animation-delay:.24s}
+@keyframes cfInterruptWave{from{transform:scaleY(.55);opacity:.45}to{transform:scaleY(1.25);opacity:1}}
+html[data-theme="pearl"] .cf-interrupt-call{
+  background:linear-gradient(135deg,#fffaf0,#f2f8f5)!important;
+  border-color:#dfc68f!important;
+  color:#173d37!important;
+  box-shadow:0 12px 30px rgba(48,83,75,.075),inset 0 1px 0 #fff!important;
+}
+html[data-theme="pearl"] .cf-interrupt-call-copy small{color:#71817d!important}
+html[data-theme="pearl"] .cf-interrupt-call-wave i{background:#1f7669!important}
+.call-screen.awaiting-start .cf-interrupt-call{display:none!important}
+@media(max-width:620px){
+  .cf-interrupt-call{width:min(380px,100%);margin-top:0;margin-bottom:10px;min-height:54px;border-radius:17px;padding:8px 12px 8px 9px;grid-template-columns:38px 1fr auto;gap:9px}
+  .cf-interrupt-call-icon{width:38px;height:38px;font-size:18px}
+  .cf-interrupt-call-copy strong{font-size:11px}
+  .cf-interrupt-call-copy small{font-size:7.5px}
+}
+@media(prefers-reduced-motion:reduce){.cf-interrupt-call,.cf-interrupt-call-wave i{transition:none!important;animation:none!important}}
