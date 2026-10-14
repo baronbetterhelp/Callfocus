@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.42-test';
+const ADMIN_BUILD_VERSION='15.43-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],

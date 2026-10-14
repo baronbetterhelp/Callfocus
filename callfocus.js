@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.42-test';
+  const BUILD='15.43-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -3848,15 +3848,50 @@ ${approvedPatterns}
     return String(input||'').replace(/\D/g,'').slice(0,6);
   }
 
-  function applyReferralFromUrl(){
-    const input=$v('signupReferralCode');
-    if(!input||input.value.trim())return;
-    const raw=new URLSearchParams(location.search).get('ref')||'';
-    const code=String(raw).trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16);
-    if(code.length>=6)input.value=code;
+  const PENDING_REFERRAL_KEY='callfocus_pending_referral_v1';
+  function cleanReferralCode(value){
+    return String(value||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16);
   }
-  applyReferralFromUrl();
-  window.addEventListener('pageshow',applyReferralFromUrl);
+  function savePendingReferral(code){
+    code=cleanReferralCode(code);
+    if(code.length<6)return '';
+    try{sessionStorage.setItem(PENDING_REFERRAL_KEY,code)}catch{}
+    return code;
+  }
+  function pendingReferralCode(){
+    const params=new URLSearchParams(location.search);
+    const fromUrl=cleanReferralCode(params.get('ref')||'');
+    if(fromUrl.length>=6)return savePendingReferral(fromUrl);
+    try{return cleanReferralCode(sessionStorage.getItem(PENDING_REFERRAL_KEY)||'')}catch{return ''}
+  }
+  function clearPendingReferral(){
+    try{sessionStorage.removeItem(PENDING_REFERRAL_KEY)}catch{}
+  }
+  function applyReferralFromUrl({openSignup=false}={}){
+    const code=pendingReferralCode();
+    if(!code)return '';
+    const input=$v('signupReferralCode');
+    if(input&&!input.value.trim()){
+      input.value=code;
+      input.dataset.referralLinkApplied='1';
+      const help=input.parentElement?.querySelector('.field-help');
+      if(help)help.textContent=`Referral link applied: ${code}. You will receive ${CREDIT_RULES.starterCredits.toLocaleString()} free credits when your account is created.`;
+    }
+    const params=new URLSearchParams(location.search);
+    if(openSignup&&!account&&params.get('signup')==='1'){
+      setTimeout(()=>{
+        try{showAuth('signup',null,`Referral link applied. Create your account to receive ${CREDIT_RULES.starterCredits.toLocaleString()} free credits.`)}catch{}
+        setTimeout(()=>$v('signupName')?.focus(),120);
+      },180);
+    }
+    return code;
+  }
+  applyReferralFromUrl({openSignup:document.readyState!=='loading'});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>applyReferralFromUrl({openSignup:true}),{once:true});
+  window.addEventListener('pageshow',()=>applyReferralFromUrl({openSignup:true}));
+  $v('signupReferralCode')?.addEventListener('input',event=>{
+    if(event.target.dataset.referralLinkApplied==='1'&&cleanReferralCode(event.target.value)!==pendingReferralCode())delete event.target.dataset.referralLinkApplied;
+  });
 
   document.querySelectorAll('.password-eye').forEach(button=>{
     button.addEventListener('click',()=>{
@@ -3875,7 +3910,7 @@ ${approvedPatterns}
     const name=$v('signupName')?.value.trim()||'';
     const email=$v('signupEmail')?.value.trim().toLowerCase()||'';
     const phone=$v('signupPhone')?.value.trim()||'';
-    const referralCode=String($v('signupReferralCode')?.value||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16);
+    const referralCode=cleanReferralCode($v('signupReferralCode')?.value||pendingReferralCode());
     const password=$v('signupPassword')?.value||'';
     const confirm=$v('signupConfirm')?.value||'';
     if(!name||!email||!phone||!password||!confirm){toast('Complete every account field');return;}
@@ -3909,6 +3944,7 @@ ${approvedPatterns}
         return;
       }
       if(payload.token){
+        clearPendingReferral();
         storeSessionAndReload(payload.token,payload.notice||'Account created',true);
         return;
       }
@@ -3942,6 +3978,7 @@ ${approvedPatterns}
         const msg=payload?.error||'Could not verify that code.';
         authStatus(msg,'error','emailVerifyModal');toast(msg);return;
       }
+      clearPendingReferral();
       storeSessionAndReload(payload.token,'Email verified · account created',true);
     }catch{
       const msg='Could not reach the verification service. Try again.';
@@ -6469,7 +6506,7 @@ ${approvedPatterns}
   const escRef=value=>String(value??'').replace(/[&<>'"]/g,ch=>({
     '&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'
   }[ch]));
-  const referralUrl=code=>`${location.origin}/?ref=${encodeURIComponent(String(code||''))}`;
+  const referralUrl=code=>`${location.origin}/?ref=${encodeURIComponent(String(code||''))}&signup=1`;
   const humanDate=value=>{try{return value?new Date(value).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):''}catch{return ''}};
 
   function status(message='',type='info'){
@@ -6531,9 +6568,9 @@ ${approvedPatterns}
   async function shareReferral(){
     const payload=await load();if(!payload?.code)return;
     const url=referralUrl(payload.code);
-    const text=`Use my CallFocus referral code ${payload.code} when you sign up and get ${Number(payload.signupBonusCredits||75).toLocaleString()} free credits.`;
+    const text=`Join CallFocus with my referral link and get ${Number(payload.signupBonusCredits||75).toLocaleString()} free credits when you create your account. Referral code: ${payload.code}.`;
     if(navigator.share){try{await navigator.share({title:'CallFocus referral',text,url});return}catch(error){if(error?.name==='AbortError')return}}
-    try{await navigator.clipboard.writeText(`${text} ${url}`);toast('Referral link copied')}catch{toast('Referral link ready to share')}
+    try{await navigator.clipboard.writeText(url);toast('Referral signup link copied')}catch{toast(`Referral link: ${url}`)}
   }
   document.addEventListener('click',event=>{
     const copy=event.target.closest?.('[data-referral-copy]');if(copy){event.preventDefault();copyCode();return}
@@ -6585,7 +6622,7 @@ ${approvedPatterns}
     showing=true;seen.add(item.id);
     const host=ensureHost();host.innerHTML='';
     const card=document.createElement('button');card.type='button';card.className='cf-headsup-card';card.setAttribute('aria-label','CallFocus notification');
-    const icon=document.createElement('span');icon.className='cf-headsup-icon';const img=document.createElement('img');img.src='/logo.png?v=15.42-test';img.alt='';icon.appendChild(img);
+    const icon=document.createElement('span');icon.className='cf-headsup-icon';const img=document.createElement('img');img.src='/logo.png?v=15.43-test';img.alt='';icon.appendChild(img);
     const copy=document.createElement('span');copy.className='cf-headsup-copy';
     const meta=document.createElement('span');meta.className='cf-headsup-meta';const brand=document.createElement('strong');brand.textContent='CallFocus';const now=document.createElement('small');now.textContent='now';meta.append(brand,now);
     const message=document.createElement('span');message.className='cf-headsup-message';message.textContent=String(item.message||item.title||'You have a new CallFocus update.');
