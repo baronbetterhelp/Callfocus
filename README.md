@@ -1,1 +1,1 @@
-CallFocus V15.43 Visual Test — Curved Live Continuity Core & Continuous Floating Ring Motion
+CallFocus V15.42 Visual Test — Mid-Call Continuation & Purpose Cut-In
