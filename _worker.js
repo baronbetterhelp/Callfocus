@@ -1127,7 +1127,7 @@ async function handleCustomerData(request, env) {
     auth.user.updatedAt = new Date().toISOString();
     await env.CALLFOCUS_CONFIG.put(customerUserKey(auth.user.id), JSON.stringify(auth.user));
   }
-  return json({ ok: true, user: publicCustomerUser(auth.user), savedAt: new Date().toISOString() });
+  return json({ ok: true, user: publicCustomerUser(auth.user), wallet: incoming.wallet ? normalizeServerWallet(incoming.wallet) : null, savedAt: new Date().toISOString() });
 }
 
 async function handleCustomerDelete(request, env) {
@@ -2266,9 +2266,29 @@ async function handleSession(request, env) {
   const config = await getConfig(env);
   if (!config.serverOnline) return new Response(config.serverMessage || DEFAULT_CONFIG.serverMessage, { status: 503, headers: { 'Cache-Control': 'no-store' } });
 
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return new Response('Sign in again before starting a call.', { status: 401, headers: { 'Cache-Control': 'no-store', 'X-CallFocus-Error-Code': 'customer_session_expired' } });
+
   let body;
   try { body = await request.json(); } catch { return new Response('Invalid JSON request.', { status: 400 }); }
   if (!body?.sdp || typeof body.sdp !== 'string') return new Response('Missing SDP offer.', { status: 400 });
+  if (body?.userId && String(body.userId) !== String(auth.user.id)) return new Response('Account mismatch.', { status: 403, headers: { 'Cache-Control': 'no-store', 'X-CallFocus-Error-Code': 'customer_account_mismatch' } });
+
+  const unlimitedEmails = Array.isArray(config.unlimitedCreditEmails) ? config.unlimitedCreditEmails.map(normalizeCustomerEmail).filter(Boolean) : [];
+  const unlimitedCredit = unlimitedEmails.includes(normalizeCustomerEmail(auth.user.email));
+  const accountData = (await env.CALLFOCUS_CONFIG.get(customerDataKey(auth.user.id), { type: 'json' })) || defaultCustomerData(auth.user.name);
+  const serverWallet = normalizeServerWallet(accountData.wallet || {});
+  if (!unlimitedCredit && serverWallet.balanceSeconds < 15) {
+    return new Response('Not enough call credit to start. Buy credits first.', {
+      status: 402,
+      headers: {
+        'Cache-Control': 'no-store',
+        'X-CallFocus-Error-Code': 'insufficient_call_credit',
+        'X-CallFocus-Wallet-Balance-Seconds': String(serverWallet.balanceSeconds),
+        'X-CallFocus-Wallet-Revision': String(serverWallet.revision || 0)
+      }
+    });
+  }
 
   const requested = body.session || {};
   const userVoiceProfile = normalizeUserAiVoiceProfile(requested.voiceProfile);
@@ -2365,7 +2385,7 @@ The entire spoken call must stay in ${callLanguage}. This is a hard CallFocus se
   await recordLiveStatus(env, { ok: true, status: 201, code: 'ok', message: 'GPT-Live session created successfully.' });
 
   let callUsageId=null;
-  try{callUsageId=await registerCallUsage(request,env,body,created)}catch(error){console.error('CallFocus call registration failed',error?.message||error)}
+  try{callUsageId=await registerCallUsage(request,env,body,created,auth)}catch(error){console.error('CallFocus call registration failed',error?.message||error)}
   const headers = new Headers({
     'Content-Type': 'application/sdp',
     'Cache-Control': 'no-store',
@@ -2378,6 +2398,9 @@ The entire spoken call must stay in ${callLanguage}. This is a hard CallFocus se
   });
   if(callUsageId)headers.set('X-CallFocus-Call-Usage-ID',callUsageId);
   headers.set('X-CallFocus-Provider-Session-ID',String(created?.id||created?.session?.id||''));
+  headers.set('X-CallFocus-Wallet-Balance-Seconds', String(serverWallet.balanceSeconds));
+  headers.set('X-CallFocus-Wallet-Revision', String(serverWallet.revision || 0));
+  headers.set('X-CallFocus-Unlimited-Credit', unlimitedCredit ? '1' : '0');
   return new Response(answerSdp, { status: 200, headers });
 }
 
@@ -4320,7 +4343,7 @@ export default {
     if (url.pathname === '/api/manual-payment/cancel') return safeCustomerRoute('manual-payment-cancel', () => handleManualPaymentCancel(request, env));
     if (url.pathname === '/api/manual-payment/status') return safeCustomerRoute('manual-payment-status', () => handleManualPaymentStatus(request, env));
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.37-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.38-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -4359,10 +4382,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.37-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.38-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.37-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.37-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.38-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.38-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -4372,16 +4395,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.37-test');
+      headers.set('X-CallFocus-Admin-Build', '15.38-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.37-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.38-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.37-test');
+      headers.set('X-CallFocus-Admin-Build', '15.38-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {
@@ -4433,13 +4456,54 @@ function priceCallUsage(record) {
   record.estimatedCostUsd = record.voiceCostUsd + record.backendCostUsd;
   return record;
 }
-async function registerCallUsage(request, env, body, providerSession) {
+function liveCallWalletLedgerId(id) { return `live-call:${String(id || '')}`; }
+async function applyLiveCallWalletCharge(env, auth, record) {
+  if (!env.CALLFOCUS_CONFIG || !auth?.user?.id || !record?.id) return { wallet: null, chargedSeconds: 0, creditExhausted: false, unlimited: false };
+  const config = await getConfig(env);
+  const unlimitedEmails = Array.isArray(config.unlimitedCreditEmails) ? config.unlimitedCreditEmails.map(normalizeCustomerEmail).filter(Boolean) : [];
+  const unlimited = unlimitedEmails.includes(normalizeCustomerEmail(auth.user.email));
+  const data = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
+  const wallet = normalizeServerWallet(data.wallet || {});
+  if (unlimited) return { wallet, chargedSeconds: 0, creditExhausted: false, unlimited: true };
+  const targetSeconds = record.started === true ? Math.max(0, Math.floor(Number(record.durationSeconds) || 0)) : 0;
+  const ledgerId = liveCallWalletLedgerId(record.id);
+  const ledgerIndex = wallet.usage.findIndex(row => String(row?.id || '') === ledgerId);
+  let ledger = ledgerIndex >= 0 ? { ...wallet.usage[ledgerIndex] } : null;
+  const alreadyCharged = Math.max(0, Math.floor(Number(ledger?.seconds) || 0));
+  const wantedDelta = Math.max(0, targetSeconds - alreadyCharged);
+  const available = Math.max(0, Math.floor(Number(wallet.balanceSeconds) || 0));
+  const chargedNow = Math.min(available, wantedDelta);
+  const chargedSeconds = alreadyCharged + chargedNow;
+  const creditExhausted = wantedDelta > chargedNow || (targetSeconds > 0 && available <= chargedNow && chargedSeconds < targetSeconds);
+  if (chargedNow > 0) {
+    wallet.balanceSeconds = Math.max(0, available - chargedNow);
+    wallet.revision = Math.max(0, Number(wallet.revision) || 0) + 1;
+    ledger = {
+      id: ledgerId,
+      type: 'live_call',
+      referenceId: record.id,
+      seconds: chargedSeconds,
+      credits: Math.round((chargedSeconds / CALLFOCUS_SECONDS_PER_CREDIT) * 10) / 10,
+      createdAt: ledger?.createdAt || record.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      note: 'Server-authoritative live call credit usage'
+    };
+    if (ledgerIndex >= 0) wallet.usage[ledgerIndex] = ledger;
+    else wallet.usage.unshift(ledger);
+    wallet.usage = wallet.usage.slice(0, 250);
+    data.wallet = wallet;
+    await env.CALLFOCUS_CONFIG.put(customerDataKey(auth.user.id), JSON.stringify(data));
+  }
+  return { wallet, chargedSeconds, chargedNow, creditExhausted, unlimited: false };
+}
+
+async function registerCallUsage(request, env, body, providerSession, authOverride = null) {
   if(!env.CALLFOCUS_CONFIG) return null;
-  const auth=await authenticatedCustomer(request,env); if(!auth)return null;
+  const auth=authOverride||await authenticatedCustomer(request,env); if(!auth)return null;
   const id=crypto.randomUUID(),when=Date.now(),now=new Date(when).toISOString();
   const key=`call_usage:recent:${String(9_999_999_999_999-when).padStart(13,'0')}:${id}`;
   const details=body?.session||{};
-  const record=priceCallUsage({id,userId:auth.user.id,userName:auth.user.name||'',userEmail:auth.user.email||'',threadId:String(details.threadId||'').slice(0,160),title:String(details.callTitle||'').slice(0,160),callerName:String(details.callerName||'').slice(0,120),model:'gpt-live-1',providerSessionId:String(providerSession?.id||providerSession?.session?.id||'').slice(0,160),createdAt:now,updatedAt:now,durationSeconds:0,providerSeconds:null,voiceRateUsdPerMinute:LIVE_VOICE_RATE_USD_PER_MINUTE,creditsUsed:0,started:false,finalized:false,sequence:0,backendResponses:[],usageSource:'initialization'});
+  const record=priceCallUsage({id,userId:auth.user.id,userName:auth.user.name||'',userEmail:auth.user.email||'',threadId:String(details.threadId||'').slice(0,160),title:String(details.callTitle||'').slice(0,160),callerName:String(details.callerName||'').slice(0,120),model:'gpt-live-1',providerSessionId:String(providerSession?.id||providerSession?.session?.id||'').slice(0,160),createdAt:now,updatedAt:now,durationSeconds:0,providerSeconds:null,voiceRateUsdPerMinute:LIVE_VOICE_RATE_USD_PER_MINUTE,creditsUsed:0,walletChargedSeconds:0,creditExhausted:false,started:false,finalized:false,sequence:0,backendResponses:[],usageSource:'initialization'});
   await storeCallUsage(env,key,record);
   await env.CALLFOCUS_CONFIG.put(callUsageIndexKey(id),JSON.stringify({key,userId:auth.user.id}),{expirationTtl:CALL_USAGE_RETENTION_SECONDS});
   return id;
@@ -4469,16 +4533,18 @@ async function handleCallUsage(request,env) {
   record.finalized=record.finalized===true||body.finalized===true;
   if(body.closed===true){record.closed=true;record.usageSource=record.providerSeconds===null?'initialization':'api_final_duration';}
   record.reason=String(body.reason||record.reason||'').slice(0,80);
-  record.creditsUsed=Math.max(record.creditsUsed||0,usageNumber(body.creditsUsed,1_000_000));
-  record.unlimitedCredit=body.unlimitedCredit===true||record.unlimitedCredit===true;
-  if(record.unlimitedCredit)record.creditsUsed=0;
   const seen=new Map((record.backendResponses||[]).map(r=>[r.id,r]));
   for(const raw of (Array.isArray(body.backendResponses)?body.backendResponses:[]).slice(0,100)){const item=cleanBackendUsage(raw);if(item&&!seen.has(item.id))seen.set(item.id,item);}
   record.backendResponses=[...seen.values()].slice(0,500);
   record.updatedAt=new Date().toISOString();
   if(record.finalized)record.completedAt=record.completedAt||record.updatedAt;
+  const charge = await applyLiveCallWalletCharge(env, auth, record);
+  record.unlimitedCredit = charge.unlimited === true;
+  record.walletChargedSeconds = charge.unlimited ? 0 : Math.max(0, Number(charge.chargedSeconds) || 0);
+  record.creditExhausted = charge.creditExhausted === true;
+  record.creditsUsed = charge.unlimited ? 0 : Math.round((record.walletChargedSeconds / CALLFOCUS_SECONDS_PER_CREDIT) * 10) / 10;
   await storeCallUsage(env,index.key,priceCallUsage(record));
-  return json({ok:true,id,estimatedCostUsd:record.estimatedCostUsd});
+  return json({ok:true,id,estimatedCostUsd:record.estimatedCostUsd,wallet:charge.wallet,chargedSeconds:record.walletChargedSeconds,creditsUsed:record.creditsUsed,creditExhausted:record.creditExhausted,unlimitedCredit:record.unlimitedCredit});
 }
 async function recordCallBackendUsage(env,auth,callUsageId,responseId,model,usage) {
   if(!callUsageId||!responseId||!env.CALLFOCUS_CONFIG)return;

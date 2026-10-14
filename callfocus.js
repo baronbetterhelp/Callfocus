@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.37-test';
+  const BUILD='15.38-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -1569,7 +1569,10 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       const offer=await pc.createOffer(); await pc.setLocalDescription(offer); await waitForIce(pc);
       const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('callfocus_server_session_v1')||''}`},body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,voiceProfile:call.voiceProfile||null,callLanguage:call.callLanguage||'English',contextInstructions:buildInstructions(call),threadId:call.threadId,callTitle:call.title,callerName:call.callerName}})});
       const text=await res.text();
-      if(!res.ok){const reason=res.headers.get('X-CallFocus-Error-Code')||`http_${res.status}`;throw Object.assign(new Error(text||'Live session failed'),{callFocusReason:reason})}
+      if(!res.ok){const reason=res.headers.get('X-CallFocus-Error-Code')||`http_${res.status}`;throw Object.assign(new Error(text||'Live session failed'),{callFocusReason:reason,httpStatus:res.status})}
+      const serverBalance=Number(res.headers.get('X-CallFocus-Wallet-Balance-Seconds'));
+      const serverRevision=Number(res.headers.get('X-CallFocus-Wallet-Revision'));
+      if(Number.isFinite(serverBalance)&&data?.wallet){window.CallFocusCredits?.applyAuthoritativeWallet?.({...data.wallet,balanceSeconds:Math.max(0,Math.floor(serverBalance)),revision:Number.isFinite(serverRevision)?Math.max(0,Math.floor(serverRevision)):Number(data.wallet.revision||0)});}
       call.speakFirst=res.headers.get('X-CallFocus-Speak-First')!=='0'; call.engine=res.headers.get('X-CallFocus-Engine')||'gpt-live-1'; call.configUpdatedAt=res.headers.get('X-CallFocus-Config-Updated')||'';
       call.callUsageId=res.headers.get('X-CallFocus-Call-Usage-ID')||'';
       call.providerSessionId=res.headers.get('X-CallFocus-Provider-Session-ID')||'';
@@ -1578,8 +1581,9 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     }catch(err){
       console.error(err);
       const raw=String(err?.message||err||'').toLowerCase(); const reason=err?.callFocusReason||'';
-      const inactive=raw.includes('server not active')||raw.includes('credit')||raw.includes('quota')||reason.includes('credit')||reason.includes('quota');
-      failCall(call,inactive?'Server not active right now. Please try again soon.':'Server unavailable. Try again soon.',reason);
+      const lowCredit=reason==='insufficient_call_credit'||err?.httpStatus===402||raw.includes('not enough call credit');
+      const inactive=raw.includes('server not active')||raw.includes('quota')||reason.includes('quota');
+      failCall(call,lowCredit?'Not enough call credit to start. Buy credits first.':(inactive?'Server not active right now. Please try again soon.':'Server unavailable. Try again soon.'),reason);
     }
   };
 
@@ -2247,7 +2251,30 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     return data.wallet;
   }
 
-  function currentBalanceSeconds(){ return isUnlimitedAccount()?UNLIMITED_SENTINEL_SECONDS:(ensureWallet(true)?.balanceSeconds||0); }
+  function currentBalanceSeconds(){
+    if(isUnlimitedAccount()) return UNLIMITED_SENTINEL_SECONDS;
+    const wallet=ensureWallet(true);
+    if(creditBurnStartedAt&&live?.started){
+      const elapsed=Math.max(0,Math.floor((Date.now()-creditBurnStartedAt)/1000));
+      return Math.max(0,Math.floor(Number(creditBurnStartBalance)||0)-elapsed);
+    }
+    return wallet?.balanceSeconds||0;
+  }
+
+  function applyAuthoritativeWallet(wallet){
+    if(!wallet||!account||!data)return false;
+    const serverRev=Math.max(0,Number(wallet.revision)||0),localRev=Math.max(0,Number(data.wallet?.revision)||0);
+    if(serverRev<localRev)return false;
+    data.wallet=wallet;
+    if(creditBurnStartedAt&&live?.started&&!isUnlimitedAccount()){
+      const elapsed=Math.max(0,Math.floor((Date.now()-creditBurnStartedAt)/1000));
+      creditBurnStartBalance=Math.max(0,Math.floor(Number(wallet.balanceSeconds)||0))+elapsed;
+      live.creditSecondsUsed=elapsed;
+    }
+    try{writeJSON(accountDataKey(account.id),data)}catch{}
+    renderCreditDock();renderLiveCredit();renderCreditPage();renderSettingsCredit();renderVoiceCredit();
+    return true;
+  }
 
   // Shared wallet API used by live calls and generated voice notes.
   // One wallet second equals one second of either live-call time or generated voice-note audio.
@@ -2297,6 +2324,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     formatCredits,
     humanTime,
     deductUsageSeconds,
+    applyAuthoritativeWallet,
     render:()=>{renderCreditDock();renderLiveCredit();renderCreditPage();renderSettingsCredit();renderVoiceCredit();},
     rules:CREDIT_RULES
   };
@@ -2434,15 +2462,10 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
   function syncCreditBurn(){
     if(isUnlimitedAccount()){ if(live) live.creditSecondsUsed=0; renderLiveCredit(); return; }
     if(!creditBurnStartedAt||!account||!data) return;
-    const wallet=ensureWallet(true);
     const elapsed=Math.max(0,Math.floor((Date.now()-creditBurnStartedAt)/1000));
     const next=Math.max(0,creditBurnStartBalance-elapsed);
-    if(wallet.balanceSeconds!==next){
-      wallet.balanceSeconds=next;
-      live.creditSecondsUsed=Math.max(0,creditBurnStartBalance-next);
-      if(lastSavedCreditSecond!==next){ lastSavedCreditSecond=next; saveData(); }
-      renderCreditDock(); renderLiveCredit();
-    }
+    if(live)live.creditSecondsUsed=elapsed;
+    if(lastSavedCreditSecond!==next){lastSavedCreditSecond=next;renderCreditDock();renderLiveCredit();}
     if(next>0&&next<=CREDIT_RULES.lowCreditEndSeconds&&!creditEndRequested&&live?.started){
       creditEndRequested=true;
       $('liveCaption').textContent='Low call credit · ending naturally…';
@@ -2472,7 +2495,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     if(sync) syncCreditBurn();
     clearInterval(creditBurnTimer); creditBurnTimer=null;
     creditBurnStartedAt=0; creditBurnStartBalance=0; creditEndRequested=false; lastSavedCreditSecond=null;
-    if(account&&data){saveData();renderCreditDock();renderLiveCredit();renderCreditPage();}
+    if(account&&data){renderCreditDock();renderLiveCredit();renderCreditPage();}
   }
 
   const priorStartTimerV11=startTimer;
@@ -2482,6 +2505,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
   startCall=async function(call){
     if(!account||!data) return priorStartCallV11(call);
     if(isUnlimitedAccount()){ renderLiveCredit(); return priorStartCallV11(call); }
+    try{await window.CallFocusPaystack?.refreshWallet?.({quiet:true})}catch{}
     const seconds=currentBalanceSeconds();
     if(seconds<15){
       renderCreditDock();
@@ -3483,6 +3507,7 @@ ${approvedPatterns}
       if(res.ok){
         const payload=await readPayload(res);
         if(payload?.user) account={...account,...payload.user};
+        if(payload?.wallet) window.CallFocusCredits?.applyAuthoritativeWallet?.(payload.wallet);
       }
     }catch{}
     finally{
@@ -4100,13 +4125,15 @@ ${approvedPatterns}
 
   function applyWallet(wallet,{save=false}={}){
     if(!wallet||typeof account==='undefined'||!account||typeof data==='undefined'||!data) return;
-    const currentRevision=Number(data?.wallet?.revision||0);
-    const nextRevision=Number(wallet?.revision||0);
-    if(nextRevision<currentRevision) return;
-    data.wallet=wallet;
-    try{
-      if(typeof writeJSON==='function'&&typeof accountDataKey==='function') writeJSON(accountDataKey(account.id),data);
-    }catch{}
+    if(window.CallFocusCredits?.applyAuthoritativeWallet){
+      if(!window.CallFocusCredits.applyAuthoritativeWallet(wallet))return;
+    }else{
+      const currentRevision=Number(data?.wallet?.revision||0);
+      const nextRevision=Number(wallet?.revision||0);
+      if(nextRevision<currentRevision) return;
+      data.wallet=wallet;
+      try{if(typeof writeJSON==='function'&&typeof accountDataKey==='function') writeJSON(accountDataKey(account.id),data);}catch{}
+    }
     if(save){ try{if(typeof saveData==='function')saveData();}catch{} }
     try{window.CallFocusCredits?.render?.();}catch{}
     // Wallet polling must never rebuild customer forms. Repainting the whole workspace
@@ -6313,7 +6340,7 @@ ${approvedPatterns}
 (()=>{
   const QUEUE_KEY='callfocus_call_usage_queue_v158';
   const SESSION_KEY='callfocus_server_session_v1';
-  const states=new Map();let flushing=false,retryTimer=null;
+  const states=new Map();let flushing=false,retryTimer=null,meterTimer=null;
   let pending={};try{pending=JSON.parse(localStorage.getItem(QUEUE_KEY)||'{}')||{}}catch{}
   function storeQueue(){try{localStorage.setItem(QUEUE_KEY,JSON.stringify(pending))}catch{}}
   function stateFor(call=live?.current){
@@ -6349,6 +6376,12 @@ ${approvedPatterns}
         if(body.userId!==account?.id)continue;
         const res=await fetch('/api/call-usage',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify(body),keepalive:true,cache:'no-store'});
         if(!res.ok)throw new Error('Call usage report will retry');
+        const payload=await res.json().catch(()=>({}));
+        if(payload?.wallet)window.CallFocusCredits?.applyAuthoritativeWallet?.(payload.wallet);
+        if(payload?.creditExhausted&&live?.current?.callUsageId===id&&live?.started){
+          const caption=document.getElementById('liveCaption');if(caption)caption.textContent='Call credit exhausted.';
+          setTimeout(()=>{if(live?.current?.callUsageId===id&&live?.started)cleanupCall(true)},120);
+        }
         if(pending[id]?.sequence===body.sequence)delete pending[id];storeQueue();
       }
     }catch{retryFlush(10000)}
@@ -6370,7 +6403,7 @@ ${approvedPatterns}
       if(event.type==='session.usage.updated'||event.type==='session.closed'){
         if(Number.isFinite(Number(event.usage?.seconds)))s.providerSeconds=Math.max(s.providerSeconds||0,Number(event.usage.seconds));
         if(event.type==='session.closed'){
-          s.closed=true;s.finalized=true;s.reason=String(event.reason||'closed');report(s,{force:true});
+          stopMeter();s.closed=true;s.finalized=true;s.reason=String(event.reason||'closed');report(s,{force:true});
         }else report(s);
       }
       if(event.type==='response.event')backendEvent(s,event);
@@ -6380,11 +6413,20 @@ ${approvedPatterns}
     if(event?.type==='session.closed'&&live?.started&&!live._cfUserClosing)cleanupCall(true);
     return result;
   };
+  function stopMeter(){clearInterval(meterTimer);meterTimer=null}
+  function startMeter(){
+    stopMeter();
+    meterTimer=setInterval(()=>{
+      const s=stateFor();
+      if(!s||!live?.started){stopMeter();return;}
+      report(s,{force:true});
+    },4000);
+  }
   const previousStartTimer=startTimer;
-  startTimer=function(){const result=previousStartTimer();const s=stateFor();if(s){s.started=true;report(s,{force:true})}return result};
+  startTimer=function(){const result=previousStartTimer();const s=stateFor();if(s){s.started=true;report(s,{force:true});startMeter()}return result};
   const previousSave=saveCompletedCall;
   saveCompletedCall=function(){
-    const call=live?.current,s=stateFor(call);capture(s);
+    const call=live?.current,s=stateFor(call);capture(s);stopMeter();
     const result=previousSave();
     if(s){
       s.finalized=true;report(s,{force:true});
@@ -6542,7 +6584,7 @@ ${approvedPatterns}
     showing=true;seen.add(item.id);
     const host=ensureHost();host.innerHTML='';
     const card=document.createElement('button');card.type='button';card.className='cf-headsup-card';card.setAttribute('aria-label','CallFocus notification');
-    const icon=document.createElement('span');icon.className='cf-headsup-icon';const img=document.createElement('img');img.src='/logo.png?v=15.37-test';img.alt='';icon.appendChild(img);
+    const icon=document.createElement('span');icon.className='cf-headsup-icon';const img=document.createElement('img');img.src='/logo.png?v=15.38-test';img.alt='';icon.appendChild(img);
     const copy=document.createElement('span');copy.className='cf-headsup-copy';
     const meta=document.createElement('span');meta.className='cf-headsup-meta';const brand=document.createElement('strong');brand.textContent='CallFocus';const now=document.createElement('small');now.textContent='now';meta.append(brand,now);
     const message=document.createElement('span');message.className='cf-headsup-message';message.textContent=String(item.message||item.title||'You have a new CallFocus update.');
