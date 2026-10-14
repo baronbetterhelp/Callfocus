@@ -20,4 +20,4 @@ V15.38 server-authoritative live-call credit enforcement, calls, voice notes, pa
 
 ## Build
 
-`15.39-test`
+`15.40-test`

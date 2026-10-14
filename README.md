@@ -1,1 +1,1 @@
-CallFocus V15.39 Visual Test — Live Interrupt & Redirect
+CallFocus V15.40 Visual Test — Dual Redirect Controls

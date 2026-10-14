@@ -3575,56 +3575,57 @@ html:not([data-theme="pearl"]) .cf-stage-note{
 
 
 /* ========================================================================
-   CallFocus V15.39 Visual Test — Live Interrupt & Redirect control
+   CallFocus V15.40 Visual Test — Dual Redirect Controls
    ======================================================================== */
-.cf-interrupt-call{
-  width:min(430px,100%);
-  margin:4px auto 12px;
-  min-height:58px;
-  padding:9px 14px 9px 10px;
-  border:1px solid rgba(233,199,125,.34);
-  border-radius:19px;
-  background:linear-gradient(135deg,rgba(233,199,125,.12),rgba(255,255,255,.055));
-  color:#f5f3ed;
-  display:grid;
-  grid-template-columns:42px 1fr auto;
-  align-items:center;
-  gap:11px;
-  text-align:left;
-  box-shadow:0 14px 34px rgba(0,0,0,.20),inset 0 1px 0 rgba(255,255,255,.035);
-  transition:transform .18s ease,border-color .18s ease,background .18s ease,opacity .18s ease;
+.cf-redirect-controls{
+  width:min(430px,100%);margin:4px auto 12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;
+}
+.cf-redirect-controls.hidden{display:none!important}
+.cf-redirect-action{
+  min-width:0;min-height:62px;padding:9px 10px;border-radius:18px;border:1px solid rgba(75,143,129,.20);
+  display:grid;grid-template-columns:38px 1fr;align-items:center;gap:9px;text-align:left;color:#eef5f2;
+  background:linear-gradient(145deg,rgba(19,42,38,.88),rgba(12,24,22,.94));
+  box-shadow:0 12px 30px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.035);
+  transition:transform .18s ease,border-color .18s ease,background .18s ease,opacity .18s ease,box-shadow .18s ease;
   -webkit-tap-highlight-color:transparent;
 }
-.cf-interrupt-call.hidden{display:none!important}
-.cf-interrupt-call:not(:disabled):active{transform:scale(.985)}
-.cf-interrupt-call:disabled{opacity:.58;cursor:default}
-.cf-interrupt-call-icon{
-  width:42px;height:42px;border-radius:50%;display:grid;place-items:center;
-  background:linear-gradient(145deg,#e9c77d,#c89d4d);color:#111;font:800 20px/1 Manrope,sans-serif;
-  box-shadow:0 8px 20px rgba(196,153,74,.16)
+.cf-redirect-action:not(:disabled):active{transform:scale(.98)}
+.cf-redirect-action:disabled{opacity:.54;cursor:default}
+.cf-redirect-action.is-busy,.cf-redirect-action.is-queued{border-color:rgba(91,186,165,.42);box-shadow:0 12px 30px rgba(17,94,80,.18),inset 0 1px 0 rgba(255,255,255,.045)}
+.cf-interrupt-now{border-color:rgba(221,174,87,.38);background:linear-gradient(145deg,rgba(72,54,24,.82),rgba(31,27,20,.96))}
+.cf-interrupt-now.is-busy{border-color:rgba(236,190,103,.72);box-shadow:0 12px 32px rgba(157,111,36,.20),inset 0 1px 0 rgba(255,255,255,.05)}
+.cf-redirect-icon{
+  width:38px;height:38px;border-radius:13px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.08);
+  background:rgba(255,255,255,.055);color:#76c8b6;
 }
-.cf-interrupt-call-copy{display:grid;gap:2px;min-width:0}
-.cf-interrupt-call-copy strong{font:800 12px/1.15 Manrope,sans-serif;letter-spacing:.01em}
-.cf-interrupt-call-copy small{font-size:8px;line-height:1.35;color:#a9aaa8}
-.cf-interrupt-call-wave{height:24px;display:flex;align-items:center;gap:3px;padding-left:5px}
-.cf-interrupt-call-wave i{display:block;width:3px;border-radius:999px;background:#e9c77d;opacity:.7;height:8px}
-.cf-interrupt-call-wave i:nth-child(2){height:17px}.cf-interrupt-call-wave i:nth-child(3){height:11px}
-.cf-interrupt-call.is-busy .cf-interrupt-call-wave i{animation:cfInterruptWave .72s ease-in-out infinite alternate}
-.cf-interrupt-call.is-busy .cf-interrupt-call-wave i:nth-child(2){animation-delay:.12s}.cf-interrupt-call.is-busy .cf-interrupt-call-wave i:nth-child(3){animation-delay:.24s}
-@keyframes cfInterruptWave{from{transform:scaleY(.55);opacity:.45}to{transform:scaleY(1.25);opacity:1}}
-html[data-theme="pearl"] .cf-interrupt-call{
-  background:linear-gradient(135deg,#fffaf0,#f2f8f5)!important;
-  border-color:#dfc68f!important;
-  color:#173d37!important;
-  box-shadow:0 12px 30px rgba(48,83,75,.075),inset 0 1px 0 #fff!important;
+.cf-interrupt-now .cf-redirect-icon{color:#efc56f;background:rgba(238,190,98,.09);border-color:rgba(238,190,98,.14)}
+.cf-redirect-icon svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.cf-redirect-copy{display:grid;gap:2px;min-width:0}
+.cf-redirect-copy strong{font:800 11px/1.12 Manrope,sans-serif;letter-spacing:-.01em;white-space:normal}
+.cf-redirect-copy small{font-size:7.4px;line-height:1.28;color:#9eb0ab;white-space:normal}
+.cf-redirect-action.is-busy .cf-redirect-icon svg{animation:cfRedirectPulse .72s ease-in-out infinite alternate}
+.cf-redirect-action.is-queued .cf-redirect-icon svg{animation:cfRedirectFloat 1.2s ease-in-out infinite alternate}
+@keyframes cfRedirectPulse{from{transform:scale(.88);opacity:.58}to{transform:scale(1.08);opacity:1}}
+@keyframes cfRedirectFloat{from{transform:translateX(-1px);opacity:.62}to{transform:translateX(2px);opacity:1}}
+html[data-theme="pearl"] .cf-redirect-action{
+  color:#173d37;background:linear-gradient(145deg,#f7fbf9,#eef6f3)!important;border-color:#cfe0da!important;
+  box-shadow:0 10px 26px rgba(48,83,75,.065),inset 0 1px 0 #fff!important;
 }
-html[data-theme="pearl"] .cf-interrupt-call-copy small{color:#71817d!important}
-html[data-theme="pearl"] .cf-interrupt-call-wave i{background:#1f7669!important}
-.call-screen.awaiting-start .cf-interrupt-call{display:none!important}
+html[data-theme="pearl"] .cf-interrupt-now{
+  background:linear-gradient(145deg,#fff8eb,#f8f3e9)!important;border-color:#dec68f!important;
+}
+html[data-theme="pearl"] .cf-redirect-copy small{color:#71817d!important}
+html[data-theme="pearl"] .cf-redirect-icon{background:#edf6f3;border-color:#d7e7e2;color:#1f7669}
+html[data-theme="pearl"] .cf-interrupt-now .cf-redirect-icon{background:#fff1cf;border-color:#e8d29f;color:#9d6d22}
+.call-screen.awaiting-start .cf-redirect-controls{display:none!important}
 @media(max-width:620px){
-  .cf-interrupt-call{width:min(380px,100%);margin-top:0;margin-bottom:10px;min-height:54px;border-radius:17px;padding:8px 12px 8px 9px;grid-template-columns:38px 1fr auto;gap:9px}
-  .cf-interrupt-call-icon{width:38px;height:38px;font-size:18px}
-  .cf-interrupt-call-copy strong{font-size:11px}
-  .cf-interrupt-call-copy small{font-size:7.5px}
+  .cf-redirect-controls{width:min(380px,100%);margin-top:0;margin-bottom:10px;gap:7px}
+  .cf-redirect-action{min-height:58px;border-radius:16px;padding:8px 8px;grid-template-columns:34px 1fr;gap:7px}
+  .cf-redirect-icon{width:34px;height:34px;border-radius:11px}.cf-redirect-icon svg{width:20px;height:20px}
+  .cf-redirect-copy strong{font-size:9.8px}.cf-redirect-copy small{font-size:6.7px}
 }
-@media(prefers-reduced-motion:reduce){.cf-interrupt-call,.cf-interrupt-call-wave i{transition:none!important;animation:none!important}}
+@media(max-width:385px){
+  .cf-redirect-action{grid-template-columns:30px 1fr;padding:7px 6px;gap:6px}.cf-redirect-icon{width:30px;height:30px}.cf-redirect-copy strong{font-size:9px}.cf-redirect-copy small{font-size:6.2px}
+}
+@media(prefers-reduced-motion:reduce){.cf-redirect-action,.cf-redirect-icon svg{transition:none!important;animation:none!important}}
+
