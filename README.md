@@ -1,1 +1,1 @@
-CallFocus V15.41 Visual Test — GPT-Live-Safe Redirect Controls
+CallFocus V15.42 Visual Test — Mid-Call Continuation & Purpose Cut-In
