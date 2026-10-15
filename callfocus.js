@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.48-test';
+  const BUILD='15.58-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -456,7 +456,11 @@ function setSession(acc){ account=acc; localStorage.setItem(SESSION_KEY,acc.id);
 function saveData(){ if(!account||!data)return; writeJSON(accountDataKey(account.id),data); renderAccountUI(); renderWorkspace(); }
 function restoreSession(){ const id=localStorage.getItem(SESSION_KEY); if(!id){ account=null; data=null; renderAccountUI(); renderWorkspace(); return; } const acc=accounts().find(a=>a.id===id); if(!acc){localStorage.removeItem(SESSION_KEY);account=null;data=null;renderAccountUI();renderWorkspace();return;} setSession(acc); }
 async function createAccount(event){
-  event.preventDefault(); const name=$('signupName').value.trim(),email=$('signupEmail').value.trim().toLowerCase(),password=$('signupPassword').value,confirm=$('signupConfirm').value;
+  event?.preventDefault?.();
+  // V15.57: every signup path, including referral-link auto-open, must use
+  // the canonical email-verification flow once that handler is available.
+  if(typeof window.CallFocusEmailSignupStart==='function') return window.CallFocusEmailSignupStart();
+  const name=$('signupName').value.trim(),email=$('signupEmail').value.trim().toLowerCase(),password=$('signupPassword').value,confirm=$('signupConfirm').value;
   if(!name||!email||!password) return toast('Complete all account fields');
   if(password.length<8) return toast('Password must be at least 8 characters');
   if(password!==confirm) return toast('Passwords do not match');
@@ -2445,7 +2449,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     if($('creditCheckoutSummary')) $('creditCheckoutSummary').textContent=`${amount.toLocaleString()} credits · ${formatNaira(nairaForCredits(amount))}`;
   }
 
-  function openCreditPaymentPlaceholder(){
+  async function openCreditPaymentPlaceholder(){
     if(!account) return requireAccount({type:'route',route:'credits'},'Sign in before purchasing call credit.');
     if(isUnlimitedAccount()) return toast('This account already has unlimited CallFocus credit.');
     const input=$('customCreditAmount');
@@ -2453,10 +2457,20 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     if(amount<CREDIT_RULES.minimumPurchaseCredits) return toast('The minimum purchase is 300 credits');
     amount=Math.floor(amount);
     selectedCreditAmount=amount;
+
+    let availability=window.CallFocusPaymentAvailability||null;
+    if(!availability?.known){
+      try{availability=await window.CallFocusSyncPaymentAvailability?.({force:true,retry:false})||availability;}catch{}
+    }
+    if(availability?.known&&availability.available!==true){
+      return toast('Payment options are temporarily unavailable. Please try again shortly.');
+    }
+    if(!availability?.known){
+      return toast('Could not load payment options. Tap the payment button again to retry.');
+    }
     if(window.CallFocusManualPayments?.shouldUseManual?.()) return window.CallFocusManualPayments.start(amount);
-    if(window.CallFocusPaystack?.checkout) return window.CallFocusPaystack.checkout(amount);
-    if($('creditPaymentModalSummary')) $('creditPaymentModalSummary').textContent=`${amount.toLocaleString()} credits · ${formatNaira(nairaForCredits(amount))} · ${humanTime(secondsForCredits(amount))} call time`;
-    openModal('creditPaymentModal');
+    if(availability.paystack===true&&window.CallFocusPaystack?.checkout) return window.CallFocusPaystack.checkout(amount);
+    return toast('Payment options are temporarily unavailable. Please try again shortly.');
   }
 
   function syncCreditBurn(){
@@ -3482,6 +3496,7 @@ ${approvedPatterns}
     writeJSON(accountDataKey(account.id),data);
     serverReady=true;
     if(render){renderAccountUI();renderWorkspace();}
+    try{window.dispatchEvent(new CustomEvent('callfocus:account-ready',{detail:{userId:account?.id||''}}));}catch{}
     try{window.CallFocusEntitlements?.refresh?.();}catch{}
   }
 
@@ -3539,6 +3554,10 @@ ${approvedPatterns}
 
   async function createAccountServer(event){
     event?.preventDefault?.();
+    // V15.57 compatibility guard: a stale form binding must never post to
+    // the retired legacy /api/auth/signup endpoint. Delegate to the current
+    // email-verification signup flow whenever it has been installed.
+    if(typeof window.CallFocusEmailSignupStart==='function') return window.CallFocusEmailSignupStart();
     const name=$('signupName').value.trim();
     const email=$('signupEmail').value.trim().toLowerCase();
     const phone=String($('signupPhone')?.value||'').trim();
@@ -3986,7 +4005,21 @@ ${approvedPatterns}
     }finally{setBusy(button,false);}
   }
 
-  $v('signupForm').onsubmit=e=>{e.preventDefault();requestSignup();};
+  // V15.58: keep one canonical verified-signup handler without a capture-phase
+  // listener. Re-apply the handler on pageshow so referral links and normal
+  // signups use the exact same request -> email verification flow.
+  window.CallFocusEmailSignupStart=requestSignup;
+  function bindCanonicalSignupFlow(){
+    const form=$v('signupForm');
+    if(!form)return;
+    form.onsubmit=event=>{
+      event?.preventDefault?.();
+      requestSignup();
+      return false;
+    };
+  }
+  bindCanonicalSignupFlow();
+  window.addEventListener('pageshow',bindCanonicalSignupFlow);
   window.createAccount=e=>{e?.preventDefault?.();requestSignup();};
   $v('verifySignupCodeBtn')?.addEventListener('click',verifySignup);
   $v('resendSignupCodeBtn')?.addEventListener('click',()=>requestSignup({resend:true}));
@@ -5091,38 +5124,71 @@ ${approvedPatterns}
 
 /* ===== v12-stabilization.js ===== */
 
-/* CallFocus V12.9 payment availability: Paystack first, manual bank-transfer fallback second */
+/* CallFocus V15.58 payment availability: resilient boot + retry on direct /credits loads */
 (()=>{
-  async function syncPaymentAvailability(){
-    let paystack=false,manual=false;
-    try{
-      const res=await fetch('/api/public-config',{cache:'no-store'});
-      const cfg=await res.json();
-      paystack=cfg?.paymentsEnabled===true;
-      manual=cfg?.manualPaymentsEnabled===true;
-    }catch{}
-    const available=paystack||manual;
-    window.CallFocusPaymentAvailability={paystack,manual,available};
+  let syncPromise=null;
+  let retryTimer=null;
+  let attempts=0;
+
+  function paint(state){
+    const paystack=state.paystack===true, manual=state.manual===true, known=state.known===true;
+    const available=known&&(paystack||manual);
+    window.CallFocusPaymentAvailability={paystack,manual,available,known,error:state.error||''};
     document.documentElement.classList.toggle('payments-enabled',paystack);
-    document.documentElement.classList.toggle('payments-disabled',!paystack);
-    document.documentElement.classList.toggle('manual-payments-enabled',!paystack&&manual);
-    document.documentElement.classList.toggle('all-payments-unavailable',!available);
+    document.documentElement.classList.toggle('payments-disabled',known&&!paystack);
+    document.documentElement.classList.toggle('manual-payments-enabled',manual&&!paystack);
+    document.documentElement.classList.toggle('all-payments-unavailable',known&&!available);
     const amount=Number(document.getElementById('customCreditAmount')?.value||300);
     const amountValid=Number.isFinite(amount)&&Math.floor(amount)>=300;
     const checkout=document.getElementById('creditCheckoutBtn');
-    if(checkout){checkout.disabled=!available||!amountValid;checkout.setAttribute('aria-disabled',String(checkout.disabled));}
+    if(checkout){
+      // When availability is still unknown, keep a valid amount clickable so
+      // the click can perform a just-in-time retry instead of leaving the UI dead.
+      checkout.disabled=!amountValid||(known&&!available);
+      checkout.setAttribute('aria-disabled',String(checkout.disabled));
+    }
     const label=document.getElementById('creditCheckoutLabel');
-    if(label)label.textContent=paystack?'Continue to payment':manual?'Request account number':'Payments unavailable';
+    if(label)label.textContent=!known?'Retry payment options':paystack?'Continue to payment':manual?'Request account number':'Payments unavailable';
     const note=document.getElementById('creditPaymentNote');
-    if(note)note.textContent=paystack?'Secure checkout is handled by Paystack. Credits are added only after CallFocus verifies a successful payment on the server.':manual?'Pay by bank transfer, upload your receipt, and receive credits after manual confirmation.':'Payments are temporarily unavailable while Paystack activation is pending.';
+    if(note)note.textContent=!known?'CallFocus could not confirm payment availability yet. Tap the button to retry.':paystack?'Secure checkout is handled by Paystack. Credits are added only after CallFocus verifies a successful payment on the server.':manual?'Pay by bank transfer, upload your receipt, and receive credits after manual confirmation.':'Payments are temporarily unavailable while Paystack activation is pending.';
     const notice=document.getElementById('paymentPendingNotice');
-    if(notice&&!paystack){const strong=notice.querySelector('strong'),span=notice.querySelector('span');if(strong)strong.textContent=manual?'Bank transfer available':'Payments are temporarily unavailable';if(span)span.textContent=manual?'Transfer the exact amount, upload your receipt, and your credits will be added after confirmation.':'Payments are temporarily unavailable. Please try again later.';}
+    if(notice){
+      const strong=notice.querySelector('strong'),span=notice.querySelector('span');
+      if(!known){if(strong)strong.textContent='Checking payment options';if(span)span.textContent='CallFocus will retry automatically. You can also tap the payment button to retry now.';}
+      else if(!paystack){if(strong)strong.textContent=manual?'Manual bank transfer available':'Payments are temporarily unavailable';if(span)span.textContent=manual?'Transfer the exact amount, upload your receipt, and your credits will be added after confirmation.':'Payments are temporarily unavailable. Please try again later.';}
+    }
     const dva=document.getElementById('paystackCreateDvaBtn'); if(dva)dva.disabled=!paystack;
     try{window.CallFocusManualPayments?.validateAmount?.();}catch{}
+    return window.CallFocusPaymentAvailability;
+  }
+
+  async function syncPaymentAvailability({force=false,retry=true}={}){
+    if(syncPromise&&!force)return syncPromise;
+    syncPromise=(async()=>{
+      try{
+        const controller=new AbortController();
+        const timer=setTimeout(()=>controller.abort(),8000);
+        let res;
+        try{res=await fetch('/api/public-config',{cache:'no-store',signal:controller.signal});}
+        finally{clearTimeout(timer);}
+        if(!res.ok)throw new Error(`HTTP ${res.status}`);
+        const cfg=await res.json();
+        attempts=0;clearTimeout(retryTimer);
+        return paint({known:true,paystack:cfg?.paymentsEnabled===true,manual:cfg?.manualPaymentsEnabled===true});
+      }catch(error){
+        const state=paint({known:false,paystack:false,manual:false,error:String(error?.message||error||'unavailable')});
+        if(retry&&attempts<4){attempts+=1;clearTimeout(retryTimer);retryTimer=setTimeout(()=>syncPaymentAvailability({force:true,retry:true}),Math.min(8000,1000*attempts));}
+        return state;
+      }finally{syncPromise=null;}
+    })();
+    return syncPromise;
   }
   window.CallFocusSyncPaymentAvailability=syncPaymentAvailability;
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',syncPaymentAvailability,{once:true});else syncPaymentAvailability();
-  window.addEventListener('pageshow',syncPaymentAvailability);
+  const boot=()=>syncPaymentAvailability({force:true,retry:true});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+  window.addEventListener('pageshow',boot);
+  window.addEventListener('online',boot);
+  window.addEventListener('focus',()=>{if(window.CallFocusPaymentAvailability?.known!==true)boot();});
 })();
 
 ;
@@ -5546,8 +5612,10 @@ ${approvedPatterns}
     if(!input)return true;
     const valid=amountValid();
     input.classList.toggle('is-invalid',!valid);card?.classList.toggle('has-error',!valid);err?.classList.toggle('hidden',valid);
-    const available=window.CallFocusPaymentAvailability?.available===true;
-    if(btn){btn.disabled=!valid||!available;btn.setAttribute('aria-disabled',String(btn.disabled));}
+    const availability=window.CallFocusPaymentAvailability||{};
+    const known=availability.known===true;
+    const available=availability.available===true;
+    if(btn){btn.disabled=!valid||(known&&!available);btn.setAttribute('aria-disabled',String(btn.disabled));}
     return valid;
   }
   function saveActive(id){try{id?localStorage.setItem(ACTIVE_KEY,id):localStorage.removeItem(ACTIVE_KEY)}catch{}}
@@ -6573,19 +6641,27 @@ ${approvedPatterns}
     status('');
   }
   async function load(force=false){
-    if(!account)return null;
+    const token=localStorage.getItem(TOKEN_KEY)||'';
+    if(!account){
+      if(token){status('Restoring your account…');return null;}
+      qsa('[data-referral-code]').forEach(el=>el.textContent='Sign in');
+      status('Sign in again to load your referrals.','error');return null;
+    }
     if(cache&&!force){render(cache);return cache}
     if(loading)return loading;
-    const token=localStorage.getItem(TOKEN_KEY)||'';
-    if(!token){status('Sign in again to load your referrals.','error');return null}
+    if(!token){qsa('[data-referral-code]').forEach(el=>el.textContent='Sign in');status('Sign in again to load your referrals.','error');return null}
     status('Loading referrals...');
     loading=(async()=>{
       try{
         const res=await fetch('/api/referrals',{headers:{Authorization:`Bearer ${token}`},cache:'no-store'});
         const payload=await res.json().catch(()=>({}));
-        if(!res.ok)throw new Error(payload?.error||'Could not load referrals.');
+        if(!res.ok)throw Object.assign(new Error(payload?.error||'Could not load referrals.'),{status:res.status});
         render(payload);return payload;
-      }catch(error){status(error?.message||'Could not load referrals.','error');return null}
+      }catch(error){
+        if(error?.status===401||error?.status===403)qsa('[data-referral-code]').forEach(el=>el.textContent='Sign in again');
+        else qsa('[data-referral-code]').forEach(el=>{if(el.textContent==='Loading…'||el.textContent==='Loading...')el.textContent='Retry';});
+        status(error?.message||'Could not load referrals.','error');return null;
+      }
       finally{loading=null}
     })();
     return loading;
@@ -6606,11 +6682,25 @@ ${approvedPatterns}
     const share=event.target.closest?.('[data-referral-share]');if(share){event.preventDefault();shareReferral();return}
   });
   window.CallFocusRenderReferrals=()=>load(true);
+  let bootTimer=null,bootAttempts=0;
   const boot=()=>{
     const path=(location.pathname||'/').replace(/\/+$/,'')||'/';
-    if((path==='/credits'||path==='/referrals')&&account)setTimeout(()=>load(true),120);
+    if(path!=='/credits'&&path!=='/referrals')return;
+    clearTimeout(bootTimer);
+    const token=localStorage.getItem(TOKEN_KEY)||'';
+    if(account&&token){bootAttempts=0;setTimeout(()=>load(true),80);return;}
+    if(token&&bootAttempts<40){
+      bootAttempts+=1;
+      qsa('[data-referral-code]').forEach(el=>{if(!el.textContent||el.textContent==='Loading…'||el.textContent==='Loading...')el.textContent='Loading…';});
+      bootTimer=setTimeout(boot,250);
+      return;
+    }
+    if(!token)qsa('[data-referral-code]').forEach(el=>el.textContent='Sign in');
   };
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+  window.addEventListener('callfocus:account-ready',()=>{bootAttempts=0;boot();});
+  window.addEventListener('pageshow',()=>{bootAttempts=0;boot();});
+  window.addEventListener('online',()=>{bootAttempts=0;boot();});
 })();
 
 
