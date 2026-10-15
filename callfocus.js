@@ -5285,9 +5285,10 @@ ${approvedPatterns}
 
   function pickerHtml(scope, selectedId=''){
     const voices=ensureAiVoiceData().map(cleanProfile);
+    const editIcon='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4.2L19 9.2 14.8 5 4 15.8V20Z"></path><path d="m13.7 6.1 4.2 4.2"></path></svg>';
     return `<div class="ai-voice-picker" data-ai-scope="${scope}">
       <div class="ai-voice-picker-head"><div><strong>Create your own AI voice</strong><small>Choose accent, age impression, warmth, energy, speed and presence.</small></div><button type="button" class="btn btn-ghost ai-voice-create-btn" data-ai-create>+ Create voice</button></div>
-      ${voices.length?`<div class="ai-voice-choice-row">${voices.map(v=>`<button type="button" class="ai-voice-chip ${v.id===selectedId?'active':''}" data-ai-select="${esc(v.id)}"><strong>${esc(v.name)}</strong><small>${esc(v.gender==='female'?'Female':'Male')} · ${esc(ACCENTS[v.accent])}</small></button>`).join('')}</div>`:'<div class="ai-voice-picker-empty">No custom AI voice profiles yet. Your normal Male and Female choices still work.</div>'}
+      ${voices.length?`<div class="ai-voice-choice-row">${voices.map(v=>`<div class="ai-voice-chip-wrap ${v.id===selectedId?'active':''}"><button type="button" class="ai-voice-chip ${v.id===selectedId?'active':''}" data-ai-select="${esc(v.id)}"><strong>${esc(v.name)}</strong><small>${esc(v.gender==='female'?'Female':'Male')} · ${esc(ACCENTS[v.accent])}</small></button><button type="button" class="ai-voice-chip-edit" data-ai-edit="${esc(v.id)}" aria-label="Edit ${esc(v.name)}">${editIcon}<span>Edit</span></button></div>`).join('')}</div>`:'<div class="ai-voice-picker-empty">No custom AI voice profiles yet. Your normal Male and Female choices still work.</div>'}
     </div>`;
   }
   function renderNewCallPicker(){
@@ -5306,6 +5307,7 @@ ${approvedPatterns}
     root.innerHTML=pickerHtml('note',voiceNoteAiVoiceId);
   }
   function handlePickerClick(e){
+    const edit=e.target.closest('[data-ai-edit]'); if(edit){openDesigner(edit.dataset.aiEdit);return;}
     const create=e.target.closest('[data-ai-create]'); if(create){openDesigner();return;}
     const select=e.target.closest('[data-ai-select]'); if(!select)return;
     const id=select.dataset.aiSelect,p=profileById(id); if(!p)return;
