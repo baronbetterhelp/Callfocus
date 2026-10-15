@@ -11,12 +11,12 @@
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
   <link rel="icon" type="image/png" href="./favicon.png" />
-  <title>CallFocus — Context for every call</title>
+  <title>CallFocus | Realtime Conversation Continuity Platform</title>
   <script>
     document.documentElement.dataset.theme='pearl';
     document.documentElement.style.colorScheme='light';
     try{history.scrollRestoration='manual';}catch{}
-    window.__CALLFOCUS_BUILD__='15.44-test';
+    window.__CALLFOCUS_BUILD__='15.46-test';
     (function(){
       const cleanPath=(location.pathname||'/').replace(/\/+$/,'')||'/';
       const topNow=()=>{try{window.scrollTo(0,0);}catch{}};
@@ -24,18 +24,79 @@
       window.addEventListener('pageshow',()=>{ if(cleanPath==='/'){ topNow(); requestAnimationFrame(topNow); setTimeout(topNow,80); setTimeout(topNow,260); } },{once:false});
     })();
   </script>
-  <meta name="description" content="Context-aware realtime calling workspace." />
+  <meta name="description" content="CallFocus at callfocus.link is a web-based conversation continuity platform for realtime voice calls, saved caller context, repeat-call threads, voice notes, live translation and reusable call setups." />
+  <meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1" />
+  <link rel="canonical" href="https://callfocus.link/" />
+  <meta property="og:site_name" content="CallFocus" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="CallFocus | Realtime Conversation Continuity Platform" />
+  <meta property="og:description" content="Keep caller context, conversation dynamics and repeat-call continuity together for realtime voice calls." />
+  <meta property="og:url" content="https://callfocus.link/" />
+  <meta property="og:image" content="https://callfocus.link/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="CallFocus | Realtime Conversation Continuity Platform" />
+  <meta name="twitter:description" content="A web-based conversation continuity platform for realtime voice calls and repeat-call context." />
+  <meta name="twitter:image" content="https://callfocus.link/icon-512.png" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://callfocus.link/#website",
+        "url": "https://callfocus.link/",
+        "name": "CallFocus",
+        "alternateName": ["CallFocus app", "CallFocus conversation continuity"],
+        "description": "CallFocus at callfocus.link is a web-based conversation continuity platform for realtime voice calls, saved caller context and repeat-call threads.",
+        "inLanguage": "en"
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://callfocus.link/#software",
+        "name": "CallFocus",
+        "url": "https://callfocus.link/",
+        "applicationCategory": "CommunicationApplication",
+        "operatingSystem": "Web",
+        "description": "A web-based conversation continuity platform for preparing realtime voice calls, saving caller context, continuing repeat-call threads, creating voice notes and following live translation transcripts.",
+        "image": "https://callfocus.link/icon-512.png",
+        "isAccessibleForFree": true
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "https://callfocus.link/#faq",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is CallFocus?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "CallFocus at callfocus.link is a web-based conversation continuity platform for realtime voice calls. It helps users prepare caller context, keep repeat-call threads, create voice notes and continue future calls without rebuilding the same background information."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is CallFocus at callfocus.link the same as Call Focus in Ireland?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. CallFocus at callfocus.link is an independent web software product and is not affiliated with Call Focus at callfocus.ie, the Irish training and consultancy business."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=15.44-test" />
+  <link rel="stylesheet" href="/callfocus.css?v=15.46-test" />
 </head>
 <body data-cf-document-view="home">
   <div class="app-root home-page" id="pageRoot">
     <header class="site-header" id="siteHeader">
       <div class="container header-inner">
         <a class="brand" href="#home" aria-label="CallFocus home">
-          <span class="brand-logo-shell" aria-hidden="true"><img class="brand-logo-image" width="256" height="256" decoding="async" src="./logo.png?v=15.44-test" alt="" /></span>
+          <span class="brand-logo-shell" aria-hidden="true"><img class="brand-logo-image" width="256" height="256" decoding="async" src="./logo.png?v=15.46-test" alt="" /></span>
           <span class="brand-copy">
             <strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong>
             <small>Conversation continuity, simplified.</small>
@@ -145,7 +206,7 @@
                   <span class="cf-phone-orbit-dot dot-three"></span>
                   <div class="cf-phone-caller-core">
                     <span class="cf-phone-core-pulse"></span>
-                    <b class="cf-phone-caller-avatar"><img src="./caller-alex.png?v=15.44-test" alt="" width="56" height="56" decoding="async" /></b>
+                    <b class="cf-phone-caller-avatar"><img src="./caller-alex.png?v=15.46-test" alt="" width="56" height="56" decoding="async" /></b>
                     <strong>Alex</strong>
                     <small>Conversation active</small>
                   </div>
@@ -372,6 +433,24 @@
           </div>
         </section>
 
+        <section class="cf-identity-section" id="about-callfocus" aria-labelledby="callfocusIdentityTitle">
+          <div class="container cf-identity-grid">
+            <div class="cf-identity-copy reveal-card" data-reveal>
+              <span class="section-eyebrow">About CallFocus</span>
+              <h2 id="callfocusIdentityTitle">CallFocus is a web-based conversation continuity platform.</h2>
+              <p><strong>CallFocus at callfocus.link</strong> helps people prepare realtime voice calls, keep caller background and conversation dynamics attached to repeat-call threads, create voice notes, and continue future conversations without rebuilding the same context.</p>
+              <p class="cf-identity-disambiguation"><strong>Independent product:</strong> CallFocus at callfocus.link is not affiliated with <a href="https://www.callfocus.ie/" rel="nofollow noopener" target="_blank">Call Focus at callfocus.ie</a>, the Irish training and consultancy business.</p>
+              <a class="btn btn-light cf-identity-about-link" href="/about">About CallFocus</a>
+            </div>
+            <div class="cf-identity-faq reveal-card" data-reveal>
+              <span class="section-eyebrow">Quick facts</span>
+              <details open><summary>What does CallFocus do?</summary><p>It keeps reusable caller context, today’s call topic, locations, time zones, voice choices and recent-call continuity together around a realtime conversation.</p></details>
+              <details><summary>What is the official CallFocus website?</summary><p>The official product website is <strong>callfocus.link</strong>.</p></details>
+              <details><summary>Is it the Irish Call Focus training company?</summary><p>No. CallFocus at callfocus.link is a separate web software product and has no affiliation with callfocus.ie.</p></details>
+            </div>
+          </div>
+        </section>
+
         <section class="home-cta">
           <div class="container home-cta-inner reveal-card" data-reveal>
             <div><span class="section-eyebrow">Ready to use CallFocus?</span><h2>Start with one caller. The next call gets easier.</h2></div>
@@ -499,7 +578,7 @@
 
             <div class="voice-note-result hidden" id="voiceNoteResult">
               <div class="voice-note-result-top">
-                <span class="voice-note-result-avatar"><img src="./logo.png?v=15.44-test" alt="" /></span>
+                <span class="voice-note-result-avatar"><img src="./logo.png?v=15.46-test" alt="" /></span>
                 <div><strong>Voice note ready</strong><small id="voiceNoteResultMeta">Female voice</small></div>
                 <span class="ai-voice-pill">AI-generated voice</span>
               </div>
@@ -705,8 +784,8 @@
 
     <footer class="premium-footer">
       <div class="container footer-inner">
-        <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="./logo.png?v=15.44-test" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span></div></div>
-        <div class="footer-links"><button data-route="home">Home</button><button data-route="recent">Recent Calls</button><button data-route="profile">My Profile</button><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/support">Support</a></div>
+        <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="./logo.png?v=15.46-test" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span></div></div>
+        <div class="footer-links"><button data-route="home">Home</button><button data-route="recent">Recent Calls</button><button data-route="profile">My Profile</button><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/about">About</a><a href="/support">Support</a></div>
       </div>
     </footer>
   </div>
@@ -916,6 +995,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=15.44-test"></script>
+  <script src="/callfocus.js?v=15.46-test"></script>
 </body>
 </html>

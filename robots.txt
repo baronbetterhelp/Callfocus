@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /manual-payment-review
+
+Sitemap: https://callfocus.link/sitemap.xml

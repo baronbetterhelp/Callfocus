@@ -1,0 +1,17 @@
+# CallFocus
+
+Official website: https://callfocus.link/
+Official product overview: https://callfocus.link/about
+
+CallFocus at callfocus.link is a web-based conversation continuity platform for realtime voice calls. It helps users prepare reusable caller context, conversation dynamics, today-specific call details, locations, time zones and voice settings, then continue repeat calls from recent conversation threads.
+
+Core features include realtime voice calls, saved callers, repeat-call continuity, conversation dynamics generation, voice notes, worldwide location and time-zone awareness, and live translation transcripts.
+
+Identity clarification: CallFocus at callfocus.link is an independent web software product. It is not affiliated with Call Focus at https://www.callfocus.ie/, the Irish training and consultancy business.
+
+Public pages:
+- Home: https://callfocus.link/
+- About: https://callfocus.link/about
+- Support: https://callfocus.link/support
+- Privacy: https://callfocus.link/privacy
+- Terms: https://callfocus.link/terms
