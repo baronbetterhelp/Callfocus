@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.58-test';
+  const BUILD='15.59-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -3868,6 +3868,10 @@ ${approvedPatterns}
   }
 
   const PENDING_REFERRAL_KEY='callfocus_pending_referral_v1';
+  function referralStarterCredits(){
+    const n=Number(window.CallFocusCredits?.rules?.starterCredits);
+    return Number.isFinite(n)?Math.max(0,Math.round(n)):75;
+  }
   function cleanReferralCode(value){
     return String(value||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,16);
   }
@@ -3889,25 +3893,36 @@ ${approvedPatterns}
   function applyReferralFromUrl({openSignup=false}={}){
     const code=pendingReferralCode();
     if(!code)return '';
+    const starterCredits=referralStarterCredits();
     const input=$v('signupReferralCode');
     if(input&&!input.value.trim()){
       input.value=code;
       input.dataset.referralLinkApplied='1';
       const help=input.parentElement?.querySelector('.field-help');
-      if(help)help.textContent=`Referral link applied: ${code}. You will receive ${CREDIT_RULES.starterCredits.toLocaleString()} free credits when your account is created.`;
+      if(help)help.textContent=`Referral link applied: ${code}. You will receive ${starterCredits.toLocaleString()} free credits when your account is created.`;
     }
     const params=new URLSearchParams(location.search);
     if(openSignup&&!account&&params.get('signup')==='1'){
       setTimeout(()=>{
-        try{showAuth('signup',null,`Referral link applied. Create your account to receive ${CREDIT_RULES.starterCredits.toLocaleString()} free credits.`)}catch{}
+        try{showAuth('signup',null,`Referral link applied. Create your account to receive ${starterCredits.toLocaleString()} free credits.`)}catch{}
         setTimeout(()=>$v('signupName')?.focus(),120);
       },180);
     }
     return code;
   }
-  applyReferralFromUrl({openSignup:document.readyState!=='loading'});
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>applyReferralFromUrl({openSignup:true}),{once:true});
-  window.addEventListener('pageshow',()=>applyReferralFromUrl({openSignup:true}));
+  // Install the verified-signup dispatcher BEFORE referral-link UI work.
+  // That way even a referral-rendering problem can never fall back to the retired
+  // legacy /api/auth/signup endpoint. Function declarations are hoisted.
+  window.CallFocusEmailSignupStart=requestSignup;
+  const applyReferralSafely=options=>{
+    try{return applyReferralFromUrl(options)}catch(error){
+      console.warn('CallFocus referral link setup recovered safely',error);
+      return '';
+    }
+  };
+  applyReferralSafely({openSignup:document.readyState!=='loading'});
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>applyReferralSafely({openSignup:true}),{once:true});
+  window.addEventListener('pageshow',()=>applyReferralSafely({openSignup:true}));
   $v('signupReferralCode')?.addEventListener('input',event=>{
     if(event.target.dataset.referralLinkApplied==='1'&&cleanReferralCode(event.target.value)!==pendingReferralCode())delete event.target.dataset.referralLinkApplied;
   });
