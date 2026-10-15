@@ -309,6 +309,306 @@ async function sendCallFocusEmail(env, { to, subject, html, text = '', attachmen
   }
 }
 
+
+// -----------------------------------------------------------------------------
+// V15.49 admin promotional email studio
+// Uses the existing verified Resend sender. Bulk sends use Resend's batch API,
+// include one-click unsubscribe headers, and honor a CallFocus suppression list.
+// -----------------------------------------------------------------------------
+const MARKETING_CAMPAIGN_TTL = 60 * 60 * 24 * 365;
+const MARKETING_UNSUBSCRIBE_TTL = 60 * 60 * 24 * 365 * 5;
+
+function marketingSuppressionKey(userId = '') {
+  return `marketing:unsubscribe:${String(userId || '').trim()}`;
+}
+function marketingCampaignKey(id = '') {
+  return `marketing:campaign:${String(id || '').trim()}`;
+}
+function marketingEmailSecret(env) {
+  return String(env.CALLFOCUS_MARKETING_SECRET || env.CALLFOCUS_ADMIN_PASSCODE || env.RESEND_API_KEY || '').trim();
+}
+function callFocusMarketingFromEmail(env) {
+  return String(env.CALLFOCUS_MARKETING_FROM_EMAIL || env.CALLFOCUS_FROM_EMAIL || '').trim();
+}
+function cleanMarketingText(value = '', max = 5000) {
+  return String(value || '').replace(/\u0000/g, '').replace(/\r\n/g, '\n').trim().slice(0, max);
+}
+function marketingHttpUrl(value = '') {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return '';
+    return parsed.toString().slice(0, 1200);
+  } catch { return ''; }
+}
+function marketingPersonalize(value = '', user = {}) {
+  const full = String(user?.name || 'there').trim() || 'there';
+  const first = full.split(/\s+/)[0] || full;
+  return String(value || '')
+    .replace(/\{name\}/gi, full)
+    .replace(/\{first_name\}|\{firstname\}/gi, first);
+}
+function marketingParagraphsHtml(value = '') {
+  const blocks = cleanMarketingText(value, 5000).split(/\n{2,}/).map(v => v.trim()).filter(Boolean);
+  return blocks.map(block => `<p style="margin:0 0 18px;">${escapeHtml(block).replace(/\n/g, '<br>')}</p>`).join('');
+}
+function marketingTextFromMessage(value = '') {
+  return cleanMarketingText(value, 5000).replace(/\n{3,}/g, '\n\n');
+}
+async function createMarketingUnsubscribeToken(env, userId) {
+  const secret = marketingEmailSecret(env);
+  if (!secret) throw new Error('Marketing unsubscribe signing is not configured.');
+  const exp = Math.floor(Date.now() / 1000) + MARKETING_UNSUBSCRIBE_TTL;
+  const payload = asciiToBase64Url(JSON.stringify({ v: 1, userId: String(userId || ''), exp }));
+  const signature = await hmacSha256Hex(secret, payload);
+  return `${payload}.${signature}`;
+}
+async function verifyMarketingUnsubscribeToken(env, token) {
+  const [payload, signature, ...extra] = String(token || '').trim().split('.');
+  if (!payload || !signature || extra.length) return null;
+  const secret = marketingEmailSecret(env);
+  if (!secret) return null;
+  const expected = await hmacSha256Hex(secret, payload);
+  if (!constantTimeHexEqual(signature, expected)) return null;
+  let parsed = null;
+  try { parsed = JSON.parse(base64UrlToAscii(payload)); } catch { return null; }
+  if (!parsed || parsed.v !== 1 || !parsed.userId || Number(parsed.exp) < Math.floor(Date.now() / 1000)) return null;
+  return parsed;
+}
+function marketingEmailHtml({ user = {}, subject = '', preheader = '', eyebrow = '', headline = '', message = '', ctaLabel = '', ctaUrl = '', companyName = '', businessAddress = '', unsubscribeUrl = '' } = {}) {
+  const personalizedEyebrow = escapeHtml(marketingPersonalize(eyebrow || 'CALLFOCUS UPDATE', user));
+  const personalizedHeadline = escapeHtml(marketingPersonalize(headline, user));
+  const personalizedMessage = marketingParagraphsHtml(marketingPersonalize(message, user));
+  const safePreheader = escapeHtml(marketingPersonalize(preheader || subject, user));
+  const safeCompany = escapeHtml(companyName);
+  const safeAddress = escapeHtml(businessAddress);
+  const safeCtaLabel = escapeHtml(marketingPersonalize(ctaLabel, user));
+  const safeCtaUrl = escapeHtml(ctaUrl);
+  const safeUnsubscribe = escapeHtml(unsubscribeUrl);
+  const logo = 'https://callfocus.link/logo.png';
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#153e37;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${safePreheader}</div>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;background:#edf4f1;padding:28px 12px;"><tr><td align="center">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;max-width:620px;background:#ffffff;border:1px solid #d7e5df;border-radius:30px;overflow:hidden;box-shadow:0 22px 60px rgba(19,73,63,.08);">
+    <tr><td style="padding:26px 32px 18px;background:linear-gradient(135deg,#f9fcfb 0%,#f1f8f5 56%,#fbf7ed 100%);border-bottom:1px solid #e0ebe7;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="vertical-align:middle;width:58px;"><img src="${logo}" width="50" height="50" alt="CallFocus" style="display:block;width:50px;height:50px;border-radius:14px;"></td><td style="vertical-align:middle;padding-left:12px;"><div style="font-size:24px;line-height:1;font-weight:800;color:#123d36;">Call<span style="color:#bf8b42;">Focus</span></div><div style="font-size:12px;line-height:1.5;color:#7a8d88;margin-top:5px;">Conversation continuity, simplified.</div></td></tr></table>
+    </td></tr>
+    <tr><td style="padding:34px 32px 10px;">
+      <div style="font-size:12px;line-height:1.4;font-weight:800;letter-spacing:.18em;color:#2a897b;text-transform:uppercase;">${personalizedEyebrow}</div>
+      <div style="margin-top:12px;font-size:34px;line-height:1.12;font-weight:800;letter-spacing:-.03em;color:#123c35;">${personalizedHeadline}</div>
+    </td></tr>
+    <tr><td style="padding:12px 32px 6px;font-size:17px;line-height:1.72;color:#5b716c;">${personalizedMessage}</td></tr>
+    ${safeCtaLabel && safeCtaUrl ? `<tr><td style="padding:10px 32px 30px;"><a href="${safeCtaUrl}" style="display:inline-block;background:linear-gradient(135deg,#248d7d,#146c60);color:#ffffff;text-decoration:none;font-size:16px;line-height:1;font-weight:800;padding:17px 24px;border-radius:15px;box-shadow:0 12px 28px rgba(24,116,102,.18);">${safeCtaLabel}</a></td></tr>` : ''}
+    <tr><td style="padding:22px 32px 28px;border-top:1px solid #e3ece8;background:#fbfcfb;font-size:12px;line-height:1.7;color:#82918d;">
+      <div style="font-weight:700;color:#5f746f;">${safeCompany}</div>
+      <div>${safeAddress}</div>
+      <div style="margin-top:10px;">You are receiving this promotional email because you subscribed to CallFocus updates. <a href="${safeUnsubscribe}" style="color:#1c7568;text-decoration:underline;">Unsubscribe</a> from promotional email at any time.</div>
+    </td></tr>
+  </table>
+  <div style="max-width:620px;padding:15px 10px 0;text-align:center;font-size:11px;line-height:1.6;color:#91a09c;">CallFocus · callfocus.link</div>
+</td></tr></table>
+</body></html>`;
+}
+function marketingEmailText({ user = {}, subject = '', headline = '', message = '', ctaLabel = '', ctaUrl = '', companyName = '', businessAddress = '', unsubscribeUrl = '' } = {}) {
+  const title = marketingPersonalize(headline || subject, user);
+  const body = marketingPersonalize(marketingTextFromMessage(message), user);
+  return `${title}\n\n${body}${ctaLabel && ctaUrl ? `\n\n${marketingPersonalize(ctaLabel, user)}: ${ctaUrl}` : ''}\n\n${companyName}\n${businessAddress}\n\nUnsubscribe from promotional email: ${unsubscribeUrl}`;
+}
+async function sendCallFocusBatchEmails(env, emails = [], idempotencyKey = '') {
+  if (!callFocusEmailConfigured(env)) {
+    const error = new Error('Resend is not configured for CallFocus.');
+    error.code = 'email_not_configured';
+    throw error;
+  }
+  const response = await fetch('https://api.resend.com/emails/batch', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${String(env.RESEND_API_KEY).trim()}`,
+      'Content-Type': 'application/json',
+      ...(idempotencyKey ? { 'Idempotency-Key': String(idempotencyKey).slice(0, 256) } : {})
+    },
+    body: JSON.stringify(emails)
+  });
+  let payload = null;
+  try { payload = await response.json(); } catch {}
+  if (!response.ok) {
+    const error = new Error(payload?.message || payload?.error || `Resend rejected the batch (HTTP ${response.status}).`);
+    error.code = 'batch_email_failed';
+    error.status = response.status;
+    throw error;
+  }
+  return payload || { data: [] };
+}
+async function listMarketingUsers(env, selectedIds = null) {
+  if (Array.isArray(selectedIds)) {
+    const cleanIds = [...new Set(selectedIds.map(v => String(v || '').trim()).filter(v => /^[A-Za-z0-9_-]{6,160}$/.test(v)))].slice(0, 1000);
+    const rows = [];
+    for (let i = 0; i < cleanIds.length; i += 30) {
+      const part = await Promise.all(cleanIds.slice(i, i + 30).map(id => env.CALLFOCUS_CONFIG.get(customerUserKey(id), { type: 'json' }).catch(() => null)));
+      rows.push(...part.filter(Boolean));
+    }
+    return rows;
+  }
+  const rows = [];
+  let cursor = '';
+  do {
+    const page = await env.CALLFOCUS_CONFIG.list({ prefix: 'customer:user:', limit: 1000, ...(cursor ? { cursor } : {}) });
+    const keys = Array.isArray(page?.keys) ? page.keys : [];
+    for (let i = 0; i < keys.length; i += 30) {
+      const part = await Promise.all(keys.slice(i, i + 30).map(entry => env.CALLFOCUS_CONFIG.get(entry.name, { type: 'json' }).catch(() => null)));
+      rows.push(...part.filter(Boolean));
+    }
+    cursor = page?.list_complete ? '' : String(page?.cursor || '');
+  } while (cursor && rows.length < 10000);
+  return rows;
+}
+async function marketingCampaignHistory(env) {
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.list !== 'function') return [];
+  const page = await env.CALLFOCUS_CONFIG.list({ prefix: 'marketing:campaign:', limit: 40 });
+  const rows = await Promise.all((page.keys || []).map(entry => env.CALLFOCUS_CONFIG.get(entry.name, { type: 'json' }).catch(() => null)));
+  return rows.filter(Boolean).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).slice(0, 20);
+}
+async function handleMarketingUnsubscribe(request, env) {
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.put !== 'function') return new Response('Unsubscribe is temporarily unavailable.', { status: 503 });
+  const token = String(new URL(request.url).searchParams.get('token') || '').trim();
+  const payload = await verifyMarketingUnsubscribeToken(env, token);
+  if (!payload) return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font-family:Arial;padding:40px;color:#173d37"><h1>Link unavailable</h1><p>This unsubscribe link is invalid or expired.</p></body>', { status: 400, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+  const user = await env.CALLFOCUS_CONFIG.get(customerUserKey(payload.userId), { type: 'json' }).catch(() => null);
+  await env.CALLFOCUS_CONFIG.put(marketingSuppressionKey(payload.userId), JSON.stringify({ userId: payload.userId, email: normalizeCustomerEmail(user?.email), unsubscribedAt: new Date().toISOString() }));
+  if (request.method === 'POST') return json({ ok: true, unsubscribed: true });
+  return new Response(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>CallFocus email preferences</title></head><body style="margin:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#173d37"><div style="max-width:560px;margin:70px auto;padding:20px"><div style="background:#fff;border:1px solid #d8e6e1;border-radius:26px;padding:34px;box-shadow:0 18px 50px rgba(21,75,65,.08)"><div style="font-size:12px;font-weight:800;letter-spacing:.18em;color:#2a897b">CALLFOCUS EMAIL</div><h1 style="font-size:32px;margin:12px 0 10px">You are unsubscribed.</h1><p style="font-size:17px;line-height:1.65;color:#60746f">You will no longer receive promotional CallFocus email at this address. Account, security and payment messages are not affected.</p><a href="https://callfocus.link" style="display:inline-block;margin-top:14px;background:#197768;color:#fff;text-decoration:none;padding:14px 20px;border-radius:14px;font-weight:800">Return to CallFocus</a></div></div></body></html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+}
+async function handleAdminMarketingEmail(request, env) {
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (request.method === 'GET') {
+    return json({
+      ok: true,
+      configured: callFocusEmailConfigured(env),
+      sender: callFocusMarketingFromEmail(env),
+      replyTo: String(env.CALLFOCUS_REPLY_TO_EMAIL || '').trim(),
+      history: await marketingCampaignHistory(env)
+    });
+  }
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET, POST' } });
+  if (!callFocusEmailConfigured(env)) return json({ error: 'Resend is not configured. Add RESEND_API_KEY and CALLFOCUS_FROM_EMAIL in Cloudflare.' }, 503);
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.list !== 'function' || typeof env.CALLFOCUS_CONFIG.put !== 'function') return json({ error: 'Global customer storage is not connected.' }, 503);
+
+  let body = {};
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const action = String(body?.action || 'send').trim().toLowerCase();
+  const subject = cleanMarketingText(body?.subject, 160);
+  const preheader = cleanMarketingText(body?.preheader, 180);
+  const eyebrow = cleanMarketingText(body?.eyebrow || 'CALLFOCUS UPDATE', 60);
+  const headline = cleanMarketingText(body?.headline, 160);
+  const message = cleanMarketingText(body?.message, 5000);
+  const ctaLabel = cleanMarketingText(body?.ctaLabel, 48);
+  const ctaUrl = marketingHttpUrl(body?.ctaUrl);
+  const companyName = cleanMarketingText(body?.companyName, 120);
+  const businessAddress = cleanMarketingText(body?.businessAddress, 300);
+  const requestId = String(body?.requestId || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 100);
+  if (!subject || !headline || !message) return json({ error: 'Add an email subject, headline and message before sending.' }, 400);
+  if (!!ctaLabel !== !!ctaUrl) return json({ error: 'Add both a button label and a valid http(s) button link, or leave both blank.' }, 400);
+  if (!companyName || !businessAddress) return json({ error: 'Add your legal business / sender name and a valid business mailing address before sending promotional email.' }, 400);
+  if (requestId.length < 8) return json({ error: 'Campaign request identifier is missing.' }, 400);
+
+  const origin = new URL(request.url).origin;
+  const from = callFocusMarketingFromEmail(env);
+  const replyTo = normalizeCustomerEmail(env.CALLFOCUS_REPLY_TO_EMAIL || '');
+
+  if (action === 'test') {
+    const testEmail = normalizeCustomerEmail(body?.testEmail);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testEmail)) return json({ error: 'Enter a valid test email address.' }, 400);
+    const testUser = { id: 'test-recipient', name: 'Test recipient', email: testEmail };
+    const unsub = `${origin}/email/unsubscribe-preview`;
+    const html = marketingEmailHtml({ user: testUser, subject, preheader, eyebrow, headline, message, ctaLabel, ctaUrl, companyName, businessAddress, unsubscribeUrl: unsub });
+    const text = marketingEmailText({ user: testUser, subject, headline, message, ctaLabel, ctaUrl, companyName, businessAddress, unsubscribeUrl: unsub });
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${String(env.RESEND_API_KEY).trim()}`, 'Content-Type': 'application/json', 'Idempotency-Key': `cf-marketing-test-${requestId}` },
+      body: JSON.stringify({ from, to: [testEmail], subject: marketingPersonalize(subject, testUser), html, text, ...(replyTo ? { reply_to: replyTo } : {}), tags: [{ name: 'category', value: 'marketing_test' }] })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) return json({ error: payload?.message || `Could not send test email (HTTP ${response.status}).` }, 502);
+    return json({ ok: true, test: true, sent: 1, emailId: payload?.id || '' });
+  }
+
+  if (body?.consentConfirmed !== true) return json({ error: 'Confirm that the recipients opted in to promotional email before sending.' }, 400);
+  const audience = String(body?.audience || 'all').toLowerCase() === 'selected' ? 'selected' : 'all';
+  const selectedIds = audience === 'selected' ? (Array.isArray(body?.selectedUserIds) ? body.selectedUserIds : []) : null;
+  if (audience === 'selected' && !selectedIds.length) return json({ error: 'Select at least one customer.' }, 400);
+  let users = await listMarketingUsers(env, selectedIds);
+  users = users.filter(user => user?.id && user?.email && user.accountDisabled !== true && user.emailVerified !== false);
+  const byEmail = new Map();
+  for (const user of users) {
+    const email = normalizeCustomerEmail(user.email);
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) byEmail.set(email, { ...user, email });
+  }
+  users = [...byEmail.values()];
+  if (!users.length) return json({ error: 'No active, verified customer email addresses matched this audience.' }, 400);
+
+  let suppressed = 0;
+  const eligible = [];
+  for (let i = 0; i < users.length; i += 40) {
+    const group = users.slice(i, i + 40);
+    const states = await Promise.all(group.map(user => env.CALLFOCUS_CONFIG.get(marketingSuppressionKey(user.id)).catch(() => null)));
+    states.forEach((state, index) => state ? suppressed++ : eligible.push(group[index]));
+  }
+  if (!eligible.length) return json({ error: 'Every customer in this audience has unsubscribed from promotional email.', suppressed, targeted: users.length }, 409);
+
+  const chunks = [];
+  for (let i = 0; i < eligible.length; i += 100) chunks.push(eligible.slice(i, i + 100));
+  let sent = 0;
+  let failed = 0;
+  const errors = [];
+  for (let index = 0; index < chunks.length; index++) {
+    const batchUsers = chunks[index];
+    const emails = [];
+    for (const user of batchUsers) {
+      const token = await createMarketingUnsubscribeToken(env, user.id);
+      const unsubscribeUrl = `${origin}/email/unsubscribe?token=${encodeURIComponent(token)}`;
+      emails.push({
+        from,
+        to: [user.email],
+        subject: marketingPersonalize(subject, user),
+        html: marketingEmailHtml({ user, subject, preheader, eyebrow, headline, message, ctaLabel, ctaUrl, companyName, businessAddress, unsubscribeUrl }),
+        text: marketingEmailText({ user, subject, headline, message, ctaLabel, ctaUrl, companyName, businessAddress, unsubscribeUrl }),
+        ...(replyTo ? { reply_to: replyTo } : {}),
+        headers: { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click', 'X-Entity-Ref-ID': `callfocus-${requestId}-${user.id}` },
+        tags: [{ name: 'category', value: 'marketing' }, { name: 'campaign', value: requestId.slice(0, 80) }]
+      });
+    }
+    try {
+      await sendCallFocusBatchEmails(env, emails, `cf-marketing-${requestId}-${index + 1}`);
+      sent += emails.length;
+    } catch (error) {
+      failed += emails.length;
+      errors.push(String(error?.message || 'Batch send failed').slice(0, 220));
+    }
+  }
+  const createdAt = new Date().toISOString();
+  const campaign = {
+    id: requestId,
+    createdAt,
+    audience,
+    subject,
+    headline,
+    targeted: users.length,
+    eligible: eligible.length,
+    suppressed,
+    sent,
+    failed,
+    sender: from,
+    companyName,
+    ctaUrl,
+    status: failed ? (sent ? 'partial' : 'failed') : 'sent',
+    errors: errors.slice(0, 3)
+  };
+  await env.CALLFOCUS_CONFIG.put(marketingCampaignKey(`${Date.now()}-${requestId}`), JSON.stringify(campaign), { expirationTtl: MARKETING_CAMPAIGN_TTL });
+  return json({ ok: sent > 0, campaign, history: await marketingCampaignHistory(env) }, sent > 0 ? 200 : 502);
+}
+
 function normalizeCustomerEmail(value = '') {
   return String(value || '').trim().toLowerCase();
 }
@@ -4388,7 +4688,9 @@ export default {
     if (url.pathname === '/api/manual-payment/cancel') return safeCustomerRoute('manual-payment-cancel', () => handleManualPaymentCancel(request, env));
     if (url.pathname === '/api/manual-payment/status') return safeCustomerRoute('manual-payment-status', () => handleManualPaymentStatus(request, env));
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.48-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/email/unsubscribe-preview' && request.method === 'GET') return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#173d37"><div style="max-width:560px;margin:70px auto;padding:20px"><div style="background:#fff;border:1px solid #d8e6e1;border-radius:26px;padding:34px"><h1>Test email only</h1><p>This is the unsubscribe preview from a CallFocus test email. No customer preference was changed.</p></div></div></body>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
+    if (url.pathname === '/email/unsubscribe' && (request.method === 'GET' || request.method === 'POST')) return handleMarketingUnsubscribe(request, env);
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.49-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -4397,6 +4699,7 @@ export default {
     if (url.pathname === '/api/admin/screenshot-limits') return handleAdminScreenshotLimits(request, env);
     if (url.pathname === '/api/admin/quick-start') return handleAdminQuickStart(request, env);
     if (url.pathname === '/api/admin/users') return handleAdminUsers(request, env);
+    if (url.pathname === '/api/admin/marketing-email') return handleAdminMarketingEmail(request, env);
     if (url.pathname === '/api/admin/ai-usage') return handleAdminAiUsage(request, env);
     if (url.pathname === '/api/admin/logout') return handleAdminLogout(request, env);
     if (url.pathname === '/api/admin/call-usage') return handleAdminCallUsage(request, env);
@@ -4427,10 +4730,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.48-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.49-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.48-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.48-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.49-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.49-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -4440,16 +4743,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.48-test');
+      headers.set('X-CallFocus-Admin-Build', '15.49-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.48-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.49-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.48-test');
+      headers.set('X-CallFocus-Admin-Build', '15.49-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {

@@ -11,13 +11,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=15.48-test" />
+  <link rel="stylesheet" href="/admin.css?v=15.49-test" />
 </head>
 <body class="admin-page">
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="/admin">
-        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.48-test" alt="CallFocus" /></span>
+        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.49-test" alt="CallFocus" /></span>
         <span class="brand-copy"><strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong><small>Private system control</small></span>
       </a>
       <div class="header-actions"><a class="btn btn-ghost admin-back-link" href="/">Customer site</a></div>
@@ -44,6 +44,7 @@
         <div class="admin-tab-scroll" id="adminTabScroll">
           <button class="admin-tab active" type="button" data-admin-tab="dashboard" aria-selected="true"><span>▦</span>Dashboard</button>
           <button class="admin-tab" type="button" data-admin-tab="customers" aria-selected="false"><span>◎</span>Customers</button>
+          <button class="admin-tab" type="button" data-admin-tab="email" aria-selected="false"><span>✉</span>Email</button>
           <button class="admin-tab" type="button" data-admin-tab="payments" aria-selected="false"><span>▣</span>Payments</button>
           <button class="admin-tab" type="button" data-admin-tab="ai" aria-selected="false"><span>✦</span>AI usage</button>
           <button class="admin-tab" type="button" data-admin-tab="voice" aria-selected="false"><span>◉</span>Voice</button>
@@ -108,6 +109,80 @@
           </div>
           <div class="admin-users-list" id="adminUsersList"><div class="admin-users-empty">Customer accounts will appear here.</div></div>
           <button class="btn btn-ghost admin-users-more hidden" type="button" id="adminUsersMoreBtn">Load more users</button>
+        </div>
+      </section>
+
+
+      <section class="admin-tab-panel" data-admin-panel="email">
+        <div class="admin-section-heading admin-section-heading-row">
+          <div><span class="kicker">Customer communications</span><h2>Promotional email studio</h2><p>Compose a polished CallFocus campaign, preview it, choose every active customer or select individual recipients, then send through your existing Resend connection.</p></div>
+          <button class="btn btn-ghost" type="button" id="marketingRefreshBtn">Refresh email status</button>
+        </div>
+
+        <div class="marketing-status-strip" id="marketingStatusStrip">
+          <span class="marketing-status-dot"></span>
+          <strong id="marketingStatusText">Checking Resend connection…</strong>
+          <small id="marketingSenderText">Sender status will appear here.</small>
+        </div>
+
+        <div class="marketing-studio-grid">
+          <div class="marketing-compose-column">
+            <div class="premium-panel form-panel marketing-compose-panel">
+              <div class="admin-users-heading"><div><h3>Campaign details</h3><p class="admin-panel-copy">Use {name} anywhere in the subject, headline or message to personalize each email.</p></div></div>
+              <label>Email subject<input id="marketingSubject" maxlength="160" placeholder="A better way to keep every conversation moving" /></label>
+              <label>Inbox preview text<input id="marketingPreheader" maxlength="180" placeholder="A short line customers see beside the subject." /></label>
+              <div class="form-grid two">
+                <label>Small heading<input id="marketingEyebrow" maxlength="60" value="CALLFOCUS UPDATE" /></label>
+                <label>Main headline<input id="marketingHeadline" maxlength="160" placeholder="Something new is waiting in CallFocus." /></label>
+              </div>
+              <label>Message<textarea id="marketingMessage" rows="8" maxlength="5000" placeholder="Write the message you want customers to receive. You can use {name} to personalize it."></textarea></label>
+              <div class="form-grid two">
+                <label>Button label<input id="marketingCtaLabel" maxlength="48" placeholder="Open CallFocus" /></label>
+                <label>Button link<input id="marketingCtaUrl" type="url" maxlength="1200" value="https://callfocus.link" placeholder="https://callfocus.link" /></label>
+              </div>
+              <div class="marketing-legal-fields">
+                <label>Legal business / sender name<input id="marketingCompanyName" maxlength="120" value="CallFocus · Baron Luxury Services" /></label>
+                <label>Business mailing address<input id="marketingBusinessAddress" maxlength="300" placeholder="Enter the valid postal address required for promotional email." /></label>
+              </div>
+              <div class="admin-recommendation">For deliverability and compliance, promotional email should only be sent to people who opted in. Every campaign includes a one-click unsubscribe link and automatically skips customers who have unsubscribed.</div>
+            </div>
+
+            <div class="premium-panel marketing-audience-panel">
+              <div class="admin-users-heading"><div><h3>Audience</h3><p class="admin-panel-copy">Choose everyone or tick only the customers you want to receive this campaign.</p></div></div>
+              <div class="marketing-audience-choice" role="radiogroup" aria-label="Email audience">
+                <label class="marketing-audience-option active"><input type="radio" name="marketingAudience" value="all" checked /><span><strong>All active customers</strong><small>Send to every active CallFocus customer. Unsubscribed addresses are skipped automatically.</small></span></label>
+                <label class="marketing-audience-option"><input type="radio" name="marketingAudience" value="selected" /><span><strong>Selected customers</strong><small>Tick the individual customers you want below.</small></span></label>
+              </div>
+              <div class="marketing-recipient-tools">
+                <label>Find customer<input id="marketingRecipientSearch" type="search" autocomplete="off" placeholder="Name, email or phone" /></label>
+                <div class="marketing-recipient-buttons"><button class="btn btn-ghost" type="button" id="marketingSelectVisibleBtn">Select visible</button><button class="btn btn-ghost" type="button" id="marketingClearSelectedBtn">Clear selection</button></div>
+              </div>
+              <div class="marketing-recipient-summary" id="marketingRecipientSummary">Loading customers…</div>
+              <div class="marketing-recipient-list" id="marketingRecipientList"><div class="admin-users-empty">Customer accounts will appear here.</div></div>
+            </div>
+
+            <div class="premium-panel marketing-send-panel">
+              <div class="admin-users-heading"><div><h3>Send</h3><p class="admin-panel-copy">Send yourself a test first, then send the final campaign when everything looks right.</p></div></div>
+              <label>Test email address<input id="marketingTestEmail" type="email" autocomplete="email" placeholder="you@example.com" /></label>
+              <label class="marketing-consent-confirm"><input id="marketingConsentConfirmed" type="checkbox" /><span>I confirm the recipients of this promotional campaign have opted in to receive CallFocus marketing or promotional email.</span></label>
+              <div class="marketing-send-actions">
+                <button class="btn btn-ghost" type="button" id="marketingTestBtn">Send test email</button>
+                <button class="btn btn-primary" type="button" id="marketingSendBtn">Send campaign</button>
+              </div>
+              <div class="marketing-send-result hidden" id="marketingSendResult"></div>
+            </div>
+          </div>
+
+          <div class="marketing-preview-column">
+            <div class="premium-panel marketing-preview-panel">
+              <div class="admin-users-heading"><div><h3>Live preview</h3><p class="admin-panel-copy">A close preview of the premium template customers will receive.</p></div></div>
+              <div class="marketing-email-preview" id="marketingEmailPreview"></div>
+            </div>
+            <div class="premium-panel marketing-history-panel">
+              <div class="admin-users-heading"><div><h3>Recent campaigns</h3><p class="admin-panel-copy">A lightweight record of recently sent campaigns and delivery requests.</p></div></div>
+              <div id="marketingCampaignHistory"><div class="admin-users-empty">No campaign history loaded yet.</div></div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -305,6 +380,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=15.48-test"></script>
+  <script src="/admin.js?v=15.49-test"></script>
 </body>
 </html>

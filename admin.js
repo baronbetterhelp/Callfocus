@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.48-test';
+const ADMIN_BUILD_VERSION='15.49-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -38,6 +38,9 @@ let customVoiceAccess=null;
 let adminManualPayments=[];
 let adminManualPaymentsLoading=false;
 let quickStartItems=[];
+let marketingSelectedUserIds=new Set();
+let marketingHistory=[];
+let marketingSending=false;
 function toast(msg){$('toast').textContent=msg;$('toast').classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>$('toast').classList.add('hidden'),2400)}
 function authHeaders(extra={}){return {'X-CallFocus-Admin-Key':adminKey,...extra}}
 function coreVoiceOptions(){return CORE_VOICES.map(v=>`<option value="${v}">${v}${v==='marin'||v==='cedar'?' · recommended':''}</option>`).join('')}
@@ -207,7 +210,7 @@ async function addUnlimitedUser(){
 }
 function fill(config,storageConnected){currentConfig=config;customVoices=Array.isArray(config.customVoices)?config.customVoices:[];populateVoices();renderCustomVoiceLibrary();unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;if($('adminManualPaymentsEnabled'))$('adminManualPaymentsEnabled').checked=config.manualPaymentsEnabled===true;if($('adminManualBankName'))$('adminManualBankName').value=config.manualPaymentBankName||'';if($('adminManualAccountName'))$('adminManualAccountName').value=config.manualPaymentAccountName||'';if($('adminManualAccountNumber'))$('adminManualAccountNumber').value=config.manualPaymentAccountNumber||'';if($('adminManualPaymentEmail'))$('adminManualPaymentEmail').value=config.manualPaymentNotificationEmail||'support@callfocus.link';if($('adminAnalysisScreenshotMin'))$('adminAnalysisScreenshotMin').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMin)||20)));if($('adminAnalysisScreenshotMax'))$('adminAnalysisScreenshotMax').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMax)||Number(config.autoFillScreenshotLimit)||50)));fillQuickStart(config.quickStart||{});renderScreenshotLimitsSummary();$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);if($('adminDashStorage'))$('adminDashStorage').textContent=storageConnected?'Global storage connected':'Storage needs attention';renderServerState();renderBackupStatus(storageConnected)}
 async function api(path,options={}){const res=await fetch(path,{credentials:'same-origin',...options,headers:authHeaders(options.headers||{})});const type=res.headers.get('content-type')||'';const data=type.includes('application/json')?await res.json():await res.text();if(!res.ok)throw Object.assign(new Error(data?.error||data||'Request failed'),{status:res.status});return data}
-async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{const auth=await api('/api/admin/login',{method:'POST'});adminKey=auth.adminToken||key;rememberAdminSession(adminKey);$('adminPasscode').value='';const result=await api('/api/admin/config');$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminUsers(true);loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadAdminManualPayments();}catch(err){adminKey='';if(err.status===401||err.status===403)forgetAdminSession();$('adminGateNote').textContent=err.message;toast(err.message)}}
+async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{const auth=await api('/api/admin/login',{method:'POST'});adminKey=auth.adminToken||key;rememberAdminSession(adminKey);$('adminPasscode').value='';const result=await api('/api/admin/config');$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminUsers(true);loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadAdminManualPayments();loadMarketingStatus();}catch(err){adminKey='';if(err.status===401||err.status===403)forgetAdminSession();$('adminGateNote').textContent=err.message;toast(err.message)}}
 async function saveConfig(message='Global CallFocus settings saved'){
   const btn=$('saveAdminBtn'),old=btn?.textContent||'Save global settings';
   if(btn){btn.disabled=true;btn.textContent='Saving…'}
@@ -386,7 +389,7 @@ async function loadAdminUsers(reset=false){
       summary.textContent=`${adminUsers.length} customers · ${funded} funded · ${unlimited} unlimited · ${disabled} disabled`;
     }
   }catch(err){toast(err.message);if(!adminUsers.length&&$('adminUsersList'))$('adminUsersList').innerHTML='<div class="admin-users-empty">Could not load customer accounts.</div>';}
-  finally{adminUsersLoading=false;if(refresh){refresh.disabled=false;refresh.textContent='Refresh users';}if(more){more.disabled=false;more.textContent='Load more users';}}
+  finally{adminUsersLoading=false;if(refresh){refresh.disabled=false;refresh.textContent='Refresh users';}if(more){more.disabled=false;more.textContent='Load more users';}renderMarketingRecipients();}
 }
 function actionPrompt(action,user){
   if(action==='disable_account')return `Disable ${user.email}? They will be signed out and unable to sign in until you enable the account again.`;
@@ -549,6 +552,85 @@ async function runDiagnostics(){
 $('runDiagnosticsBtn')?.addEventListener('click',runDiagnostics);
 
 
+
+/* CallFocus V15.49 — premium promotional email studio. */
+function marketingAudience(){return document.querySelector('input[name="marketingAudience"]:checked')?.value==='selected'?'selected':'all';}
+function marketingValue(id){return String($(id)?.value||'').trim();}
+function marketingHtmlText(value=''){return esc(String(value||'')).replace(/\n/g,'<br>');}
+function marketingPersonalPreview(value=''){return String(value||'').replace(/\{name\}/gi,'Alex').replace(/\{first_name\}|\{firstname\}/gi,'Alex');}
+function marketingRecipientRows(){
+  const q=String($('marketingRecipientSearch')?.value||'').trim().toLowerCase();
+  const rows=adminUsers.filter(u=>!u.accountDisabled&&u.emailVerified!==false);
+  return q?rows.filter(u=>[u.name,u.email,u.phone].some(v=>String(v||'').toLowerCase().includes(q))):rows;
+}
+function renderMarketingRecipients(){
+  const root=$('marketingRecipientList'),summary=$('marketingRecipientSummary');if(!root||!summary)return;
+  const rows=marketingRecipientRows(),allActive=adminUsers.filter(u=>!u.accountDisabled&&u.emailVerified!==false);
+  const selected=[...marketingSelectedUserIds].filter(id=>adminUsers.some(u=>u.id===id&&!u.accountDisabled&&u.emailVerified!==false));
+  marketingSelectedUserIds=new Set(selected);
+  const audience=marketingAudience();
+  summary.textContent=audience==='all'?`${allActive.length} active verified customers will be targeted · unsubscribed addresses are skipped by the server`:`${marketingSelectedUserIds.size} customer${marketingSelectedUserIds.size===1?'':'s'} selected · ${rows.length} shown`;
+  if(!rows.length){root.innerHTML='<div class="admin-users-empty">No matching active customer accounts.</div>';return;}
+  root.innerHTML=rows.map(u=>`<label class="marketing-recipient-row${marketingSelectedUserIds.has(u.id)?' selected':''}"><input type="checkbox" data-marketing-user-id="${esc(u.id)}" ${marketingSelectedUserIds.has(u.id)?'checked':''} ${audience==='all'?'disabled':''}/><span class="marketing-recipient-avatar">${esc((u.name||u.email||'?').trim().charAt(0).toUpperCase()||'?')}</span><span class="marketing-recipient-copy"><strong>${esc(u.name||'Unnamed user')}</strong><small>${esc(u.email)}</small></span><span class="marketing-recipient-state">${u.unlimited?'Unlimited':'Active'}</span></label>`).join('');
+}
+function marketingCampaignPayload(){
+  return {
+    subject:marketingValue('marketingSubject'),preheader:marketingValue('marketingPreheader'),eyebrow:marketingValue('marketingEyebrow'),headline:marketingValue('marketingHeadline'),message:marketingValue('marketingMessage'),ctaLabel:marketingValue('marketingCtaLabel'),ctaUrl:marketingValue('marketingCtaUrl'),companyName:marketingValue('marketingCompanyName'),businessAddress:marketingValue('marketingBusinessAddress')
+  };
+}
+function renderMarketingPreview(){
+  const root=$('marketingEmailPreview');if(!root)return;const p=marketingCampaignPayload();
+  const eyebrow=marketingPersonalPreview(p.eyebrow||'CALLFOCUS UPDATE'),headline=marketingPersonalPreview(p.headline||'Your CallFocus update'),message=marketingPersonalPreview(p.message||'Write your promotional message and the finished email will preview here.'),cta=marketingPersonalPreview(p.ctaLabel||'Open CallFocus');
+  root.innerHTML=`<div class="marketing-preview-canvas"><div class="marketing-preview-brand"><img src="/logo.png?v=${ADMIN_BUILD_VERSION}" alt=""><span><strong>Call<span>Focus</span></strong><small>Conversation continuity, simplified.</small></span></div><div class="marketing-preview-body"><span class="marketing-preview-eyebrow">${esc(eyebrow)}</span><h3>${esc(headline)}</h3><div class="marketing-preview-message">${marketingHtmlText(message)}</div>${p.ctaLabel&&p.ctaUrl?`<span class="marketing-preview-cta">${esc(cta)}</span>`:''}</div><div class="marketing-preview-footer"><strong>${esc(p.companyName||'CallFocus')}</strong><span>${esc(p.businessAddress||'Your business mailing address will appear here.')}</span><small>Promotional email · Unsubscribe</small></div></div>`;
+}
+function renderMarketingHistory(rows=marketingHistory){
+  const root=$('marketingCampaignHistory');if(!root)return;marketingHistory=Array.isArray(rows)?rows:[];
+  if(!marketingHistory.length){root.innerHTML='<div class="admin-users-empty">No promotional campaigns sent yet.</div>';return;}
+  root.innerHTML=marketingHistory.map(c=>`<article class="marketing-history-item"><div><strong>${esc(c.subject||'Untitled campaign')}</strong><span>${c.createdAt?esc(new Date(c.createdAt).toLocaleString()):'—'} · ${esc(c.audience||'all')}</span></div><div class="marketing-history-stats"><span>${Number(c.sent||0)} sent</span><span>${Number(c.suppressed||0)} skipped</span><span class="${Number(c.failed||0)?'bad':''}">${Number(c.failed||0)} failed</span></div></article>`).join('');
+}
+async function loadMarketingStatus(){
+  if(!adminKey)return;const btn=$('marketingRefreshBtn');if(btn){btn.disabled=true;btn.textContent='Refreshing…';}
+  try{
+    const result=await api('/api/admin/marketing-email');
+    $('marketingStatusStrip')?.classList.toggle('is-ready',!!result.configured);
+    if($('marketingStatusText'))$('marketingStatusText').textContent=result.configured?'Resend promotional sending is connected':'Resend promotional sending is not configured';
+    if($('marketingSenderText'))$('marketingSenderText').textContent=result.configured?`Sender: ${result.sender||'configured sender'}${result.replyTo?` · Replies: ${result.replyTo}`:''}`:'Add RESEND_API_KEY and CALLFOCUS_FROM_EMAIL in Cloudflare.';
+    renderMarketingHistory(result.history||[]);
+  }catch(err){if($('marketingStatusText'))$('marketingStatusText').textContent='Could not check email status';if($('marketingSenderText'))$('marketingSenderText').textContent=err.message||'Try again.';}
+  finally{if(btn){btn.disabled=false;btn.textContent='Refresh email status';}}
+}
+function marketingShowResult(message,type='ok'){
+  const box=$('marketingSendResult');if(!box)return;box.classList.remove('hidden','bad');if(type==='bad')box.classList.add('bad');box.textContent=message;
+}
+async function sendMarketingEmail(test=false){
+  if(marketingSending)return;const p=marketingCampaignPayload();
+  if(!p.subject||!p.headline||!p.message)return toast('Add a subject, headline and message first');
+  if((p.ctaLabel&&!p.ctaUrl)||(!p.ctaLabel&&p.ctaUrl))return toast('Add both a button label and button link, or leave both blank');
+  if(!p.companyName||!p.businessAddress)return toast('Add your legal business name and mailing address');
+  if(!test&&!$('marketingConsentConfirmed')?.checked)return toast('Confirm that these recipients opted in to promotional email');
+  const audience=marketingAudience();if(!test&&audience==='selected'&&!marketingSelectedUserIds.size)return toast('Select at least one customer');
+  const testEmail=marketingValue('marketingTestEmail');if(test&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testEmail))return toast('Enter a valid test email address');
+  const btn=test?$('marketingTestBtn'):$('marketingSendBtn'),old=btn?.textContent||'';const requestId=(globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,100);
+  if(!test){const count=audience==='all'?adminUsers.filter(u=>!u.accountDisabled&&u.emailVerified!==false).length:marketingSelectedUserIds.size;if(!confirm(`Send this promotional email to ${count} ${audience==='all'?'active customer account(s)':'selected customer(s)'}?\n\nCustomers who previously unsubscribed will be skipped automatically.`))return;}
+  marketingSending=true;if(btn){btn.disabled=true;btn.textContent=test?'Sending test…':'Sending campaign…';}marketingShowResult(test?'Preparing test email…':'Preparing campaign…');
+  try{
+    const result=await api('/api/admin/marketing-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...p,action:test?'test':'send',testEmail,audience,selectedUserIds:[...marketingSelectedUserIds],consentConfirmed:$('marketingConsentConfirmed')?.checked===true,requestId})});
+    if(test){marketingShowResult(`Test email sent to ${testEmail}. Check the inbox and spam folder before sending the campaign.`);toast('Test email sent');}
+    else{const c=result.campaign||{};marketingShowResult(`${Number(c.sent||0)} sent · ${Number(c.suppressed||0)} unsubscribed skipped · ${Number(c.failed||0)} failed${Number(c.failed||0)?' · check Resend logs for delivery details':''}`,Number(c.failed||0)&&!Number(c.sent||0)?'bad':'ok');renderMarketingHistory(result.history||[]);toast(Number(c.failed||0)?'Campaign completed with some delivery errors':'Campaign submitted to Resend');}
+  }catch(err){marketingShowResult(err.message||'Could not send email','bad');toast(err.message||'Could not send email');}
+  finally{marketingSending=false;if(btn){btn.disabled=false;btn.textContent=old;}}
+}
+document.querySelectorAll('input[name="marketingAudience"]').forEach(input=>input.addEventListener('change',()=>{document.querySelectorAll('.marketing-audience-option').forEach(label=>label.classList.toggle('active',label.querySelector('input')?.checked));renderMarketingRecipients();}));
+$('marketingRecipientSearch')?.addEventListener('input',renderMarketingRecipients);
+$('marketingRecipientList')?.addEventListener('change',event=>{const box=event.target.closest('[data-marketing-user-id]');if(!box)return;const id=box.dataset.marketingUserId;if(box.checked)marketingSelectedUserIds.add(id);else marketingSelectedUserIds.delete(id);renderMarketingRecipients();});
+$('marketingSelectVisibleBtn')?.addEventListener('click',()=>{document.querySelector('input[name="marketingAudience"][value="selected"]')?.click();marketingRecipientRows().forEach(u=>marketingSelectedUserIds.add(u.id));renderMarketingRecipients();});
+$('marketingClearSelectedBtn')?.addEventListener('click',()=>{marketingSelectedUserIds.clear();renderMarketingRecipients();});
+['marketingSubject','marketingPreheader','marketingEyebrow','marketingHeadline','marketingMessage','marketingCtaLabel','marketingCtaUrl','marketingCompanyName','marketingBusinessAddress'].forEach(id=>$(id)?.addEventListener('input',renderMarketingPreview));
+$('marketingTestBtn')?.addEventListener('click',()=>sendMarketingEmail(true));
+$('marketingSendBtn')?.addEventListener('click',()=>sendMarketingEmail(false));
+$('marketingRefreshBtn')?.addEventListener('click',loadMarketingStatus);
+renderMarketingPreview();
+
 /* CallFocus V12.3 — organized scrollable admin + AI usage tracker */
 function setAdminTab(name='dashboard'){
   const target=String(name||'dashboard');
@@ -598,7 +680,7 @@ async function loadAdminAiUsage(){
 $('aiUsageRefreshBtn')?.addEventListener('click',loadAdminAiUsage);
 $('adminRefreshAllBtn')?.addEventListener('click',async()=>{
   const btn=$('adminRefreshAllBtn');const old=btn?.textContent||'Refresh data';if(btn){btn.disabled=true;btn.textContent='Refreshing…';}
-  try{await Promise.all([loadAdminUsers(true),loadAdminAiUsage(),loadAdminManualPayments()]);toast('Admin data refreshed');}
+  try{await Promise.all([loadAdminUsers(true),loadAdminAiUsage(),loadAdminManualPayments(),loadMarketingStatus()]);toast('Admin data refreshed');}
   finally{if(btn){btn.disabled=false;btn.textContent=old;}}
 });
 
