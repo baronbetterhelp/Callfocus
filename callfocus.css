@@ -3718,3 +3718,33 @@ html[data-theme="pearl"] .cf-interrupt-now .cf-redirect-icon{background:#fff1cf;
   #cfAutoFillModal.modal-backdrop{padding-top:68px!important}
   #cfAutoFillModal .cf-autofill-modal{max-height:calc(100dvh - 68px)!important}
 }
+
+/* ===== CallFocus V15.55 — inline auto-fill screenshots + post-generation actions ===== */
+.cf-autofill-upload-stage{margin-top:4px}
+.cf-autofill-selection-shell{
+  border:1.5px solid rgba(30,98,88,.18);
+  border-radius:22px;
+  padding:14px;
+  background:linear-gradient(135deg,rgba(236,248,244,.70),rgba(252,248,239,.68));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.82);
+}
+.cf-autofill-selection-head{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px;margin-bottom:10px}
+.cf-autofill-selection-head strong{font-size:11px;color:#173f38}
+.cf-autofill-selection-head span{font-size:8px;color:#71827e;text-align:right}
+.cf-autofill-add-more{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:7px 11px;border:1px solid rgba(28,93,82,.16);border-radius:999px;background:rgba(255,255,255,.76);color:#1d695d;font:750 8px/1.1 'Manrope',sans-serif;cursor:pointer;white-space:nowrap}
+.cf-autofill-thumbs{max-height:none;overflow:visible}
+.cf-autofill-actions{display:flex!important;align-items:center;gap:9px}
+.cf-autofill-actions .cf-autofill-clear{flex:0 0 auto;width:auto!important;min-width:130px;padding-inline:14px}
+.cf-autofill-actions .cf-autofill-primary{flex:1 1 auto;width:auto!important;min-width:0}
+html:not([data-theme="pearl"]) .cf-autofill-selection-shell{background:linear-gradient(145deg,#151b19,#101412);border-color:#2c3935;box-shadow:inset 0 1px 0 rgba(255,255,255,.035)}
+html:not([data-theme="pearl"]) .cf-autofill-selection-head strong{color:#dcebe6}
+html:not([data-theme="pearl"]) .cf-autofill-add-more{background:#18211e;border-color:#31423d;color:#79c9b8}
+@media(max-width:620px){
+  .cf-autofill-selection-shell{padding:11px 9px 10px}
+  .cf-autofill-selection-head{grid-template-columns:minmax(0,1fr) auto;gap:7px}
+  .cf-autofill-selection-head span{grid-column:1/2;text-align:left;font-size:7px}
+  .cf-autofill-add-more{grid-column:2/3;grid-row:1/3;align-self:center;padding-inline:10px}
+  .cf-autofill-actions{gap:7px!important}
+  .cf-autofill-actions .cf-autofill-clear{min-width:0;flex:0 0 34%;padding-inline:7px;font-size:8px}
+  .cf-autofill-actions .cf-autofill-primary{flex:1 1 66%;padding-inline:8px}
+}

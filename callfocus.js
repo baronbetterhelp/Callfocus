@@ -6168,13 +6168,21 @@ ${approvedPatterns}
           </div>
           <p class="cf-autofill-note">These caller details anchor the analysis. CallFocus will not invent missing personal information about either person.</p>
         </div>
-        <label class="dynamics-upload-zone cf-autofill-upload" for="cfAutoFillFiles">
-          <span class="dynamics-upload-icon">＋</span><strong>Upload Client &amp; Callers Conversation screenshot</strong>
-          <p id="cfAutoFillUploadCopy">${minImages()===maxImages()?`Choose exactly ${minImages()} screenshot${minImages()===1?'':'s'}, preferably in conversation order.`:`Choose at least ${minImages()} and up to ${maxImages()} screenshots, preferably in conversation order.`}</p>
-        </label>
+        <div class="cf-autofill-upload-stage" id="cfAutoFillUploadStage">
+          <label class="dynamics-upload-zone cf-autofill-upload" id="cfAutoFillUploadPrompt" for="cfAutoFillFiles">
+            <span class="dynamics-upload-icon">＋</span><strong>Upload Client &amp; Callers Conversation screenshot</strong>
+            <p id="cfAutoFillUploadCopy">${minImages()===maxImages()?`Choose exactly ${minImages()} screenshot${minImages()===1?'':'s'}, preferably in conversation order.`:`Choose at least ${minImages()} and up to ${maxImages()} screenshots, preferably in conversation order.`}</p>
+          </label>
+          <div class="cf-autofill-selection-shell hidden" id="cfAutoFillSelectionShell">
+            <div class="dynamics-selection-head cf-autofill-selection-head">
+              <strong id="cfAutoFillCount">0 / ${maxImages()} selected</strong>
+              <span id="cfAutoFillSelectionNote">At least ${minImages()} screenshot${minImages()===1?'':'s'} required</span>
+              <label class="cf-autofill-add-more" for="cfAutoFillFiles">+ Add more</label>
+            </div>
+            <div class="dynamics-thumbs cf-autofill-thumbs" id="cfAutoFillThumbs"><div class="dynamics-empty-thumbs">Your selected screenshots will appear here.</div></div>
+          </div>
+        </div>
         <input class="dynamics-file-input" id="cfAutoFillFiles" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple />
-        <div class="dynamics-selection-head"><strong id="cfAutoFillCount">0 / ${maxImages()} selected</strong><span id="cfAutoFillSelectionNote">At least ${minImages()} screenshot${minImages()===1?'':'s'} required</span></div>
-        <div class="dynamics-thumbs cf-autofill-thumbs" id="cfAutoFillThumbs"><div class="dynamics-empty-thumbs">Your selected screenshots will appear here.</div></div>
         <div class="dynamics-privacy">Screenshots are used only for this generation request and are not saved to your CallFocus account. The generated text is saved only if you choose to add or save it.</div>
         <div class="dynamics-progress-wrap hidden" id="cfAutoFillProgressWrap">
           <div class="dynamics-progress-line"><div class="dynamics-progress-bar" id="cfAutoFillProgressBar"></div></div>
@@ -6185,11 +6193,11 @@ ${approvedPatterns}
           <label>About you<textarea id="cfAutoAboutSelfResult" rows="7"></textarea></label>
           <label>About the caller<textarea id="cfAutoAboutCallerResult" rows="7"></textarea></label>
           <label>Conversation dynamics<textarea id="cfAutoDynamicsResult" rows="12"></textarea></label>
-          <div class="cf-autofill-result-actions"><button class="btn btn-primary" type="button" id="cfAutoApplyBtn">Add generated information to call</button></div>
         </div>
         <div class="dynamics-modal-actions cf-autofill-actions">
-          <button class="btn btn-ghost" type="button" id="cfAutoClearBtn">Clear screenshots</button>
-          <button class="btn btn-primary" type="button" id="cfAutoGenerateBtn" disabled>Generate information</button>
+          <button class="btn btn-ghost cf-autofill-clear" type="button" id="cfAutoClearBtn">Clear screenshots</button>
+          <button class="btn btn-primary cf-autofill-primary" type="button" id="cfAutoGenerateBtn" disabled>Generate information</button>
+          <button class="btn btn-primary cf-autofill-primary hidden" type="button" id="cfAutoApplyBtn">Add generated information to call</button>
         </div>
       </div>`;
     document.body.appendChild(wrap);
@@ -6247,22 +6255,36 @@ ${approvedPatterns}
     const valid=incoming.filter(f=>ALLOWED_TYPES.has(String(f.type||'').toLowerCase())&&Number(f.size||0)<=MAX_FILE_BYTES);
     if(valid.length!==incoming.length)notify('Some files were skipped. Use PNG, JPG, WEBP or GIF screenshots smaller than 20 MB each.');
     const max=maxImages();
-    autoFiles=valid.slice(0,max);
-    if(valid.length>max)notify(`CallFocus currently accepts a maximum of ${max} screenshots for automatic first-call information.`);
-    byId('cfAutoFillResults')?.classList.add('hidden');
+    const combined=[...autoFiles,...valid],seen=new Set();
+    autoFiles=combined.filter(file=>{const key=`${file.name}|${file.size}|${file.lastModified}`;if(seen.has(key))return false;seen.add(key);return true;}).slice(0,max);
+    if(combined.length>max)notify(`CallFocus currently accepts a maximum of ${max} screenshots for automatic first-call information.`);
+    setAutoGeneratedState(false);
     renderAutoSelection();
   }
   function resetAutoFiles(resetInput=false){
     if(autoBusy)return;
     autoFiles=[];
     if(resetInput&&byId('cfAutoFillFiles'))byId('cfAutoFillFiles').value='';
-    byId('cfAutoFillResults')?.classList.add('hidden');
+    setAutoGeneratedState(false);
     renderAutoSelection();
     const wrap=byId('cfAutoFillProgressWrap');if(wrap)wrap.classList.add('hidden');
   }
   function formatSize(bytes){const n=Math.max(0,Number(bytes)||0);if(n<1024)return`${n} B`;if(n<1048576)return`${Math.max(1,Math.round(n/1024))} KB`;return`${(n/1048576).toFixed(n>=10485760?0:1)} MB`;}
+  function setAutoGeneratedState(generated){
+    const results=byId('cfAutoFillResults'),generate=byId('cfAutoGenerateBtn'),apply=byId('cfAutoApplyBtn');
+    if(results)results.classList.toggle('hidden',!generated);
+    if(generate)generate.classList.toggle('hidden',!!generated);
+    if(apply)apply.classList.toggle('hidden',!generated);
+    const modal=byId('cfAutoFillModal')?.querySelector('.cf-autofill-modal');
+    if(modal)modal.dataset.generated=generated?'true':'false';
+  }
   function renderAutoSelection(){
     const count=byId('cfAutoFillCount'),note=byId('cfAutoFillSelectionNote'),thumbs=byId('cfAutoFillThumbs'),button=byId('cfAutoGenerateBtn');
+    const prompt=byId('cfAutoFillUploadPrompt'),selection=byId('cfAutoFillSelectionShell'),clear=byId('cfAutoClearBtn');
+    const hasFiles=autoFiles.length>0;
+    if(prompt)prompt.classList.toggle('hidden',hasFiles);
+    if(selection)selection.classList.toggle('hidden',!hasFiles);
+    if(clear)clear.classList.toggle('hidden',!hasFiles);
     const max=maxImages();
     if(autoFiles.length>max)autoFiles=autoFiles.slice(0,max);
     if(count)count.textContent=`${autoFiles.length} / ${max} selected`;
@@ -6277,7 +6299,7 @@ ${approvedPatterns}
     autoFiles.forEach((file,i)=>{
       const item=document.createElement('div');item.className='dynamics-thumb dynamics-thumb-safe';
       item.innerHTML=`<div class="dynamics-thumb-placeholder" aria-hidden="true">IMG</div><span class="dynamics-thumb-label">Screenshot ${i+1}</span><small class="dynamics-thumb-size">${formatSize(file.size)}</small><b>${i+1}</b>`;
-      const remove=document.createElement('button');remove.type='button';remove.className='dynamics-thumb-remove';remove.textContent='×';remove.setAttribute('aria-label',`Remove screenshot ${i+1}`);remove.onclick=()=>{if(autoBusy)return;autoFiles.splice(i,1);renderAutoSelection();};
+      const remove=document.createElement('button');remove.type='button';remove.className='dynamics-thumb-remove';remove.textContent='×';remove.setAttribute('aria-label',`Remove screenshot ${i+1}`);remove.onclick=()=>{if(autoBusy)return;autoFiles.splice(i,1);setAutoGeneratedState(false);renderAutoSelection();};
       item.appendChild(remove);thumbs.appendChild(item);
     });
   }
@@ -6306,7 +6328,7 @@ ${approvedPatterns}
     if(autoFiles.length<min)return notify(`Upload at least ${min} conversation screenshot${min===1?'':'s'}.`);
     const max=maxImages();
     if(autoFiles.length>max)return notify(`This CallFocus setup currently allows up to ${max} screenshots for automatic first-call information.`);
-    autoBusy=true;renderAutoSelection();byId('cfAutoGenerateBtn').textContent='Generating…';byId('cfAutoClearBtn').disabled=true;byId('cfAutoFillResults')?.classList.add('hidden');
+    autoBusy=true;setAutoGeneratedState(false);renderAutoSelection();byId('cfAutoGenerateBtn').textContent='Generating…';byId('cfAutoClearBtn').disabled=true;
     const batchSize=smallerBatches()?MOBILE_BATCH_SIZE:DESKTOP_BATCH_SIZE,totalBatches=Math.ceil(autoFiles.length/batchSize),summaries=[],analysisId=(crypto.randomUUID?.()||`cfctx_${Date.now()}_${Math.random().toString(36).slice(2,10)}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,96),callerHint=safeText(byId('newCallPersonName')?.value);
     try{
       for(let b=0;b<totalBatches;b++){
@@ -6319,7 +6341,7 @@ ${approvedPatterns}
       const final=await api({kind:'finalize',summaries,imageCount:autoFiles.length,analysisId,callerMeta,callerHint});
       if(!final?.aboutSelf||!final?.aboutCaller||!final?.dynamics)throw new Error('CallFocus could not create all three information sections.');
       byId('cfAutoAboutSelfResult').value=final.aboutSelf.trim();byId('cfAutoAboutCallerResult').value=final.aboutCaller.trim();byId('cfAutoDynamicsResult').value=final.dynamics.trim();
-      byId('cfAutoFillResults').dataset.callerName=safeText(final.callerName||'');byId('cfAutoFillResults').classList.remove('hidden');setAutoProgress(100,`Finished using ${autoFiles.length} screenshots.`);byId('cfAutoFillResults').scrollIntoView({behavior:'smooth',block:'nearest'});
+      byId('cfAutoFillResults').dataset.callerName=safeText(final.callerName||'');setAutoGeneratedState(true);setAutoProgress(100,`Finished using ${autoFiles.length} screenshots.`);byId('cfAutoFillResults').scrollIntoView({behavior:'smooth',block:'nearest'});
     }catch(e){setAutoProgress(0,e?.message||'Generation failed. Please try again.',true);notify(e?.message||'Generation failed. Please try again.');}
     finally{autoBusy=false;byId('cfAutoGenerateBtn').textContent='Generate information';byId('cfAutoClearBtn').disabled=false;renderAutoSelection();}
   }
