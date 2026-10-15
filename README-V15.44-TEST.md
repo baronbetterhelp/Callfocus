@@ -1,4 +1,4 @@
-# CallFocus V15.44 Visual Test — KV Emergency Optimization & Capacity Recovery
+# CallFocus V15.45 Visual Test — Complete Customer List Restore
 
 Built directly on **V15.43 Visual Test**. Stable V15.16 remains the approved stable base unless a visual-test branch is explicitly promoted.
 
@@ -30,4 +30,4 @@ This build reduces unnecessary KV writes substantially, but a production service
 
 ## Build
 
-`15.44-test`
+`15.45-test`
