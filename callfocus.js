@@ -6236,6 +6236,11 @@ ${approvedPatterns}
     resetAutoFiles(true);
     refreshAutoFillLimitUI();
     openOverlay('cfAutoFillModal');
+    // Always reopen the auto-fill sheet at its true top so the heading and close button are fully visible.
+    requestAnimationFrame(()=>{
+      const modal=byId('cfAutoFillModal')?.querySelector('.cf-autofill-modal');
+      if(modal)modal.scrollTop=0;
+    });
   }
   function closeAutoFill(){if(autoBusy)return notify('Please wait for the current generation to finish.');closeOverlay('cfAutoFillModal');}
 

@@ -3699,3 +3699,22 @@ html[data-theme="pearl"] .cf-interrupt-now .cf-redirect-icon{background:#fff1cf;
     top:max(0px, calc(env(safe-area-inset-top) - 8px))!important;
   }
 }
+
+/* ===== CallFocus V15.53 — mobile first-call auto-fill vertical spacing ===== */
+@media(max-width:620px){
+  /* Keep the auto-fill sheet comfortably below the iPhone status/browser area. */
+  #cfAutoFillModal.modal-backdrop{
+    padding-top:92px!important;
+    align-items:end!important;
+  }
+  #cfAutoFillModal .cf-autofill-modal{
+    width:100%!important;
+    max-height:calc(100dvh - 92px)!important;
+    border-radius:24px 24px 0 0!important;
+    margin:0!important;
+  }
+}
+@media(max-width:620px) and (max-height:640px){
+  #cfAutoFillModal.modal-backdrop{padding-top:68px!important}
+  #cfAutoFillModal .cf-autofill-modal{max-height:calc(100dvh - 68px)!important}
+}
