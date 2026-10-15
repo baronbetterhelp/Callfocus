@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.43-test';
+const ADMIN_BUILD_VERSION='15.45-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -355,17 +355,36 @@ function renderAdminUsers(){
 async function loadAdminUsers(reset=false){
   if(adminUsersLoading)return; adminUsersLoading=true;
   const refresh=$('adminUsersRefreshBtn'),more=$('adminUsersMoreBtn');
-  if(reset){adminUsers=[];adminUsersCursor='';if(refresh){refresh.disabled=true;refresh.textContent='Refreshing…';}}
+  if(reset){adminUsers=[];adminUsersCursor='';if(refresh){refresh.disabled=true;refresh.textContent='Refreshing all…';}}
   if(more){more.disabled=true;more.textContent='Loading…';}
+  let listComplete=false;
+  let pagesLoaded=0;
   try{
-    const qs=new URLSearchParams({limit:'50'}); if(adminUsersCursor)qs.set('cursor',adminUsersCursor);
-    const result=await api(`/api/admin/users?${qs.toString()}`);
-    const incoming=Array.isArray(result.users)?result.users:[];
-    const byId=new Map(adminUsers.map(u=>[u.id,u])); incoming.forEach(u=>byId.set(u.id,u));
-    adminUsers=[...byId.values()].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
-    adminUsersCursor=String(result.cursor||'');
+    // V15.45: the Customers page is an "All CallFocus users" view. On initial
+    // load and Refresh, walk every available KV page instead of silently
+    // stopping after the first 50. Manual Load more still fetches one page.
+    do{
+      const qs=new URLSearchParams({limit:'50'}); if(adminUsersCursor)qs.set('cursor',adminUsersCursor);
+      const result=await api(`/api/admin/users?${qs.toString()}`);
+      const incoming=Array.isArray(result.users)?result.users:[];
+      const byId=new Map(adminUsers.map(u=>[u.id,u])); incoming.forEach(u=>byId.set(u.id,u));
+      adminUsers=[...byId.values()].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+      adminUsersCursor=String(result.cursor||'');
+      listComplete=!!result.listComplete || !adminUsersCursor;
+      pagesLoaded+=1;
+      renderAdminUsers();
+      if(!reset || listComplete)break;
+      // Yield briefly so mobile Safari can keep the admin interface responsive.
+      await new Promise(resolve=>setTimeout(resolve,0));
+    }while(adminUsersCursor && pagesLoaded<40);
     if(more)more.classList.toggle('hidden',!adminUsersCursor);
-    renderAdminUsers();
+    const summary=$('adminUsersSummary');
+    if(summary && listComplete){
+      const disabled=adminUsers.filter(u=>u.accountDisabled).length;
+      const unlimited=adminUsers.filter(u=>u.unlimited).length;
+      const funded=adminUsers.filter(u=>Number(u?.wallet?.purchaseCount||0)>0).length;
+      summary.textContent=`${adminUsers.length} customers · ${funded} funded · ${unlimited} unlimited · ${disabled} disabled`;
+    }
   }catch(err){toast(err.message);if(!adminUsers.length&&$('adminUsersList'))$('adminUsersList').innerHTML='<div class="admin-users-empty">Could not load customer accounts.</div>';}
   finally{adminUsersLoading=false;if(refresh){refresh.disabled=false;refresh.textContent='Refresh users';}if(more){more.disabled=false;more.textContent='Load more users';}}
 }
