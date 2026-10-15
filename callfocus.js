@@ -6164,6 +6164,7 @@ ${approvedPatterns}
           <div class="field-heading"><strong>About Caller</strong><small>Required before generation</small></div>
           <div class="form-grid cf-autofill-meta-grid">
             <label>Callers name<input id="cfAutoCallerName" autocomplete="name" placeholder="e.g. David" /></label>
+            <label>Callers age<input id="cfAutoCallerAge" type="number" inputmode="numeric" min="1" max="120" placeholder="e.g. 38" /></label>
             <label>Callers Job or work type<input id="cfAutoCallerJob" placeholder="e.g. Construction worker" /></label>
           </div>
           <p class="cf-autofill-note">These caller details anchor the analysis. CallFocus will not invent missing personal information about either person.</p>
@@ -6206,7 +6207,7 @@ ${approvedPatterns}
     byId('cfAutoGenerateBtn').onclick=runAutoFill;
     byId('cfAutoApplyBtn').onclick=applyGeneratedInfo;
     byId('cfAutoFillFiles').addEventListener('change',e=>{selectAutoFiles([...e.target.files]);e.target.value='';});
-    ['cfAutoCallerName','cfAutoCallerJob'].forEach(id=>byId(id)?.addEventListener('input',renderAutoSelection));
+    ['cfAutoCallerName','cfAutoCallerAge','cfAutoCallerJob'].forEach(id=>byId(id)?.addEventListener('input',renderAutoSelection));
     wrap.addEventListener('click',e=>{if(e.target===wrap&&!autoBusy)closeAutoFill();});
   }
 
@@ -6238,6 +6239,7 @@ ${approvedPatterns}
     installAutoFillModal();
     const profile=(typeof data!=='undefined'&&data?.profile)||{};
     byId('cfAutoCallerName').value=safeText(byId('newCallPersonName')?.value||'');
+    byId('cfAutoCallerAge').value='';
     byId('cfAutoCallerJob').value='';
     resetAutoFiles(true);
     refreshAutoFillLimitUI();
@@ -6291,7 +6293,7 @@ ${approvedPatterns}
     const min=minImages();
     const remaining=Math.max(0,min-autoFiles.length);
     if(note)note.textContent=remaining?`${remaining} more screenshot${remaining===1?'':'s'} required`:`${autoFiles.length} screenshots ready`;
-    const metaReady=!!safeText(byId('cfAutoCallerName')?.value)&&!!safeText(byId('cfAutoCallerJob')?.value);
+    const metaReady=!!safeText(byId('cfAutoCallerName')?.value)&&!!safeText(byId('cfAutoCallerAge')?.value)&&!!safeText(byId('cfAutoCallerJob')?.value);
     if(button)button.disabled=autoBusy||autoFiles.length<min||!metaReady;
     if(!thumbs)return;
     thumbs.innerHTML='';
@@ -6322,8 +6324,9 @@ ${approvedPatterns}
 
   async function runAutoFill(){
     if(autoBusy)return;
-    const callerMeta={name:safeText(byId('cfAutoCallerName')?.value),job:safeText(byId('cfAutoCallerJob')?.value)};
-    if(!callerMeta.name||!callerMeta.job)return notify('Enter the callers name and job/work type first.');
+    const callerMeta={name:safeText(byId('cfAutoCallerName')?.value),age:safeText(byId('cfAutoCallerAge')?.value),job:safeText(byId('cfAutoCallerJob')?.value)};
+    if(!callerMeta.name||!callerMeta.age||!callerMeta.job)return notify('Enter the callers name, age and job/work type first.');
+    const age=Number(callerMeta.age);if(!Number.isFinite(age)||age<1||age>120)return notify('Enter a valid callers age.');
     const min=minImages();
     if(autoFiles.length<min)return notify(`Upload at least ${min} conversation screenshot${min===1?'':'s'}.`);
     const max=maxImages();

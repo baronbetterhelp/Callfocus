@@ -3778,9 +3778,12 @@ async function handleCallContextAnalyze(request, env) {
   const callerMeta = body?.callerMeta && typeof body.callerMeta === 'object' ? body.callerMeta : {};
   const legacyMeta = body?.userMeta && typeof body.userMeta === 'object' ? body.userMeta : {};
   const callerNameConfirmed = String(callerMeta?.name || legacyMeta?.name || '').trim().slice(0, 120);
+  const callerAgeConfirmed = String(callerMeta?.age || legacyMeta?.age || '').trim().slice(0, 12);
   const callerJobConfirmed = String(callerMeta?.job || legacyMeta?.job || '').trim().slice(0, 180);
   const callerHint = String(body?.callerHint || callerNameConfirmed || '').trim().slice(0, 120);
-  if (!callerNameConfirmed || !callerJobConfirmed) return json({ error: 'Enter the callers name and job/work type before generating.' }, 400);
+  if (!callerNameConfirmed || !callerAgeConfirmed || !callerJobConfirmed) return json({ error: 'Enter the callers name, age and job/work type before generating.' }, 400);
+  const callerAgeNumber = Number(callerAgeConfirmed);
+  if (!Number.isFinite(callerAgeNumber) || callerAgeNumber < 1 || callerAgeNumber > 120) return json({ error: 'Enter a valid callers age.' }, 400);
   const config = await getConfig(env);
   const minScreenshots = Math.max(1, Math.min(50, Math.round(Number(config.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin)));
   const maxScreenshots = Math.max(minScreenshots, Math.min(50, Math.round(Number(config.analysisScreenshotMax ?? config.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax)));
@@ -3799,8 +3802,8 @@ async function handleCallContextAnalyze(request, env) {
     if (totalChars > 32_000_000) return json({ error: 'This screenshot batch is too large. Please try again.' }, 413);
     const batchNumber = Math.max(1, Math.floor(Number(body?.batchNumber) || 1));
     const totalBatches = Math.max(batchNumber, Math.floor(Number(body?.totalBatches) || batchNumber));
-    const identity = `The person being called is confirmed to be ${callerNameConfirmed}, whose job/work type is ${callerJobConfirmed}. The CallFocus account holder/client is the other participant in the conversation and must be identified from the screenshot layout and message direction.`;
-    const content = [{ type: 'input_text', text: `${identity}\n\nYou are reading batch ${batchNumber} of ${totalBatches} ordered screenshots from the same private conversation. Build detailed analyst notes that will later be used to create three separate CallFocus fields: About the account holder/client, About the caller, and Dynamics of Your Conversations.\n\nUse visible chat layout, names, message direction and wording carefully to distinguish the account holder/client from the caller. In common messaging layouts outgoing/right-side messages may belong to the account holder/client, but only use that cue when the interface clearly supports it. The supplied caller name and caller job/work type are confirmed facts about the person being called and must not be reassigned to the account holder/client.\n\nCapture explicit facts about each person: names, work, family, location, routines, responsibilities, preferences, plans, interests, relevant life context and anything else actually stated. Separately capture communication behavior: who initiates, response length and timing, warmth, affection, flirtation, humor, reassurance, conflict, boundaries, recurring subjects, future plans, unresolved situations, and changes in closeness. Preserve important concrete context with short paraphrases.\n\nDo not invent demographics, jobs, family relationships, diagnoses, motives or hidden facts. If a fact cannot be assigned confidently, mark it as uncertain in the notes rather than guessing. Treat overlapping screenshots as duplicate context, not additional evidence. Keep this batch summary under 850 words.` }];
+    const identity = `The person being called is confirmed to be ${callerNameConfirmed}, age ${callerAgeConfirmed}, whose job/work type is ${callerJobConfirmed}. The CallFocus account holder/client is the other participant in the conversation and must be identified from the screenshot layout and message direction.`;
+    const content = [{ type: 'input_text', text: `${identity}\n\nYou are reading batch ${batchNumber} of ${totalBatches} ordered screenshots from the same private conversation. Build detailed analyst notes that will later be used to create three separate CallFocus fields: About the account holder/client, About the caller, and Dynamics of Your Conversations.\n\nUse visible chat layout, names, message direction and wording carefully to distinguish the account holder/client from the caller. In common messaging layouts outgoing/right-side messages may belong to the account holder/client, but only use that cue when the interface clearly supports it. The supplied caller name, age and caller job/work type are confirmed facts about the person being called and must not be reassigned to the account holder/client.\n\nCapture explicit facts about each person: names, work, family, location, routines, responsibilities, preferences, plans, interests, relevant life context and anything else actually stated. Separately capture communication behavior: who initiates, response length and timing, warmth, affection, flirtation, humor, reassurance, conflict, boundaries, recurring subjects, future plans, unresolved situations, and changes in closeness. Preserve important concrete context with short paraphrases.\n\nDo not invent demographics, jobs, family relationships, diagnoses, motives or hidden facts. If a fact cannot be assigned confidently, mark it as uncertain in the notes rather than guessing. Treat overlapping screenshots as duplicate context, not additional evidence. Keep this batch summary under 850 words.` }];
     for (const image of images) content.push({ type: 'input_image', image_url: image, detail: 'high' });
     try {
       const result = await callOpenAIResponses(env, { model: 'gpt-6-luna', store: false, reasoning: { effort: 'none' }, max_output_tokens: 1600, input: [{ role: 'user', content }] });
@@ -3819,6 +3822,7 @@ async function handleCallContextAnalyze(request, env) {
 
 CONFIRMED CALLER FACTS
 Caller name: ${callerNameConfirmed}
+Caller age: ${callerAgeConfirmed}
 Caller job/work type: ${callerJobConfirmed}${callerHint && callerHint !== callerNameConfirmed ? `
 Caller name hint: ${callerHint}` : ''}
 
@@ -3837,7 +3841,7 @@ Requirements for aboutSelf:
 
 Requirements for aboutCaller:
 - Write roughly 140–300 useful words when enough information exists.
-- Start naturally with the confirmed caller name and job/work type.
+- Start naturally with the confirmed caller name, age and job/work type.
 - Include clearly supported routines, family/life context, preferences, plans, communication style, and anything practically important for future calls.
 - If a detail is unsupported, omit it instead of saying it as fact.
 
@@ -4768,7 +4772,7 @@ export default {
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
     if (url.pathname === '/email/unsubscribe-preview' && request.method === 'GET') return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#173d37"><div style="max-width:560px;margin:70px auto;padding:20px"><div style="background:#fff;border:1px solid #d8e6e1;border-radius:26px;padding:34px"><h1>Test email only</h1><p>This is the unsubscribe preview from a CallFocus test email. No customer preference was changed.</p></div></div></body>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
     if (url.pathname === '/email/unsubscribe' && (request.method === 'GET' || request.method === 'POST')) return handleMarketingUnsubscribe(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.55-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.56-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
