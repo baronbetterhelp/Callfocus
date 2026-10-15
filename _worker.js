@@ -317,6 +317,37 @@ async function sendCallFocusEmail(env, { to, subject, html, text = '', attachmen
 // -----------------------------------------------------------------------------
 const MARKETING_CAMPAIGN_TTL = 60 * 60 * 24 * 365;
 const MARKETING_UNSUBSCRIBE_TTL = 60 * 60 * 24 * 365 * 5;
+const MARKETING_DRAFT_KEY = 'marketing:draft:v1';
+const MARKETING_DRAFT_TTL = 60 * 60 * 24 * 365 * 2;
+
+function marketingDraftPayload(body = {}) {
+  return {
+    subject: cleanMarketingText(body?.subject, 160),
+    preheader: cleanMarketingText(body?.preheader, 180),
+    eyebrow: cleanMarketingText(body?.eyebrow || 'CALLFOCUS UPDATE', 60),
+    headline: cleanMarketingText(body?.headline, 160),
+    message: cleanMarketingText(body?.message, 5000),
+    ctaLabel: cleanMarketingText(body?.ctaLabel, 48),
+    ctaUrl: marketingHttpUrl(body?.ctaUrl),
+    companyName: cleanMarketingText(body?.companyName, 120),
+    businessAddress: cleanMarketingText(body?.businessAddress, 300),
+    testEmail: normalizeCustomerEmail(body?.testEmail),
+    updatedAt: new Date().toISOString()
+  };
+}
+async function readMarketingDraft(env) {
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.get !== 'function') return null;
+  try {
+    const raw = await env.CALLFOCUS_CONFIG.get(MARKETING_DRAFT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+async function saveMarketingDraft(env, body = {}) {
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.put !== 'function') return null;
+  const draft = marketingDraftPayload(body);
+  await env.CALLFOCUS_CONFIG.put(MARKETING_DRAFT_KEY, JSON.stringify(draft), { expirationTtl: MARKETING_DRAFT_TTL });
+  return draft;
+}
 
 function marketingSuppressionKey(userId = '') {
   return `marketing:unsubscribe:${String(userId || '').trim()}`;
@@ -388,26 +419,25 @@ function marketingEmailHtml({ user = {}, subject = '', preheader = '', eyebrow =
   const safeUnsubscribe = escapeHtml(unsubscribeUrl);
   const logo = 'https://callfocus.link/logo.png';
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#153e37;">
+<body style="margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#173d37;">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">${safePreheader}</div>
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;background:#edf4f1;padding:28px 12px;"><tr><td align="center">
-  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;max-width:620px;background:#ffffff;border:1px solid #d7e5df;border-radius:30px;overflow:hidden;box-shadow:0 22px 60px rgba(19,73,63,.08);">
-    <tr><td style="padding:26px 32px 18px;background:linear-gradient(135deg,#f9fcfb 0%,#f1f8f5 56%,#fbf7ed 100%);border-bottom:1px solid #e0ebe7;">
-      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="vertical-align:middle;width:58px;"><img src="${logo}" width="50" height="50" alt="CallFocus" style="display:block;width:50px;height:50px;border-radius:14px;"></td><td style="vertical-align:middle;padding-left:12px;"><div style="font-size:24px;line-height:1;font-weight:800;color:#123d36;">Call<span style="color:#bf8b42;">Focus</span></div><div style="font-size:12px;line-height:1.5;color:#7a8d88;margin-top:5px;">Conversation continuity, simplified.</div></td></tr></table>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;background:#ffffff;"><tr><td align="center" style="padding:24px 16px;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="width:100%;max-width:620px;background:#ffffff;">
+    <tr><td style="padding:4px 0 22px;border-bottom:1px solid #e5ece9;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="vertical-align:middle;width:46px;"><img src="${logo}" width="40" height="40" alt="CallFocus" style="display:block;width:40px;height:40px;border-radius:10px;"></td><td style="vertical-align:middle;padding-left:10px;"><div style="font-size:21px;line-height:1;font-weight:800;color:#173d37;">Call<span style="color:#bd8b46;">Focus</span></div><div style="font-size:11px;line-height:1.45;color:#7d8e89;margin-top:4px;">Conversation continuity, simplified.</div></td></tr></table>
     </td></tr>
-    <tr><td style="padding:34px 32px 10px;">
-      <div style="font-size:12px;line-height:1.4;font-weight:800;letter-spacing:.18em;color:#2a897b;text-transform:uppercase;">${personalizedEyebrow}</div>
-      <div style="margin-top:12px;font-size:34px;line-height:1.12;font-weight:800;letter-spacing:-.03em;color:#123c35;">${personalizedHeadline}</div>
+    <tr><td style="padding:28px 0 8px;">
+      <div style="font-size:11px;line-height:1.4;font-weight:800;letter-spacing:.14em;color:#2b887a;text-transform:uppercase;">${personalizedEyebrow}</div>
+      <div style="margin-top:10px;font-size:28px;line-height:1.2;font-weight:800;letter-spacing:-.02em;color:#173d37;">${personalizedHeadline}</div>
     </td></tr>
-    <tr><td style="padding:12px 32px 6px;font-size:17px;line-height:1.72;color:#5b716c;">${personalizedMessage}</td></tr>
-    ${safeCtaLabel && safeCtaUrl ? `<tr><td style="padding:10px 32px 30px;"><a href="${safeCtaUrl}" style="display:inline-block;background:linear-gradient(135deg,#248d7d,#146c60);color:#ffffff;text-decoration:none;font-size:16px;line-height:1;font-weight:800;padding:17px 24px;border-radius:15px;box-shadow:0 12px 28px rgba(24,116,102,.18);">${safeCtaLabel}</a></td></tr>` : ''}
-    <tr><td style="padding:22px 32px 28px;border-top:1px solid #e3ece8;background:#fbfcfb;font-size:12px;line-height:1.7;color:#82918d;">
-      <div style="font-weight:700;color:#5f746f;">${safeCompany}</div>
+    <tr><td style="padding:10px 0 6px;font-size:16.5px;line-height:1.72;color:#536963;">${personalizedMessage}</td></tr>
+    ${safeCtaLabel && safeCtaUrl ? `<tr><td style="padding:18px 0 24px;"><a href="${safeCtaUrl}" style="display:inline-block;background:#187668;color:#ffffff;text-decoration:none;font-size:15px;line-height:1;font-weight:800;padding:14px 20px;border-radius:10px;">${safeCtaLabel}</a></td></tr>` : ''}
+    <tr><td style="padding:20px 0 4px;border-top:1px solid #e5ece9;font-size:11.5px;line-height:1.65;color:#85948f;">
+      <div style="font-weight:700;color:#62756f;">${safeCompany}</div>
       <div>${safeAddress}</div>
-      <div style="margin-top:10px;">You are receiving this promotional email because you subscribed to CallFocus updates. <a href="${safeUnsubscribe}" style="color:#1c7568;text-decoration:underline;">Unsubscribe</a> from promotional email at any time.</div>
+      <div style="margin-top:8px;">You are receiving this promotional email because you subscribed to CallFocus updates. <a href="${safeUnsubscribe}" style="color:#1c7568;text-decoration:underline;">Unsubscribe</a> at any time.</div>
     </td></tr>
   </table>
-  <div style="max-width:620px;padding:15px 10px 0;text-align:center;font-size:11px;line-height:1.6;color:#91a09c;">CallFocus · callfocus.link</div>
 </td></tr></table>
 </body></html>`;
 }
@@ -488,6 +518,7 @@ async function handleAdminMarketingEmail(request, env) {
       configured: callFocusEmailConfigured(env),
       sender: callFocusMarketingFromEmail(env),
       replyTo: String(env.CALLFOCUS_REPLY_TO_EMAIL || '').trim(),
+      draft: await readMarketingDraft(env),
       history: await marketingCampaignHistory(env)
     });
   }
@@ -498,6 +529,10 @@ async function handleAdminMarketingEmail(request, env) {
   let body = {};
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
   const action = String(body?.action || 'send').trim().toLowerCase();
+  if (action === 'save-draft') {
+    const draft = await saveMarketingDraft(env, body);
+    return json({ ok: true, draft });
+  }
   const subject = cleanMarketingText(body?.subject, 160);
   const preheader = cleanMarketingText(body?.preheader, 180);
   const eyebrow = cleanMarketingText(body?.eyebrow || 'CALLFOCUS UPDATE', 60);
@@ -516,6 +551,7 @@ async function handleAdminMarketingEmail(request, env) {
   const origin = new URL(request.url).origin;
   const from = callFocusMarketingFromEmail(env);
   const replyTo = normalizeCustomerEmail(env.CALLFOCUS_REPLY_TO_EMAIL || '');
+  await saveMarketingDraft(env, { ...body, subject, preheader, eyebrow, headline, message, ctaLabel, ctaUrl, companyName, businessAddress });
 
   if (action === 'test') {
     const testEmail = normalizeCustomerEmail(body?.testEmail);
@@ -4690,7 +4726,7 @@ export default {
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
     if (url.pathname === '/email/unsubscribe-preview' && request.method === 'GET') return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#173d37"><div style="max-width:560px;margin:70px auto;padding:20px"><div style="background:#fff;border:1px solid #d8e6e1;border-radius:26px;padding:34px"><h1>Test email only</h1><p>This is the unsubscribe preview from a CallFocus test email. No customer preference was changed.</p></div></div></body>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
     if (url.pathname === '/email/unsubscribe' && (request.method === 'GET' || request.method === 'POST')) return handleMarketingUnsubscribe(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.50-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.51-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -4730,10 +4766,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.50-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.51-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.50-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.50-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.51-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.51-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -4743,16 +4779,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.50-test');
+      headers.set('X-CallFocus-Admin-Build', '15.51-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.50-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.51-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.50-test');
+      headers.set('X-CallFocus-Admin-Build', '15.51-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {

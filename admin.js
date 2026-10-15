@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.50-test';
+const ADMIN_BUILD_VERSION='15.51-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -41,6 +41,9 @@ let quickStartItems=[];
 let marketingSelectedUserIds=new Set();
 let marketingHistory=[];
 let marketingSending=false;
+let marketingDraftLoaded=false;
+let marketingDraftTimer=0;
+let marketingDraftSaving=false;
 function toast(msg){$('toast').textContent=msg;$('toast').classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>$('toast').classList.add('hidden'),2400)}
 function authHeaders(extra={}){return {'X-CallFocus-Admin-Key':adminKey,...extra}}
 function coreVoiceOptions(){return CORE_VOICES.map(v=>`<option value="${v}">${v}${v==='marin'||v==='cedar'?' · recommended':''}</option>`).join('')}
@@ -575,13 +578,38 @@ function renderMarketingRecipients(){
 }
 function marketingCampaignPayload(){
   return {
-    subject:marketingValue('marketingSubject'),preheader:marketingValue('marketingPreheader'),eyebrow:marketingValue('marketingEyebrow'),headline:marketingValue('marketingHeadline'),message:marketingValue('marketingMessage'),ctaLabel:marketingValue('marketingCtaLabel'),ctaUrl:marketingValue('marketingCtaUrl'),companyName:marketingValue('marketingCompanyName'),businessAddress:marketingValue('marketingBusinessAddress')
+    subject:marketingValue('marketingSubject'),preheader:marketingValue('marketingPreheader'),eyebrow:marketingValue('marketingEyebrow'),headline:marketingValue('marketingHeadline'),message:marketingValue('marketingMessage'),ctaLabel:marketingValue('marketingCtaLabel'),ctaUrl:marketingValue('marketingCtaUrl'),companyName:marketingValue('marketingCompanyName'),businessAddress:marketingValue('marketingBusinessAddress'),testEmail:marketingValue('marketingTestEmail')
   };
+}
+function setMarketingDraftStatus(message,state=''){
+  const el=$('marketingDraftStatus');if(!el)return;el.textContent=message;el.classList.remove('is-saved','is-saving');if(state)el.classList.add(state);
+}
+function applyMarketingDraft(draft){
+  if(!draft||typeof draft!=='object'||marketingDraftLoaded)return;
+  const map={marketingSubject:'subject',marketingPreheader:'preheader',marketingEyebrow:'eyebrow',marketingHeadline:'headline',marketingMessage:'message',marketingCtaLabel:'ctaLabel',marketingCtaUrl:'ctaUrl',marketingCompanyName:'companyName',marketingBusinessAddress:'businessAddress',marketingTestEmail:'testEmail'};
+  Object.entries(map).forEach(([id,key])=>{const el=$(id);if(el&&draft[key]!==undefined&&draft[key]!==null)el.value=String(draft[key]);});
+  marketingDraftLoaded=true;renderMarketingPreview();
+  if(draft.updatedAt){const when=new Date(draft.updatedAt);setMarketingDraftStatus(`Saved draft restored · ${Number.isNaN(when.getTime())?'recently':when.toLocaleString()}`,'is-saved');}
+  else setMarketingDraftStatus('Saved draft restored.','is-saved');
+}
+async function saveMarketingDraft({silent=false}={}){
+  if(!adminKey||marketingDraftSaving)return;
+  marketingDraftSaving=true;if(!silent)setMarketingDraftStatus('Saving draft…','is-saving');
+  const btn=$('marketingSaveDraftBtn'),old=btn?.textContent||'';if(btn&&!silent){btn.disabled=true;btn.textContent='Saving…';}
+  try{
+    const result=await api('/api/admin/marketing-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...marketingCampaignPayload(),action:'save-draft'})});
+    const when=result?.draft?.updatedAt?new Date(result.draft.updatedAt):new Date();
+    setMarketingDraftStatus(`Draft saved · ${when.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`,'is-saved');
+  }catch(err){setMarketingDraftStatus(`Draft could not be saved · ${err.message||'Try again.'}`);if(!silent)toast(err.message||'Could not save draft');}
+  finally{marketingDraftSaving=false;if(btn&&!silent){btn.disabled=false;btn.textContent=old||'Save draft';}}
+}
+function queueMarketingDraftSave(){
+  if(!marketingDraftLoaded)return;clearTimeout(marketingDraftTimer);setMarketingDraftStatus('Saving changes…','is-saving');marketingDraftTimer=setTimeout(()=>saveMarketingDraft({silent:true}),900);
 }
 function renderMarketingPreview(){
   const root=$('marketingEmailPreview');if(!root)return;const p=marketingCampaignPayload();
   const eyebrow=marketingPersonalPreview(p.eyebrow||'CALLFOCUS UPDATE'),headline=marketingPersonalPreview(p.headline||'Your CallFocus update'),message=marketingPersonalPreview(p.message||'Write your promotional message and the finished email will preview here.'),cta=marketingPersonalPreview(p.ctaLabel||'Open CallFocus');
-  root.innerHTML=`<div class="marketing-preview-canvas"><div class="marketing-preview-brand"><img src="/logo.png?v=${ADMIN_BUILD_VERSION}" alt=""><span><strong>Call<span>Focus</span></strong><small>Conversation continuity, simplified.</small></span></div><div class="marketing-preview-body"><span class="marketing-preview-eyebrow">${esc(eyebrow)}</span><h3>${esc(headline)}</h3><div class="marketing-preview-message">${marketingHtmlText(message)}</div>${p.ctaLabel&&p.ctaUrl?`<span class="marketing-preview-cta">${esc(cta)}</span>`:''}</div><div class="marketing-preview-footer"><strong>${esc(p.companyName||'CallFocus')}</strong><span>${esc(p.businessAddress||'Your business mailing address will appear here.')}</span><small>Promotional email · Unsubscribe</small></div></div>`;
+  root.innerHTML=`<div class="marketing-preview-canvas"><div class="marketing-preview-brand"><img src="/logo.png?v=${ADMIN_BUILD_VERSION}" alt=""><span><strong>Call<span>Focus</span></strong><small>Conversation continuity, simplified.</small></span></div><div class="marketing-preview-body"><span class="marketing-preview-eyebrow">${esc(eyebrow)}</span><h3>${esc(headline)}</h3><div class="marketing-preview-message">${marketingHtmlText(message)}</div>${p.ctaLabel&&p.ctaUrl?`<span class="marketing-preview-cta">${esc(cta)}</span>`:''}</div><div class="marketing-preview-footer"><strong>${esc(p.companyName||'CallFocus')}</strong><span>${esc(p.businessAddress||'Your business mailing address will appear here.')}</span><small>Unsubscribe from promotional email</small></div></div>`;
 }
 function renderMarketingHistory(rows=marketingHistory){
   const root=$('marketingCampaignHistory');if(!root)return;marketingHistory=Array.isArray(rows)?rows:[];
@@ -595,6 +623,8 @@ async function loadMarketingStatus(){
     $('marketingStatusStrip')?.classList.toggle('is-ready',!!result.configured);
     if($('marketingStatusText'))$('marketingStatusText').textContent=result.configured?'Resend promotional sending is connected':'Resend promotional sending is not configured';
     if($('marketingSenderText'))$('marketingSenderText').textContent=result.configured?`Sender: ${result.sender||'configured sender'}${result.replyTo?` · Replies: ${result.replyTo}`:''}`:'Add RESEND_API_KEY and CALLFOCUS_FROM_EMAIL in Cloudflare.';
+    applyMarketingDraft(result.draft||null);
+    if(!marketingDraftLoaded){marketingDraftLoaded=true;setMarketingDraftStatus('No saved draft yet. Changes will save automatically.');}
     renderMarketingHistory(result.history||[]);
   }catch(err){if($('marketingStatusText'))$('marketingStatusText').textContent='Could not check email status';if($('marketingSenderText'))$('marketingSenderText').textContent=err.message||'Try again.';}
   finally{if(btn){btn.disabled=false;btn.textContent='Refresh email status';}}
@@ -625,7 +655,8 @@ $('marketingRecipientSearch')?.addEventListener('input',renderMarketingRecipient
 $('marketingRecipientList')?.addEventListener('change',event=>{const box=event.target.closest('[data-marketing-user-id]');if(!box)return;const id=box.dataset.marketingUserId;if(box.checked)marketingSelectedUserIds.add(id);else marketingSelectedUserIds.delete(id);renderMarketingRecipients();});
 $('marketingSelectVisibleBtn')?.addEventListener('click',()=>{document.querySelector('input[name="marketingAudience"][value="selected"]')?.click();marketingRecipientRows().forEach(u=>marketingSelectedUserIds.add(u.id));renderMarketingRecipients();});
 $('marketingClearSelectedBtn')?.addEventListener('click',()=>{marketingSelectedUserIds.clear();renderMarketingRecipients();});
-['marketingSubject','marketingPreheader','marketingEyebrow','marketingHeadline','marketingMessage','marketingCtaLabel','marketingCtaUrl','marketingCompanyName','marketingBusinessAddress'].forEach(id=>$(id)?.addEventListener('input',renderMarketingPreview));
+['marketingSubject','marketingPreheader','marketingEyebrow','marketingHeadline','marketingMessage','marketingCtaLabel','marketingCtaUrl','marketingCompanyName','marketingBusinessAddress','marketingTestEmail'].forEach(id=>$(id)?.addEventListener('input',()=>{renderMarketingPreview();queueMarketingDraftSave();}));
+$('marketingSaveDraftBtn')?.addEventListener('click',()=>saveMarketingDraft({silent:false}));
 $('marketingTestBtn')?.addEventListener('click',()=>sendMarketingEmail(true));
 $('marketingSendBtn')?.addEventListener('click',()=>sendMarketingEmail(false));
 $('marketingRefreshBtn')?.addEventListener('click',loadMarketingStatus);

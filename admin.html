@@ -11,13 +11,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=15.50-test" />
+  <link rel="stylesheet" href="/admin.css?v=15.51-test" />
 </head>
 <body class="admin-page">
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="/admin">
-        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.50-test" alt="CallFocus" /></span>
+        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.51-test" alt="CallFocus" /></span>
         <span class="brand-copy"><strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong><small>Private system control</small></span>
       </a>
       <div class="header-actions"><a class="btn btn-ghost admin-back-link" href="/">Customer site</a></div>
@@ -128,7 +128,7 @@
         <div class="marketing-studio-grid">
           <div class="marketing-compose-column">
             <div class="premium-panel form-panel marketing-compose-panel">
-              <div class="admin-users-heading"><div><h3>Campaign details</h3><p class="admin-panel-copy">Use {name} anywhere in the subject, headline or message to personalize each email.</p></div></div>
+              <div class="admin-users-heading"><div><h3>Campaign details</h3><p class="admin-panel-copy">Use {name} anywhere in the subject, headline or message to personalize each email.</p><p class="marketing-draft-status" id="marketingDraftStatus">Your most recent email draft will be saved automatically.</p></div><button class="btn btn-ghost" type="button" id="marketingSaveDraftBtn">Save draft</button></div>
               <label>Email subject<input id="marketingSubject" maxlength="160" placeholder="A better way to keep every conversation moving" /></label>
               <label>Inbox preview text<input id="marketingPreheader" maxlength="180" placeholder="A short line customers see beside the subject." /></label>
               <div class="form-grid two">
@@ -144,7 +144,7 @@
                 <label>Legal business / sender name<input id="marketingCompanyName" maxlength="120" value="CallFocus · Baron Luxury Services" /></label>
                 <label>Business mailing address<input id="marketingBusinessAddress" maxlength="300" placeholder="Enter the valid postal address required for promotional email." /></label>
               </div>
-              <div class="admin-recommendation">For deliverability and compliance, promotional email should only be sent to people who opted in. Every campaign includes a one-click unsubscribe link and automatically skips customers who have unsubscribed.</div>
+              <div class="admin-recommendation">This now uses a simpler, normal-email style instead of a large promotional card. Gmail and other providers still decide whether a legitimate promotional message appears in Primary, Promotions, Updates or another tab. CallFocus keeps the required unsubscribe controls and does not try to bypass inbox filtering.</div>
             </div>
 
             <div class="premium-panel marketing-audience-panel">
@@ -380,6 +380,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=15.50-test"></script>
+  <script src="/admin.js?v=15.51-test"></script>
 </body>
 </html>

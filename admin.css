@@ -927,7 +927,7 @@ body.admin-page{
 @media(max-width:980px){.marketing-studio-grid{grid-template-columns:1fr}.marketing-preview-column{position:static}.marketing-audience-choice{grid-template-columns:1fr}}
 @media(max-width:650px){.marketing-recipient-tools{grid-template-columns:1fr}.marketing-recipient-buttons{display:grid;grid-template-columns:1fr 1fr}.marketing-recipient-row{grid-template-columns:auto auto 1fr}.marketing-recipient-state{grid-column:3}.marketing-send-actions{display:grid;grid-template-columns:1fr}.marketing-send-actions .btn{width:100%}.marketing-preview-body h3{font-size:1.45rem}.marketing-status-strip{margin-top:-4px}}
 
-/* CallFocus V15.50 — mobile promotional audience selector alignment */
+/* CallFocus V15.51 — mobile promotional audience selector alignment */
 .marketing-audience-option{
   min-width:0;
   box-sizing:border-box;
@@ -963,3 +963,17 @@ body.admin-page{
   .marketing-audience-option strong{font-size:.94rem}
   .marketing-audience-option small{font-size:.82rem;line-height:1.42}
 }
+
+/* CallFocus V15.51 — saved email draft + cleaner inbox-style preview */
+.marketing-draft-status{margin:7px 0 0;color:#71837e;font-size:.8rem;line-height:1.45}
+.marketing-draft-status.is-saved{color:#1f7a6d;font-weight:700}
+.marketing-draft-status.is-saving{color:#a07b3f}
+.marketing-preview-canvas{border-radius:18px;box-shadow:0 14px 34px rgba(20,72,63,.06)}
+.marketing-preview-brand{background:#fff;border-bottom:1px solid #e5ece9;padding:18px 20px}
+.marketing-preview-brand img{width:40px;height:40px;border-radius:10px}
+.marketing-preview-brand strong{font-size:1.12rem}
+.marketing-preview-body{padding:24px 20px 18px}
+.marketing-preview-body h3{font-size:1.5rem;line-height:1.16}
+.marketing-preview-cta{border-radius:10px;box-shadow:none;padding:12px 16px}
+.marketing-preview-footer{background:#fff;border-top:1px solid #e5ece9;padding:17px 20px}
+@media(max-width:650px){.marketing-compose-panel .admin-users-heading{align-items:flex-start;gap:12px}.marketing-compose-panel .admin-users-heading>.btn{width:auto;white-space:nowrap}}
