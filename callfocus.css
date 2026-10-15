@@ -3666,3 +3666,36 @@ html[data-theme="pearl"] .cf-interrupt-now .cf-redirect-icon{background:#fff1cf;
     padding-top:max(48px, calc(env(safe-area-inset-top) + 14px))!important;
   }
 }
+
+/* ========================================================================
+   CallFocus V15.48 Visual Test — Mobile sticky-header safe-area shield
+   Keep the iPhone status area visually clean while the page scrolls and
+   pull the sticky header slightly upward without putting controls under it.
+   ======================================================================== */
+@media (max-width:700px){
+  body[data-cf-document-view="home"]::after{
+    content:"";
+    position:fixed;
+    z-index:89;
+    top:0;
+    left:0;
+    right:0;
+    height:max(0px, env(safe-area-inset-top));
+    background:#eef7f4;
+    pointer-events:none;
+  }
+  html[data-theme="pearl"] body[data-cf-document-view="home"] .site-header{
+    background:#fff!important;
+    backdrop-filter:none!important;
+    -webkit-backdrop-filter:none!important;
+    isolation:isolate;
+  }
+}
+@media (display-mode:standalone) and (max-width:700px){
+  body[data-cf-document-view="home"]{
+    padding-top:max(0px, calc(env(safe-area-inset-top) - 8px))!important;
+  }
+  body[data-cf-document-view="home"] .site-header{
+    top:max(0px, calc(env(safe-area-inset-top) - 8px))!important;
+  }
+}
