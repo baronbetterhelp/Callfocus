@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.48-test';
+  const BUILD='15.57-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -456,7 +456,11 @@ function setSession(acc){ account=acc; localStorage.setItem(SESSION_KEY,acc.id);
 function saveData(){ if(!account||!data)return; writeJSON(accountDataKey(account.id),data); renderAccountUI(); renderWorkspace(); }
 function restoreSession(){ const id=localStorage.getItem(SESSION_KEY); if(!id){ account=null; data=null; renderAccountUI(); renderWorkspace(); return; } const acc=accounts().find(a=>a.id===id); if(!acc){localStorage.removeItem(SESSION_KEY);account=null;data=null;renderAccountUI();renderWorkspace();return;} setSession(acc); }
 async function createAccount(event){
-  event.preventDefault(); const name=$('signupName').value.trim(),email=$('signupEmail').value.trim().toLowerCase(),password=$('signupPassword').value,confirm=$('signupConfirm').value;
+  event?.preventDefault?.();
+  // V15.57: every signup path, including referral-link auto-open, must use
+  // the canonical email-verification flow once that handler is available.
+  if(typeof window.CallFocusEmailSignupStart==='function') return window.CallFocusEmailSignupStart();
+  const name=$('signupName').value.trim(),email=$('signupEmail').value.trim().toLowerCase(),password=$('signupPassword').value,confirm=$('signupConfirm').value;
   if(!name||!email||!password) return toast('Complete all account fields');
   if(password.length<8) return toast('Password must be at least 8 characters');
   if(password!==confirm) return toast('Passwords do not match');
@@ -3539,6 +3543,10 @@ ${approvedPatterns}
 
   async function createAccountServer(event){
     event?.preventDefault?.();
+    // V15.57 compatibility guard: a stale form binding must never post to
+    // the retired legacy /api/auth/signup endpoint. Delegate to the current
+    // email-verification signup flow whenever it has been installed.
+    if(typeof window.CallFocusEmailSignupStart==='function') return window.CallFocusEmailSignupStart();
     const name=$('signupName').value.trim();
     const email=$('signupEmail').value.trim().toLowerCase();
     const phone=String($('signupPhone')?.value||'').trim();
@@ -3986,7 +3994,24 @@ ${approvedPatterns}
     }finally{setBusy(button,false);}
   }
 
-  $v('signupForm').onsubmit=e=>{e.preventDefault();requestSignup();};
+  // V15.57: one authoritative signup path for normal links and referral links.
+  // The capture-phase listener runs before any stale legacy onsubmit handler,
+  // preventing accidental requests to the retired /api/auth/signup endpoint.
+  window.CallFocusEmailSignupStart=requestSignup;
+  function bindCanonicalSignupFlow(){
+    const form=$v('signupForm');
+    if(!form)return;
+    form.onsubmit=null;
+    if(form.dataset.cfVerifiedSignupBound==='1')return;
+    form.dataset.cfVerifiedSignupBound='1';
+    form.addEventListener('submit',event=>{
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      requestSignup();
+    },true);
+  }
+  bindCanonicalSignupFlow();
+  window.addEventListener('pageshow',bindCanonicalSignupFlow);
   window.createAccount=e=>{e?.preventDefault?.();requestSignup();};
   $v('verifySignupCodeBtn')?.addEventListener('click',verifySignup);
   $v('resendSignupCodeBtn')?.addEventListener('click',()=>requestSignup({resend:true}));
