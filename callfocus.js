@@ -6103,7 +6103,7 @@ ${approvedPatterns}
     const shortcut=byId('cfFirstCallAutoFillDescription');
     if(shortcut)shortcut.textContent=`Auto-fill can create About you, About the caller and Conversation dynamics from ${autoFillRangeLabel(max)}. Nothing is added to the form until you review it.`;
     const intro=byId('cfAutoFillIntro');
-    if(intro)intro.textContent=`Upload ${autoFillRangeLabel(max)}. Add a few facts about yourself first so CallFocus can separate your details from the person you are calling.`;
+    if(intro)intro.textContent=`Upload ${autoFillRangeLabel(max)}. Add a few facts about the caller first so CallFocus can identify them correctly throughout the conversation.`;
     const uploadCopy=byId('cfAutoFillUploadCopy');
     if(uploadCopy)uploadCopy.textContent=min===max?`Choose exactly ${min} screenshot${min===1?'':'s'}, preferably in conversation order.`:`Choose at least ${min} and up to ${max} screenshots, preferably in conversation order.`;
     if(autoFiles.length>max)autoFiles=autoFiles.slice(0,max);
@@ -6157,20 +6157,19 @@ ${approvedPatterns}
     wrap.innerHTML=`
       <div class="modal cf-autofill-modal" role="dialog" aria-modal="true" aria-labelledby="cfAutoFillTitle">
         <div class="modal-head">
-          <div><span class="section-eyebrow">First-call auto-fill</span><h2 id="cfAutoFillTitle">Generate all caller information</h2><p id="cfAutoFillIntro">Upload ${autoFillRangeLabel()}. Add a few facts about yourself first so CallFocus can separate your details from the person you are calling.</p></div>
+          <div><span class="section-eyebrow">First-call auto-fill</span><h2 id="cfAutoFillTitle">Generate all caller information</h2><p id="cfAutoFillIntro">Upload ${autoFillRangeLabel()}. Add a few facts about the caller first so CallFocus can identify them correctly throughout the conversation.</p></div>
           <button class="modal-close" type="button" id="cfAutoFillClose" aria-label="Close">×</button>
         </div>
         <div class="cf-autofill-personal">
-          <div class="field-heading"><strong>About you</strong><small>Required before generation</small></div>
-          <div class="form-grid three cf-autofill-meta-grid">
-            <label>Your name<input id="cfAutoSelfName" autocomplete="name" placeholder="e.g. Diane" /></label>
-            <label>Your age<input id="cfAutoSelfAge" type="number" inputmode="numeric" min="1" max="120" placeholder="e.g. 38" /></label>
-            <label>Your job / work type<input id="cfAutoSelfJob" placeholder="e.g. Medical aid assistant" /></label>
+          <div class="field-heading"><strong>About Caller</strong><small>Required before generation</small></div>
+          <div class="form-grid cf-autofill-meta-grid">
+            <label>Callers name<input id="cfAutoCallerName" autocomplete="name" placeholder="e.g. David" /></label>
+            <label>Callers Job or work type<input id="cfAutoCallerJob" placeholder="e.g. Construction worker" /></label>
           </div>
-          <p class="cf-autofill-note">These facts anchor the analysis. CallFocus will not invent missing personal information about either person.</p>
+          <p class="cf-autofill-note">These caller details anchor the analysis. CallFocus will not invent missing personal information about either person.</p>
         </div>
         <label class="dynamics-upload-zone cf-autofill-upload" for="cfAutoFillFiles">
-          <span class="dynamics-upload-icon">＋</span><strong>Upload conversation screenshots</strong>
+          <span class="dynamics-upload-icon">＋</span><strong>Upload Client &amp; Callers Conversation screenshot</strong>
           <p id="cfAutoFillUploadCopy">${minImages()===maxImages()?`Choose exactly ${minImages()} screenshot${minImages()===1?'':'s'}, preferably in conversation order.`:`Choose at least ${minImages()} and up to ${maxImages()} screenshots, preferably in conversation order.`}</p>
         </label>
         <input class="dynamics-file-input" id="cfAutoFillFiles" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple />
@@ -6199,7 +6198,7 @@ ${approvedPatterns}
     byId('cfAutoGenerateBtn').onclick=runAutoFill;
     byId('cfAutoApplyBtn').onclick=applyGeneratedInfo;
     byId('cfAutoFillFiles').addEventListener('change',e=>{selectAutoFiles([...e.target.files]);e.target.value='';});
-    ['cfAutoSelfName','cfAutoSelfAge','cfAutoSelfJob'].forEach(id=>byId(id)?.addEventListener('input',renderAutoSelection));
+    ['cfAutoCallerName','cfAutoCallerJob'].forEach(id=>byId(id)?.addEventListener('input',renderAutoSelection));
     wrap.addEventListener('click',e=>{if(e.target===wrap&&!autoBusy)closeAutoFill();});
   }
 
@@ -6230,9 +6229,8 @@ ${approvedPatterns}
     if(!token()){try{showAuth('signin',null,'Sign in to generate and save caller information.');}catch{notify('Sign in first.');}return;}
     installAutoFillModal();
     const profile=(typeof data!=='undefined'&&data?.profile)||{};
-    byId('cfAutoSelfName').value=safeText(profile.name||account?.name||'');
-    byId('cfAutoSelfJob').value=safeText(profile.role||'');
-    byId('cfAutoSelfAge').value='';
+    byId('cfAutoCallerName').value=safeText(byId('newCallPersonName')?.value||'');
+    byId('cfAutoCallerJob').value='';
     resetAutoFiles(true);
     refreshAutoFillLimitUI();
     openOverlay('cfAutoFillModal');
@@ -6271,7 +6269,7 @@ ${approvedPatterns}
     const min=minImages();
     const remaining=Math.max(0,min-autoFiles.length);
     if(note)note.textContent=remaining?`${remaining} more screenshot${remaining===1?'':'s'} required`:`${autoFiles.length} screenshots ready`;
-    const metaReady=!!safeText(byId('cfAutoSelfName')?.value)&&!!safeText(byId('cfAutoSelfAge')?.value)&&!!safeText(byId('cfAutoSelfJob')?.value);
+    const metaReady=!!safeText(byId('cfAutoCallerName')?.value)&&!!safeText(byId('cfAutoCallerJob')?.value);
     if(button)button.disabled=autoBusy||autoFiles.length<min||!metaReady;
     if(!thumbs)return;
     thumbs.innerHTML='';
@@ -6298,17 +6296,16 @@ ${approvedPatterns}
   async function api(body){
     const res=await fetch('/api/call-context/analyze',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token()}`},body:JSON.stringify(body),cache:'no-store'});let payload={};try{payload=await res.json()}catch{}if(!res.ok)throw new Error(payload?.error||'CallFocus could not generate the caller information.');return payload;
   }
-  async function analyzeBatch(images,batchNumber,totalBatches,analysisId,userMeta,callerHint){let last;for(let a=0;a<2;a++){try{return await api({kind:'batch',images,batchNumber,totalBatches,totalImageCount:autoFiles.length,analysisId,userMeta,callerHint});}catch(e){last=e;if(a===0)await new Promise(r=>setTimeout(r,650));}}throw last;}
+  async function analyzeBatch(images,batchNumber,totalBatches,analysisId,callerMeta,callerHint){let last;for(let a=0;a<2;a++){try{return await api({kind:'batch',images,batchNumber,totalBatches,totalImageCount:autoFiles.length,analysisId,callerMeta,callerHint});}catch(e){last=e;if(a===0)await new Promise(r=>setTimeout(r,650));}}throw last;}
 
   async function runAutoFill(){
     if(autoBusy)return;
-    const userMeta={name:safeText(byId('cfAutoSelfName')?.value),age:safeText(byId('cfAutoSelfAge')?.value),job:safeText(byId('cfAutoSelfJob')?.value)};
-    if(!userMeta.name||!userMeta.age||!userMeta.job)return notify('Enter your name, age and job/work type first.');
+    const callerMeta={name:safeText(byId('cfAutoCallerName')?.value),job:safeText(byId('cfAutoCallerJob')?.value)};
+    if(!callerMeta.name||!callerMeta.job)return notify('Enter the callers name and job/work type first.');
     const min=minImages();
     if(autoFiles.length<min)return notify(`Upload at least ${min} conversation screenshot${min===1?'':'s'}.`);
     const max=maxImages();
     if(autoFiles.length>max)return notify(`This CallFocus setup currently allows up to ${max} screenshots for automatic first-call information.`);
-    const age=Number(userMeta.age);if(!Number.isFinite(age)||age<1||age>120)return notify('Enter a valid age.');
     autoBusy=true;renderAutoSelection();byId('cfAutoGenerateBtn').textContent='Generating…';byId('cfAutoClearBtn').disabled=true;byId('cfAutoFillResults')?.classList.add('hidden');
     const batchSize=smallerBatches()?MOBILE_BATCH_SIZE:DESKTOP_BATCH_SIZE,totalBatches=Math.ceil(autoFiles.length/batchSize),summaries=[],analysisId=(crypto.randomUUID?.()||`cfctx_${Date.now()}_${Math.random().toString(36).slice(2,10)}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,96),callerHint=safeText(byId('newCallPersonName')?.value);
     try{
@@ -6316,10 +6313,10 @@ ${approvedPatterns}
         const start=b*batchSize,group=autoFiles.slice(start,start+batchSize),prepared=[];
         for(let j=0;j<group.length;j++){const index=start+j+1;setAutoProgress(((b+(j/group.length)*.38)/(totalBatches+1))*100,`Preparing screenshot ${index} of ${autoFiles.length}…`);prepared.push(await prepareImage(group[j]));await yieldBrowser();}
         setAutoProgress(((b+.45)/(totalBatches+1))*100,`Reading screenshots ${start+1}–${start+group.length} of ${autoFiles.length}…`);
-        const result=await analyzeBatch(prepared,b+1,totalBatches,analysisId,userMeta,callerHint);if(!result?.summary)throw new Error('One screenshot group did not return usable information.');summaries.push(result.summary);prepared.length=0;await yieldBrowser();setAutoProgress(((b+1)/(totalBatches+1))*100,`Read ${start+group.length} of ${autoFiles.length} screenshots.`);
+        const result=await analyzeBatch(prepared,b+1,totalBatches,analysisId,callerMeta,callerHint);if(!result?.summary)throw new Error('One screenshot group did not return usable information.');summaries.push(result.summary);prepared.length=0;await yieldBrowser();setAutoProgress(((b+1)/(totalBatches+1))*100,`Read ${start+group.length} of ${autoFiles.length} screenshots.`);
       }
       setAutoProgress((totalBatches/(totalBatches+1))*100,'Building About you, About the caller and conversation dynamics…');
-      const final=await api({kind:'finalize',summaries,imageCount:autoFiles.length,analysisId,userMeta,callerHint});
+      const final=await api({kind:'finalize',summaries,imageCount:autoFiles.length,analysisId,callerMeta,callerHint});
       if(!final?.aboutSelf||!final?.aboutCaller||!final?.dynamics)throw new Error('CallFocus could not create all three information sections.');
       byId('cfAutoAboutSelfResult').value=final.aboutSelf.trim();byId('cfAutoAboutCallerResult').value=final.aboutCaller.trim();byId('cfAutoDynamicsResult').value=final.dynamics.trim();
       byId('cfAutoFillResults').dataset.callerName=safeText(final.callerName||'');byId('cfAutoFillResults').classList.remove('hidden');setAutoProgress(100,`Finished using ${autoFiles.length} screenshots.`);byId('cfAutoFillResults').scrollIntoView({behavior:'smooth',block:'nearest'});

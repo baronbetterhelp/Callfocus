@@ -3775,12 +3775,12 @@ async function handleCallContextAnalyze(request, env) {
   const kind = body?.kind === 'finalize' ? 'finalize' : 'batch';
   const suppliedAnalysisId = String(body?.analysisId || '').trim();
   const analysisId = /^[A-Za-z0-9_-]{8,96}$/.test(suppliedAnalysisId) ? suppliedAnalysisId : crypto.randomUUID();
-  const meta = body?.userMeta && typeof body.userMeta === 'object' ? body.userMeta : {};
-  const userName = String(meta?.name || '').trim().slice(0, 120);
-  const userAge = String(meta?.age || '').trim().slice(0, 12);
-  const userJob = String(meta?.job || '').trim().slice(0, 180);
-  const callerHint = String(body?.callerHint || '').trim().slice(0, 120);
-  if (!userName || !userAge || !userJob) return json({ error: 'Enter your name, age and job/work type before generating.' }, 400);
+  const callerMeta = body?.callerMeta && typeof body.callerMeta === 'object' ? body.callerMeta : {};
+  const legacyMeta = body?.userMeta && typeof body.userMeta === 'object' ? body.userMeta : {};
+  const callerNameConfirmed = String(callerMeta?.name || legacyMeta?.name || '').trim().slice(0, 120);
+  const callerJobConfirmed = String(callerMeta?.job || legacyMeta?.job || '').trim().slice(0, 180);
+  const callerHint = String(body?.callerHint || callerNameConfirmed || '').trim().slice(0, 120);
+  if (!callerNameConfirmed || !callerJobConfirmed) return json({ error: 'Enter the callers name and job/work type before generating.' }, 400);
   const config = await getConfig(env);
   const minScreenshots = Math.max(1, Math.min(50, Math.round(Number(config.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin)));
   const maxScreenshots = Math.max(minScreenshots, Math.min(50, Math.round(Number(config.analysisScreenshotMax ?? config.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax)));
@@ -3799,8 +3799,8 @@ async function handleCallContextAnalyze(request, env) {
     if (totalChars > 32_000_000) return json({ error: 'This screenshot batch is too large. Please try again.' }, 413);
     const batchNumber = Math.max(1, Math.floor(Number(body?.batchNumber) || 1));
     const totalBatches = Math.max(batchNumber, Math.floor(Number(body?.totalBatches) || batchNumber));
-    const identity = `The CallFocus account holder is ${userName}, age ${userAge}, whose job/work type is ${userJob}.${callerHint ? ` The person they intend to call is named or believed to be named ${callerHint}.` : ''}`;
-    const content = [{ type: 'input_text', text: `${identity}\n\nYou are reading batch ${batchNumber} of ${totalBatches} ordered screenshots from the same private conversation. Build detailed analyst notes that will later be used to create three separate CallFocus fields: About the account holder, About the other caller, and Dynamics of Your Conversations.\n\nUse visible chat layout, names, message direction and wording carefully to distinguish the account holder from the other person. In common messaging layouts outgoing/right-side messages may belong to the account holder, but only use that cue when the interface clearly supports it. The supplied name/age/job are confirmed facts about the account holder and must not be reassigned to the other person.\n\nCapture explicit facts about each person: names, work, family, location, routines, responsibilities, preferences, plans, interests, relevant life context and anything else actually stated. Separately capture communication behavior: who initiates, response length and timing, warmth, affection, flirtation, humor, reassurance, conflict, boundaries, recurring subjects, future plans, unresolved situations, and changes in closeness. Preserve important concrete context with short paraphrases.\n\nDo not invent demographics, jobs, family relationships, diagnoses, motives or hidden facts. If a fact cannot be assigned confidently, mark it as uncertain in the notes rather than guessing. Treat overlapping screenshots as duplicate context, not additional evidence. Keep this batch summary under 850 words.` }];
+    const identity = `The person being called is confirmed to be ${callerNameConfirmed}, whose job/work type is ${callerJobConfirmed}. The CallFocus account holder/client is the other participant in the conversation and must be identified from the screenshot layout and message direction.`;
+    const content = [{ type: 'input_text', text: `${identity}\n\nYou are reading batch ${batchNumber} of ${totalBatches} ordered screenshots from the same private conversation. Build detailed analyst notes that will later be used to create three separate CallFocus fields: About the account holder/client, About the caller, and Dynamics of Your Conversations.\n\nUse visible chat layout, names, message direction and wording carefully to distinguish the account holder/client from the caller. In common messaging layouts outgoing/right-side messages may belong to the account holder/client, but only use that cue when the interface clearly supports it. The supplied caller name and caller job/work type are confirmed facts about the person being called and must not be reassigned to the account holder/client.\n\nCapture explicit facts about each person: names, work, family, location, routines, responsibilities, preferences, plans, interests, relevant life context and anything else actually stated. Separately capture communication behavior: who initiates, response length and timing, warmth, affection, flirtation, humor, reassurance, conflict, boundaries, recurring subjects, future plans, unresolved situations, and changes in closeness. Preserve important concrete context with short paraphrases.\n\nDo not invent demographics, jobs, family relationships, diagnoses, motives or hidden facts. If a fact cannot be assigned confidently, mark it as uncertain in the notes rather than guessing. Treat overlapping screenshots as duplicate context, not additional evidence. Keep this batch summary under 850 words.` }];
     for (const image of images) content.push({ type: 'input_image', image_url: image, detail: 'high' });
     try {
       const result = await callOpenAIResponses(env, { model: 'gpt-6-luna', store: false, reasoning: { effort: 'none' }, max_output_tokens: 1600, input: [{ role: 'user', content }] });
@@ -3815,7 +3815,49 @@ async function handleCallContextAnalyze(request, env) {
   if (imageCount < minScreenshots || imageCount > maxScreenshots) return json({ error: `Upload between ${minScreenshots} and ${maxScreenshots} screenshots for automatic first-call information.` }, 400);
   const joined = summaries.map((x,i)=>`BATCH ${i+1}\n${x.slice(0,5200)}`).join('\n\n');
   if (joined.length > 78_000) return json({ error: 'The combined conversation information is too large to finalize.' }, 413);
-  const prompt = `Create three CallFocus first-call context fields from the analyst notes below. They came from ${imageCount} ordered conversation screenshots.\n\nCONFIRMED ACCOUNT-HOLDER FACTS\nName: ${userName}\nAge: ${userAge}\nJob/work type: ${userJob}${callerHint ? `\nOther caller name hint: ${callerHint}` : ''}\n\nReturn STRICT JSON only with exactly these keys:\n{\n  "callerName": "",\n  "aboutSelf": "",\n  "aboutCaller": "",\n  "dynamics": ""\n}\n\nRequirements for aboutSelf:\n- Write roughly 140–260 useful words when enough information exists.\n- Start naturally with the confirmed name, age and job/work type.\n- Add only account-holder facts explicitly supported by the notes, plus their observed communication style and relevant ongoing context.\n- Do not invent missing biography.\n\nRequirements for aboutCaller:\n- Write roughly 140–300 useful words when enough information exists.\n- Include the other person's clearly supported name and facts, work, routines, family/life context, preferences, plans, communication style, and anything practically important for future calls.\n- If a detail is unsupported, omit it instead of saying it as fact.\n\nRequirements for callerName:\n- Use the other person's supported name when clear. Prefer the supplied caller-name hint when it matches the notes. If no name is supported, return an empty string.\n\nRequirements for dynamics:\n- Begin exactly with: Dynamics of Your Conversations\n- Aim for 550–850 words when the evidence supports that depth. Be shorter rather than inventing details.\n- Describe overall relationship dynamic and conversational rhythm, recurring everyday habits/topics, the other person's communication style, the account holder's communication style, how both styles interact, emotional support, affection/flirtation, humor, tension/conflict, boundaries, future plans, unresolved complications, important ongoing life context, progression in closeness/distance, and practical guidance for how a future CallFocus voice should behave.\n- Use short * bullets only where helpful for recurring concrete topics or routines.\n- Treat the relationship as established only to the degree supported by the messages.\n- Never invent missing personal information.\n- Do not mention screenshots, batches, AI, models, prompts or analysis.\n- Do not use labels such as Person A/Person B in the finished text. Refer to the account holder as "you" in the dynamics.\n\nMake all three text fields ready to paste directly into CallFocus. Escape line breaks correctly as JSON strings.\n\nANALYST NOTES\n${joined}`;
+  const prompt = `Create three CallFocus first-call context fields from the analyst notes below. They came from ${imageCount} ordered conversation screenshots.
+
+CONFIRMED CALLER FACTS
+Caller name: ${callerNameConfirmed}
+Caller job/work type: ${callerJobConfirmed}${callerHint && callerHint !== callerNameConfirmed ? `
+Caller name hint: ${callerHint}` : ''}
+
+Return STRICT JSON only with exactly these keys:
+{
+  "callerName": "",
+  "aboutSelf": "",
+  "aboutCaller": "",
+  "dynamics": ""
+}
+
+Requirements for aboutSelf:
+- Write roughly 140–260 useful words when enough information exists.
+- Describe the account holder/client using only facts explicitly supported by the notes, plus their observed communication style and relevant ongoing context.
+- Do not invent missing biography, age, job, location or relationships.
+
+Requirements for aboutCaller:
+- Write roughly 140–300 useful words when enough information exists.
+- Start naturally with the confirmed caller name and job/work type.
+- Include clearly supported routines, family/life context, preferences, plans, communication style, and anything practically important for future calls.
+- If a detail is unsupported, omit it instead of saying it as fact.
+
+Requirements for callerName:
+- Return the confirmed caller name: ${callerNameConfirmed}.
+
+Requirements for dynamics:
+- Begin exactly with: Dynamics of Your Conversations
+- Aim for 550–850 words when the evidence supports that depth. Be shorter rather than inventing details.
+- Describe overall relationship dynamic and conversational rhythm, recurring everyday habits/topics, the caller's communication style, the account holder/client's communication style, how both styles interact, emotional support, affection/flirtation, humor, tension/conflict, boundaries, future plans, unresolved complications, important ongoing life context, progression in closeness/distance, and practical guidance for how a future CallFocus voice should behave.
+- Use short * bullets only where helpful for recurring concrete topics or routines.
+- Treat the relationship as established only to the degree supported by the messages.
+- Never invent missing personal information.
+- Do not mention screenshots, batches, AI, models, prompts or analysis.
+- Do not use labels such as Person A/Person B in the finished text. Refer to the account holder/client as "you" in the dynamics.
+
+Make all three text fields ready to paste directly into CallFocus. Escape line breaks correctly as JSON strings.
+
+ANALYST NOTES
+${joined}`;
   try {
     const result = await callOpenAIResponses(env, { model: 'gpt-6-luna', store: false, reasoning: { effort: 'none' }, max_output_tokens: 3200, input: [{ role: 'user', content: [{ type: 'input_text', text: prompt }] }] });
     const parsed = parseCallContextJson(result.text);
@@ -4726,7 +4768,7 @@ export default {
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
     if (url.pathname === '/email/unsubscribe-preview' && request.method === 'GET') return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#173d37"><div style="max-width:560px;margin:70px auto;padding:20px"><div style="background:#fff;border:1px solid #d8e6e1;border-radius:26px;padding:34px"><h1>Test email only</h1><p>This is the unsubscribe preview from a CallFocus test email. No customer preference was changed.</p></div></div></body>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
     if (url.pathname === '/email/unsubscribe' && (request.method === 'GET' || request.method === 'POST')) return handleMarketingUnsubscribe(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.53-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.54-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
