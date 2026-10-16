@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.73-test';
+const ADMIN_BUILD_VERSION='15.74-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -40,6 +40,7 @@ let adminManualPaymentsLoading=false;
 let quickStartItems=[];
 let marketingSelectedUserIds=new Set();
 let directSelectedUserIds=new Set();
+let directFundingFilter='all';
 let directSending=false;
 let directTemplates=[];
 let directDraftTimer=null;
@@ -631,10 +632,27 @@ function directInvalidRecipientEmails(){
   const parts=raw.split(/[\s,;]+/).map(v=>v.trim().toLowerCase()).filter(Boolean);
   return [...new Set(parts.filter(v=>!directEmailValid(v)))];
 }
+function directUserIsFunded(user){return Number(user?.wallet?.purchaseCount||0)>0;}
+function directEligibleUsers(){return adminUsers.filter(u=>!u.accountDisabled&&u.emailVerified!==false);}
 function directRecipientRows(){
   const q=String($('directRecipientSearch')?.value||'').trim().toLowerCase();
-  const rows=adminUsers.filter(u=>!u.accountDisabled&&u.emailVerified!==false);
-  return q?rows.filter(u=>[u.name,u.email,u.phone].some(v=>String(v||'').toLowerCase().includes(q))):rows;
+  let rows=directEligibleUsers();
+  if(directFundingFilter==='funded')rows=rows.filter(directUserIsFunded);
+  if(directFundingFilter==='not_funded')rows=rows.filter(u=>!directUserIsFunded(u));
+  if(q)rows=rows.filter(u=>[u.name,u.email,u.phone].some(v=>String(v||'').toLowerCase().includes(q)));
+  return rows;
+}
+function renderDirectFundingControls(){
+  const eligible=directEligibleUsers();
+  const funded=eligible.filter(directUserIsFunded).length;
+  const notFunded=eligible.length-funded;
+  const counts={all:eligible.length,funded,not_funded:notFunded};
+  document.querySelectorAll('[data-direct-funding-filter]').forEach(btn=>{
+    const key=String(btn.dataset.directFundingFilter||'all');
+    btn.classList.toggle('active',key===directFundingFilter);
+    btn.setAttribute('aria-pressed',key===directFundingFilter?'true':'false');
+    const count=btn.querySelector('[data-direct-filter-count]');if(count)count.textContent=String(counts[key]??0);
+  });
 }
 function renderDirectRecipients(){
   const root=$('directRecipientList'),summary=$('directRecipientSummary');if(!root||!summary)return;
@@ -647,8 +665,24 @@ function renderDirectRecipients(){
   if(directSelectedUserIds.size)parts.push(`${directSelectedUserIds.size} saved customer${directSelectedUserIds.size===1?'':'s'}`);
   if(invalid.length)parts.push(`${invalid.length} invalid address${invalid.length===1?'':'es'}`);
   summary.textContent=parts.length?`${parts.join(' · ')} selected`:'No recipients selected yet.';
-  if(!rows.length){root.innerHTML='<div class="admin-users-empty">No matching active customer accounts. You can still send to any valid email address above.</div>';return;}
-  root.innerHTML=rows.map(u=>`<label class="marketing-recipient-row${directSelectedUserIds.has(u.id)?' selected':''}"><input type="checkbox" data-direct-user-id="${esc(u.id)}" ${directSelectedUserIds.has(u.id)?'checked':''}/><span class="marketing-recipient-avatar">${esc((u.name||u.email||'?').trim().charAt(0).toUpperCase()||'?')}</span><span class="marketing-recipient-copy"><strong>${esc(u.name||'Unnamed user')}</strong><small>${esc(u.email)}</small></span><span class="marketing-recipient-state">${u.unlimited?'Unlimited':'Active'}</span></label>`).join('');
+  renderDirectFundingControls();
+  const selectShown=$('directSelectShownBtn'),clearShown=$('directClearShownBtn');
+  if(selectShown)selectShown.disabled=!rows.length||rows.every(u=>directSelectedUserIds.has(u.id));
+  if(clearShown)clearShown.disabled=!rows.some(u=>directSelectedUserIds.has(u.id));
+  if(!rows.length){root.innerHTML='<div class="admin-users-empty">No customers match this search and funding filter. You can still send to any valid email address above.</div>';return;}
+  root.innerHTML=rows.map(u=>{
+    const funded=directUserIsFunded(u);
+    const purchaseCount=Number(u?.wallet?.purchaseCount||0);
+    const paid=Number(u?.wallet?.totalPaidNaira||0);
+    const fundingTitle=funded?`${purchaseCount} verified payment${purchaseCount===1?'':'s'} · ₦${paid.toLocaleString(undefined,{maximumFractionDigits:2})}`:'No verified payment yet';
+    return `<label class="marketing-recipient-row direct-recipient-row${directSelectedUserIds.has(u.id)?' selected':''}"><input type="checkbox" data-direct-user-id="${esc(u.id)}" ${directSelectedUserIds.has(u.id)?'checked':''}/><span class="marketing-recipient-avatar">${esc((u.name||u.email||'?').trim().charAt(0).toUpperCase()||'?')}</span><span class="marketing-recipient-copy"><strong>${esc(u.name||'Unnamed user')}</strong><small>${esc(u.email)}</small>${u.unlimited?'<small class="direct-recipient-access">Unlimited access</small>':''}</span><span class="direct-funding-badge ${funded?'funded':'not-funded'}" title="${esc(fundingTitle)}">${funded?'Funded':'Not funded'}</span></label>`;
+  }).join('');
+}
+function directSelectRows(select=true){
+  const rows=directRecipientRows();
+  rows.forEach(u=>{if(select)directSelectedUserIds.add(u.id);else directSelectedUserIds.delete(u.id);});
+  renderDirectRecipients();scheduleDirectDraftSave();
+  toast(select?`${rows.length} shown customer${rows.length===1?'':'s'} selected`:`${rows.length} shown customer${rows.length===1?'':'s'} cleared`);
 }
 function directShowResult(message,type='ok'){
   const box=$('directSendResult');if(!box)return;box.classList.remove('hidden','bad');if(type==='bad')box.classList.add('bad');box.textContent=message;
@@ -679,6 +713,9 @@ async function sendDirectCustomerEmail(){
 restoreDirectDraftLocal();
 ['directCustomEmails','directSubject','directMessage','directCtaLabel','directCtaUrl'].forEach(id=>$(id)?.addEventListener('input',()=>{if(id==='directCustomEmails')renderDirectRecipients();scheduleDirectDraftSave();}));
 $('directRecipientSearch')?.addEventListener('input',renderDirectRecipients);
+document.querySelectorAll('[data-direct-funding-filter]').forEach(btn=>btn.addEventListener('click',()=>{directFundingFilter=String(btn.dataset.directFundingFilter||'all');renderDirectRecipients();}));
+$('directSelectShownBtn')?.addEventListener('click',()=>directSelectRows(true));
+$('directClearShownBtn')?.addEventListener('click',()=>directSelectRows(false));
 $('directRecipientList')?.addEventListener('change',event=>{const box=event.target.closest('[data-direct-user-id]');if(!box)return;const id=box.dataset.directUserId;if(box.checked)directSelectedUserIds.add(id);else directSelectedUserIds.delete(id);renderDirectRecipients();scheduleDirectDraftSave();});
 $('directSaveTemplateBtn')?.addEventListener('click',saveDirectTemplate);
 $('directLoadTemplateBtn')?.addEventListener('click',loadSelectedDirectTemplate);

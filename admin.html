@@ -11,13 +11,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=15.73-test" />
+  <link rel="stylesheet" href="/admin.css?v=15.74-test" />
 </head>
 <body class="admin-page">
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="/admin">
-        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.73-test" alt="CallFocus" /></span>
+        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.74-test" alt="CallFocus" /></span>
         <span class="brand-copy"><strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong><small>Private system control</small></span>
       </a>
       <div class="header-actions"><a class="btn btn-ghost admin-back-link" href="/">Customer site</a></div>
@@ -170,6 +170,17 @@
                 <summary>Select saved CallFocus customer <span class="field-optional">Optional</span></summary>
                 <div class="direct-saved-customers-body">
                   <label>Find customer<input id="directRecipientSearch" type="search" autocomplete="off" placeholder="Name, email or phone" /></label>
+                  <div class="direct-customer-tools">
+                    <div class="direct-funding-filters" role="group" aria-label="Filter customers by verified payment status">
+                      <button class="direct-filter-chip active" type="button" data-direct-funding-filter="all" aria-pressed="true">All <span data-direct-filter-count>0</span></button>
+                      <button class="direct-filter-chip" type="button" data-direct-funding-filter="funded" aria-pressed="false">Funded <span data-direct-filter-count>0</span></button>
+                      <button class="direct-filter-chip" type="button" data-direct-funding-filter="not_funded" aria-pressed="false">Not funded <span data-direct-filter-count>0</span></button>
+                    </div>
+                    <div class="direct-customer-bulk-actions">
+                      <button class="btn btn-ghost" type="button" id="directSelectShownBtn">Select shown</button>
+                      <button class="btn btn-ghost" type="button" id="directClearShownBtn">Clear shown</button>
+                    </div>
+                  </div>
                   <div class="direct-recipient-list" id="directRecipientList"><div class="admin-users-empty">Customer accounts will appear here.</div></div>
                 </div>
               </details>
@@ -445,6 +456,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=15.73-test"></script>
+  <script src="/admin.js?v=15.74-test"></script>
 </body>
 </html>
