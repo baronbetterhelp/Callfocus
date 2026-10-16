@@ -3796,3 +3796,107 @@ input,textarea,select{min-width:0;max-width:100%}
   .container{width:calc(100% - 20px)}
   .field-section{grid-template-columns:36px minmax(0,1fr);gap:9px;padding:12px}
 }
+
+
+/* ===== CallFocus V15.76 Visual Test — new-call vertical-only viewport guard ===== */
+#newCallModal{
+  overflow-x:hidden!important;
+  overscroll-behavior-x:none;
+  touch-action:pan-y;
+}
+#newCallModal .call-form-modal{
+  width:min(900px,100%)!important;
+  max-width:100%!important;
+  min-width:0!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  overscroll-behavior-x:none;
+  touch-action:pan-y;
+}
+#newCallModal .modal-head,
+#newCallModal .new-call-form,
+#newCallModal .field-section,
+#newCallModal .field-content,
+#newCallModal .field-heading,
+#newCallModal .form-grid,
+#newCallModal .location-card,
+#newCallModal .voice-choice,
+#newCallModal .call-opening-box,
+#newCallModal .call-form-footer,
+#newCallModal .cf-first-call-tools,
+#newCallModal .cf-first-call-tools-copy,
+#newCallModal .cf-first-call-tools-actions{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+}
+#newCallModal input,
+#newCallModal textarea,
+#newCallModal select,
+#newCallModal button{
+  max-width:100%;
+}
+@media(max-width:960px){
+  #newCallModal .call-form-modal{width:100%!important;}
+}
+
+
+/* ===== CallFocus V15.77 Visual Test — restore mobile step layout + hard horizontal fit =====
+   Scope: new-call setup only. Restore the pre-V15.67 mobile arrangement where
+   the step number sits above the content, and remove the actual horizontal
+   overflow source so iPhone Safari can only move this sheet vertically. */
+#newCallModal{
+  width:100vw!important;
+  max-width:100vw!important;
+  overflow:hidden!important;
+  overscroll-behavior-x:none!important;
+}
+#newCallModal .call-form-modal{
+  width:min(900px,calc(100vw - 24px))!important;
+  max-width:calc(100vw - 24px)!important;
+  margin-left:auto!important;
+  margin-right:auto!important;
+  overflow-x:clip!important;
+  overscroll-behavior-x:none!important;
+  touch-action:pan-y!important;
+}
+#newCallModal .new-call-form,
+#newCallModal .field-section,
+#newCallModal .field-content,
+#newCallModal .form-grid,
+#newCallModal .location-card,
+#newCallModal .voice-choice,
+#newCallModal .call-opening-box{
+  min-width:0!important;
+  max-width:100%!important;
+}
+#newCallModal .new-call-form{overflow-x:clip!important;touch-action:pan-y!important}
+#newCallModal .field-content>*,
+#newCallModal .form-grid>*,
+#newCallModal label,
+#newCallModal .dynamics-warning,
+#newCallModal .preset-description,
+#newCallModal .location-autocomplete{
+  min-width:0!important;
+  max-width:100%!important;
+}
+#newCallModal input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+#newCallModal textarea,
+#newCallModal select{
+  width:100%!important;
+  min-width:0!important;
+  max-width:100%!important;
+}
+@media(max-width:620px){
+  #newCallModal .field-section{
+    grid-template-columns:minmax(0,1fr)!important;
+    gap:12px!important;
+    padding:14px!important;
+  }
+  #newCallModal .field-number{
+    width:31px!important;
+    height:31px!important;
+    justify-self:start!important;
+  }
+  #newCallModal .field-content{width:100%!important}
+}

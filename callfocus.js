@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.75-test';
+  const BUILD='15.77-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -7473,5 +7473,29 @@ ${approvedPatterns}
       }
     }).observe(m,{attributes:true,attributeFilter:['class']});
   }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else bind();
+})();
+
+
+/* ===== CallFocus V15.76 Visual Test — lock new-call setup to vertical scrolling ===== */
+(()=>{
+  const modal=()=>document.getElementById('newCallModal');
+  const scroller=()=>modal()?.querySelector('.call-form-modal');
+  const resetX=()=>{
+    const el=scroller();
+    if(!el)return;
+    if(el.scrollLeft!==0)el.scrollLeft=0;
+  };
+  const bind=()=>{
+    const el=scroller();
+    if(!el)return;
+    resetX();
+    el.addEventListener('scroll',resetX,{passive:true});
+    el.addEventListener('touchmove',resetX,{passive:true});
+    window.addEventListener('resize',resetX,{passive:true});
+    window.visualViewport?.addEventListener('resize',resetX,{passive:true});
+    new MutationObserver(()=>{if(!modal()?.classList.contains('hidden'))requestAnimationFrame(resetX)})
+      .observe(modal(),{attributes:true,attributeFilter:['class']});
+  };
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else bind();
 })();
