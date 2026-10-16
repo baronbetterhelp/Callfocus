@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.64-test';
+  const BUILD='15.65-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -7336,4 +7336,102 @@ ${approvedPatterns}
       return `${base}\n\nCALLFLOW PACING\n- The call must not sound rushed. Treat silence and the other person’s replies as part of the conversation.\n- Never deliver several prepared points back-to-back. Introduce one meaningful thought or question, then listen.\n- After the opening, normally allow the other person to respond before moving into the purpose of the call.\n- Personal, romantic, friendship and family calls should establish human connection before moving into heavier details unless the situation clearly requires urgency.\n- Business or professional calls should be concise but not abrupt: greet, establish context, state one purpose naturally, pause for acknowledgement, then continue one point at a time.\n- Sensitive calls should use softer transitions and permission-based language rather than jumping straight into the hardest point.\n- Adapt to what the other person actually says instead of marching through a checklist.\n${rebuilt?'- Today’s topic is a CallFocus rebuilt natural call plan. Follow its sequence and pacing as flexible guidance. Never read it verbatim or announce its headings.':''}`;
     };
   }
+})();
+
+/* ===== CallFocus V15.65 Visual Test — iOS new-call screenshot scroll stability ===== */
+(()=>{
+  const MODAL_ID='newCallModal';
+  let stableTop=0;
+  let userScrollUntil=0;
+  let restoring=false;
+  let touchActive=false;
+  let bound=false;
+
+  const modal=()=>document.getElementById(MODAL_ID);
+  const scroller=()=>modal()?.querySelector('.call-form-modal');
+  const isOpen=()=>{const m=modal();return !!m&&!m.classList.contains('hidden')};
+  const now=()=>{try{return performance.now()}catch{return Date.now()}};
+
+  function capture(){
+    if(!isOpen())return;
+    const el=scroller();if(!el)return;
+    stableTop=Math.max(0,Number(el.scrollTop)||0);
+  }
+  function markUserScroll(extra=900){
+    userScrollUntil=now()+extra;
+    capture();
+  }
+  function restore(){
+    if(!isOpen()||stableTop<2)return;
+    const el=scroller();if(!el)return;
+    if(Math.abs((Number(el.scrollTop)||0)-stableTop)<2)return;
+    restoring=true;
+    try{el.scrollTop=stableTop}catch{}
+    requestAnimationFrame(()=>{
+      try{if(isOpen())el.scrollTop=stableTop}catch{}
+      restoring=false;
+    });
+  }
+  function queueRestore(){
+    if(!isOpen())return;
+    requestAnimationFrame(restore);
+    setTimeout(restore,70);
+    setTimeout(restore,220);
+  }
+  function onScroll(){
+    if(restoring||!isOpen())return;
+    const el=scroller();if(!el)return;
+    const top=Math.max(0,Number(el.scrollTop)||0);
+
+    // Normal finger/mouse scrolling and ordinary programmatic movement are allowed
+    // to become the new saved position. The one case we reject is Safari suddenly
+    // snapping a deeply-scrolled setup back to the very top while there was no
+    // user scroll gesture, which can happen around an iPhone screenshot/viewport event.
+    // An abrupt, near-zero jump with no finger currently on the scroller is the
+    // Safari failure we are guarding. Check this before the short momentum window
+    // so a screenshot taken immediately after scrolling is still protected.
+    if(!touchActive && top<=48 && stableTop>=80 && Math.abs(top-stableTop)>=64){
+      queueRestore();
+      return;
+    }
+    if(touchActive || now()<=userScrollUntil || stableTop<80 || top>48 || Math.abs(top-stableTop)<32){
+      stableTop=top;
+      return;
+    }
+    stableTop=top;
+  }
+  function bind(){
+    if(bound)return;
+    const m=modal(),el=scroller();if(!m||!el)return;
+    bound=true;
+    stableTop=Math.max(0,Number(el.scrollTop)||0);
+    el.addEventListener('scroll',onScroll,{passive:true});
+    el.addEventListener('touchstart',()=>{touchActive=true;markUserScroll(1300)},{passive:true});
+    el.addEventListener('touchmove',()=>markUserScroll(1300),{passive:true});
+    el.addEventListener('touchend',()=>{touchActive=false;userScrollUntil=now()+1000},{passive:true});
+    el.addEventListener('touchcancel',()=>{touchActive=false;userScrollUntil=now()+350},{passive:true});
+    el.addEventListener('pointerdown',()=>markUserScroll(1000),{passive:true});
+    el.addEventListener('wheel',()=>markUserScroll(900),{passive:true});
+
+    window.addEventListener('blur',capture,{passive:true});
+    window.addEventListener('focus',queueRestore,{passive:true});
+    window.addEventListener('resize',queueRestore,{passive:true});
+    window.addEventListener('pageshow',queueRestore,{passive:true});
+    window.visualViewport?.addEventListener('resize',queueRestore,{passive:true});
+    document.addEventListener('visibilitychange',()=>{
+      if(document.visibilityState==='hidden')capture();
+      else queueRestore();
+    },{passive:true});
+
+    // Observe open/close changes so a fresh modal session starts from its actual
+    // current scroll position instead of carrying a stale guard position.
+    new MutationObserver(()=>{
+      if(isOpen()){
+        requestAnimationFrame(()=>{const s=scroller();stableTop=Math.max(0,Number(s?.scrollTop)||0)});
+      }else{
+        stableTop=0;userScrollUntil=0;restoring=false;touchActive=false;
+      }
+    }).observe(m,{attributes:true,attributeFilter:['class']});
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else bind();
 })();
