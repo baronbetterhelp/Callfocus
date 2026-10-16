@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.59-test';
+  const BUILD='15.60-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -7169,3 +7169,162 @@ ${approvedPatterns}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ensureControls,{once:true});else ensureControls();
 })();
 
+
+
+/* ===== CallFocus V15.60 — Natural Call Plan Rebuild ===== */
+(()=>{
+  const REBUILD_ENDPOINT='/api/call-plan/rebuild';
+
+  function rebuildIcon(){
+    return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h7.6l-2.1-2.1L14 3.4 18.6 8 14 12.6l-1.5-1.5L14.6 9H7a4 4 0 0 0-4 4c0 2.2 1.8 4 4 4h2v2H7a6 6 0 0 1 0-12Zm10 0h-2V5h2a6 6 0 0 1 0 12H9.4l2.1 2.1-1.5 1.5L5.4 16 10 11.4l1.5 1.5L9.4 15H17a4 4 0 1 0 0-8Z"/></svg>`;
+  }
+
+  function rebuildMarkup(scope){
+    const id=scope==='repeat'?'repeatCallRebuildBtn':'newCallRebuildBtn';
+    const statusId=scope==='repeat'?'repeatCallRebuildStatus':'newCallRebuildStatus';
+    return `<div class="cf-call-rebuild" data-call-rebuild="${scope}">
+      <div class="cf-call-rebuild-copy">
+        <div class="cf-call-rebuild-title"><span>CallFocus Rebuild</span><b>Recommended</b></div>
+        <p>Turn your rough notes into a slower, natural call flow before the call starts.</p>
+        <small id="${statusId}">Optional · Recommended for the best call experience.</small>
+      </div>
+      <button type="button" class="cf-call-rebuild-btn" id="${id}">${rebuildIcon()}<span>Rebuild</span></button>
+    </div>`;
+  }
+
+  function ensureNewCallRebuild(){
+    const topic=document.getElementById('newCallTopic');
+    if(!topic)return;
+    const label=topic.closest('label');
+    if(!label||label.parentElement?.querySelector('[data-call-rebuild="new"]'))return;
+    label.insertAdjacentHTML('afterend',rebuildMarkup('new'));
+  }
+
+  function ensureRepeatCallRebuild(){
+    const topic=document.getElementById('repeatTopic');
+    if(!topic)return;
+    const label=topic.closest('label');
+    if(!label||label.parentElement?.querySelector('[data-call-rebuild="repeat"]'))return;
+    label.insertAdjacentHTML('afterend',rebuildMarkup('repeat'));
+  }
+
+  function safeText(value,max=5000){return String(value??'').trim().slice(0,max)}
+  function selectedThread(){
+    try{return data?.threads?.find(t=>t.id===selectedThreadId)||null}catch{return null}
+  }
+  function collectContext(scope){
+    if(scope==='repeat'){
+      const t=selectedThread()||{};
+      return {
+        mode:'repeat',
+        topic:safeText(document.getElementById('repeatTopic')?.value,7000),
+        title:safeText(t.title,180),
+        callerName:safeText(t.callerName,140),
+        aboutSelf:safeText(document.getElementById('repeatAboutSelf')?.value||t.aboutSelf,4500),
+        aboutCaller:safeText(document.getElementById('repeatAboutCaller')?.value||t.aboutCaller,4500),
+        dynamics:safeText(document.getElementById('repeatDynamics')?.value||t.dynamics,5000),
+        dynamicsMode:safeText(document.getElementById('repeatDynamicsMode')?.value||t.dynamicsMode,60),
+        language:safeText(document.getElementById('repeatCallLanguage')?.value||t.callLanguage||'English',80),
+        openingMode:safeText(document.getElementById('repeatOpeningMode')?.value||t.openingMode||'auto',30),
+        previousTopic:safeText(t.calls?.length?t.calls[t.calls.length-1]?.topic:'',2500)
+      };
+    }
+    return {
+      mode:'new',
+      topic:safeText(document.getElementById('newCallTopic')?.value,7000),
+      title:safeText(document.getElementById('newCallTitle')?.value,180),
+      callerName:safeText(document.getElementById('newCallPersonName')?.value,140),
+      aboutSelf:safeText(document.getElementById('newCallAboutSelf')?.value,4500),
+      aboutCaller:safeText(document.getElementById('newCallAboutCaller')?.value,4500),
+      dynamics:safeText(document.getElementById('newCallDynamics')?.value,5000),
+      dynamicsMode:safeText(document.getElementById('newCallDynamicsMode')?.value,60),
+      language:safeText(document.getElementById('newCallLanguage')?.value||'English',80),
+      openingMode:safeText(document.getElementById('newCallOpeningMode')?.value||'auto',30),
+      previousTopic:''
+    };
+  }
+
+  function setRebuildState(scope,state,message=''){
+    const btn=document.getElementById(scope==='repeat'?'repeatCallRebuildBtn':'newCallRebuildBtn');
+    const status=document.getElementById(scope==='repeat'?'repeatCallRebuildStatus':'newCallRebuildStatus');
+    const card=btn?.closest('.cf-call-rebuild');
+    if(btn){
+      btn.disabled=state==='busy';
+      btn.classList.toggle('busy',state==='busy');
+      btn.innerHTML=`${rebuildIcon()}<span>${state==='busy'?'Rebuilding…':'Rebuild'}</span>`;
+    }
+    card?.classList.toggle('ready',state==='ready');
+    card?.classList.toggle('error',state==='error');
+    if(status){
+      if(message)status.textContent=message;
+      else if(state==='busy')status.textContent='Building a natural, unhurried call flow…';
+      else if(state==='ready')status.textContent='Natural call plan ready. You can still edit it before calling.';
+      else status.textContent='Optional · Recommended for the best call experience.';
+    }
+  }
+
+  async function rebuild(scope){
+    const field=document.getElementById(scope==='repeat'?'repeatTopic':'newCallTopic');
+    if(!field)return;
+    const context=collectContext(scope);
+    if(!context.topic){
+      setRebuildState(scope,'error','Add what today’s call is about first, then tap Rebuild.');
+      try{field.focus()}catch{}
+      return;
+    }
+    if(context.topic.length<8){
+      setRebuildState(scope,'error','Add a little more detail so CallFocus can build a useful call flow.');
+      return;
+    }
+    setRebuildState(scope,'busy');
+    try{
+      const response=await fetch(REBUILD_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify(context)});
+      const payload=await response.json().catch(()=>({}));
+      if(!response.ok)throw new Error(payload?.error||'Could not rebuild this call right now.');
+      const plan=safeText(payload?.plan,9000);
+      if(!plan)throw new Error('CallFocus returned an empty call plan. Please try again.');
+      field.value=plan;
+      field.dataset.callfocusRebuilt='true';
+      field.dataset.callfocusCategory=safeText(payload?.category,40);
+      field.dispatchEvent(new Event('input',{bubbles:true}));
+      field.dispatchEvent(new Event('change',{bubbles:true}));
+      const category=safeText(payload?.category,40);
+      setRebuildState(scope,'ready',`${category?category[0].toUpperCase()+category.slice(1)+' · ':''}Natural call plan ready. Edit anything you want before starting.`);
+      try{field.scrollIntoView({behavior:'smooth',block:'center'})}catch{}
+    }catch(error){
+      setRebuildState(scope,'error',String(error?.message||'Could not rebuild this call right now.'));
+    }
+  }
+
+  document.addEventListener('click',e=>{
+    if(e.target.closest('#newCallRebuildBtn')){rebuild('new');return}
+    if(e.target.closest('#repeatCallRebuildBtn')){rebuild('repeat');return}
+  });
+
+  document.addEventListener('input',e=>{
+    if(e.target?.id==='newCallTopic' && e.isTrusted){e.target.dataset.callfocusRebuilt='false';setRebuildState('new','idle')}
+    if(e.target?.id==='repeatTopic' && e.isTrusted){e.target.dataset.callfocusRebuilt='false';setRebuildState('repeat','idle')}
+  },true);
+
+  // New-call form is present in every customer shell.
+  ensureNewCallRebuild();
+  document.addEventListener('click',e=>{if(e.target.closest('[data-new-call],#newCallBtn,.new-call-button'))setTimeout(ensureNewCallRebuild,0)},true);
+
+  // Recent Calls is rendered dynamically. Wrap the final renderer so the Rebuild card
+  // is reinserted every time a thread is opened or restored.
+  if(typeof renderThreadDetail==='function'){
+    const previousRender=renderThreadDetail;
+    renderThreadDetail=function(id){const result=previousRender(id);queueMicrotask(ensureRepeatCallRebuild);return result};
+  }
+  window.addEventListener('pageshow',()=>{ensureNewCallRebuild();setTimeout(ensureRepeatCallRebuild,0)});
+
+  // Strengthen delivery for all calls and give rebuilt plans special handling.
+  if(typeof buildInstructions==='function'){
+    const previousBuild=buildInstructions;
+    buildInstructions=function(c){
+      const base=previousBuild(c);
+      const rebuilt=/^Natural call plan\b/i.test(String(c?.topic||'').trim()) || c?.topicRebuilt===true;
+      return `${base}\n\nCALLFLOW PACING\n- The call must not sound rushed. Treat silence and the other person’s replies as part of the conversation.\n- Never deliver several prepared points back-to-back. Introduce one meaningful thought or question, then listen.\n- After the opening, normally allow the other person to respond before moving into the purpose of the call.\n- Personal, romantic, friendship and family calls should establish human connection before moving into heavier details unless the situation clearly requires urgency.\n- Business or professional calls should be concise but not abrupt: greet, establish context, state one purpose naturally, pause for acknowledgement, then continue one point at a time.\n- Sensitive calls should use softer transitions and permission-based language rather than jumping straight into the hardest point.\n- Adapt to what the other person actually says instead of marching through a checklist.\n${rebuilt?'- Today’s topic is a CallFocus rebuilt natural call plan. Follow its sequence and pacing as flexible guidance. Never read it verbatim or announce its headings.':''}`;
+    };
+  }
+})();

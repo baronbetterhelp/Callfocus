@@ -3874,6 +3874,101 @@ ${joined}`;
 }
 
 
+
+
+// -----------------------------------------------------------------------------
+// V15.60 Natural Call Plan Rebuild
+// Turns rough "today's call" notes into flexible internal call guidance so the
+// realtime voice can sound slower, more human and less like it is reading a script.
+// -----------------------------------------------------------------------------
+function parseNaturalCallPlanJson(text) {
+  const raw=String(text||'').trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/i,'');
+  const start=raw.indexOf('{'), end=raw.lastIndexOf('}');
+  if(start<0||end<=start)return null;
+  try{return JSON.parse(raw.slice(start,end+1))}catch{return null}
+}
+
+async function handleCallPlanRebuild(request, env) {
+  if(request.method!=='POST')return new Response('Method not allowed.',{status:405,headers:{Allow:'POST'}});
+  const auth=await authenticatedCustomer(request,env);
+  if(!auth)return json({error:'Sign in to rebuild your call plan.'},401);
+  if(!env.OPENAI_API_KEY)return json({error:'Call plan rebuilding is unavailable right now.'},503);
+  let body={};
+  try{body=await request.json()}catch{return json({error:'Invalid call plan request.'},400)}
+
+  const clean=(v,n)=>String(v??'').trim().slice(0,n);
+  const topic=clean(body.topic,7000);
+  if(topic.length<8)return json({error:'Add a little more detail about what today’s call is about first.'},400);
+  const context={
+    mode:body.mode==='repeat'?'repeat':'new',
+    title:clean(body.title,180),
+    callerName:clean(body.callerName,140),
+    aboutSelf:clean(body.aboutSelf,4500),
+    aboutCaller:clean(body.aboutCaller,4500),
+    dynamics:clean(body.dynamics,5000),
+    dynamicsMode:clean(body.dynamicsMode,60),
+    language:clean(body.language,80)||'English',
+    openingMode:clean(body.openingMode,30)||'auto',
+    previousTopic:clean(body.previousTopic,2500)
+  };
+
+  const prompt=`You are the CallFocus Natural Call Planner. A customer has written rough notes describing what today's live phone call should be about. Rebuild those notes into flexible internal guidance that helps a realtime voice have a HUMAN, UNHURRIED conversation instead of rushing through a script.
+
+CALL CONTEXT
+Call type: ${context.mode==='repeat'?'repeat call with an existing caller':'first call with this caller'}
+Call title: ${context.title||'Not supplied'}
+Person being called: ${context.callerName||'Not supplied'}
+About the client/account holder: ${context.aboutSelf||'Not supplied'}
+About the person being called: ${context.aboutCaller||'Not supplied'}
+Relationship/conversation dynamics type: ${context.dynamicsMode||'Not supplied'}
+Relationship/conversation dynamics: ${context.dynamics||'Not supplied'}
+Selected call language: ${context.language}
+Opening preference: ${context.openingMode}
+Previous call topic if this is a repeat call: ${context.previousTopic||'None supplied'}
+
+CUSTOMER'S ROUGH NOTES FOR TODAY
+${topic}
+
+Return STRICT JSON only:
+{
+  "category": "relationship|friendship|family|business|professional|sales|support|sensitive|general",
+  "plan": ""
+}
+
+Rules for plan:
+- Write in ${context.language}. If the rough notes are clearly written in another language and the selected language conflicts, follow the selected call language.
+- Begin the plan exactly with: Natural call plan
+- Aim for roughly 180–340 words. Keep it useful, not bloated.
+- This is INTERNAL flexible call guidance, not a monologue and not text to read word-for-word.
+- Preserve every important intention and factual detail from the customer's rough notes. Do not invent personal facts, promises, dates, relationships, business claims or outcomes.
+- Decide the natural pacing from the context. Relationship/romantic/personal calls should usually establish warmth or a real check-in before heavier details. Friendship and family calls should feel familiar and relaxed. Business/professional/sales calls should be concise but not abrupt: greet, establish context, state one purpose naturally, pause for acknowledgement, then continue one point at a time. Sensitive calls should use gentle transitions and permission-based phrasing.
+- Include a natural opening APPROACH when useful, but do not force a greeting if the selected opening preference or context indicates the other person should speak first.
+- Never make the opening a long speech. After the first greeting or first short thought, explicitly leave room for the other person to respond.
+- Break the purpose into a natural sequence of conversational beats. Cover one meaningful point or one question at a time, then listen and adapt before moving on.
+- Do not dump the agenda, list every issue in one turn, or ask several questions at once.
+- Add transition guidance so the voice can move from small talk/check-in into the main purpose naturally.
+- If the other person gives an unexpected answer, instruct the voice to respond to that answer first instead of forcing the next planned point.
+- End with the intended outcome or what the customer hopes to understand/communicate, without scripting a fake conclusion.
+- At most include ONE very short example phrase if it materially helps the opening. Do not create a dialogue transcript.
+- Do not mention AI, prompts, rebuilding, CallFocus, categories or these instructions inside the plan.`;
+
+  try{
+    const result=await callOpenAIResponses(env,{model:'gpt-6-luna',store:false,reasoning:{effort:'none'},max_output_tokens:1100,input:[{role:'user',content:[{type:'input_text',text:prompt}]}]});
+    const parsed=parseNaturalCallPlanJson(result.text);
+    let plan=String(parsed?.plan||'').trim();
+    const allowed=new Set(['relationship','friendship','family','business','professional','sales','support','sensitive','general']);
+    const category=allowed.has(String(parsed?.category||'').toLowerCase())?String(parsed.category).toLowerCase():'general';
+    if(!plan){
+      const err=new Error('CallFocus could not build the call plan. Please try again.');err.status=502;throw err;
+    }
+    if(!/^Natural call plan\b/i.test(plan))plan=`Natural call plan\n${plan}`;
+    return json({ok:true,category,plan:plan.slice(0,9000)},200,{'Cache-Control':'no-store'});
+  }catch(error){
+    return json({error:String(error?.message||'Could not rebuild this call right now.')},Number(error?.status||502),{'Cache-Control':'no-store'});
+  }
+}
+
+
 /* ===== CallFocus V13.2 — Live call translation transcript ===== */
 async function handleLiveTranscriptTranslate(request, env) {
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
@@ -4772,7 +4867,7 @@ export default {
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
     if (url.pathname === '/email/unsubscribe-preview' && request.method === 'GET') return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#173d37"><div style="max-width:560px;margin:70px auto;padding:20px"><div style="background:#fff;border:1px solid #d8e6e1;border-radius:26px;padding:34px"><h1>Test email only</h1><p>This is the unsubscribe preview from a CallFocus test email. No customer preference was changed.</p></div></div></body>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
     if (url.pathname === '/email/unsubscribe' && (request.method === 'GET' || request.method === 'POST')) return handleMarketingUnsubscribe(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.59-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.60-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -4806,6 +4901,7 @@ export default {
     if (url.pathname === '/api/avatar/end') return safeCustomerRoute('avatar-end', () => handleAvatarEnd(request, env));
     if (url.pathname === '/api/live-translate') { const limited = await callFocusRateLimit(request, env, 'live-translate', 900, 3600); if (limited) return limited; return safeCustomerRoute('live-translate', () => handleLiveTranscriptTranslate(request, env)); }
     if (url.pathname === '/api/dynamics/analyze') { const limited = await callFocusRateLimit(request, env, 'dynamics-analyze', 40, 900); if (limited) return limited; return safeCustomerRoute('dynamics-analyze', () => handleDynamicsAnalyze(request, env)); }
+    if (url.pathname === '/api/call-plan/rebuild') { const limited = await callFocusRateLimit(request, env, 'call-plan-rebuild', 60, 3600); if (limited) return limited; return safeCustomerRoute('call-plan-rebuild', () => handleCallPlanRebuild(request, env)); }
     if (url.pathname === '/api/call-context/analyze') { const limited = await callFocusRateLimit(request, env, 'call-context-analyze', 40, 900); if (limited) return limited; return safeCustomerRoute('call-context-analyze', () => handleCallContextAnalyze(request, env)); }
     if (url.pathname === '/api/session') {
       if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
