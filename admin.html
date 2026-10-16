@@ -11,13 +11,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=15.71-test" />
+  <link rel="stylesheet" href="/admin.css?v=15.72-test" />
 </head>
 <body class="admin-page">
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="/admin">
-        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.71-test" alt="CallFocus" /></span>
+        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.72-test" alt="CallFocus" /></span>
         <span class="brand-copy"><strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong><small>Private system control</small></span>
       </a>
       <div class="header-actions"><a class="btn btn-ghost admin-back-link" href="/">Customer site</a></div>
@@ -136,6 +136,20 @@
             <div class="direct-email-compose">
               <label>Recipient email(s)<textarea id="directCustomEmails" rows="2" maxlength="4000" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="name@example.com"></textarea><span class="field-help">Enter one or more email addresses separated by commas, spaces or new lines.</span></label>
               <div class="direct-recipient-summary" id="directRecipientSummary">No recipients selected yet.</div>
+              <div class="direct-message-library">
+                <div class="direct-message-library-head">
+                  <div><strong>Saved messages</strong><small>Your current draft saves automatically on this device. Save reusable messages here to load them anytime.</small></div>
+                </div>
+                <div class="form-grid two direct-message-library-grid">
+                  <label>Message name<input id="directTemplateName" maxlength="80" placeholder="Welcome message" /></label>
+                  <label>Saved messages<select id="directTemplateSelect"><option value="">No saved messages yet</option></select></label>
+                </div>
+                <div class="direct-message-library-actions">
+                  <button class="btn btn-ghost" type="button" id="directSaveTemplateBtn">Save message</button>
+                  <button class="btn btn-ghost" type="button" id="directLoadTemplateBtn">Load selected</button>
+                  <button class="btn btn-ghost direct-template-delete" type="button" id="directDeleteTemplateBtn">Delete</button>
+                </div>
+              </div>
               <details class="direct-saved-customers">
                 <summary>Select saved CallFocus customer <span class="field-optional">Optional</span></summary>
                 <div class="direct-saved-customers-body">
@@ -415,6 +429,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=15.71-test"></script>
+  <script src="/admin.js?v=15.72-test"></script>
 </body>
 </html>

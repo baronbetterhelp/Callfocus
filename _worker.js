@@ -319,6 +319,65 @@ const MARKETING_CAMPAIGN_TTL = 60 * 60 * 24 * 365;
 const MARKETING_UNSUBSCRIBE_TTL = 60 * 60 * 24 * 365 * 5;
 const MARKETING_DRAFT_KEY = 'marketing:draft:v1';
 const MARKETING_DRAFT_TTL = 60 * 60 * 24 * 365 * 2;
+const DIRECT_EMAIL_TEMPLATES_KEY = 'direct-email:templates:v1';
+const DIRECT_EMAIL_TEMPLATES_TTL = 60 * 60 * 24 * 365 * 2;
+const DIRECT_EMAIL_TEMPLATE_LIMIT = 30;
+
+function directEmailTemplatePayload(body = {}, previous = {}) {
+  return {
+    id: String(body?.id || previous?.id || crypto.randomUUID()).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 80) || crypto.randomUUID(),
+    name: cleanMarketingText(body?.name, 80),
+    subject: cleanMarketingText(body?.subject, 160),
+    message: cleanMarketingText(body?.message, 5000),
+    ctaLabel: cleanMarketingText(body?.ctaLabel, 48),
+    ctaUrl: marketingHttpUrl(body?.ctaUrl),
+    createdAt: String(previous?.createdAt || new Date().toISOString()),
+    updatedAt: new Date().toISOString()
+  };
+}
+async function readDirectEmailTemplates(env) {
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.get !== 'function') return [];
+  try {
+    const raw = await env.CALLFOCUS_CONFIG.get(DIRECT_EMAIL_TEMPLATES_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter(Boolean).slice(0, DIRECT_EMAIL_TEMPLATE_LIMIT) : [];
+  } catch { return []; }
+}
+async function writeDirectEmailTemplates(env, templates = []) {
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.put !== 'function') throw new Error('Global customer storage is not connected.');
+  const rows = Array.isArray(templates) ? templates.slice(0, DIRECT_EMAIL_TEMPLATE_LIMIT) : [];
+  await env.CALLFOCUS_CONFIG.put(DIRECT_EMAIL_TEMPLATES_KEY, JSON.stringify(rows), { expirationTtl: DIRECT_EMAIL_TEMPLATES_TTL });
+  return rows;
+}
+async function handleAdminDirectEmailTemplates(request, env) {
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.get !== 'function' || typeof env.CALLFOCUS_CONFIG.put !== 'function') return json({ error: 'Global customer storage is not connected.' }, 503);
+  if (request.method === 'GET') return json({ ok: true, templates: await readDirectEmailTemplates(env) });
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET, POST' } });
+  let body = {};
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const action = String(body?.action || 'save').trim().toLowerCase();
+  let templates = await readDirectEmailTemplates(env);
+  if (action === 'delete') {
+    const id = String(body?.id || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 80);
+    if (!id) return json({ error: 'Choose a saved message first.' }, 400);
+    templates = templates.filter(item => String(item?.id || '') !== id);
+    await writeDirectEmailTemplates(env, templates);
+    return json({ ok: true, templates });
+  }
+  if (action !== 'save') return json({ error: 'Unknown saved-message action.' }, 400);
+  const requestedId = String(body?.id || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 80);
+  const existing = requestedId ? templates.find(item => String(item?.id || '') === requestedId) : null;
+  const template = directEmailTemplatePayload({ ...body, id: requestedId || undefined }, existing || {});
+  if (!template.name) return json({ error: 'Add a name for this saved message.' }, 400);
+  if (!template.subject || !template.message) return json({ error: 'Add an email subject and message before saving.' }, 400);
+  if (!!template.ctaLabel !== !!template.ctaUrl) return json({ error: 'Add both button text and a valid http(s) button link, or leave both blank.' }, 400);
+  templates = templates.filter(item => String(item?.id || '') !== template.id);
+  templates.unshift(template);
+  templates = await writeDirectEmailTemplates(env, templates);
+  return json({ ok: true, template, templates });
+}
+
 
 function marketingDraftPayload(body = {}) {
   return {
@@ -5186,7 +5245,7 @@ export default {
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
     if (url.pathname === '/email/unsubscribe-preview' && request.method === 'GET') return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#173d37"><div style="max-width:560px;margin:70px auto;padding:20px"><div style="background:#fff;border:1px solid #d8e6e1;border-radius:26px;padding:34px"><h1>Test email only</h1><p>This is the unsubscribe preview from a CallFocus test email. No customer preference was changed.</p></div></div></body>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
     if (url.pathname === '/email/unsubscribe' && (request.method === 'GET' || request.method === 'POST')) return handleMarketingUnsubscribe(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.71-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.72-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -5197,6 +5256,7 @@ export default {
     if (url.pathname === '/api/admin/quick-start') return handleAdminQuickStart(request, env);
     if (url.pathname === '/api/admin/users') return handleAdminUsers(request, env);
     if (url.pathname === '/api/admin/direct-email') return handleAdminDirectEmail(request, env);
+    if (url.pathname === '/api/admin/direct-email-templates') return handleAdminDirectEmailTemplates(request, env);
     if (url.pathname === '/api/admin/marketing-email') return handleAdminMarketingEmail(request, env);
     if (url.pathname === '/api/admin/ai-usage') return handleAdminAiUsage(request, env);
     if (url.pathname === '/api/admin/logout') return handleAdminLogout(request, env);
@@ -5229,10 +5289,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.71-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.72-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.71-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.71-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.72-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.72-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -5242,16 +5302,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.71-test');
+      headers.set('X-CallFocus-Admin-Build', '15.72-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.71-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.72-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.71-test');
+      headers.set('X-CallFocus-Admin-Build', '15.72-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {

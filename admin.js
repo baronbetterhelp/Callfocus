@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.71-test';
+const ADMIN_BUILD_VERSION='15.72-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -41,6 +41,9 @@ let quickStartItems=[];
 let marketingSelectedUserIds=new Set();
 let directSelectedUserIds=new Set();
 let directSending=false;
+let directTemplates=[];
+let directDraftTimer=null;
+const DIRECT_DRAFT_STORAGE_KEY='callfocus_admin_direct_message_draft_v1';
 let marketingHistory=[];
 let marketingSending=false;
 let marketingDraftLoaded=false;
@@ -215,7 +218,7 @@ async function addUnlimitedUser(){
 }
 function fill(config,storageConnected){currentConfig=config;customVoices=Array.isArray(config.customVoices)?config.customVoices:[];populateVoices();renderCustomVoiceLibrary();unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;if($('adminManualPaymentsEnabled'))$('adminManualPaymentsEnabled').checked=config.manualPaymentsEnabled===true;if($('adminManualBankName'))$('adminManualBankName').value=config.manualPaymentBankName||'';if($('adminManualAccountName'))$('adminManualAccountName').value=config.manualPaymentAccountName||'';if($('adminManualAccountNumber'))$('adminManualAccountNumber').value=config.manualPaymentAccountNumber||'';if($('adminManualPaymentEmail'))$('adminManualPaymentEmail').value=config.manualPaymentNotificationEmail||'support@callfocus.link';if($('adminAnalysisScreenshotMin'))$('adminAnalysisScreenshotMin').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMin)||20)));if($('adminAnalysisScreenshotMax'))$('adminAnalysisScreenshotMax').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMax)||Number(config.autoFillScreenshotLimit)||50)));fillQuickStart(config.quickStart||{});renderScreenshotLimitsSummary();$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);if($('adminDashStorage'))$('adminDashStorage').textContent=storageConnected?'Global storage connected':'Storage needs attention';renderServerState();renderBackupStatus(storageConnected)}
 async function api(path,options={}){const res=await fetch(path,{credentials:'same-origin',...options,headers:authHeaders(options.headers||{})});const type=res.headers.get('content-type')||'';const data=type.includes('application/json')?await res.json():await res.text();if(!res.ok)throw Object.assign(new Error(data?.error||data||'Request failed'),{status:res.status});return data}
-async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{const auth=await api('/api/admin/login',{method:'POST'});adminKey=auth.adminToken||key;rememberAdminSession(adminKey);$('adminPasscode').value='';const result=await api('/api/admin/config');$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminManualPayments().then(()=>loadAdminUsers(true));loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadMarketingStatus();}catch(err){adminKey='';if(err.status===401||err.status===403)forgetAdminSession();$('adminGateNote').textContent=err.message;toast(err.message)}}
+async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{const auth=await api('/api/admin/login',{method:'POST'});adminKey=auth.adminToken||key;rememberAdminSession(adminKey);$('adminPasscode').value='';const result=await api('/api/admin/config');$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminManualPayments().then(()=>loadAdminUsers(true));loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadMarketingStatus();loadDirectTemplates();}catch(err){adminKey='';if(err.status===401||err.status===403)forgetAdminSession();$('adminGateNote').textContent=err.message;toast(err.message)}}
 async function saveConfig(message='Global CallFocus settings saved'){
   const btn=$('saveAdminBtn'),old=btn?.textContent||'Save global settings';
   if(btn){btn.disabled=true;btn.textContent='Saving…'}
@@ -562,8 +565,59 @@ $('runDiagnosticsBtn')?.addEventListener('click',runDiagnostics);
 
 
 
-/* CallFocus V15.71 — direct email CTA alignment and sizing polish. */
+/* CallFocus V15.72 — persistent direct-email draft + reusable saved messages. */
 function directValue(id){return String($(id)?.value||'').trim();}
+function directDraftPayload(){return {customEmails:directValue('directCustomEmails'),selectedUserIds:[...directSelectedUserIds],subject:directValue('directSubject'),message:directValue('directMessage'),ctaLabel:directValue('directCtaLabel'),ctaUrl:directValue('directCtaUrl'),updatedAt:new Date().toISOString()};}
+function saveDirectDraftLocal(){try{localStorage.setItem(DIRECT_DRAFT_STORAGE_KEY,JSON.stringify(directDraftPayload()));}catch{}}
+function scheduleDirectDraftSave(){clearTimeout(directDraftTimer);directDraftTimer=setTimeout(saveDirectDraftLocal,180);}
+function restoreDirectDraftLocal(){
+  try{
+    const raw=localStorage.getItem(DIRECT_DRAFT_STORAGE_KEY);if(!raw)return;const d=JSON.parse(raw)||{};
+    if($('directCustomEmails'))$('directCustomEmails').value=String(d.customEmails||'');
+    if($('directSubject'))$('directSubject').value=String(d.subject||'');
+    if($('directMessage'))$('directMessage').value=String(d.message||'');
+    if($('directCtaLabel'))$('directCtaLabel').value=String(d.ctaLabel??'Open CallFocus');
+    if($('directCtaUrl'))$('directCtaUrl').value=String(d.ctaUrl??'https://callfocus.link');
+    if(Array.isArray(d.selectedUserIds))directSelectedUserIds=new Set(d.selectedUserIds.map(v=>String(v||'')).filter(Boolean));
+  }catch{}
+}
+function renderDirectTemplates(){
+  const select=$('directTemplateSelect');if(!select)return;const selected=String(select.value||'');
+  if(!directTemplates.length){select.innerHTML='<option value="">No saved messages yet</option>';return;}
+  select.innerHTML='<option value="">Choose a saved message</option>'+directTemplates.map(item=>`<option value="${esc(item.id)}">${esc(item.name||item.subject||'Saved message')}</option>`).join('');
+  if(directTemplates.some(x=>x.id===selected))select.value=selected;
+}
+async function loadDirectTemplates(){
+  if(!adminKey)return;try{const data=await api('/api/admin/direct-email-templates');directTemplates=Array.isArray(data.templates)?data.templates:[];renderDirectTemplates();}catch(err){console.warn('Could not load direct email templates',err);}
+}
+async function saveDirectTemplate(){
+  const name=directValue('directTemplateName'),subject=directValue('directSubject'),message=directValue('directMessage'),ctaLabel=directValue('directCtaLabel'),ctaUrl=directValue('directCtaUrl');
+  if(!name)return toast('Add a name for this saved message');
+  if(!subject||!message)return toast('Add an email subject and message first');
+  if((ctaLabel&&!ctaUrl)||(!ctaLabel&&ctaUrl))return toast('Add both button text and button link, or leave both blank');
+  const btn=$('directSaveTemplateBtn'),old=btn?.textContent||'Save message';if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  try{const currentId=String($('directTemplateSelect')?.value||'');const result=await api('/api/admin/direct-email-templates',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'save',id:currentId,name,subject,message,ctaLabel,ctaUrl})});directTemplates=Array.isArray(result.templates)?result.templates:[];renderDirectTemplates();if(result.template?.id&&$('directTemplateSelect'))$('directTemplateSelect').value=result.template.id;toast(currentId?'Saved message updated':'Message saved');}
+  catch(err){toast(err.message||'Could not save message');}
+  finally{if(btn){btn.disabled=false;btn.textContent=old;}}
+}
+function loadSelectedDirectTemplate(){
+  const id=String($('directTemplateSelect')?.value||'');const item=directTemplates.find(x=>x.id===id);if(!item)return toast('Choose a saved message first');
+  if($('directTemplateName'))$('directTemplateName').value=String(item.name||'');
+  if($('directSubject'))$('directSubject').value=String(item.subject||'');
+  if($('directMessage'))$('directMessage').value=String(item.message||'');
+  if($('directCtaLabel'))$('directCtaLabel').value=String(item.ctaLabel||'');
+  if($('directCtaUrl'))$('directCtaUrl').value=String(item.ctaUrl||'');
+  saveDirectDraftLocal();toast('Saved message loaded');
+}
+async function deleteSelectedDirectTemplate(){
+  const id=String($('directTemplateSelect')?.value||'');const item=directTemplates.find(x=>x.id===id);if(!item)return toast('Choose a saved message first');
+  if(!confirm(`Delete saved message “${item.name||item.subject||'Saved message'}”?`))return;
+  const btn=$('directDeleteTemplateBtn'),old=btn?.textContent||'Delete';if(btn){btn.disabled=true;btn.textContent='Deleting…';}
+  try{const result=await api('/api/admin/direct-email-templates',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'delete',id})});directTemplates=Array.isArray(result.templates)?result.templates:[];renderDirectTemplates();if($('directTemplateName'))$('directTemplateName').value='';toast('Saved message deleted');}
+  catch(err){toast(err.message||'Could not delete saved message');}
+  finally{if(btn){btn.disabled=false;btn.textContent=old;}}
+}
+
 function directEmailValid(email=''){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email||'').trim());}
 function directCustomRecipientEmails(){
   const raw=directValue('directCustomEmails');
@@ -621,10 +675,16 @@ async function sendDirectCustomerEmail(){
   }catch(err){directShowResult(err.message||'Could not send direct message','bad');toast(err.message||'Could not send direct message');}
   finally{directSending=false;if(btn){btn.disabled=false;btn.textContent=old;}}
 }
-$('directCustomEmails')?.addEventListener('input',renderDirectRecipients);
+restoreDirectDraftLocal();
+['directCustomEmails','directSubject','directMessage','directCtaLabel','directCtaUrl'].forEach(id=>$(id)?.addEventListener('input',()=>{if(id==='directCustomEmails')renderDirectRecipients();scheduleDirectDraftSave();}));
 $('directRecipientSearch')?.addEventListener('input',renderDirectRecipients);
-$('directRecipientList')?.addEventListener('change',event=>{const box=event.target.closest('[data-direct-user-id]');if(!box)return;const id=box.dataset.directUserId;if(box.checked)directSelectedUserIds.add(id);else directSelectedUserIds.delete(id);renderDirectRecipients();});
+$('directRecipientList')?.addEventListener('change',event=>{const box=event.target.closest('[data-direct-user-id]');if(!box)return;const id=box.dataset.directUserId;if(box.checked)directSelectedUserIds.add(id);else directSelectedUserIds.delete(id);renderDirectRecipients();scheduleDirectDraftSave();});
+$('directSaveTemplateBtn')?.addEventListener('click',saveDirectTemplate);
+$('directLoadTemplateBtn')?.addEventListener('click',loadSelectedDirectTemplate);
+$('directDeleteTemplateBtn')?.addEventListener('click',deleteSelectedDirectTemplate);
 $('directSendBtn')?.addEventListener('click',sendDirectCustomerEmail);
+window.addEventListener('pagehide',saveDirectDraftLocal);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')saveDirectDraftLocal();});
 
 /* CallFocus V15.49 — premium promotional email studio. */
 function marketingAudience(){return document.querySelector('input[name="marketingAudience"]:checked')?.value==='selected'?'selected':'all';}
