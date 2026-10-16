@@ -3997,7 +3997,15 @@ IMPORTANT RETRY: Your previous answer could not be read by the application. Retu
     if(!/^Natural call plan\b/i.test(plan))plan=`Natural call plan\n${plan}`;
     return json({ok:true,category:recovered.category||'general',plan:plan.slice(0,9000)},200,{'Cache-Control':'no-store'});
   }catch(error){
-    return json({error:String(error?.message||'Could not rebuild this call right now.')},Number(error?.status||502),{'Cache-Control':'no-store'});
+    const message=String(error?.message||'');
+    const promptPolicyError=/(invalid prompt|usage policy|policy violation|content policy|flagged as potentially violating)/i.test(message);
+    if(promptPolicyError){
+      return json({
+        error:'Please edit what today’s call is about and try again, or continue without the AI-assisted Rebuild.',
+        code:'call_plan_prompt_needs_edit'
+      },400,{'Cache-Control':'no-store'});
+    }
+    return json({error:message||'Could not rebuild this call right now.'},Number(error?.status||502),{'Cache-Control':'no-store'});
   }
 }
 
@@ -4900,7 +4908,7 @@ export default {
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
     if (url.pathname === '/email/unsubscribe-preview' && request.method === 'GET') return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#173d37"><div style="max-width:560px;margin:70px auto;padding:20px"><div style="background:#fff;border:1px solid #d8e6e1;border-radius:26px;padding:34px"><h1>Test email only</h1><p>This is the unsubscribe preview from a CallFocus test email. No customer preference was changed.</p></div></div></body>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
     if (url.pathname === '/email/unsubscribe' && (request.method === 'GET' || request.method === 'POST')) return handleMarketingUnsubscribe(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.62-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.63-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
