@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.70-test';
+const ADMIN_BUILD_VERSION='15.71-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -562,7 +562,7 @@ $('runDiagnosticsBtn')?.addEventListener('click',runDiagnostics);
 
 
 
-/* CallFocus V15.70 — direct email panel with custom-address support. */
+/* CallFocus V15.71 — direct email CTA alignment and sizing polish. */
 function directValue(id){return String($(id)?.value||'').trim();}
 function directEmailValid(email=''){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email||'').trim());}
 function directCustomRecipientEmails(){
