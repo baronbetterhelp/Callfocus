@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.74-test';
+const ADMIN_BUILD_VERSION='15.75-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -814,7 +814,7 @@ function renderResendUsage(usage){
   if($('resendMonthlySent'))$('resendMonthlySent').textContent=`${Math.max(0,Number(monthly.sent)||0).toLocaleString()} sent this month${Number(monthly.received)>0?` · ${Math.max(0,Number(monthly.received)||0).toLocaleString()} received`:''}`;
   const reset=daily.resetsAt?new Date(daily.resetsAt):null;
   if($('resendUsageReset'))$('resendUsageReset').textContent=reset&&!Number.isNaN(reset.getTime())?`Daily quota resets ${reset.toLocaleString()}`:'Daily quota reset time unavailable.';
-  if(live){live.textContent='Live from Resend';live.classList.add('is-ready');}
+  if(live){live.textContent=usage?.keySource==='dedicated'?'Live from Resend · Usage key':'Live from Resend';live.classList.add('is-ready');}
   if(note){
     const pct=dailyLimit?Math.min(100,Math.round((dailyUsed/dailyLimit)*100)):null;
     note.textContent=dailyLimit===null?'Your current Resend plan has no daily cap reported by the Usage API.':`${remaining.toLocaleString()} email${remaining===1?'':'s'} remaining today · ${pct}% of the daily quota used.`;
