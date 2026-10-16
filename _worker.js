@@ -1432,27 +1432,19 @@ async function handleCustomerData(request, env) {
   const incoming = body?.data;
   if (!validCustomerDataShape(incoming)) return json({ error: 'Invalid account data.' }, 400);
 
-  // V11.22: Paystack can update the wallet while an older browser tab is still
-  // open. Never let a stale full-account sync overwrite a newer server wallet.
-  // Also protect against an equal-revision race: if the server wallet contains a
-  // Paystack purchase reference that the incoming browser wallet is missing, the
-  // server wallet wins. Legitimate usage deductions retain purchase references.
+  // V15.68: the server wallet is authoritative. General account/profile syncs
+  // must never replace balance, purchases or usage from a browser snapshot. This
+  // closes the cross-device/KV race where an older customer tab could overwrite
+  // a manual payment, admin gift, Paystack credit or server-side call charge.
   const currentServerData = (await env.CALLFOCUS_CONFIG.get(customerDataKey(auth.user.id), { type: 'json' })) || null;
   if (validCustomerDataShape(currentServerData) && currentServerData.wallet) {
-    const serverRevision = Math.max(0, Number(currentServerData.wallet?.revision) || 0);
-    const incomingRevision = Math.max(0, Number(incoming.wallet?.revision) || 0);
-    const serverFundingRefs = wallet => new Set((Array.isArray(wallet?.purchases) ? wallet.purchases : [])
-      .filter(p => ['paystack','manual_bank_transfer','referral_reward'].includes(String(p?.provider || '').toLowerCase()))
-      .map(p => String(p?.reference || p?.id || '').trim())
-      .filter(Boolean));
-    const currentFundingRefs = serverFundingRefs(currentServerData.wallet);
-    const incomingFundingRefs = serverFundingRefs(incoming.wallet);
-    const incomingMissingServerPurchase = [...currentFundingRefs].some(ref => !incomingFundingRefs.has(ref));
-    if (serverRevision > incomingRevision || (serverRevision === incomingRevision && incomingMissingServerPurchase)) {
-      incoming.wallet = currentServerData.wallet;
-    }
+    incoming.wallet = normalizeServerWallet(currentServerData.wallet);
+  } else if (incoming.wallet) {
+    // Recovery-only fallback for an old account whose server data was missing.
+    incoming.wallet = normalizeServerWallet(incoming.wallet);
+  } else {
+    incoming.wallet = normalizeServerWallet(defaultCustomerData(auth.user.name).wallet);
   }
-  if (incoming.wallet) incoming.wallet = normalizeServerWallet(incoming.wallet);
 
   const encoded = JSON.stringify(incoming);
   if (new TextEncoder().encode(encoded).byteLength > CUSTOMER_DATA_MAX_BYTES) return json({ error: 'Account data is too large.' }, 413);
@@ -1857,6 +1849,55 @@ async function handleCreditEntitlement(request, env) {
 }
 
 
+
+async function handleWalletConsume(request, env) {
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Session expired.', code: 'session_expired' }, 401);
+  let body = {};
+  try { body = await request.json(); } catch { return json({ error: 'Invalid credit usage request.' }, 400); }
+  const requestedSeconds = Math.max(0, Math.min(3600, Math.ceil(Number(body?.seconds) || 0)));
+  const referenceId = String(body?.referenceId || '').trim().replace(/[^A-Za-z0-9:_-]/g, '').slice(0, 140);
+  const type = String(body?.type || '').trim().toLowerCase();
+  if (!requestedSeconds || !referenceId || !['voice_note'].includes(type)) return json({ error: 'Invalid credit usage request.' }, 400);
+
+  const config = await getConfig(env);
+  const unlimitedEmails = Array.isArray(config.unlimitedCreditEmails) ? config.unlimitedCreditEmails.map(normalizeCustomerEmail).filter(Boolean) : [];
+  const data = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
+  const wallet = normalizeServerWallet(data.wallet);
+  if (unlimitedEmails.includes(normalizeCustomerEmail(auth.user.email))) {
+    return json({ ok: true, unlimited: true, deductedSeconds: 0, requestedSeconds, wallet }, 200, { 'Cache-Control': 'no-store' });
+  }
+
+  const ledgerId = `voice-note:${referenceId}`;
+  const existing = wallet.usage.find(row => String(row?.id || '') === ledgerId);
+  if (existing) {
+    return json({ ok: true, duplicate: true, deductedSeconds: Math.max(0, Number(existing.seconds) || 0), requestedSeconds, wallet }, 200, { 'Cache-Control': 'no-store' });
+  }
+  const before = Math.max(0, Math.floor(Number(wallet.balanceSeconds) || 0));
+  const deductedSeconds = Math.min(before, requestedSeconds);
+  if (deductedSeconds <= 0) return json({ error: 'Not enough CallFocus credit.', code: 'insufficient_credit', wallet }, 402, { 'Cache-Control': 'no-store' });
+  wallet.balanceSeconds = Math.max(0, before - deductedSeconds);
+  wallet.revision = Math.max(0, Number(wallet.revision) || 0) + 1;
+  wallet.usage.unshift({
+    id: ledgerId,
+    type: 'voice_note',
+    referenceId,
+    seconds: deductedSeconds,
+    credits: Math.round((deductedSeconds / CALLFOCUS_SECONDS_PER_CREDIT) * 10) / 10,
+    createdAt: new Date().toISOString(),
+    note: 'Server-authoritative voice note credit usage'
+  });
+  wallet.usage = wallet.usage.slice(0, 250);
+  data.wallet = wallet;
+  await env.CALLFOCUS_CONFIG.put(customerDataKey(auth.user.id), JSON.stringify(data));
+  const confirmed = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
+  const confirmedWallet = normalizeServerWallet(confirmed.wallet);
+  const confirmedLedger = confirmedWallet.usage.find(row => String(row?.id || '') === ledgerId);
+  if (!confirmedLedger) return json({ error: 'Credit usage could not be verified. Please try again.', code: 'wallet_write_unverified' }, 503, { 'Cache-Control': 'no-store' });
+  return json({ ok: deductedSeconds >= requestedSeconds, deductedSeconds, requestedSeconds, wallet: confirmedWallet }, deductedSeconds >= requestedSeconds ? 200 : 409, { 'Cache-Control': 'no-store' });
+}
+
 async function handleAdminUnlimitedUser(request, env) {
   if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
@@ -1957,6 +1998,72 @@ async function handleAdminUsers(request, env) {
   });
 }
 
+
+async function commitWalletUsageCredit(env, user, { ledgerId, type, credits, seconds, note, createdAt }) {
+  const id = String(ledgerId || '').trim();
+  if (!user?.id || !id) throw new Error('Credit grant is missing its account or ledger identifier.');
+  const addSeconds = Math.max(0, Math.floor(Number(seconds) || 0));
+  if (!addSeconds) throw new Error('Credit grant amount is invalid.');
+  let lastData = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const data = await getCustomerDataForUpdate(env, user.id, user.name);
+    const wallet = normalizeServerWallet(data.wallet);
+    const existing = wallet.usage.find(row => String(row?.id || '') === id);
+    if (existing) return { data, wallet, duplicate: true, verified: true, ledger: existing };
+    wallet.balanceSeconds = Math.max(0, Math.floor(Number(wallet.balanceSeconds) || 0)) + addSeconds;
+    wallet.revision = Math.max(0, Number(wallet.revision) || 0) + 1;
+    const ledger = {
+      id,
+      type: String(type || 'admin_credit_grant'),
+      credits: Math.max(0, Number(credits) || 0),
+      seconds: addSeconds,
+      createdAt: createdAt || new Date().toISOString(),
+      note: String(note || 'Credits added by CallFocus admin').slice(0, 180)
+    };
+    wallet.usage.unshift(ledger);
+    wallet.usage = wallet.usage.slice(0, 250);
+    data.wallet = wallet;
+    await env.CALLFOCUS_CONFIG.put(customerDataKey(user.id), JSON.stringify(data));
+    lastData = data;
+    const confirmed = await getCustomerDataForUpdate(env, user.id, user.name);
+    const confirmedWallet = normalizeServerWallet(confirmed.wallet);
+    const confirmedLedger = confirmedWallet.usage.find(row => String(row?.id || '') === id);
+    if (confirmedLedger) return { data: confirmed, wallet: confirmedWallet, duplicate: false, verified: true, ledger: confirmedLedger };
+  }
+  return { data: lastData, wallet: normalizeServerWallet(lastData?.wallet || {}), duplicate: false, verified: false, ledger: null };
+}
+
+async function commitWalletPurchaseCredit(env, user, purchase = {}) {
+  const reference = String(purchase?.reference || purchase?.id || '').trim();
+  if (!user?.id || !reference) throw new Error('Payment credit is missing its account or reference.');
+  const addSeconds = Math.max(0, Math.floor(Number(purchase?.seconds) || 0));
+  if (!addSeconds) throw new Error('Payment credit amount is invalid.');
+  let lastData = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const data = await getCustomerDataForUpdate(env, user.id, user.name);
+    const wallet = normalizeServerWallet(data.wallet);
+    const existing = wallet.purchases.find(row => String(row?.reference || row?.id || '') === reference);
+    if (existing) return { data, wallet, duplicate: true, verified: true, purchase: existing };
+    // A full 250-row purchase ledger may have legitimately pruned an old item.
+    // Do not reconstruct a missing reference in that edge case because the old
+    // amount may already be included in the balance.
+    if (wallet.purchases.length >= 250) return { data, wallet, duplicate: true, verified: true, purchase: null, ledgerPruned: true };
+    wallet.balanceSeconds = Math.max(0, Math.floor(Number(wallet.balanceSeconds) || 0)) + addSeconds;
+    wallet.revision = Math.max(0, Number(wallet.revision) || 0) + 1;
+    const row = { ...purchase, id: purchase.id || reference, reference, seconds: addSeconds };
+    wallet.purchases.unshift(row);
+    wallet.purchases = wallet.purchases.slice(0, 250);
+    data.wallet = wallet;
+    await env.CALLFOCUS_CONFIG.put(customerDataKey(user.id), JSON.stringify(data));
+    lastData = data;
+    const confirmed = await getCustomerDataForUpdate(env, user.id, user.name);
+    const confirmedWallet = normalizeServerWallet(confirmed.wallet);
+    const confirmedPurchase = confirmedWallet.purchases.find(item => String(item?.reference || item?.id || '') === reference);
+    if (confirmedPurchase) return { data: confirmed, wallet: confirmedWallet, duplicate: false, verified: true, purchase: confirmedPurchase };
+  }
+  return { data: lastData, wallet: normalizeServerWallet(lastData?.wallet || {}), duplicate: false, verified: false, purchase: null };
+}
+
 async function handleAdminUserAction(request, env) {
   if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
@@ -2012,21 +2119,17 @@ async function handleAdminUserAction(request, env) {
     credits = Math.round(credits * 10) / 10;
     const secondsAdded = callFocusSecondsForCredits(credits);
     if (!Number.isFinite(secondsAdded) || !Number.isSafeInteger(secondsAdded) || secondsAdded <= 0) return json({ error: 'That credit amount cannot be safely added.' }, 400);
-    const wallet = normalizeServerWallet(data.wallet);
-    wallet.balanceSeconds = Math.max(0, Math.floor(Number(wallet.balanceSeconds) || 0)) + secondsAdded;
-    wallet.revision = Math.max(0, Number(wallet.revision) || 0) + 1;
     const ledgerId = `admin-credit-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
-    wallet.usage.unshift({
-      id: ledgerId,
+    const committed = await commitWalletUsageCredit(env, user, {
+      ledgerId,
       type: 'admin_credit_grant',
       credits,
       seconds: secondsAdded,
       createdAt: now,
       note: 'Credits added by CallFocus admin'
     });
-    wallet.usage = wallet.usage.slice(0, 250);
-    data.wallet = wallet;
-    await env.CALLFOCUS_CONFIG.put(customerDataKey(user.id), JSON.stringify(data));
+    if (!committed.verified) return json({ error: 'The credit update could not be verified. No confirmation was sent. Please retry.' }, 503);
+    const committedData = committed.data;
 
     const amountText = credits.toLocaleString(undefined, { maximumFractionDigits: 1 });
     const customerName = String(user.name || 'there').trim().slice(0, 120) || 'there';
@@ -2036,6 +2139,7 @@ async function handleAdminUserAction(request, env) {
       .replace(/\{customer\}|\{name\}/gi, customerName)
       .slice(0, 360);
     const notification = await appendCustomerNotification(env, user.id, {
+      id: ledgerId,
       type: 'admin_credit',
       title: 'Credits added',
       message,
@@ -2044,7 +2148,7 @@ async function handleAdminUserAction(request, env) {
     });
     const refreshedConfig = await getConfig(env);
     const unlimitedEmails = Array.isArray(refreshedConfig.unlimitedCreditEmails) ? refreshedConfig.unlimitedCreditEmails.map(normalizeCustomerEmail).filter(Boolean) : [];
-    return json({ ok: true, action, creditsAdded: credits, notification, user: adminUserSummary(user, data, unlimitedEmails), unlimitedCreditEmails: unlimitedEmails });
+    return json({ ok: true, action, creditsAdded: credits, notification, walletVerified: true, user: adminUserSummary(user, committedData, unlimitedEmails), unlimitedCreditEmails: unlimitedEmails });
   }
 
   if (action === 'delete_account') {
@@ -2122,17 +2226,16 @@ async function handleAdminGiftAll(request, env) {
         try {
           const user = await env.CALLFOCUS_CONFIG.get(entry.name, { type: 'json' });
           if (!user?.id) return { skipped: true };
-          const data = await getCustomerDataForUpdate(env, user.id, user.name);
-          const wallet = normalizeServerWallet(data.wallet);
-          const alreadyApplied = wallet.usage.some(row => String(row?.id || '') === ledgerId);
-          if (!alreadyApplied) {
-            wallet.balanceSeconds = Math.max(0, Math.floor(Number(wallet.balanceSeconds) || 0)) + secondsAdded;
-            wallet.revision = Math.max(0, Number(wallet.revision) || 0) + 1;
-            wallet.usage.unshift({ id: ledgerId, type: 'admin_bulk_credit_gift', credits, seconds: secondsAdded, createdAt: now, note: 'Bulk credits gifted by CallFocus admin' });
-            wallet.usage = wallet.usage.slice(0, 250);
-            data.wallet = wallet;
-            await env.CALLFOCUS_CONFIG.put(customerDataKey(user.id), JSON.stringify(data));
-          }
+          const committed = await commitWalletUsageCredit(env, user, {
+            ledgerId,
+            type: 'admin_bulk_credit_gift',
+            credits,
+            seconds: secondsAdded,
+            createdAt: now,
+            note: 'Bulk credits gifted by CallFocus admin'
+          });
+          if (!committed.verified) return { failed: true };
+          const alreadyApplied = committed.duplicate === true;
           const customerName = String(user.name || 'there').trim().slice(0, 120) || 'there';
           const message = template.replace(/\{amount\}/gi, amountText).replace(/\{customer\}|\{name\}/gi, customerName).slice(0, 360);
           await appendCustomerNotification(env, user.id, { id: noticeId, type: 'admin_bulk_credit', title: 'Credits added', message, credits, createdAt: now });
@@ -2459,9 +2562,19 @@ function userAiVoiceInstructions(profile) {
 }
 async function handleVoiceNote(request, env) {
   if (!env.OPENAI_API_KEY) return json({ error: 'Voice notes are unavailable right now. Please try again soon.' }, 503);
+  const auth = await authenticatedCustomer(request, env);
+  if (!auth) return json({ error: 'Sign in again before generating a voice note.', code: 'session_expired' }, 401);
 
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+
+  if (body?.userId && String(body.userId) !== String(auth.user.id)) return json({ error: 'Account mismatch.', code: 'customer_account_mismatch' }, 403);
+  const voiceConfig = await getConfig(env);
+  const unlimitedVoiceEmails = Array.isArray(voiceConfig.unlimitedCreditEmails) ? voiceConfig.unlimitedCreditEmails.map(normalizeCustomerEmail).filter(Boolean) : [];
+  const voiceUnlimited = unlimitedVoiceEmails.includes(normalizeCustomerEmail(auth.user.email));
+  const voiceData = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
+  const voiceWallet = normalizeServerWallet(voiceData.wallet);
+  if (!voiceUnlimited && voiceWallet.balanceSeconds < 5) return json({ error: 'Not enough CallFocus credit to generate a voice note.', code: 'insufficient_credit' }, 402);
 
   const prompt = String(body?.prompt || '').trim();
   if (!prompt) return json({ error: 'Type what you want the voice note to say.' }, 400);
@@ -2471,7 +2584,7 @@ async function handleVoiceNote(request, env) {
   const targetMaxWords = requestedMaxSeconds > 0 ? Math.max(8, Math.floor(requestedMaxSeconds * 1.7)) : 0;
   const mode = body?.mode === 'reply' ? 'reply' : 'script';
 
-  const config = await getConfig(env);
+  const config = voiceConfig;
   const userVoiceProfile = normalizeUserAiVoiceProfile(body?.voiceProfile);
   const gender = userVoiceProfile?.gender || (body?.voiceGender === 'female' ? 'female' : 'male');
   const selectedVoice = gender === 'female' ? config.femaleVoice : config.maleVoice;
@@ -4666,11 +4779,25 @@ async function handleManualPaymentStatus(request, env) {
   if (!auth) return json({ error: 'Sign in first.' }, 401);
   const id = String(new URL(request.url).searchParams.get('id') || '').trim();
   const record = await manualPaymentRecord(env, id);
-  if (!record || String(record.userId) !== String(auth.user.id)) return json({ error: 'Payment request not found.' }, 404);
+  if (!record) return json({ error: 'Payment request not found.' }, 404);
+  if (String(record.userId) !== String(auth.user.id)) {
+    const sameEmail = normalizeCustomerEmail(record.customerEmail) === normalizeCustomerEmail(auth.user.email);
+    const recordPhone = normalizeCustomerPhone(record.customerPhone);
+    const samePhone = !recordPhone || recordPhone === normalizeCustomerPhone(auth.user.phone);
+    if (!sameEmail || !samePhone) return json({ error: 'Payment request not found.' }, 404);
+    record.previousUserId = record.userId || null;
+    record.userId = auth.user.id;
+    record.updatedAt = new Date().toISOString();
+    await putManualPaymentRecord(env, record);
+  }
   let wallet = null;
   if (record.status === 'approved') {
-    const data = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
-    wallet = data.wallet;
+    const repaired = await ensureApprovedManualPaymentCredit(env, record);
+    if (repaired.ok && String(repaired.user?.id || '') === String(auth.user.id)) wallet = repaired.wallet;
+    else {
+      const data = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
+      wallet = data.wallet;
+    }
   }
   return json({ ok: true, payment: manualPaymentPublic(record), wallet });
 }
@@ -4683,7 +4810,21 @@ async function handleAdminManualPayments(request, env) {
   const rows = await Promise.all((page.keys || []).map(async entry => {
     try { return await env.CALLFOCUS_CONFIG.get(entry.name, { type: 'json' }); } catch { return null; }
   }));
-  const payments = rows.filter(Boolean).sort((a,b) => String(b.submittedAt || b.createdAt || '').localeCompare(String(a.submittedAt || a.createdAt || ''))).slice(0, 200).map(manualPaymentAdmin);
+  const rawPayments = rows.filter(Boolean).sort((a,b) => String(b.submittedAt || b.createdAt || '').localeCompare(String(a.submittedAt || a.createdAt || ''))).slice(0, 200);
+  const payments = [];
+  for (let start = 0; start < rawPayments.length; start += 12) {
+    const batch = rawPayments.slice(start, start + 12);
+    const healed = await Promise.all(batch.map(async record => {
+      if (record?.status !== 'approved') return manualPaymentAdmin(record);
+      try {
+        const result = await ensureApprovedManualPaymentCredit(env, record);
+        return { ...manualPaymentAdmin(record), walletCreditPresent: result.ok === true, creditRepaired: result.repaired === true, accountReassigned: result.reassigned === true };
+      } catch {
+        return { ...manualPaymentAdmin(record), walletCreditPresent: false };
+      }
+    }));
+    payments.push(...healed);
+  }
   return json({
     ok: true,
     payments,
@@ -4712,6 +4853,57 @@ async function sendManualPaymentDecisionEmail(env, record, approved) {
   try { await sendCallFocusEmail(env, { to: record.customerEmail, subject: `CallFocus · ${statusTitle}`, html, text: approved ? `${record.credits} credits have been added to your CallFocus balance.` : `Your manual payment ${record.id} could not be approved.` }); } catch {}
 }
 
+
+async function resolveManualPaymentCustomer(env, record = {}) {
+  let user = record?.userId ? await env.CALLFOCUS_CONFIG.get(customerUserKey(record.userId), { type: 'json' }) : null;
+  const paymentEmail = normalizeCustomerEmail(record?.customerEmail);
+  const paymentPhone = normalizeCustomerPhone(record?.customerPhone);
+  const userMatches = user && (!paymentEmail || normalizeCustomerEmail(user.email) === paymentEmail) && (!paymentPhone || normalizeCustomerPhone(user.phone) === paymentPhone);
+  if (userMatches) return { user, reassigned: false };
+  if (paymentEmail) {
+    const active = await readCustomerUserByEmail(env, paymentEmail);
+    const phoneMatches = active && (!paymentPhone || normalizeCustomerPhone(active.phone) === paymentPhone);
+    if (phoneMatches) return { user: active, reassigned: !!record?.userId && String(record.userId) !== String(active.id) };
+  }
+  return { user: null, reassigned: false };
+}
+
+async function ensureApprovedManualPaymentCredit(env, record = {}) {
+  const resolved = await resolveManualPaymentCustomer(env, record);
+  const user = resolved.user;
+  if (!user?.id) return { ok: false, error: 'Customer account not found.', status: 404 };
+  const now = new Date().toISOString();
+  const credits = Math.max(0, Number(record.credits) || 0);
+  const secondsAdded = purchaseSecondsForCredits(credits);
+  if (!credits || !secondsAdded) return { ok: false, error: 'Manual payment credit amount is invalid.', status: 400 };
+  const committed = await commitWalletPurchaseCredit(env, user, {
+    id: record.id,
+    reference: record.id,
+    provider: 'manual_bank_transfer',
+    channel: 'manual_bank_transfer',
+    amountNaira: Math.max(0, Number(record.amountNaira) || 0),
+    credits,
+    seconds: secondsAdded,
+    createdAt: record.submittedAt || record.createdAt || now,
+    approvedAt: record.approvedAt || now
+  });
+  if (!committed.verified) return { ok: false, error: 'The approved payment could not be verified in the customer wallet. Please retry.', status: 503, user };
+  let changedRecord = false;
+  if (resolved.reassigned && String(record.userId || '') !== String(user.id)) {
+    record.previousUserId = record.userId || null;
+    record.userId = user.id;
+    record.updatedAt = now;
+    changedRecord = true;
+  }
+  if (!committed.duplicate) {
+    record.creditReconciledAt = now;
+    record.updatedAt = now;
+    changedRecord = true;
+  }
+  if (changedRecord) await putManualPaymentRecord(env, record);
+  return { ok: true, user, data: committed.data, wallet: committed.wallet, repaired: !committed.duplicate, reassigned: resolved.reassigned };
+}
+
 async function applyManualPaymentDecision(env, id, action, reason = '') {
   const paymentId = String(id || '').trim();
   const decision = String(action || '').trim().toLowerCase();
@@ -4719,43 +4911,34 @@ async function applyManualPaymentDecision(env, id, action, reason = '') {
   const record = await manualPaymentRecord(env, paymentId);
   if (!record) return { error: 'Manual payment not found.', status: 404 };
   if (decision === 'approve' && record.status === 'approved') {
-    const data = await getCustomerDataForUpdate(env, record.userId, record.customerName);
-    const referralReward = await safeAwardReferralAfterDeposit(env, record.userId, { provider: 'manual_bank_transfer', reference: record.id, at: record.approvedAt || record.submittedAt || new Date().toISOString() });
-    return { ok: true, duplicate: true, payment: manualPaymentAdmin(record), wallet: data.wallet, referralReward };
+    const repaired = await ensureApprovedManualPaymentCredit(env, record);
+    if (!repaired.ok) return { error: repaired.error, status: repaired.status || 500, payment: manualPaymentAdmin(record) };
+    const referralReward = await safeAwardReferralAfterDeposit(env, repaired.user.id, { provider: 'manual_bank_transfer', reference: record.id, at: record.approvedAt || record.submittedAt || new Date().toISOString() });
+    const config = await getConfig(env);
+    const unlimitedEmails = Array.isArray(config.unlimitedCreditEmails) ? config.unlimitedCreditEmails.map(normalizeCustomerEmail).filter(Boolean) : [];
+    return { ok: true, duplicate: !repaired.repaired, repaired: repaired.repaired, payment: manualPaymentAdmin(record), wallet: repaired.wallet, user: adminUserSummary(repaired.user, repaired.data, unlimitedEmails), referralReward };
   }
   if (record.status !== 'pending_confirmation') return { error: 'Only submitted payments awaiting confirmation can be changed.', status: 409, payment: manualPaymentAdmin(record) };
   const now = new Date().toISOString();
   if (decision === 'approve') {
-    const user = await env.CALLFOCUS_CONFIG.get(customerUserKey(record.userId), { type: 'json' });
-    if (!user) return { error: 'Customer account not found.', status: 404 };
-    const data = await getCustomerDataForUpdate(env, user.id, user.name);
-    const wallet = normalizeServerWallet(data.wallet);
-    const existing = wallet.purchases.find(p => String(p?.reference || p?.id || '') === record.id);
-    if (!existing) {
-      const secondsAdded = purchaseSecondsForCredits(record.credits);
-      wallet.balanceSeconds += secondsAdded;
-      wallet.revision = Math.max(0, Number(wallet.revision) || 0) + 1;
-      wallet.purchases.unshift({
-        id: record.id,
-        reference: record.id,
-        provider: 'manual_bank_transfer',
-        channel: 'manual_bank_transfer',
-        amountNaira: Math.max(0, Number(record.amountNaira) || 0),
-        credits: Math.max(0, Number(record.credits) || 0),
-        seconds: secondsAdded,
-        createdAt: record.submittedAt || now,
-        approvedAt: now
-      });
-      wallet.purchases = wallet.purchases.slice(0, 250);
-      data.wallet = wallet;
-      await env.CALLFOCUS_CONFIG.put(customerDataKey(user.id), JSON.stringify(data));
+    const resolved = await resolveManualPaymentCustomer(env, record);
+    const user = resolved.user;
+    if (!user?.id) return { error: 'Customer account not found.', status: 404 };
+    if (resolved.reassigned) {
+      record.previousUserId = record.userId || null;
+      record.userId = user.id;
     }
-    record.status = 'approved'; record.approvedAt = now; record.updatedAt = now; record.rejectionReason = '';
+    record.approvedAt = now;
+    const credited = await ensureApprovedManualPaymentCredit(env, record);
+    if (!credited.ok) return { error: credited.error, status: credited.status || 500, payment: manualPaymentAdmin(record) };
+    record.status = 'approved'; record.approvedAt = record.approvedAt || now; record.updatedAt = now; record.rejectionReason = '';
     await putManualPaymentRecord(env, record);
     await invalidateManualPaymentDecisionTokens(env, record);
     await sendManualPaymentDecisionEmail(env, record, true);
-    const referralReward = await safeAwardReferralAfterDeposit(env, user.id, { provider: 'manual_bank_transfer', reference: record.id, at: now });
-    return { ok: true, payment: manualPaymentAdmin(record), wallet, referralReward };
+    const referralReward = await safeAwardReferralAfterDeposit(env, credited.user.id, { provider: 'manual_bank_transfer', reference: record.id, at: now });
+    const config = await getConfig(env);
+    const unlimitedEmails = Array.isArray(config.unlimitedCreditEmails) ? config.unlimitedCreditEmails.map(normalizeCustomerEmail).filter(Boolean) : [];
+    return { ok: true, payment: manualPaymentAdmin(record), wallet: credited.wallet, user: adminUserSummary(credited.user, credited.data, unlimitedEmails), referralReward };
   }
   record.status = 'rejected';
   record.rejectedAt = now;
@@ -4908,10 +5091,11 @@ export default {
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
     if (url.pathname === '/email/unsubscribe-preview' && request.method === 'GET') return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#173d37"><div style="max-width:560px;margin:70px auto;padding:20px"><div style="background:#fff;border:1px solid #d8e6e1;border-radius:26px;padding:34px"><h1>Test email only</h1><p>This is the unsubscribe preview from a CallFocus test email. No customer preference was changed.</p></div></div></body>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
     if (url.pathname === '/email/unsubscribe' && (request.method === 'GET' || request.method === 'POST')) return handleMarketingUnsubscribe(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.66-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.68-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
+    if (url.pathname === '/api/wallet/consume') return safeCustomerRoute('wallet-consume', () => handleWalletConsume(request, env));
     if (url.pathname === '/api/admin/login' && request.method === 'POST') { const limited = await callFocusRateLimit(request, env, 'admin-login', 8, 900); if (limited) return limited; return handleAdminLogin(request, env); }
     if (url.pathname === '/api/admin/config') return handleAdminConfig(request, env);
     if (url.pathname === '/api/admin/screenshot-limits') return handleAdminScreenshotLimits(request, env);
@@ -4949,10 +5133,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.51-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.68-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.51-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.51-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.68-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.68-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -4962,16 +5146,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.51-test');
+      headers.set('X-CallFocus-Admin-Build', '15.68-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.51-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.68-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.51-test');
+      headers.set('X-CallFocus-Admin-Build', '15.68-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {
