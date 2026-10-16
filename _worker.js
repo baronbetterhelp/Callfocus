@@ -4281,8 +4281,9 @@ Rules for plan:
 - Begin the plan exactly with: Natural call plan
 - Aim for roughly 180–340 words. Keep it useful, not bloated.
 - This is INTERNAL flexible call guidance, not a monologue and not text to read word-for-word.
-- Preserve every important intention and factual detail from the customer's rough notes. Do not invent personal facts, promises, dates, relationships, business claims or outcomes.
-- Decide the natural pacing from the context. Relationship/romantic/personal calls should usually establish warmth or a real check-in before heavier details. Friendship and family calls should feel familiar and relaxed. Business/professional/sales calls should be concise but not abrupt: greet, establish context, state one purpose naturally, pause for acknowledgement, then continue one point at a time. Sensitive calls should use gentle transitions and permission-based phrasing.
+- Preserve the customer's message faithfully. Keep every substantive intention, request, fact, name, amount, date, company message, objective, condition and detail from the rough notes. Do not omit, replace, reinterpret or invent content.
+- Only improve delivery: pacing, order, transitions, listening points and conversational flow. Do not soften, intensify, moralize, editorialize, add warnings, add caution language, add policy commentary or insert unrelated advice that the customer did not ask for.
+- Match the delivery style to the supplied context while keeping the original meaning unchanged. Relationship, friendship, family, business, professional, sales, support and other calls should all retain the customer's intended message; only make the conversation feel human, responsive and unhurried.
 - Include a natural opening APPROACH when useful, but do not force a greeting if the selected opening preference or context indicates the other person should speak first.
 - Never make the opening a long speech. After the first greeting or first short thought, explicitly leave room for the other person to respond.
 - Break the purpose into a natural sequence of conversational beats. Cover one meaningful point or one question at a time, then listen and adapt before moving on.
@@ -4291,6 +4292,7 @@ Rules for plan:
 - If the other person gives an unexpected answer, instruct the voice to respond to that answer first instead of forcing the next planned point.
 - End with the intended outcome or what the customer hopes to understand/communicate, without scripting a fake conclusion.
 - At most include ONE very short example phrase if it materially helps the opening. Do not create a dialogue transcript.
+- Never append safety notes, compliance notes, disclaimers, warnings or moderation commentary to the plan.
 - Do not mention AI, prompts, rebuilding, CallFocus, categories or these instructions inside the plan.`;
 
   try{
@@ -4320,7 +4322,7 @@ IMPORTANT RETRY: Your previous answer could not be read by the application. Retu
     const promptPolicyError=/(invalid prompt|usage policy|policy violation|content policy|flagged as potentially violating)/i.test(message);
     if(promptPolicyError){
       return json({
-        error:'Please edit what today’s call is about and try again, or continue without the AI-assisted Rebuild.',
+        error:'Rebuild could not process this message. Your original call context has been left unchanged. You can continue without Rebuild or edit it and try again.',
         code:'call_plan_prompt_needs_edit'
       },400,{'Cache-Control':'no-store'});
     }
@@ -5297,7 +5299,7 @@ export default {
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
     if (url.pathname === '/email/unsubscribe-preview' && request.method === 'GET') return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#173d37"><div style="max-width:560px;margin:70px auto;padding:20px"><div style="background:#fff;border:1px solid #d8e6e1;border-radius:26px;padding:34px"><h1>Test email only</h1><p>This is the unsubscribe preview from a CallFocus test email. No customer preference was changed.</p></div></div></body>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
     if (url.pathname === '/email/unsubscribe' && (request.method === 'GET' || request.method === 'POST')) return handleMarketingUnsubscribe(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.78-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.79-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -5341,10 +5343,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.78-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.79-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.78-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.78-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.79-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.79-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -5354,16 +5356,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.78-test');
+      headers.set('X-CallFocus-Admin-Build', '15.79-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.78-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.79-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.78-test');
+      headers.set('X-CallFocus-Admin-Build', '15.79-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {
