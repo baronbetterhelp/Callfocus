@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.68-test';
+const ADMIN_BUILD_VERSION='15.69-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -39,6 +39,8 @@ let adminManualPayments=[];
 let adminManualPaymentsLoading=false;
 let quickStartItems=[];
 let marketingSelectedUserIds=new Set();
+let directSelectedUserIds=new Set();
+let directSending=false;
 let marketingHistory=[];
 let marketingSending=false;
 let marketingDraftLoaded=false;
@@ -392,7 +394,7 @@ async function loadAdminUsers(reset=false){
       summary.textContent=`${adminUsers.length} customers · ${funded} funded · ${unlimited} unlimited · ${disabled} disabled`;
     }
   }catch(err){toast(err.message);if(!adminUsers.length&&$('adminUsersList'))$('adminUsersList').innerHTML='<div class="admin-users-empty">Could not load customer accounts.</div>';}
-  finally{adminUsersLoading=false;if(refresh){refresh.disabled=false;refresh.textContent='Refresh users';}if(more){more.disabled=false;more.textContent='Load more users';}renderMarketingRecipients();}
+  finally{adminUsersLoading=false;if(refresh){refresh.disabled=false;refresh.textContent='Refresh users';}if(more){more.disabled=false;more.textContent='Load more users';}renderMarketingRecipients();renderDirectRecipients();}
 }
 function actionPrompt(action,user){
   if(action==='disable_account')return `Disable ${user.email}? They will be signed out and unable to sign in until you enable the account again.`;
@@ -558,6 +560,49 @@ async function runDiagnostics(){
 $('runDiagnosticsBtn')?.addEventListener('click',runDiagnostics);
 
 
+
+
+/* CallFocus V15.69 — direct customer service email panel. */
+function directValue(id){return String($(id)?.value||'').trim();}
+function directRecipientRows(){
+  const q=String($('directRecipientSearch')?.value||'').trim().toLowerCase();
+  const rows=adminUsers.filter(u=>!u.accountDisabled&&u.emailVerified!==false);
+  return q?rows.filter(u=>[u.name,u.email,u.phone].some(v=>String(v||'').toLowerCase().includes(q))):rows;
+}
+function renderDirectRecipients(){
+  const root=$('directRecipientList'),summary=$('directRecipientSummary');if(!root||!summary)return;
+  const rows=directRecipientRows();
+  const selected=[...directSelectedUserIds].filter(id=>adminUsers.some(u=>u.id===id&&!u.accountDisabled&&u.emailVerified!==false));
+  directSelectedUserIds=new Set(selected);
+  summary.textContent=`${directSelectedUserIds.size} customer${directSelectedUserIds.size===1?'':'s'} selected · ${rows.length} shown`;
+  if(!rows.length){root.innerHTML='<div class="admin-users-empty">No matching active customer accounts.</div>';return;}
+  root.innerHTML=rows.map(u=>`<label class="marketing-recipient-row${directSelectedUserIds.has(u.id)?' selected':''}"><input type="checkbox" data-direct-user-id="${esc(u.id)}" ${directSelectedUserIds.has(u.id)?'checked':''}/><span class="marketing-recipient-avatar">${esc((u.name||u.email||'?').trim().charAt(0).toUpperCase()||'?')}</span><span class="marketing-recipient-copy"><strong>${esc(u.name||'Unnamed user')}</strong><small>${esc(u.email)}</small></span><span class="marketing-recipient-state">${u.unlimited?'Unlimited':'Active'}</span></label>`).join('');
+}
+function directShowResult(message,type='ok'){
+  const box=$('directSendResult');if(!box)return;box.classList.remove('hidden','bad');if(type==='bad')box.classList.add('bad');box.textContent=message;
+}
+async function sendDirectCustomerEmail(){
+  if(directSending)return;
+  const subject=directValue('directSubject'),message=directValue('directMessage'),ctaLabel=directValue('directCtaLabel'),ctaUrl=directValue('directCtaUrl');
+  if(!directSelectedUserIds.size)return toast('Select at least one customer');
+  if(!subject||!message)return toast('Add an email subject and message first');
+  if((ctaLabel&&!ctaUrl)||(!ctaLabel&&ctaUrl))return toast('Add both button text and button link, or leave both blank');
+  const count=directSelectedUserIds.size;
+  if(!confirm(`Send this direct non-promotional message to ${count} selected customer${count===1?'':'s'}?`))return;
+  const btn=$('directSendBtn'),old=btn?.textContent||'Send direct message';
+  const requestId=(globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,100);
+  directSending=true;if(btn){btn.disabled=true;btn.textContent='Sending…';}directShowResult('Sending direct message…');
+  try{
+    const result=await api('/api/admin/direct-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subject,message,ctaLabel,ctaUrl,selectedUserIds:[...directSelectedUserIds],requestId})});
+    const sent=Number(result.sent||0),failed=Number(result.failed||0);
+    directShowResult(`${sent} sent${failed?` · ${failed} failed`:''}`,failed&&!sent?'bad':'ok');
+    toast(failed?`Direct message completed · ${sent} sent · ${failed} failed`:`Direct message sent to ${sent} customer${sent===1?'':'s'}`);
+  }catch(err){directShowResult(err.message||'Could not send direct message','bad');toast(err.message||'Could not send direct message');}
+  finally{directSending=false;if(btn){btn.disabled=false;btn.textContent=old;}}
+}
+$('directRecipientSearch')?.addEventListener('input',renderDirectRecipients);
+$('directRecipientList')?.addEventListener('change',event=>{const box=event.target.closest('[data-direct-user-id]');if(!box)return;const id=box.dataset.directUserId;if(box.checked)directSelectedUserIds.add(id);else directSelectedUserIds.delete(id);renderDirectRecipients();});
+$('directSendBtn')?.addEventListener('click',sendDirectCustomerEmail);
 
 /* CallFocus V15.49 — premium promotional email studio. */
 function marketingAudience(){return document.querySelector('input[name="marketingAudience"]:checked')?.value==='selected'?'selected':'all';}

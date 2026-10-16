@@ -977,3 +977,6 @@ body.admin-page{
 .marketing-preview-cta{border-radius:10px;box-shadow:none;padding:12px 16px}
 .marketing-preview-footer{background:#fff;border-top:1px solid #e5ece9;padding:17px 20px}
 @media(max-width:650px){.marketing-compose-panel .admin-users-heading{align-items:flex-start;gap:12px}.marketing-compose-panel .admin-users-heading>.btn{width:auto;white-space:nowrap}}
+
+/* V15.69 direct customer service email panel */
+.direct-email-panel{margin:0 0 24px}.direct-email-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:18px}.direct-email-compose{display:grid;gap:16px}.direct-email-compose textarea{resize:vertical;min-height:150px}.direct-recipient-summary{padding:11px 14px;border-radius:15px;background:rgba(235,244,240,.78);color:#657b75;font-size:.88rem;line-height:1.45}.direct-recipient-list{display:grid;gap:8px;max-height:280px;overflow:auto;padding-right:3px}.direct-email-actions{display:flex;justify-content:flex-start;gap:10px}.direct-email-note{margin-top:18px}.email-section-divider{margin:6px 0 16px}.field-optional{font-size:.72rem;font-weight:700;color:#85948f;margin-left:6px;text-transform:none;letter-spacing:0}@media(max-width:650px){.direct-email-actions{display:grid;grid-template-columns:1fr}.direct-email-actions .btn{width:100%}.direct-recipient-list{max-height:330px}.email-section-divider{margin-top:2px}}
