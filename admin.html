@@ -11,13 +11,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=15.72-test" />
+  <link rel="stylesheet" href="/admin.css?v=15.73-test" />
 </head>
 <body class="admin-page">
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="/admin">
-        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.72-test" alt="CallFocus" /></span>
+        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.73-test" alt="CallFocus" /></span>
         <span class="brand-copy"><strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong><small>Private system control</small></span>
       </a>
       <div class="header-actions"><a class="btn btn-ghost admin-back-link" href="/">Customer site</a></div>
@@ -123,6 +123,22 @@
           <span class="marketing-status-dot"></span>
           <strong id="marketingStatusText">Checking Resend connection…</strong>
           <small id="marketingSenderText">Sender status will appear here.</small>
+        </div>
+
+        <div class="premium-panel resend-usage-panel" id="resendUsagePanel">
+          <div class="admin-users-heading resend-usage-heading">
+            <div>
+              <h3>Resend email usage</h3>
+              <p class="admin-panel-copy">Live account quota from Resend. This includes emails sent through the connected Resend account.</p>
+            </div>
+            <span class="resend-usage-live" id="resendUsageLive">Checking…</span>
+          </div>
+          <div class="resend-usage-grid">
+            <div class="resend-usage-card"><span>Today</span><strong id="resendDailyUsage">—</strong><small id="resendDailySent">Checking usage…</small></div>
+            <div class="resend-usage-card"><span>This month</span><strong id="resendMonthlyUsage">—</strong><small id="resendMonthlySent">Checking usage…</small></div>
+            <div class="resend-usage-card"><span>Remaining today</span><strong id="resendDailyRemaining">—</strong><small id="resendUsageReset">Refreshes automatically when you check email status.</small></div>
+          </div>
+          <div class="resend-usage-note" id="resendUsageNote">Usage details will appear here.</div>
         </div>
 
         <div class="premium-panel form-panel direct-email-panel">
@@ -429,6 +445,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=15.72-test"></script>
+  <script src="/admin.js?v=15.73-test"></script>
 </body>
 </html>

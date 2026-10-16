@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.72-test';
+const ADMIN_BUILD_VERSION='15.73-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -304,7 +304,7 @@ async function restoreRememberedAdmin(){
     $('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');
     const backup=readBackup();
     if(!r.storageConnected&&backup?.config)fill(backup.config,false);else{fill(r.config,r.storageConnected);if(r.storageConnected)saveBackup(r.config);}
-    loadAdminManualPayments().then(()=>loadAdminUsers(true));loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();
+    loadAdminManualPayments().then(()=>loadAdminUsers(true));loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadMarketingStatus();loadDirectTemplates();
   }catch(err){
     if(adminKey!==remembered)return;
     adminKey='';if(err.status===401||err.status===403)forgetAdminSession();else $('adminGateNote').textContent='Your sign-in is remembered. Refresh when the connection is available.';
@@ -672,6 +672,7 @@ async function sendDirectCustomerEmail(){
     const sent=Number(result.sent||0),failed=Number(result.failed||0);
     directShowResult(`${sent} sent${failed?` · ${failed} failed`:''}`,failed&&!sent?'bad':'ok');
     toast(failed?`Direct message completed · ${sent} sent · ${failed} failed`:`Direct message sent to ${sent} recipient${sent===1?'':'s'}`);
+    loadMarketingStatus().catch(()=>{});
   }catch(err){directShowResult(err.message||'Could not send direct message','bad');toast(err.message||'Could not send direct message');}
   finally{directSending=false;if(btn){btn.disabled=false;btn.textContent=old;}}
 }
@@ -746,6 +747,42 @@ function renderMarketingHistory(rows=marketingHistory){
   if(!marketingHistory.length){root.innerHTML='<div class="admin-users-empty">No promotional campaigns sent yet.</div>';return;}
   root.innerHTML=marketingHistory.map(c=>`<article class="marketing-history-item"><div><strong>${esc(c.subject||'Untitled campaign')}</strong><span>${c.createdAt?esc(new Date(c.createdAt).toLocaleString()):'—'} · ${esc(c.audience||'all')}</span></div><div class="marketing-history-stats"><span>${Number(c.sent||0)} sent</span><span>${Number(c.suppressed||0)} skipped</span><span class="${Number(c.failed||0)?'bad':''}">${Number(c.failed||0)} failed</span></div></article>`).join('');
 }
+function formatResendQuota(row){
+  const used=Math.max(0,Number(row?.used)||0);
+  const limit=row?.limit===null||row?.limit===undefined?null:Math.max(0,Number(row.limit)||0);
+  return limit===null?`${used.toLocaleString()} used · No cap`:`${used.toLocaleString()} / ${limit.toLocaleString()}`;
+}
+function renderResendUsage(usage){
+  const live=$('resendUsageLive'),note=$('resendUsageNote');
+  [live,note].forEach(el=>{el?.classList.remove('is-ready','is-warn','bad','warn')});
+  if(!usage?.available){
+    if($('resendDailyUsage'))$('resendDailyUsage').textContent='Unavailable';
+    if($('resendMonthlyUsage'))$('resendMonthlyUsage').textContent='Unavailable';
+    if($('resendDailyRemaining'))$('resendDailyRemaining').textContent='—';
+    if($('resendDailySent'))$('resendDailySent').textContent='Resend did not return quota data.';
+    if($('resendMonthlySent'))$('resendMonthlySent').textContent='Your email sending can still remain connected.';
+    if($('resendUsageReset'))$('resendUsageReset').textContent='Use Refresh email status to try again.';
+    if(live){live.textContent=usage?.permissionError?'Key permission needed':'Usage unavailable';live.classList.add('is-warn');}
+    if(note){note.textContent=usage?.error||'Could not retrieve Resend account usage.';note.classList.add(usage?.permissionError?'warn':'bad');}
+    return;
+  }
+  const daily=usage.daily||{},monthly=usage.monthly||{};
+  const dailyLimit=daily.limit===null||daily.limit===undefined?null:Math.max(0,Number(daily.limit)||0);
+  const dailyUsed=Math.max(0,Number(daily.used)||0);
+  const remaining=dailyLimit===null?null:Math.max(0,dailyLimit-dailyUsed);
+  if($('resendDailyUsage'))$('resendDailyUsage').textContent=formatResendQuota(daily);
+  if($('resendMonthlyUsage'))$('resendMonthlyUsage').textContent=formatResendQuota(monthly);
+  if($('resendDailyRemaining'))$('resendDailyRemaining').textContent=remaining===null?'No cap':remaining.toLocaleString();
+  if($('resendDailySent'))$('resendDailySent').textContent=`${Math.max(0,Number(daily.sent)||0).toLocaleString()} sent today${Number(daily.received)>0?` · ${Math.max(0,Number(daily.received)||0).toLocaleString()} received`:''}`;
+  if($('resendMonthlySent'))$('resendMonthlySent').textContent=`${Math.max(0,Number(monthly.sent)||0).toLocaleString()} sent this month${Number(monthly.received)>0?` · ${Math.max(0,Number(monthly.received)||0).toLocaleString()} received`:''}`;
+  const reset=daily.resetsAt?new Date(daily.resetsAt):null;
+  if($('resendUsageReset'))$('resendUsageReset').textContent=reset&&!Number.isNaN(reset.getTime())?`Daily quota resets ${reset.toLocaleString()}`:'Daily quota reset time unavailable.';
+  if(live){live.textContent='Live from Resend';live.classList.add('is-ready');}
+  if(note){
+    const pct=dailyLimit?Math.min(100,Math.round((dailyUsed/dailyLimit)*100)):null;
+    note.textContent=dailyLimit===null?'Your current Resend plan has no daily cap reported by the Usage API.':`${remaining.toLocaleString()} email${remaining===1?'':'s'} remaining today · ${pct}% of the daily quota used.`;
+  }
+}
 async function loadMarketingStatus(){
   if(!adminKey)return;const btn=$('marketingRefreshBtn');if(btn){btn.disabled=true;btn.textContent='Refreshing…';}
   try{
@@ -753,10 +790,11 @@ async function loadMarketingStatus(){
     $('marketingStatusStrip')?.classList.toggle('is-ready',!!result.configured);
     if($('marketingStatusText'))$('marketingStatusText').textContent=result.configured?'Resend promotional sending is connected':'Resend promotional sending is not configured';
     if($('marketingSenderText'))$('marketingSenderText').textContent=result.configured?`Sender: ${result.sender||'configured sender'}${result.replyTo?` · Replies: ${result.replyTo}`:''}`:'Add RESEND_API_KEY and CALLFOCUS_FROM_EMAIL in Cloudflare.';
+    renderResendUsage(result.usage||{available:false,error:'Usage details were not returned.'});
     applyMarketingDraft(result.draft||null);
     if(!marketingDraftLoaded){marketingDraftLoaded=true;setMarketingDraftStatus('No saved draft yet. Changes will save automatically.');}
     renderMarketingHistory(result.history||[]);
-  }catch(err){if($('marketingStatusText'))$('marketingStatusText').textContent='Could not check email status';if($('marketingSenderText'))$('marketingSenderText').textContent=err.message||'Try again.';}
+  }catch(err){if($('marketingStatusText'))$('marketingStatusText').textContent='Could not check email status';if($('marketingSenderText'))$('marketingSenderText').textContent=err.message||'Try again.';renderResendUsage({available:false,error:err.message||'Try again.'});}
   finally{if(btn){btn.disabled=false;btn.textContent='Refresh email status';}}
 }
 function marketingShowResult(message,type='ok'){
@@ -777,6 +815,7 @@ async function sendMarketingEmail(test=false){
     const result=await api('/api/admin/marketing-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...p,action:test?'test':'send',testEmail,audience,selectedUserIds:[...marketingSelectedUserIds],consentConfirmed:$('marketingConsentConfirmed')?.checked===true,requestId})});
     if(test){marketingShowResult(`Test email sent to ${testEmail}. Check the inbox and spam folder before sending the campaign.`);toast('Test email sent');}
     else{const c=result.campaign||{};marketingShowResult(`${Number(c.sent||0)} sent · ${Number(c.suppressed||0)} unsubscribed skipped · ${Number(c.failed||0)} failed${Number(c.failed||0)?' · check Resend logs for delivery details':''}`,Number(c.failed||0)&&!Number(c.sent||0)?'bad':'ok');renderMarketingHistory(result.history||[]);toast(Number(c.failed||0)?'Campaign completed with some delivery errors':'Campaign submitted to Resend');}
+    loadMarketingStatus().catch(()=>{});
   }catch(err){marketingShowResult(err.message||'Could not send email','bad');toast(err.message||'Could not send email');}
   finally{marketingSending=false;if(btn){btn.disabled=false;btn.textContent=old;}}
 }
