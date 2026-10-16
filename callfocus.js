@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.63-test';
+  const BUILD='15.64-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -7258,7 +7258,7 @@ ${approvedPatterns}
     if(status){
       if(message)status.textContent=message;
       else if(state==='busy')status.textContent='Building a natural, unhurried call flow…';
-      else if(state==='ready')status.textContent='Natural call plan ready. You can still edit it before calling.';
+      else if(state==='ready')status.textContent='Please read carefully and make any necessary edits before proceeding.';
       else status.textContent='Optional · Recommended for the best call experience.';
     }
   }
@@ -7298,7 +7298,7 @@ ${approvedPatterns}
       field.dispatchEvent(new Event('input',{bubbles:true}));
       field.dispatchEvent(new Event('change',{bubbles:true}));
       const category=safeText(payload?.category,40);
-      setRebuildState(scope,'ready',`${category?category[0].toUpperCase()+category.slice(1)+' · ':''}Natural call plan ready. Edit anything you want before starting.`);
+      setRebuildState(scope,'ready','Please read carefully and make any necessary edits before proceeding.');
       try{field.scrollIntoView({behavior:'smooth',block:'center'})}catch{}
     }catch(error){
       setRebuildState(scope,'error',String(error?.message||'Could not rebuild this call right now.'));
