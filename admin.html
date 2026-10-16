@@ -11,13 +11,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=15.69-test" />
+  <link rel="stylesheet" href="/admin.css?v=15.70-test" />
 </head>
 <body class="admin-page">
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="/admin">
-        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.69-test" alt="CallFocus" /></span>
+        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.70-test" alt="CallFocus" /></span>
         <span class="brand-copy"><strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong><small>Private system control</small></span>
       </a>
       <div class="header-actions"><a class="btn btn-ghost admin-back-link" href="/">Customer site</a></div>
@@ -115,7 +115,7 @@
 
       <section class="admin-tab-panel" data-admin-panel="email">
         <div class="admin-section-heading admin-section-heading-row">
-          <div><span class="kicker">Customer communications</span><h2>Customer email center</h2><p>Send simple direct service messages to individual customers, or use the promotional studio for opted-in marketing campaigns.</p></div>
+          <div><span class="kicker">Customer communications</span><h2>Customer email center</h2><p>Send direct non-promotional messages to any email address, or use the promotional studio for opted-in marketing campaigns.</p></div>
           <button class="btn btn-ghost" type="button" id="marketingRefreshBtn">Refresh email status</button>
         </div>
 
@@ -128,15 +128,21 @@
         <div class="premium-panel form-panel direct-email-panel">
           <div class="admin-users-heading">
             <div>
-              <h3>Direct customer message</h3>
-              <p class="admin-panel-copy">For account, service, support, payment or other non-promotional messages. Keep it simple and send only to the customer(s) you select.</p>
+              <h3>Direct email message</h3>
+              <p class="admin-panel-copy">Send a non-promotional account, service, support or payment message to any email address. Registered CallFocus customers can also be selected below.</p>
             </div>
           </div>
           <div class="direct-email-layout">
             <div class="direct-email-compose">
-              <label>Find customer<input id="directRecipientSearch" type="search" autocomplete="off" placeholder="Name, email or phone" /></label>
-              <div class="direct-recipient-summary" id="directRecipientSummary">Loading customers…</div>
-              <div class="direct-recipient-list" id="directRecipientList"><div class="admin-users-empty">Customer accounts will appear here.</div></div>
+              <label>Recipient email(s)<textarea id="directCustomEmails" rows="2" maxlength="4000" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="name@example.com"></textarea><span class="field-help">Enter one or more email addresses separated by commas, spaces or new lines.</span></label>
+              <div class="direct-recipient-summary" id="directRecipientSummary">No recipients selected yet.</div>
+              <details class="direct-saved-customers">
+                <summary>Select saved CallFocus customer <span class="field-optional">Optional</span></summary>
+                <div class="direct-saved-customers-body">
+                  <label>Find customer<input id="directRecipientSearch" type="search" autocomplete="off" placeholder="Name, email or phone" /></label>
+                  <div class="direct-recipient-list" id="directRecipientList"><div class="admin-users-empty">Customer accounts will appear here.</div></div>
+                </div>
+              </details>
               <label>Email subject<input id="directSubject" maxlength="160" placeholder="Your CallFocus account update" /></label>
               <label>Message<textarea id="directMessage" rows="6" maxlength="5000" placeholder="Write the message you want the customer to receive. You can use {name} to personalize it."></textarea></label>
               <div class="form-grid two">
@@ -149,7 +155,7 @@
               <div class="marketing-send-result hidden" id="directSendResult"></div>
             </div>
           </div>
-          <div class="admin-recommendation direct-email-note">Use this only for non-promotional account, service, support or payment messages. These emails are sent as direct service messages through Resend, but Gmail, Outlook and other providers still decide final inbox or tab placement.</div>
+          <div class="admin-recommendation direct-email-note">Use this only for non-promotional account, service, support or payment messages. You can send to registered customers or any valid email address. Gmail, Outlook and other providers still decide final inbox or tab placement.</div>
         </div>
 
         <div class="admin-users-heading email-section-divider"><div><h3>Promotional campaigns</h3><p class="admin-panel-copy">Use this section for opted-in marketing or promotional email.</p></div></div>
@@ -409,6 +415,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=15.69-test"></script>
+  <script src="/admin.js?v=15.70-test"></script>
 </body>
 </html>
