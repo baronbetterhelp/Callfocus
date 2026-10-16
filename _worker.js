@@ -3877,7 +3877,7 @@ ${joined}`;
 
 
 // -----------------------------------------------------------------------------
-// V15.61 Natural Call Plan Rebuild — authenticated client repair
+// V15.62 Natural Call Plan Rebuild — resilient response recovery
 // Turns rough "today's call" notes into flexible internal call guidance so the
 // realtime voice can sound slower, more human and less like it is reading a script.
 // -----------------------------------------------------------------------------
@@ -3886,6 +3886,28 @@ function parseNaturalCallPlanJson(text) {
   const start=raw.indexOf('{'), end=raw.lastIndexOf('}');
   if(start<0||end<=start)return null;
   try{return JSON.parse(raw.slice(start,end+1))}catch{return null}
+}
+
+function recoverNaturalCallPlan(text) {
+  const raw=String(text||'').trim().replace(/^```(?:json|text)?\s*/i,'').replace(/\s*```$/i,'');
+  if(!raw)return null;
+  const parsed=parseNaturalCallPlanJson(raw);
+  const allowed=new Set(['relationship','friendship','family','business','professional','sales','support','sensitive','general']);
+  if(parsed && String(parsed?.plan||'').trim()){
+    const category=allowed.has(String(parsed?.category||'').toLowerCase())?String(parsed.category).toLowerCase():'general';
+    return {category,plan:String(parsed.plan).trim()};
+  }
+
+  // Some otherwise-valid model responses occasionally arrive as plain text or as
+  // malformed JSON containing a perfectly usable plan. Recover the plan instead
+  // of surfacing a false rebuild failure to the customer.
+  const marker=raw.search(/Natural call plan\b/i);
+  if(marker>=0){
+    let plan=raw.slice(marker).trim();
+    plan=plan.replace(/\s*```\s*$/,'').replace(/\s*["']?\s*}\s*$/,'').trim();
+    if(plan.length>=40)return {category:'general',plan};
+  }
+  return null;
 }
 
 async function handleCallPlanRebuild(request, env) {
@@ -3953,16 +3975,27 @@ Rules for plan:
 - Do not mention AI, prompts, rebuilding, CallFocus, categories or these instructions inside the plan.`;
 
   try{
-    const result=await callOpenAIResponses(env,{model:'gpt-6-luna',store:false,reasoning:{effort:'none'},max_output_tokens:1100,input:[{role:'user',content:[{type:'input_text',text:prompt}]}]});
-    const parsed=parseNaturalCallPlanJson(result.text);
-    let plan=String(parsed?.plan||'').trim();
-    const allowed=new Set(['relationship','friendship','family','business','professional','sales','support','sensitive','general']);
-    const category=allowed.has(String(parsed?.category||'').toLowerCase())?String(parsed.category).toLowerCase():'general';
-    if(!plan){
+    const requestBody={model:'gpt-6-luna',store:false,reasoning:{effort:'none'},max_output_tokens:1100,input:[{role:'user',content:[{type:'input_text',text:prompt}]}]};
+    const first=await callOpenAIResponses(env,requestBody);
+    let recovered=recoverNaturalCallPlan(first.text);
+
+    // Retry only when the provider returned text but it could not be normalized
+    // into a usable call plan. This avoids duplicate calls for auth/quota/rate-limit
+    // failures while making occasional formatting drift self-healing.
+    if(!recovered){
+      const retryPrompt=`${prompt}
+
+IMPORTANT RETRY: Your previous answer could not be read by the application. Return the call plan again. You may return the strict JSON requested above, or return only the plan text beginning exactly with Natural call plan. Do not add commentary before or after it.`;
+      const retry=await callOpenAIResponses(env,{...requestBody,input:[{role:'user',content:[{type:'input_text',text:retryPrompt}]}]});
+      recovered=recoverNaturalCallPlan(retry.text);
+    }
+
+    if(!recovered?.plan){
       const err=new Error('CallFocus could not build the call plan. Please try again.');err.status=502;throw err;
     }
+    let plan=String(recovered.plan).trim();
     if(!/^Natural call plan\b/i.test(plan))plan=`Natural call plan\n${plan}`;
-    return json({ok:true,category,plan:plan.slice(0,9000)},200,{'Cache-Control':'no-store'});
+    return json({ok:true,category:recovered.category||'general',plan:plan.slice(0,9000)},200,{'Cache-Control':'no-store'});
   }catch(error){
     return json({error:String(error?.message||'Could not rebuild this call right now.')},Number(error?.status||502),{'Cache-Control':'no-store'});
   }
@@ -4867,7 +4900,7 @@ export default {
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
     if (url.pathname === '/email/unsubscribe-preview' && request.method === 'GET') return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#173d37"><div style="max-width:560px;margin:70px auto;padding:20px"><div style="background:#fff;border:1px solid #d8e6e1;border-radius:26px;padding:34px"><h1>Test email only</h1><p>This is the unsubscribe preview from a CallFocus test email. No customer preference was changed.</p></div></div></body>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
     if (url.pathname === '/email/unsubscribe' && (request.method === 'GET' || request.method === 'POST')) return handleMarketingUnsubscribe(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.61-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.62-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);

@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.61-test';
+  const BUILD='15.62-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -7171,7 +7171,7 @@ ${approvedPatterns}
 
 
 
-/* ===== CallFocus V15.61 — Rebuild Authentication + Unified Topic Panel ===== */
+/* ===== CallFocus V15.62 — Rebuild Resilience + Unified Topic Panel ===== */
 (()=>{
   const REBUILD_ENDPOINT='/api/call-plan/rebuild';
 
