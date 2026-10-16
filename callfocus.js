@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.60-test';
+  const BUILD='15.61-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -7171,7 +7171,7 @@ ${approvedPatterns}
 
 
 
-/* ===== CallFocus V15.60 — Natural Call Plan Rebuild ===== */
+/* ===== CallFocus V15.61 — Rebuild Authentication + Unified Topic Panel ===== */
 (()=>{
   const REBUILD_ENDPOINT='/api/call-plan/rebuild';
 
@@ -7263,6 +7263,10 @@ ${approvedPatterns}
     }
   }
 
+  function rebuildCustomerToken(){
+    try{return String(localStorage.getItem('callfocus_server_session_v1')||'').trim()}catch{return ''}
+  }
+
   async function rebuild(scope){
     const field=document.getElementById(scope==='repeat'?'repeatTopic':'newCallTopic');
     if(!field)return;
@@ -7276,9 +7280,14 @@ ${approvedPatterns}
       setRebuildState(scope,'error','Add a little more detail so CallFocus can build a useful call flow.');
       return;
     }
+    const token=rebuildCustomerToken();
+    if(!token){
+      setRebuildState(scope,'error','Sign in to rebuild your call plan.');
+      return;
+    }
     setRebuildState(scope,'busy');
     try{
-      const response=await fetch(REBUILD_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify(context)});
+      const response=await fetch(REBUILD_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},credentials:'same-origin',cache:'no-store',body:JSON.stringify(context)});
       const payload=await response.json().catch(()=>({}));
       if(!response.ok)throw new Error(payload?.error||'Could not rebuild this call right now.');
       const plan=safeText(payload?.plan,9000);
