@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.77-test';
+  const BUILD='15.78-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -6213,6 +6213,12 @@ ${approvedPatterns}
   let autoFiles=[];
   let autoBusy=false;
   let activeDraftId='';
+  let autoStableTop=0;
+  let autoUserScrollUntil=0;
+  let autoRestoringScroll=false;
+  let autoTouchActive=false;
+  let autoScrollBound=false;
+  let autoProgressValue=0;
 
   const byId=id=>document.getElementById(id);
   const token=()=>localStorage.getItem(SERVER_TOKEN_KEY)||'';
@@ -6332,6 +6338,7 @@ ${approvedPatterns}
     byId('cfAutoFillFiles').addEventListener('change',e=>{selectAutoFiles([...e.target.files]);e.target.value='';});
     ['cfAutoCallerName','cfAutoCallerAge','cfAutoCallerJob'].forEach(id=>byId(id)?.addEventListener('input',renderAutoSelection));
     wrap.addEventListener('click',e=>{if(e.target===wrap&&!autoBusy)closeAutoFill();});
+    bindAutoFillScrollStability();
   }
 
   function installSavedModal(){
@@ -6357,6 +6364,56 @@ ${approvedPatterns}
   function openOverlay(id){byId(id)?.classList.remove('hidden');document.body.style.overflow='hidden';}
   function closeOverlay(id){byId(id)?.classList.add('hidden');if(!document.querySelector('.modal-backdrop:not(.hidden)')&&!byId('callScreen')?.classList.contains('hidden')){}else if(document.querySelectorAll('.modal-backdrop:not(.hidden)').length===0&&byId('callScreen')?.classList.contains('hidden'))document.body.style.overflow='';}
 
+  function autoFillScroller(){return byId('cfAutoFillModal')?.querySelector('.cf-autofill-modal')||null;}
+  function autoFillOpen(){const m=byId('cfAutoFillModal');return !!m&&!m.classList.contains('hidden');}
+  function autoClock(){try{return performance.now()}catch{return Date.now()}}
+  function captureAutoFillScroll(){if(!autoFillOpen())return;const el=autoFillScroller();if(el)autoStableTop=Math.max(0,Number(el.scrollTop)||0);}
+  function markAutoFillUserScroll(extra=900){autoUserScrollUntil=autoClock()+extra;captureAutoFillScroll();}
+  function restoreAutoFillScroll(){
+    if(!autoFillOpen()||autoStableTop<2)return;
+    const el=autoFillScroller();if(!el)return;
+    if(Math.abs((Number(el.scrollTop)||0)-autoStableTop)<2)return;
+    autoRestoringScroll=true;
+    try{el.scrollTop=autoStableTop}catch{}
+    requestAnimationFrame(()=>{try{if(autoFillOpen())el.scrollTop=autoStableTop}catch{}autoRestoringScroll=false;});
+  }
+  function queueAutoFillScrollRestore(){
+    if(!autoFillOpen())return;
+    requestAnimationFrame(restoreAutoFillScroll);
+    setTimeout(restoreAutoFillScroll,70);
+    setTimeout(restoreAutoFillScroll,220);
+  }
+  function onAutoFillScroll(){
+    if(autoRestoringScroll||!autoFillOpen())return;
+    const el=autoFillScroller();if(!el)return;
+    const top=Math.max(0,Number(el.scrollTop)||0);
+    if(!autoTouchActive&&top<=48&&autoStableTop>=80&&Math.abs(top-autoStableTop)>=64){queueAutoFillScrollRestore();return;}
+    if(autoTouchActive||autoClock()<=autoUserScrollUntil||autoStableTop<80||top>48||Math.abs(top-autoStableTop)<32){autoStableTop=top;return;}
+    autoStableTop=top;
+  }
+  function bindAutoFillScrollStability(){
+    if(autoScrollBound)return;
+    const modal=byId('cfAutoFillModal'),el=autoFillScroller();if(!modal||!el)return;
+    autoScrollBound=true;autoStableTop=Math.max(0,Number(el.scrollTop)||0);
+    el.addEventListener('scroll',onAutoFillScroll,{passive:true});
+    el.addEventListener('touchstart',()=>{autoTouchActive=true;markAutoFillUserScroll(1300)},{passive:true});
+    el.addEventListener('touchmove',()=>markAutoFillUserScroll(1300),{passive:true});
+    el.addEventListener('touchend',()=>{autoTouchActive=false;autoUserScrollUntil=autoClock()+1000},{passive:true});
+    el.addEventListener('touchcancel',()=>{autoTouchActive=false;autoUserScrollUntil=autoClock()+350},{passive:true});
+    el.addEventListener('pointerdown',()=>markAutoFillUserScroll(1000),{passive:true});
+    el.addEventListener('wheel',()=>markAutoFillUserScroll(900),{passive:true});
+    window.addEventListener('blur',captureAutoFillScroll,{passive:true});
+    window.addEventListener('focus',queueAutoFillScrollRestore,{passive:true});
+    window.addEventListener('resize',queueAutoFillScrollRestore,{passive:true});
+    window.addEventListener('pageshow',queueAutoFillScrollRestore,{passive:true});
+    window.visualViewport?.addEventListener('resize',queueAutoFillScrollRestore,{passive:true});
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')captureAutoFillScroll();else queueAutoFillScrollRestore();},{passive:true});
+    new MutationObserver(()=>{
+      if(autoFillOpen())requestAnimationFrame(()=>{const s=autoFillScroller();autoStableTop=Math.max(0,Number(s?.scrollTop)||0)});
+      else{autoStableTop=0;autoUserScrollUntil=0;autoRestoringScroll=false;autoTouchActive=false;}
+    }).observe(modal,{attributes:true,attributeFilter:['class']});
+  }
+
   function openAutoFill(){
     if(!token()){try{showAuth('signin',null,'Sign in to generate and save caller information.');}catch{notify('Sign in first.');}return;}
     installAutoFillModal();
@@ -6370,7 +6427,7 @@ ${approvedPatterns}
     // Always reopen the auto-fill sheet at its true top so the heading and close button are fully visible.
     requestAnimationFrame(()=>{
       const modal=byId('cfAutoFillModal')?.querySelector('.cf-autofill-modal');
-      if(modal)modal.scrollTop=0;
+      if(modal){modal.scrollTop=0;autoStableTop=0;}
     });
   }
   function closeAutoFill(){if(autoBusy)return notify('Please wait for the current generation to finish.');closeOverlay('cfAutoFillModal');}
@@ -6388,7 +6445,7 @@ ${approvedPatterns}
   }
   function resetAutoFiles(resetInput=false){
     if(autoBusy)return;
-    autoFiles=[];
+    autoFiles=[];autoProgressValue=0;
     if(resetInput&&byId('cfAutoFillFiles'))byId('cfAutoFillFiles').value='';
     setAutoGeneratedState(false);
     renderAutoSelection();
@@ -6416,8 +6473,7 @@ ${approvedPatterns}
     const min=minImages();
     const remaining=Math.max(0,min-autoFiles.length);
     if(note)note.textContent=remaining?`${remaining} more screenshot${remaining===1?'':'s'} required`:`${autoFiles.length} screenshots ready`;
-    const metaReady=!!safeText(byId('cfAutoCallerName')?.value)&&!!safeText(byId('cfAutoCallerAge')?.value)&&!!safeText(byId('cfAutoCallerJob')?.value);
-    if(button)button.disabled=autoBusy||autoFiles.length<min||!metaReady;
+    if(button)button.disabled=autoBusy;
     if(!thumbs)return;
     thumbs.innerHTML='';
     if(!autoFiles.length){thumbs.innerHTML='<div class="dynamics-empty-thumbs">Your selected screenshots will appear here.</div>';return;}
@@ -6431,7 +6487,7 @@ ${approvedPatterns}
 
   function smallerBatches(){const ua=String(navigator.userAgent||'');const isiOS=/iPad|iPhone|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&Number(navigator.maxTouchPoints||0)>1);const narrow=globalThis.matchMedia?.('(max-width: 820px)')?.matches;return!!(isiOS||narrow);}
   function yieldBrowser(){return new Promise(resolve=>typeof requestAnimationFrame==='function'?requestAnimationFrame(()=>setTimeout(resolve,0)):setTimeout(resolve,0));}
-  function setAutoProgress(percent,text,error=false){const wrap=byId('cfAutoFillProgressWrap');if(!wrap)return;wrap.classList.remove('hidden');byId('cfAutoFillProgressBar').style.width=`${Math.max(0,Math.min(100,percent))}%`;byId('cfAutoFillProgressText').textContent=text||'';byId('cfAutoFillProgressText').classList.toggle('dynamics-status-error',!!error);byId('cfAutoFillProgressPercent').textContent=`${Math.round(Math.max(0,Math.min(100,percent)))}%`;}
+  function setAutoProgress(percent,text,error=false){const wrap=byId('cfAutoFillProgressWrap');if(!wrap)return;autoProgressValue=Math.max(0,Math.min(100,Number(percent)||0));wrap.classList.remove('hidden');byId('cfAutoFillProgressBar').style.width=`${autoProgressValue}%`;byId('cfAutoFillProgressText').textContent=text||'';byId('cfAutoFillProgressText').classList.toggle('dynamics-status-error',!!error);byId('cfAutoFillProgressPercent').textContent=`${Math.round(autoProgressValue)}%`;}
   function loadImage(src){return new Promise((resolve,reject)=>{const img=new Image();img.decoding='async';img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('One screenshot could not be prepared.'));img.src=src;});}
   function canvasBlob(canvas){return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('One screenshot could not be compressed.')),'image/jpeg',ANALYSIS_JPEG_QUALITY));}
   function blobDataURL(blob){return new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(String(r.result||''));r.onerror=()=>reject(new Error('One screenshot could not be encoded.'));r.readAsDataURL(blob);});}
@@ -6441,19 +6497,38 @@ ${approvedPatterns}
     finally{try{URL.revokeObjectURL(src)}catch{}try{if(img)img.removeAttribute('src')}catch{}try{if(canvas){canvas.width=1;canvas.height=1}}catch{}img=null;canvas=null;}
   }
   async function api(body){
-    const res=await fetch('/api/call-context/analyze',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token()}`},body:JSON.stringify(body),cache:'no-store'});let payload={};try{payload=await res.json()}catch{}if(!res.ok)throw new Error(payload?.error||'CallFocus could not generate the caller information.');return payload;
+    let res;
+    try{res=await fetch('/api/call-context/analyze',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token()}`},body:JSON.stringify(body),cache:'no-store'});}
+    catch(error){error.retryable=true;throw error;}
+    let payload={};try{payload=await res.json()}catch{}
+    if(!res.ok){const error=new Error(payload?.error||'CallFocus could not generate the caller information.');error.status=res.status;error.retryable=res.status===408||res.status===425||res.status===429||res.status>=500;throw error;}
+    return payload;
   }
-  async function analyzeBatch(images,batchNumber,totalBatches,analysisId,callerMeta,callerHint){let last;for(let a=0;a<2;a++){try{return await api({kind:'batch',images,batchNumber,totalBatches,totalImageCount:autoFiles.length,analysisId,callerMeta,callerHint});}catch(e){last=e;if(a===0)await new Promise(r=>setTimeout(r,650));}}throw last;}
+  async function analyzeBatch(images,batchNumber,totalBatches,analysisId,callerMeta,callerHint){let last;for(let a=0;a<2;a++){try{return await api({kind:'batch',images,batchNumber,totalBatches,totalImageCount:autoFiles.length,analysisId,callerMeta,callerHint});}catch(e){last=e;if(a===0&&e?.retryable!==false)await new Promise(r=>setTimeout(r,650));else break;}}throw last;}
+  async function finalizeAutoFill(body,progressPct){
+    let last;
+    for(let attempt=0;attempt<3;attempt++){
+      try{return await api(body);}
+      catch(error){
+        last=error;
+        if(error?.retryable===false||attempt===2)break;
+        const wait=900*(attempt+1);
+        setAutoProgress(progressPct,attempt===0?'Finalizing caller information… retrying after a temporary interruption.':'Finalizing caller information… one more retry.',false);
+        await new Promise(r=>setTimeout(r,wait));
+      }
+    }
+    throw last;
+  }
 
   async function runAutoFill(){
     if(autoBusy)return;
+    const min=minImages();
+    if(autoFiles.length<min){const remaining=min-autoFiles.length;return notify(`Not enough screenshots. ${remaining} more screenshot${remaining===1?' is':'s are'} required before generating information.`);}
+    const max=maxImages();
+    if(autoFiles.length>max)return notify(`This CallFocus setup currently allows up to ${max} screenshots for automatic first-call information.`);
     const callerMeta={name:safeText(byId('cfAutoCallerName')?.value),age:safeText(byId('cfAutoCallerAge')?.value),job:safeText(byId('cfAutoCallerJob')?.value)};
     if(!callerMeta.name||!callerMeta.age||!callerMeta.job)return notify('Enter the callers name, age and job/work type first.');
     const age=Number(callerMeta.age);if(!Number.isFinite(age)||age<1||age>120)return notify('Enter a valid callers age.');
-    const min=minImages();
-    if(autoFiles.length<min)return notify(`Upload at least ${min} conversation screenshot${min===1?'':'s'}.`);
-    const max=maxImages();
-    if(autoFiles.length>max)return notify(`This CallFocus setup currently allows up to ${max} screenshots for automatic first-call information.`);
     autoBusy=true;setAutoGeneratedState(false);renderAutoSelection();byId('cfAutoGenerateBtn').textContent='Generating…';byId('cfAutoClearBtn').disabled=true;
     const batchSize=smallerBatches()?MOBILE_BATCH_SIZE:DESKTOP_BATCH_SIZE,totalBatches=Math.ceil(autoFiles.length/batchSize),summaries=[],analysisId=(crypto.randomUUID?.()||`cfctx_${Date.now()}_${Math.random().toString(36).slice(2,10)}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,96),callerHint=safeText(byId('newCallPersonName')?.value);
     try{
@@ -6463,12 +6538,13 @@ ${approvedPatterns}
         setAutoProgress(((b+.45)/(totalBatches+1))*100,`Reading screenshots ${start+1}–${start+group.length} of ${autoFiles.length}…`);
         const result=await analyzeBatch(prepared,b+1,totalBatches,analysisId,callerMeta,callerHint);if(!result?.summary)throw new Error('One screenshot group did not return usable information.');summaries.push(result.summary);prepared.length=0;await yieldBrowser();setAutoProgress(((b+1)/(totalBatches+1))*100,`Read ${start+group.length} of ${autoFiles.length} screenshots.`);
       }
-      setAutoProgress((totalBatches/(totalBatches+1))*100,'Building About you, About the caller and conversation dynamics…');
-      const final=await api({kind:'finalize',summaries,imageCount:autoFiles.length,analysisId,callerMeta,callerHint});
+      const finalizeProgress=(totalBatches/(totalBatches+1))*100;
+      setAutoProgress(finalizeProgress,'Building About you, About the caller and conversation dynamics…');
+      const final=await finalizeAutoFill({kind:'finalize',summaries,imageCount:autoFiles.length,analysisId,callerMeta,callerHint},finalizeProgress);
       if(!final?.aboutSelf||!final?.aboutCaller||!final?.dynamics)throw new Error('CallFocus could not create all three information sections.');
       byId('cfAutoAboutSelfResult').value=final.aboutSelf.trim();byId('cfAutoAboutCallerResult').value=final.aboutCaller.trim();byId('cfAutoDynamicsResult').value=final.dynamics.trim();
       byId('cfAutoFillResults').dataset.callerName=safeText(final.callerName||'');setAutoGeneratedState(true);setAutoProgress(100,`Finished using ${autoFiles.length} screenshots.`);byId('cfAutoFillResults').scrollIntoView({behavior:'smooth',block:'nearest'});
-    }catch(e){setAutoProgress(0,e?.message||'Generation failed. Please try again.',true);notify(e?.message||'Generation failed. Please try again.');}
+    }catch(e){setAutoProgress(Math.max(5,autoProgressValue),e?.message||'Generation failed. Please try again.',true);notify(e?.message||'Generation failed. Please try again.');}
     finally{autoBusy=false;byId('cfAutoGenerateBtn').textContent='Generate information';byId('cfAutoClearBtn').disabled=false;renderAutoSelection();}
   }
 
