@@ -1,9 +1,5 @@
-const CALLFOCUS_SW_VERSION = '14.6-retired';
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', event => {
-  event.waitUntil((async()=>{
-    try{ await self.registration.unregister(); }catch{}
-    try{ const clients = await self.clients.matchAll({type:'window',includeUncontrolled:true}); for(const client of clients){ try{ client.postMessage({type:'CALLFOCUS_SW_RETIRED',version:CALLFOCUS_SW_VERSION}); }catch{} } }catch{}
-  })());
-});
-// No fetch handler: all requests go directly to the network/Cloudflare Worker.
+const CACHE='toolcart-shell-v1-8';
+const SHELL=['/','/styles.css','/app.js','/toolcart-logo.png','/icon-192.svg','/icon-512.svg'];
+self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting())));
+self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+self.addEventListener('fetch',event=>{const req=event.request;if(req.method!=='GET'||new URL(req.url).pathname.startsWith('/api/')||new URL(req.url).pathname.startsWith('/media/'))return;event.respondWith(fetch(req).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(req,copy));return res;}).catch(()=>caches.match(req).then(r=>r||caches.match('/'))));});

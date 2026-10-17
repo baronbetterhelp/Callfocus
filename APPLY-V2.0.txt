@@ -1,0 +1,11 @@
+ToolCart V2.0 is a fresh customer-facing front-end rebuild.
+
+Replace these files:
+- index.html
+- styles.css
+- app.js
+- VERSION
+- CHANGES-V2.0.md
+- APPLY-V2.0.txt
+
+No D1 migration required.

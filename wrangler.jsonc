@@ -1,47 +1,36 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "callfocus",
-  "main": "./_worker.js",
-  "compatibility_date": "2026-10-06",
-  "keep_vars": true,
+  "name": "toolcart",
+  "main": "_worker.js",
+  "compatibility_date": "2026-10-14",
+  "assets": {
+    "directory": "./",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "toolcart",
+      "database_id": "ef8f71eb-dd5a-41dd-b049-bfe85066aa98",
+      "migrations_dir": "."
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "toolcart-media"
+    }
+  ],
+  "vars": {
+    "APP_ORIGIN": "https://toolcart.mgt-toolcart.workers.dev",
+    "SESSION_TTL_DAYS": "30",
+    "ALLOW_UNVERIFIED_SIGNUP": "true"
+  },
   "observability": {
     "logs": {
       "enabled": true,
       "invocation_logs": true
     }
-  },
-  "kv_namespaces": [
-    {
-      "binding": "CALLFOCUS_CONFIG",
-      "id": "772f9544dbb7486480e876df3a7a7d3d"
-    }
-  ],
-  "assets": {
-    "directory": "./",
-    "binding": "ASSETS",
-    "run_worker_first": [
-      "/api/*",
-      "/manual-payment-review",
-      "/manual-payment-review/",
-      "/admin",
-      "/admin/",
-      "/admin.css",
-      "/admin.js",
-      "/admin.html",
-      "/avatar",
-      "/voice-notes",
-      "/credits",
-      "/referrals",
-      "/callers",
-      "/recent-calls",
-      "/profile",
-      "/settings",
-      "/privacy",
-      "/terms",
-      "/support",
-      "/"
-    ],
-    "not_found_handling": "404-page",
-    "html_handling": "none"
   }
 }

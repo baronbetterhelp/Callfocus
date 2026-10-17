@@ -1,0 +1,10 @@
+ToolCart V1.9 applies on top of V1.8.
+
+Replace these files:
+- app.js
+- styles.css
+- VERSION
+- CHANGES-V1.9.md
+- APPLY-V1.9.txt
+
+No D1 migration required.

@@ -1,0 +1,7 @@
+TOOLCART V1.1 — CHANGES ONLY
+
+Upload every file in this folder directly to the ROOT of the existing ToolCart GitHub repository and replace files when GitHub shows the same filename.
+
+This update standardizes the official product name to ToolCart and installs the official ToolCart cart/share logo throughout the browser/PWA/site branding.
+
+No D1 migration is required for V1.1.

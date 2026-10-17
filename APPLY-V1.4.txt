@@ -1,0 +1,11 @@
+TOOLCART V1.4 — APPLY UPDATE
+
+1. Extract ToolCart-V1.4-Changes-Only.zip.
+2. Open the extracted folder.
+3. Upload every file inside directly to the root of the existing ToolCart GitHub repository.
+4. Replace matching files when GitHub prompts you.
+5. Cloudflare should redeploy automatically from main.
+6. No new D1 migration is required for V1.4.
+7. After Cloudflare shows Ready, reopen ToolCart or refresh Safari once so the new service-worker shell is installed.
+
+V1.4 keeps the current D1 database ID, current APP_ORIGIN, R2 bucket and temporary no-Resend signup mode.

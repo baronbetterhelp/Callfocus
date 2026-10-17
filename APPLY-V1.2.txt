@@ -1,0 +1,11 @@
+TOOLCART V1.2 - APPLY UPDATE
+
+1. Extract ToolCart-V1.2-Changes-Only.zip.
+2. Upload every file inside directly to the root of the existing ToolCart GitHub repository.
+3. Replace existing files when prompted.
+4. Cloudflare should redeploy automatically from GitHub.
+5. After deployment, Create account works without Resend and signs the new user in immediately.
+
+No new D1 migration is required for V1.2.
+
+IMPORTANT: When Resend is ready, set ALLOW_UNVERIFIED_SIGNUP to false and redeploy.

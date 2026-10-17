@@ -1,0 +1,20 @@
+TOOLCART V1.1 — FLAT GITHUB UPLOAD READY
+
+This version is arranged like your simpler CallFocus upload.
+There are NO public or migrations folders.
+
+HOW TO UPLOAD:
+1. Extract this ZIP.
+2. Open the extracted folder.
+3. Select ALL files you see inside.
+4. Upload them directly to the ROOT of your ToolCart GitHub repository.
+5. Do not create any extra folder in GitHub around them.
+
+Important:
+- _worker.js must be visible at the repository root.
+- wrangler.jsonc must be visible at the repository root.
+- index.html, app.js, styles.css, admin.html, admin.js and admin.css must also be visible at the root.
+- 0001_initial.sql and 0002_seed_optional.sql are the D1 migration files and also stay at the root.
+- .assetsignore prevents backend/config/database files from being published as public static website files.
+
+After upload, return to ChatGPT and continue the setup guide one step at a time.

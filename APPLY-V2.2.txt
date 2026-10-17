@@ -1,0 +1,11 @@
+ToolCart V2.2 applies on top of V2.1.
+
+Replace these files:
+- index.html
+- styles.css
+- app.js
+- VERSION
+- CHANGES-V2.2.md
+- APPLY-V2.2.txt
+
+No D1 migration required.

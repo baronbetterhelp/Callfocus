@@ -1,0 +1,9 @@
+ToolCart V1.11 applies on top of V1.10.
+
+Replace these files:
+- styles.css
+- VERSION
+- CHANGES-V1.11.md
+- APPLY-V1.11.txt
+
+No D1 migration required.

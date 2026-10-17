@@ -1,0 +1,1 @@
+Upload the files from ToolCart-V1.5-Changes-Only to the root of your GitHub repository and replace the existing versions. No migration is required for V1.5.

@@ -1,0 +1,1 @@
+Upload the files from ToolCart-V1.7-Changes-Only to the root of the existing GitHub repository and replace matching files. No D1 migration is required.

@@ -1,0 +1,9 @@
+Upload the files from ToolCart-V1.8-Changes-Only to the root of the existing GitHub repository and replace matching files.
+
+No D1 migration is required.
+
+After deployment:
+1. Keep ADMIN_BOOTSTRAP_TOKEN configured until the owner administrator is successfully created.
+2. Open /admin and use First-time administrator setup.
+3. If ToolCart reports that the token is incorrect, make sure the value entered exactly matches the Cloudflare Worker secret, then redeploy if you changed the secret.
+4. After ToolCart opens the Admin dashboard successfully, remove or rotate ADMIN_BOOTSTRAP_TOKEN.

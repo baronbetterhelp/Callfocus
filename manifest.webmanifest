@@ -1,16 +1,11 @@
 {
-  "name": "CallFocus",
-  "short_name": "CallFocus",
-  "description": "Context-aware realtime calling workspace.",
+  "name": "ToolCart",
+  "short_name": "ToolCart",
+  "description": "All working tools in one place.",
   "start_url": "/",
-  "scope": "/",
   "display": "standalone",
-  "display_override": [
-    "fullscreen",
-    "standalone"
-  ],
-  "background_color": "#f7f8f5",
-  "theme_color": "#f7f8f5",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "icons": [
     {
       "src": "/icon-192.png",
