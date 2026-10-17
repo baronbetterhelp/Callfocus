@@ -1,0 +1,14 @@
+ToolCart V2.5 applies on top of V2.4.
+
+Replace these files:
+- admin.html
+- admin.js
+- admin.css
+- _worker.js
+- sw.js
+- VERSION
+- CHANGES-V2.5.md
+- APPLY-V2.5.txt
+
+No new D1 migration is required.
+After deployment, open /admin again. The Admin identity area will show a small V2.5 badge when the new assets are loaded.

@@ -15,9 +15,10 @@ export default {
       if (url.pathname === '/admin' || url.pathname === '/admin/') {
         const assetUrl = new URL(request.url);
         assetUrl.pathname = '/admin.html';
-        assetUrl.search = '';
-        return env.ASSETS.fetch(new Request(assetUrl.toString(), { method: 'GET', headers: request.headers }));
+        assetUrl.search = `?v=2.5.0`;
+        return adminAsset(env,new Request(assetUrl.toString(),{method:'GET',headers:request.headers}));
       }
+      if(['/admin.html','/admin.js','/admin.css'].includes(url.pathname)) return adminAsset(env,request);
       return env.ASSETS.fetch(request);
     } catch (err) {
       console.error('Unhandled worker error', err);
@@ -26,12 +27,22 @@ export default {
   },
 };
 
+async function adminAsset(env,request){
+  const res=await env.ASSETS.fetch(request);
+  const headers=new Headers(res.headers);
+  headers.set('cache-control','no-store, no-cache, must-revalidate, max-age=0');
+  headers.set('pragma','no-cache');
+  headers.set('expires','0');
+  headers.set('x-toolcart-admin-build','2.5.0');
+  return new Response(res.body,{status:res.status,statusText:res.statusText,headers});
+}
+
 async function handleApi(request, env, ctx, url) {
   const { pathname } = url;
   const method = request.method.toUpperCase();
 
   if (method === 'OPTIONS') return new Response(null, { status: 204 });
-  if (pathname === '/api/health') return apiOk({ ok: true, service: 'ToolCart', version: '1.8.0' });
+  if (pathname === '/api/health') return apiOk({ ok: true, service: 'ToolCart', version: '2.5.0' });
 
   if (pathname === '/api/public/bootstrap' && method === 'GET') return publicBootstrap(env);
   if (pathname === '/api/auth/register' && method === 'POST') return register(request, env);
@@ -1257,7 +1268,7 @@ async function adminPromos(env){const rows=await env.DB.prepare('SELECT * FROM p
 async function adminCreatePromo(request,env,admin){const b=await readJson(request);const title=cleanText(b?.title,120),message=cleanText(b?.message,500);if(!title||!message)return apiError('Title and message are required.',400);const mode=['card','popup','floating'].includes(b?.displayMode)?b.displayMode:'card';const r=await env.DB.prepare(`INSERT INTO promo_campaigns(title,message,image_key,icon_key,destination_url,enabled,target_audience,target_value_json,opening_delay_ms,closing_delay_ms,start_at,expires_at,display_mode,display_order) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(title,message,cleanText(b?.imageKey,500)||null,cleanText(b?.iconKey,500)||null,safeHttpUrl(b?.destinationUrl)?b.destinationUrl:null,boolInt(b?.enabled??1),cleanText(b?.targetAudience,40)||'all',JSON.stringify(Array.isArray(b?.targetValues)?b.targetValues:[]),Math.max(0,Number(b?.openingDelayMs||2500)),Number(b?.closingDelayMs)||null,dateOrNull(b?.startAt),dateOrNull(b?.expiresAt),mode,Number(b?.displayOrder||0)).run();await audit(env,admin.id,'promo_created','promo',String(r.meta.last_row_id),{title},request);return apiOk({id:r.meta.last_row_id,message:'Promotion created.'},201);}
 
 async function adminAudit(env,params){const page=Math.max(1,Number(params.get('page')||1));const rows=await env.DB.prepare(`SELECT l.*,a.full_name AS admin_name,a.email AS admin_email FROM audit_logs l LEFT JOIN admin_users a ON a.id=l.admin_user_id ORDER BY l.created_at DESC LIMIT 100 OFFSET ?`).bind((page-1)*100).all();return apiOk({logs:rows.results,page,hasMore:rows.results.length===100});}
-async function adminDiagnostics(env){const checks={d1:true,r2:!!env.MEDIA,resend:mailConfigured(env),paystack:!!env.PAYSTACK_SECRET_KEY,assets:!!env.ASSETS};try{await env.DB.prepare('SELECT 1').first()}catch{checks.d1=false}return apiOk({checks,version:'1.8.0',note:'This is a configuration check, not an external provider health guarantee.'});}
+async function adminDiagnostics(env){const checks={d1:true,r2:!!env.MEDIA,resend:mailConfigured(env),paystack:!!env.PAYSTACK_SECRET_KEY,assets:!!env.ASSETS};try{await env.DB.prepare('SELECT 1').first()}catch{checks.d1=false}return apiOk({checks,version:'2.5.0',note:'This is a configuration check, not an external provider health guarantee.'});}
 
 // ---------- Shared helpers ----------
 

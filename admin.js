@@ -1,24 +1,48 @@
-const state={admin:null,csrf:null,tab:'dashboard',assetView:'tools',cache:{}};
+const state={admin:null,csrf:null,tab:'dashboard',assetView:'tools',cache:{},netCache:new Map(),inflight:new Map(),loadSeq:0,warmed:false};
 const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDate=v=>{if(!v)return'';const d=new Date(v);return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',year:'numeric'}).format(d)};
 const fmtMoney=(n,c='NGN')=>new Intl.NumberFormat(undefined,{style:'currency',currency:c,currencyDisplay:'narrowSymbol'}).format((Number(n)||0)/100);
 const human=s=>String(s||'').replaceAll('_',' ').replace(/\b\w/g,m=>m.toUpperCase());
 const initials=n=>String(n||'TC').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
-async function api(path,opts={}){const headers=new Headers(opts.headers||{});if(opts.body&&!(opts.body instanceof FormData)){headers.set('content-type','application/json');opts.body=typeof opts.body==='string'?opts.body:JSON.stringify(opts.body)}if(state.csrf&&!['GET','HEAD'].includes((opts.method||'GET').toUpperCase()))headers.set('x-csrf-token',state.csrf);const res=await fetch(path,{credentials:'same-origin',...opts,headers});const d=await res.json().catch(()=>({ok:false,error:'Invalid server response.'}));if(!res.ok){const e=new Error(d.error||'Something went wrong.');e.status=res.status;throw e}return d}
+async function api(path,opts={}){
+  const method=(opts.method||'GET').toUpperCase();
+  const cacheable=method==='GET'&&path.startsWith('/api/admin/');
+  const now=Date.now(),ttl=15000;
+  if(cacheable){
+    const hit=state.netCache.get(path);
+    if(hit&&now-hit.time<ttl)return hit.data;
+    if(state.inflight.has(path))return state.inflight.get(path);
+  }else if(method!=='GET'&&method!=='HEAD'){
+    state.netCache.clear();
+  }
+  const run=(async()=>{
+    const headers=new Headers(opts.headers||{});
+    let body=opts.body;
+    if(body&&!(body instanceof FormData)){headers.set('content-type','application/json');body=typeof body==='string'?body:JSON.stringify(body)}
+    if(state.csrf&&!['GET','HEAD'].includes(method))headers.set('x-csrf-token',state.csrf);
+    const res=await fetch(path,{credentials:'same-origin',...opts,method,body,headers,cache:cacheable?'no-store':opts.cache});
+    const d=await res.json().catch(()=>({ok:false,error:'Invalid server response.'}));
+    if(!res.ok){const e=new Error(d.error||'Something went wrong.');e.status=res.status;throw e}
+    if(cacheable)state.netCache.set(path,{time:Date.now(),data:d});
+    return d;
+  })();
+  if(cacheable){state.inflight.set(path,run);run.finally(()=>state.inflight.delete(path));}
+  return run;
+}
 function toast(m,t='ok'){const e=document.createElement('div');e.className=`toast ${t}`;e.textContent=m;$('#toastHost').append(e);setTimeout(()=>e.remove(),3500)}
 function setupStatus(message='',type='info'){const el=$('#adminSetupStatus');if(!el)return;if(!message){el.textContent='';el.className='admin-setup-status hidden';return}el.textContent=message;el.className=`admin-setup-status ${type}`;}
 function empty(t,p){return `<div class="empty-state"><span>◇</span><h3>${esc(t)}</h3><p>${esc(p)}</p></div>`}
 function badge(s){const cls=['success','active','online','resolved'].includes(s)?'ok':['failed','disabled','closed'].includes(s)?'warn':'';return `<span class="status-badge ${cls}">${esc(human(s))}</span>`}
 function icon(a){return `<div class="app-icon" style="--accent:${esc(a.accent_color||'#7b65ff')}">${a.icon_url?`<img src="${esc(a.icon_url)}" alt="">`:esc(initials(a.name))}</div>`}
 
-async function boot(){bind();try{const s=await api('/api/admin/session');state.admin=s.admin;state.csrf=s.csrfToken;enterShell();loadTab('dashboard')}catch{$('#adminLogin').classList.remove('hidden')}}
-function enterShell(){$('#adminLogin').classList.add('hidden');$('#adminShell').classList.remove('hidden');$('#adminIdentity').innerHTML=`<strong>${esc(state.admin.fullName)}</strong><span>${esc(state.admin.role)} · ${esc(state.admin.email)}</span>`}
+async function boot(){bind();try{const s=await api('/api/admin/session');state.admin=s.admin;state.csrf=s.csrfToken;enterShell();await loadTab('dashboard');scheduleWarmup()}catch{$('#adminLogin').classList.remove('hidden')}}
+function enterShell(){$('#adminLogin').classList.add('hidden');$('#adminShell').classList.remove('hidden');$('#adminIdentity').innerHTML=`<strong>${esc(state.admin.fullName)}</strong><span>${esc(state.admin.role)} · ${esc(state.admin.email)}</span><small class="admin-build">V2.5</small>`}
 function bind(){
-  $('#adminLoginForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.currentTarget),b=$('button',e.currentTarget);b.disabled=true;try{const d=await api('/api/admin/login',{method:'POST',body:{email:f.get('email'),password:f.get('password')}});state.admin=d.admin;state.csrf=d.csrfToken;enterShell();loadTab('dashboard')}catch(err){toast(err.message,'error');b.disabled=false}});
+  $('#adminLoginForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.currentTarget),b=$('button',e.currentTarget);b.disabled=true;try{const d=await api('/api/admin/login',{method:'POST',body:{email:f.get('email'),password:f.get('password')}});state.admin=d.admin;state.csrf=d.csrfToken;enterShell();await loadTab('dashboard');scheduleWarmup()}catch(err){toast(err.message,'error');b.disabled=false}});
   $('#showAdminSetup')?.addEventListener('click',()=>{setupStatus();$('#adminLoginForm').classList.add('hidden');$('#showAdminSetup').classList.add('hidden');$('#adminSetupForm').classList.remove('hidden')});
   $('#cancelAdminSetup')?.addEventListener('click',()=>{setupStatus();$('#adminSetupForm').classList.add('hidden');$('#adminLoginForm').classList.remove('hidden');$('#showAdminSetup').classList.remove('hidden')});
-  $('#adminSetupForm')?.addEventListener('submit',async e=>{e.preventDefault();const form=e.currentTarget,f=new FormData(form),b=form.querySelector('button[type=submit]'),original=b.textContent;const email=String(f.get('email')||'').trim(),password=String(f.get('password')||'');setupStatus('Creating the owner administrator…','info');b.disabled=true;b.textContent='Creating administrator…';try{const token=String(f.get('bootstrapToken')||'');const d=await api('/api/admin/bootstrap',{method:'POST',headers:{'x-toolcart-bootstrap-token':token},body:{fullName:f.get('fullName'),email,password}});if(d.admin&&d.csrfToken){state.admin=d.admin;state.csrf=d.csrfToken;setupStatus('Owner administrator created. Opening the Admin dashboard…','success');toast('Owner administrator created.');form.reset();enterShell();await loadTab('dashboard');return}if(d.created&&d.requiresLogin){setupStatus(d.message||'Owner administrator created. Sign in with the credentials you just chose.','success');$('#adminLoginForm').elements.email.value=email;$('#adminLoginForm').elements.password.value=password;form.classList.add('hidden');$('#adminLoginForm').classList.remove('hidden');$('#showAdminSetup').classList.remove('hidden');toast('Owner administrator created. Sign in to continue.');return}setupStatus(d.message||'Owner administrator created.','success')}catch(err){setupStatus(err.message||'Administrator setup failed.','error');toast(err.message||'Administrator setup failed.','error')}finally{b.disabled=false;b.textContent=original}});
+  $('#adminSetupForm')?.addEventListener('submit',async e=>{e.preventDefault();const form=e.currentTarget,f=new FormData(form),b=form.querySelector('button[type=submit]'),original=b.textContent;const email=String(f.get('email')||'').trim(),password=String(f.get('password')||'');setupStatus('Creating the owner administrator…','info');b.disabled=true;b.textContent='Creating administrator…';try{const token=String(f.get('bootstrapToken')||'');const d=await api('/api/admin/bootstrap',{method:'POST',headers:{'x-toolcart-bootstrap-token':token},body:{fullName:f.get('fullName'),email,password}});if(d.admin&&d.csrfToken){state.admin=d.admin;state.csrf=d.csrfToken;setupStatus('Owner administrator created. Opening the Admin dashboard…','success');toast('Owner administrator created.');form.reset();enterShell();await loadTab('dashboard');scheduleWarmup();return}if(d.created&&d.requiresLogin){setupStatus(d.message||'Owner administrator created. Sign in with the credentials you just chose.','success');$('#adminLoginForm').elements.email.value=email;$('#adminLoginForm').elements.password.value=password;form.classList.add('hidden');$('#adminLoginForm').classList.remove('hidden');$('#showAdminSetup').classList.remove('hidden');toast('Owner administrator created. Sign in to continue.');return}setupStatus(d.message||'Owner administrator created.','success')}catch(err){setupStatus(err.message||'Administrator setup failed.','error');toast(err.message||'Administrator setup failed.','error')}finally{b.disabled=false;b.textContent=original}});
   document.addEventListener('click',async e=>{
     const nav=e.target.closest('[data-admin-tab]');if(nav){closeModal();return loadTab(nav.dataset.adminTab)}
     if(e.target.closest('[data-close-admin-modal]')||e.target.id==='modalBackdrop')return closeModal();
@@ -33,7 +57,26 @@ function bind(){
   $('#adminLogout').addEventListener('click',async()=>{try{await api('/api/admin/logout',{method:'POST'})}catch{}location.reload()});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();$('#adminSidebar').classList.remove('open')}})
 }
-async function loadTab(tab,refresh=false){if(tab==='products'){state.assetView='products';tab='apps'}state.tab=tab;$('#adminPageTitle').textContent=tab==='apps'?'Tools & Products':human(tab);$$('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b.dataset.adminTab===tab));$('#adminSidebar').classList.remove('open');$('#adminContent').innerHTML=empty('Loading',`Opening ${tab==='apps'?'Tools':human(tab)}...`);try{if(tab==='dashboard')await dashboard();else if(tab==='customers')await customers();else if(tab==='apps')await apps();else if(tab==='products')await products();else if(tab==='subscriptions')await subscriptions();else if(tab==='payments')await payments();else if(tab==='updates')await updates();else if(tab==='requests')await requests();else if(tab==='notifications')await notifications();else if(tab==='analytics')await analytics();else if(tab==='appearance')await appearance();else if(tab==='settings')await settings();else if(tab==='audit')await auditLog();else if(tab==='diagnostics')await diagnostics();else $('#adminContent').innerHTML=empty('Not available','This section is not ready.')}catch(e){if(e.status===401)return location.reload();$('#adminContent').innerHTML=empty('Could not load this section',e.message)}}
+async function loadTab(tab,refresh=false){
+  if(tab==='products'){state.assetView='products';tab='apps'}
+  const seq=++state.loadSeq;state.tab=tab;
+  $('#adminPageTitle').textContent=tab==='apps'?'Tools & Products':human(tab);
+  $$('[data-admin-tab]').forEach(b=>b.classList.toggle('active',b.dataset.adminTab===tab));
+  $('#adminSidebar').classList.remove('open');
+  if(refresh)state.netCache.clear();
+  $('#adminContent').innerHTML=adminLoading(tab==='apps'?'Tools & Products':human(tab));
+  try{
+    if(tab==='dashboard')await dashboard();else if(tab==='customers')await customers();else if(tab==='apps')await apps();else if(tab==='subscriptions')await subscriptions();else if(tab==='payments')await payments();else if(tab==='updates')await updates();else if(tab==='requests')await requests();else if(tab==='notifications')await notifications();else if(tab==='analytics')await analytics();else if(tab==='appearance')await appearance();else if(tab==='settings')await settings();else if(tab==='audit')await auditLog();else if(tab==='diagnostics')await diagnostics();else $('#adminContent').innerHTML=empty('Not available','This section is not ready.');
+    if(seq!==state.loadSeq)return;
+  }catch(e){if(seq!==state.loadSeq)return;if(e.status===401)return location.reload();$('#adminContent').innerHTML=empty('Could not load this section',e.message)}
+}
+function adminLoading(label){return `<div class="admin-fast-loading"><div class="admin-loading-head"><span></span><strong>Opening ${esc(label)}…</strong></div><div class="admin-skeleton-grid"><i></i><i></i><i></i></div></div>`}
+function scheduleWarmup(){
+  if(state.warmed)return;state.warmed=true;
+  const run=async()=>{for(const path of ['/api/admin/apps','/api/admin/products','/api/admin/requests','/api/admin/customers','/api/admin/subscriptions/plans']){try{await api(path)}catch{} await new Promise(r=>setTimeout(r,40));}};
+  if('requestIdleCallback'in window)requestIdleCallback(()=>run(),{timeout:1200});else setTimeout(run,500);
+}
+
 
 async function dashboard(){const d=await api('/api/admin/dashboard');const m=d.metrics;const cards=[['Total customers',m.totalCustomers],['Active customers',m.activeCustomers],['New signups',m.newSignups],['Paid subscribers',m.paidSubscribers],['Monthly revenue',fmtMoney(m.monthlyRevenueMinor,'NGN')],['Tools online',m.appsOnline],['Maintenance',m.appsMaintenance],['Open requests',m.openRequests],['New requests',m.unreadRequests],['Notifications sent',m.notificationsSent]];$('#adminContent').innerHTML=`<div class="metric-grid">${cards.map((c,i)=>`<article class="metric-card" style="animation-delay:${i*35}ms"><span>${esc(c[0])}</span><strong>${esc(c[1])}</strong><small>Live ecosystem metric</small></article>`).join('')}</div><div class="admin-grid-2"><section class="admin-panel"><div class="admin-panel-head"><h2>Recent payments</h2><button class="text-btn" data-admin-tab="payments">View all</button></div>${tablePayments(d.recentPayments)}</section><section class="admin-panel"><div class="admin-panel-head"><h2>Recent tool activity</h2></div>${d.recentActivity.length?`<div class="timeline">${d.recentActivity.map(x=>`<div class="timeline-item"><small>${fmtDate(x.created_at)}</small><p><strong>${esc(x.full_name)}</strong><br>Opened ${esc(x.app_name)}</p></div>`).join('')}</div>`:empty('No activity yet','Tool opens will appear here.')}</section></div>`}
 
