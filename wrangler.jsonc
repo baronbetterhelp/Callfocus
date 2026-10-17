@@ -1,0 +1,47 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "callfocus",
+  "main": "./_worker.js",
+  "compatibility_date": "2026-10-06",
+  "keep_vars": true,
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
+    }
+  },
+  "kv_namespaces": [
+    {
+      "binding": "CALLFOCUS_CONFIG",
+      "id": "772f9544dbb7486480e876df3a7a7d3d"
+    }
+  ],
+  "assets": {
+    "directory": "./",
+    "binding": "ASSETS",
+    "run_worker_first": [
+      "/api/*",
+      "/manual-payment-review",
+      "/manual-payment-review/",
+      "/admin",
+      "/admin/",
+      "/admin.css",
+      "/admin.js",
+      "/admin.html",
+      "/avatar",
+      "/voice-notes",
+      "/credits",
+      "/referrals",
+      "/callers",
+      "/recent-calls",
+      "/profile",
+      "/settings",
+      "/privacy",
+      "/terms",
+      "/support",
+      "/"
+    ],
+    "not_found_handling": "404-page",
+    "html_handling": "none"
+  }
+}
