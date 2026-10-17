@@ -1,0 +1,18 @@
+TOOLCART — PRODUCT MANAGER UPDATE
+
+This update is built directly on the current ToolCart V2.2 Product Marketplace Merge.
+It only adds:
+1. Multiple protected files/images per product.
+2. Products inside the existing Tools admin section with a Tool / Product switch.
+
+DATABASE STEP — REQUIRED ONCE
+Apply only this new migration to the existing D1 database:
+
+0004_product_assets.sql
+
+Cloudflare/Wrangler example:
+npx wrangler d1 execute toolcart --remote --file=0004_product_assets.sql
+
+Do NOT re-run 0001, 0002 or 0003 if they are already applied.
+
+Then deploy the changed application files.

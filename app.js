@@ -1,337 +1,230 @@
-const $ = (id) => document.getElementById(id);
-const qsa = (sel, root = document) => [...root.querySelectorAll(sel)];
-const esc = (value = '') => String(value).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-const uuid = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-const ACCOUNTS_KEY = 'callfocus_accounts_v4';
-const SESSION_KEY = 'callfocus_session_v4';
-const ADMIN_KEY = 'callfocus_admin_global_v4';
-const LEGACY_ADMIN_KEY = 'callfocus_admin_global_v3';
-const VOICES = ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar','ripple','vesper','stone','meridian','beacon','cinder','tempo','quartz','willow','gleam','bossa','delta'];
-const TIMEZONES = [
-  ['Africa/Lagos','Nigeria / West Africa (Lagos)'],['America/Los_Angeles','US Pacific (Los Angeles)'],['America/Denver','US Mountain (Denver)'],['America/Chicago','US Central (Chicago)'],['America/New_York','US Eastern (New York)'],['America/Phoenix','Arizona (Phoenix)'],['America/Toronto','Canada Eastern (Toronto)'],['America/Vancouver','Canada Pacific (Vancouver)'],['Europe/London','United Kingdom (London)'],['Europe/Rome','Italy (Rome)'],['Europe/Paris','France (Paris)'],['Europe/Berlin','Germany (Berlin)'],['Asia/Dubai','UAE (Dubai)'],['Asia/Kolkata','India (Kolkata)'],['Asia/Tokyo','Japan (Tokyo)'],['Asia/Shanghai','China (Shanghai)'],['Australia/Sydney','Australia (Sydney)'],['Pacific/Auckland','New Zealand (Auckland)'],['America/Indiana/Indianapolis','US Eastern (Indiana)'],['Pacific/Honolulu','Hawaii (Honolulu)'],['America/Anchorage','Alaska (Anchorage)']
-];
-const US_CITIES = [
-  ['New York, New York','America/New_York'],['Los Angeles, California','America/Los_Angeles'],['Chicago, Illinois','America/Chicago'],['Houston, Texas','America/Chicago'],['Phoenix, Arizona','America/Phoenix'],['Philadelphia, Pennsylvania','America/New_York'],['San Antonio, Texas','America/Chicago'],['San Diego, California','America/Los_Angeles'],['Dallas, Texas','America/Chicago'],['San Jose, California','America/Los_Angeles'],['Austin, Texas','America/Chicago'],['Jacksonville, Florida','America/New_York'],['Fort Worth, Texas','America/Chicago'],['Columbus, Ohio','America/New_York'],['Charlotte, North Carolina','America/New_York'],['Indianapolis, Indiana','America/Indiana/Indianapolis'],['San Francisco, California','America/Los_Angeles'],['Seattle, Washington','America/Los_Angeles'],['Denver, Colorado','America/Denver'],['Washington, District of Columbia','America/New_York'],['Nashville, Tennessee','America/Chicago'],['Oklahoma City, Oklahoma','America/Chicago'],['El Paso, Texas','America/Denver'],['Boston, Massachusetts','America/New_York'],['Portland, Oregon','America/Los_Angeles'],['Las Vegas, Nevada','America/Los_Angeles'],['Detroit, Michigan','America/New_York'],['Memphis, Tennessee','America/Chicago'],['Louisville, Kentucky','America/New_York'],['Baltimore, Maryland','America/New_York'],['Milwaukee, Wisconsin','America/Chicago'],['Albuquerque, New Mexico','America/Denver'],['Tucson, Arizona','America/Phoenix'],['Fresno, California','America/Los_Angeles'],['Sacramento, California','America/Los_Angeles'],['Atlanta, Georgia','America/New_York'],['Miami, Florida','America/New_York'],['Minneapolis, Minnesota','America/Chicago'],['New Orleans, Louisiana','America/Chicago'],['Salt Lake City, Utah','America/Denver'],['Kansas City, Missouri','America/Chicago'],['Raleigh, North Carolina','America/New_York'],['Cleveland, Ohio','America/New_York'],['Pittsburgh, Pennsylvania','America/New_York'],['St. Louis, Missouri','America/Chicago'],['Orlando, Florida','America/New_York'],['Tampa, Florida','America/New_York'],['Honolulu, Hawaii','Pacific/Honolulu'],['Anchorage, Alaska','America/Anchorage']
-];
-const DYNAMICS = {
-  custom:{label:'Upload my own dynamics (Recommended)',description:'Describe the real tone, relationship patterns, boundaries and conversational style.',prompt:''},
-  romantic:{label:'Romantic Call',description:'Warm, affectionate and emotionally attentive.',prompt:'Use a warm, affectionate and emotionally attentive romantic dynamic. Keep it natural and grounded in the supplied facts. Do not invent intimacy, promises, milestones or personal history.'},
-  dating:{label:'Dating / Getting to Know Each Other',description:'Warm, interested and lightly flirtatious.',prompt:'Use a warm, interested and lightly flirtatious getting-to-know-you dynamic. Show natural curiosity without pretending the relationship is deeper than the supplied context.'},
-  friendship:{label:'Friendship Call',description:'Relaxed, familiar and friendly.',prompt:'Use a relaxed friendship dynamic with natural back-and-forth, light humor when appropriate, and no invented shared history.'},
-  business:{label:'Business Call',description:'Clear, polished and purpose-focused.',prompt:'Use a professional, clear and goal-oriented business dynamic. Keep it courteous and efficient without inventing authority, pricing, promises or company policy.'},
-  client:{label:'Professional / Client Call',description:'Polished, courteous and professionally bounded.',prompt:'Use a polished professional-client dynamic. Be clear, helpful and appropriately formal without inventing commitments.'},
-  family:{label:'Family Call',description:'Warm and familiar while respecting the specific relationship.',prompt:'Use a warm family-call dynamic. Rely on supplied context rather than assuming nicknames, history or obligations.'},
-  supportive:{label:'Supportive / Check-in Call',description:'Attentive, caring and focused on how the person is doing.',prompt:'Use a caring and attentive check-in dynamic. Ask gentle natural follow-ups and avoid sounding clinical or scripted.'},
-  reconnecting:{label:'Reconnecting Call',description:'Warm but measured for people who have not spoken recently.',prompt:'Use a warm but measured reconnecting dynamic. Let the conversation rebuild naturally and do not pretend there has been recent contact.'},
-  casual:{label:'Casual Call',description:'Light, easygoing and low-pressure.',prompt:'Use a light, easygoing casual dynamic and follow the other person’s lead.'},
-  formal:{label:'Formal Call',description:'Respectful, composed and restrained.',prompt:'Use a formal, respectful and composed dynamic with minimal slang or over-familiarity.'}
-};
-const ADMIN_DEFAULTS = {
-  serverOnline:true,
-  serverMessage:'Server not active right now. Please try again soon.',
-  maleVoice:'cedar',
-  femaleVoice:'marin',
-  voiceNoteMaleVoice:'cedar',
-  voiceNoteFemaleVoice:'marin',
-  model:'gpt-live-1',
-  siteTheme:'pearl',
-  instructions:'Follow the customer-provided call rules and relationship context closely. Keep the conversation responsive and natural. Do not turn a social call into an interview, support exchange, coaching session, or scripted agenda.',
-  opening:'Use the customer-selected opening for each call. Greet naturally, then pause and let the other person respond before moving further into the topic.',
-  speakFirst:true,
-  interruptions:true
-};
-let remoteAdmin = {...ADMIN_DEFAULTS};
+const state={user:null,csrf:null,apps:[],products:[],wallet:{balanceMinor:0,currency:'NGN'},cartCount:0,updates:[],notifications:[],requests:[],recentApps:[],currentPlan:null,settings:{},promos:[],activeTab:'home',appCategory:'all',updateFilter:'all',notifFilter:'unread'};
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtDate=v=>{if(!v)return'';const d=new Date(v);return Number.isNaN(d)?'':new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',year:d.getFullYear()!==new Date().getFullYear()?'numeric':undefined}).format(d)};
+const fmtMoney=(minor,currency='NGN')=>new Intl.NumberFormat(undefined,{style:'currency',currency,currencyDisplay:'narrowSymbol'}).format((Number(minor)||0)/100);
+const humanStatus=s=>String(s||'').replaceAll('_',' ').replace(/\b\w/g,m=>m.toUpperCase());
 
-let account = null;
-let data = null;
-let activeView = 'home';
-let selectedThreadId = null;
-let pendingAction = null;
-let selectedNewCallVoice = 'male';
-let live = {
-  pc:null, dc:null, stream:null, audio:null, timer:null, seconds:0, connected:false,
-  muted:false, speakerOn:true, held:false, graceful:false, current:null, transcript:'', gracefulTimer:null, minimized:false, moreOpen:false
-};
+async function api(path,opts={}){
+  const headers=new Headers(opts.headers||{});
+  if(opts.body&&!(opts.body instanceof FormData)){headers.set('content-type','application/json');opts.body=typeof opts.body==='string'?opts.body:JSON.stringify(opts.body)}
+  if(state.csrf&&!['GET','HEAD'].includes((opts.method||'GET').toUpperCase()))headers.set('x-csrf-token',state.csrf);
+  const res=await fetch(path,{credentials:'same-origin',...opts,headers});
+  const data=await res.json().catch(()=>({ok:false,error:'We could not read the server response.'}));
+  if(!res.ok){const err=new Error(data.error||'Something went wrong.');err.status=res.status;err.data=data;throw err}
+  return data;
+}
+function toast(message,type='ok'){const el=document.createElement('div');el.className=`toast ${type}`;el.textContent=message;$('#toastHost').append(el);setTimeout(()=>el.remove(),3600)}
+function setTheme(){document.documentElement.dataset.theme='midnight';document.querySelector('meta[name="theme-color"]').setAttribute('content','#000000');localStorage.setItem('toolcart_theme','midnight')}
+function preferredVisualTheme(){return 'midnight'}
+function initials(name='ToolCart'){return name.trim().split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase()||'TC'}
+function iconHtml(app,cls='app-icon'){const style=`--accent:${esc(app.accent_color||app.accentColor||'#7b65ff')}`;return `<div class="${cls}" style="${style}">${app.icon_url?`<img src="${esc(app.icon_url)}" alt="">`:esc(initials(app.name))}</div>`}
+function empty(title,text,icon='◇'){return `<div class="empty-state"><span>${icon}</span><h3>${esc(title)}</h3><p>${esc(text)}</p></div>`}
 
-function readJSON(key, fallback){ try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } }
-function writeJSON(key, value){ localStorage.setItem(key, JSON.stringify(value)); }
-function accounts(){ return readJSON(ACCOUNTS_KEY, []); }
-function accountDataKey(id){ return `callfocus_account_data_v4_${id}`; }
-function defaultData(name=''){ return { profile:{name,role:'',about:'',rules:''}, callers:[], threads:[] }; }
-function loadAdmin(){ return {...ADMIN_DEFAULTS, ...remoteAdmin}; }
-function applyGlobalTheme(theme){
-  const next=theme==='pearl'?'pearl':'black';
-  document.documentElement.dataset.theme=next;
-  document.documentElement.style.colorScheme=next==='pearl'?'light':'dark';
-  const meta=document.querySelector('meta[name="theme-color"]');
-  if(meta) meta.setAttribute('content',next==='pearl'?'#f7f8f5':'#080808');
+function syncHeroMetrics(){
+  const unreadUpdates=state.updates.filter(x=>!x.is_read).length;
+  const openRequests=state.requests.filter(x=>!['resolved','closed'].includes(String(x.status||'').toLowerCase())).length||state.requests.length;
+  $('#heroToolCount')&&($('#heroToolCount').textContent=String(state.apps.length||0));
+  $('#heroUpdateCount')&&($('#heroUpdateCount').textContent=String(unreadUpdates));
+  $('#heroRequestCount')&&($('#heroRequestCount').textContent=String(openRequests));
+  $('#heroStatusLine')&&($('#heroStatusLine').textContent=`${state.apps.length||0} working tools, ${unreadUpdates} unread updates.`);
+  $('#heroSupportMail')&&($('#heroSupportMail').textContent=state.settings.support_email?`Support: ${state.settings.support_email}`:'Updates, launches and support live together here.');
 }
-async function refreshPublicConfig(){ try{ const res=await fetch('/api/public-config',{cache:'no-store'}); if(res.ok){ remoteAdmin={...ADMIN_DEFAULTS,...await res.json()}; applyGlobalTheme(remoteAdmin.siteTheme); applyAdminLabels(); } }catch{} return loadAdmin(); }
-function initials(name='?'){ return (String(name).trim()[0] || '?').toUpperCase(); }
-function normalizeName(name=''){ return String(name).trim().toLowerCase().replace(/\s+/g,' '); }
-function toast(message){ $('toast').textContent = message; $('toast').classList.remove('hidden'); clearTimeout(toast._t); toast._t = setTimeout(()=>$('toast').classList.add('hidden'), 2400); }
-function fmtDuration(seconds=0){ const h=Math.floor(seconds/3600),m=Math.floor((seconds%3600)/60),s=seconds%60; return h?`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`:`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`; }
-function nowInTimezone(tz){ try { return new Intl.DateTimeFormat('en-US',{timeZone:tz,weekday:'long',year:'numeric',month:'long',day:'numeric',hour:'numeric',minute:'2-digit',timeZoneName:'short'}).format(new Date()); } catch { return new Date().toString(); } }
-function relativeTime(iso){
-  if(!iso) return '';
-  const diff = Date.now() - new Date(iso).getTime();
-  const min = Math.max(0, Math.floor(diff/60000));
-  if(min < 1) return 'Just now'; if(min < 60) return `${min}m ago`;
-  const hr = Math.floor(min/60); if(hr < 24) return `${hr}h ago`;
-  const day = Math.floor(hr/24); if(day === 1) return 'Yesterday'; if(day < 7) return `${day}d ago`;
-  return new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric'});
+function renderHomeFeatureStrip(){
+  const box=$('#homeFeatureStrip');
+  if(!box)return;
+  const items=[
+    {eyebrow:'LAUNCH',title:`${state.apps.length||0} working tools`,copy:'Open products from one beautifully arranged home screen.'},
+    {eyebrow:'UPDATES',title:`${state.updates.length||0} recent updates`,copy:'See release notes, announcements and important notices.'},
+    {eyebrow:'SUPPORT',title:`${state.requests.length||0} request threads`,copy:'Reach support and keep every request in one place.'}
+  ];
+  box.innerHTML=items.slice(0,2).map(item=>`<article class="feature-tile"><span class="eyebrow">${esc(item.eyebrow)}</span><strong>${esc(item.title)}</strong><p>${esc(item.copy)}</p></article>`).join('');
 }
-function dateLabel(iso){ try { return new Date(iso).toLocaleString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}); } catch { return iso || ''; } }
-async function sha256(text){ const bytes=new TextEncoder().encode(text); const digest=await crypto.subtle.digest('SHA-256',bytes); return [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,'0')).join(''); }
-function bytesToB64(bytes){ let s=''; bytes.forEach(b=>s+=String.fromCharCode(b)); return btoa(s); }
-function b64ToBytes(value){ const s=atob(value); return Uint8Array.from(s,c=>c.charCodeAt(0)); }
-async function derivePasswordHash(password,saltB64,iterations=120000){ const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(password),'PBKDF2',false,['deriveBits']); const bits=await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:b64ToBytes(saltB64),iterations},key,256); return bytesToB64(new Uint8Array(bits)); }
-async function buildPasswordRecord(password){ const salt=crypto.getRandomValues(new Uint8Array(16)); const saltB64=bytesToB64(salt); const iterations=120000; return {passwordVersion:2,passwordSalt:saltB64,passwordIterations:iterations,passwordHash:await derivePasswordHash(password,saltB64,iterations)}; }
-async function verifyPassword(acc,password){ if(acc.passwordVersion===2&&acc.passwordSalt){ return (await derivePasswordHash(password,acc.passwordSalt,acc.passwordIterations||120000))===acc.passwordHash; } return (await sha256(password))===acc.passwordHash; }
-function sortedThreads(){ return [...(data?.threads || [])].sort((a,b)=>new Date(b.updatedAt||b.createdAt)-new Date(a.updatedAt||a.createdAt)); }
-function lastCall(thread){ return thread?.calls?.length ? thread.calls[thread.calls.length-1] : null; }
-function dynamicsText(mode, custom){ const preset=DYNAMICS[mode]||DYNAMICS.custom; return mode==='custom' ? (String(custom||'').trim() || 'No custom dynamics were supplied. Use the saved caller information conservatively without inventing relationship history or tone.') : `${preset.label}: ${preset.prompt}`; }
-
-function initOptions(){
-  const tz = TIMEZONES.map(([v,l])=>`<option value="${v}">${l}</option>`).join('');
-  $('newCallATimezone').innerHTML = tz; $('newCallBTimezone').innerHTML = tz;
-  const dyn = Object.entries(DYNAMICS).map(([v,d])=>`<option value="${v}">${d.label}</option>`).join('');
-  $('newCallDynamicsMode').innerHTML = dyn; $('callerDynamicsMode').innerHTML = dyn;
-  $('newCallATimezone').value = 'America/Los_Angeles'; $('newCallBTimezone').value = 'America/New_York';
-  updateDynamicsUI('newCall'); updateDynamicsUI('caller');
+function activateMotion(){
+  const nodes=$$('.reveal-on-scroll');
+  if(!nodes.length)return;
+  if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches){nodes.forEach(n=>n.classList.add('visible'));return}
+  if(!window.__toolcartObserver){
+    window.__toolcartObserver=new IntersectionObserver(entries=>{entries.forEach(entry=>{if(entry.isIntersecting){entry.target.classList.add('visible');window.__toolcartObserver.unobserve(entry.target)}})},{threshold:.14,rootMargin:'0px 0px -40px 0px'});
+  }
+  nodes.forEach(n=>{if(n.classList.contains('visible'))return;window.__toolcartObserver.observe(n)});
 }
-function updateDynamicsUI(scope){
-  const mode = $(scope+'DynamicsMode').value || 'custom';
-  const wrap = $(scope+'DynamicsCustomWrap');
-  const help = $(scope+'DynamicsHelp');
-  const preset = DYNAMICS[mode] || DYNAMICS.custom;
-  wrap.classList.toggle('hidden', mode !== 'custom');
-  help.classList.toggle('hidden', mode === 'custom');
-  if(mode !== 'custom') help.innerHTML = `<strong>${esc(preset.label)}</strong><br>${esc(preset.description)} This is a general fallback. Custom dynamics are still recommended whenever you know the real relationship context.`;
-}
-function applyAdminLabels(){
-  const admin = loadAdmin();
-  $('maleVoiceLabel').textContent = admin.maleVoice;
-  $('femaleVoiceLabel').textContent = admin.femaleVoice;
-  if($('homeVoicePair')) $('homeVoicePair').textContent = `${admin.maleVoice} / ${admin.femaleVoice}`;
+function updateScrollProgress(){
+  const bar=$('#scrollProgress');if(!bar)return;
+  const h=document.documentElement;const max=(h.scrollHeight-window.innerHeight);const progress=max>0?Math.min(1,Math.max(0,window.scrollY/max)):0;
+  bar.style.width=`${progress*100}%`;
 }
 
-function motionInit(){
-  const page = $('pageRoot');
-  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  if(!reduce) requestAnimationFrame(()=>page.classList.add('motion-ready'));
-  const nodes = qsa('[data-reveal]');
-  if(reduce || !('IntersectionObserver' in window)){ nodes.forEach(n=>n.classList.add('is-visible')); return; }
-  const observer = new IntersectionObserver(entries=>entries.forEach(entry=>{ if(entry.isIntersecting){ entry.target.classList.add('is-visible'); observer.unobserve(entry.target); } }),{threshold:.12,rootMargin:'0px 0px -2% 0px'});
-  nodes.forEach(n=>{ n.classList.add('reveal-pending'); observer.observe(n); });
-  let ticking=false;
-  const syncParallax=()=>{ if(ticking)return; ticking=true; requestAnimationFrame(()=>{ const y=Math.min(window.scrollY||0,900), mobile=innerWidth<=620; page.style.setProperty('--cf-bg-shift',`${Math.round(y*(mobile?.018:.035))}px`); page.style.setProperty('--cf-copy-shift',`${Math.round(y*(mobile?-.006:-.012))}px`); page.style.setProperty('--cf-geo-shift',`${Math.round(y*(mobile?.012:.022))}px`); ticking=false; }); };
-  syncParallax(); window.addEventListener('scroll',syncParallax,{passive:true});
+async function boot(){
+  if('serviceWorker'in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
+  bindGlobalEvents();
+  try{const session=await api('/api/session');state.user=session.user;state.csrf=session.csrfToken;await enterApp(true)}catch{await enterPublic()}
+  handleDeepLinks();
+  setupViewportDock();
+  window.addEventListener('scroll',updateScrollProgress,{passive:true});
+  updateScrollProgress();
+  activateMotion();
 }
 
-function openModal(id){ $(id).classList.remove('hidden'); document.body.style.overflow='hidden'; }
-function closeModal(id){ $(id).classList.add('hidden'); if(qsa('.modal-backdrop:not(.hidden)').length===0 && $('callScreen').classList.contains('hidden')) document.body.style.overflow=''; }
-function switchAuthTab(tab){ qsa('.auth-tab').forEach(b=>b.classList.toggle('active',b.dataset.authTab===tab)); $('signupForm').classList.toggle('hidden',tab!=='signup'); $('signinForm').classList.toggle('hidden',tab!=='signin'); }
-function showAuth(tab='signup', action=null, message=''){ pendingAction=action; switchAuthTab(tab); $('authModalTitle').textContent=tab==='signin'?'Sign in to CallFocus':'Create your CallFocus account'; $('authModalMessage').textContent=message || 'Your saved callers and recent call threads stay attached to this account.'; openModal('authModal'); }
-
-function requireAccount(action, message){ if(account) return true; showAuth('signup',action,message || 'Create an account or sign in to save your caller context and recent call threads.'); return false; }
-function runPendingAction(){ const action=pendingAction; pendingAction=null; if(!action)return; setTimeout(()=>{ if(action.type==='newcall') openNewCall(); if(action.type==='addcaller') openCallerModal(); if(action.type==='route') showView(action.route); if(action.type==='thread') { showView('recent'); selectThread(action.id); } },100); }
-
-function setSession(acc){ account=acc; localStorage.setItem(SESSION_KEY,acc.id); data=readJSON(accountDataKey(acc.id),defaultData(acc.name)); if(!data.profile) data.profile=defaultData(acc.name).profile; data.profile.name ||= acc.name; data.callers ||= []; data.threads ||= []; saveData(); }
-function saveData(){ if(!account||!data)return; writeJSON(accountDataKey(account.id),data); renderAccountUI(); renderWorkspace(); }
-function restoreSession(){ const id=localStorage.getItem(SESSION_KEY); if(!id){ account=null; data=null; renderAccountUI(); renderWorkspace(); return; } const acc=accounts().find(a=>a.id===id); if(!acc){localStorage.removeItem(SESSION_KEY);account=null;data=null;renderAccountUI();renderWorkspace();return;} setSession(acc); }
-async function createAccount(event){
-  event.preventDefault(); const name=$('signupName').value.trim(),email=$('signupEmail').value.trim().toLowerCase(),password=$('signupPassword').value,confirm=$('signupConfirm').value;
-  if(!name||!email||!password) return toast('Complete all account fields');
-  if(password.length<8) return toast('Password must be at least 8 characters');
-  if(password!==confirm) return toast('Passwords do not match');
-  const list=accounts(); if(list.some(a=>a.email===email)) return toast('An account already exists for that email');
-  const passwordRecord=await buildPasswordRecord(password); const acc={id:uuid(),name,email,...passwordRecord,createdAt:new Date().toISOString()}; list.push(acc); writeJSON(ACCOUNTS_KEY,list); setSession(acc); closeModal('authModal'); toast('Account created'); runPendingAction();
+async function enterPublic(){
+  $('#appShell').classList.add('hidden');$('#signedOut').classList.remove('hidden');
+  try{const data=await api('/api/public/bootstrap');state.settings=data.settings||{};setTheme(preferredVisualTheme(null,state.settings.default_theme||'midnight'));renderPublicApps(data.apps||[])}catch{setTheme(preferredVisualTheme(null,'midnight'));renderPublicApps([])}
 }
-async function signIn(event){
-  event.preventDefault(); const email=$('signinEmail').value.trim().toLowerCase(),password=$('signinPassword').value; const list=accounts(); const acc=list.find(a=>a.email===email); if(!acc)return toast('Account not found'); if(!(await verifyPassword(acc,password)))return toast('Incorrect password'); if(acc.passwordVersion!==2){ const upgraded=await buildPasswordRecord(password); Object.assign(acc,upgraded); writeJSON(ACCOUNTS_KEY,list); } setSession(acc); closeModal('authModal'); toast('Signed in'); runPendingAction();
-}
-function signOut(){ localStorage.removeItem(SESSION_KEY); account=null; data=null; selectedThreadId=null; closeMobileMenu(); $('headerAccountDropdown').classList.add('hidden'); showView('home',false); renderAccountUI(); renderWorkspace(); toast('Signed out'); }
-function deleteAccount(){ if(!account)return; if($('deleteConfirmInput').value.trim()!=='DELETE')return toast('Type DELETE to confirm'); const list=accounts().filter(a=>a.id!==account.id); writeJSON(ACCOUNTS_KEY,list); localStorage.removeItem(accountDataKey(account.id)); localStorage.removeItem(SESSION_KEY); account=null;data=null;selectedThreadId=null;closeModal('deleteAccountModal');showView('home',false);renderAccountUI();renderWorkspace();toast('Account deleted'); }
-
-function renderAccountUI(){
-  const guest=!account;
-  $('guestHeaderActions').classList.toggle('hidden',!guest); $('headerAccountMenu').classList.toggle('hidden',guest);
-  if(account){ $('headerAccountAvatar').textContent=initials(account.name); $('headerAccountLabel').textContent=(data?.profile?.name||account.name).split(' ')[0]; $('dropdownName').textContent=data?.profile?.name||account.name; $('dropdownEmail').textContent=account.email; }
-  renderMobileAccount();
-  $('customerHomePanel').classList.toggle('hidden',guest);
-}
-function renderMobileAccount(){
-  if(!account){ $('mobileAccountBlock').innerHTML=`<div class="mobile-account-profile"><div class="mobile-account-avatar">C</div><div><strong>Browsing as guest</strong><small>Create an account when you are ready to save callers or place a call.</small></div></div><div class="mobile-account-actions"><button class="btn btn-ghost" data-mobile-auth="signin">Sign in</button><button class="btn btn-primary" data-mobile-auth="signup">Create account</button></div>`; }
-  else { $('mobileAccountBlock').innerHTML=`<div class="mobile-account-profile"><div class="mobile-account-avatar">${esc(initials(data?.profile?.name||account.name))}</div><div><strong>${esc(data?.profile?.name||account.name)}</strong><small>${esc(account.email)}</small></div></div><div class="mobile-account-actions"><button class="btn btn-ghost" data-mobile-account="settings">Account settings</button><button class="btn btn-primary" data-mobile-account="signout">Sign out</button></div>`; }
-}
-function renderWorkspace(){
-  applyAdminLabels(); renderHomeThreads(); renderCallers(); renderRecentThreads(); renderMobileRecents(); renderProfile(); renderSettings();
-}
-function renderHomeThreads(){
-  if(!account||!data){ $('homeRecentThreads').innerHTML=''; return; }
-  $('homeCallerCount').textContent=data.callers.length; $('homeThreadCount').textContent=data.threads.length;
-  const hour=new Date().getHours(); $('customerGreeting').textContent=`Good ${hour<12?'morning':hour<18?'afternoon':'evening'}, ${(data.profile.name||account.name).split(' ')[0]}.`;
-  const threads=sortedThreads().slice(0,4); $('homeRecentThreads').innerHTML=threads.length?threads.map(threadPreviewHTML).join(''):`<div class="empty-state">Your recent call threads will appear here after your first call.</div>`;
-}
-function threadPreviewHTML(t){ const last=lastCall(t); return `<button class="thread-preview-item" data-open-thread="${t.id}"><span class="thread-avatar">${esc(initials(t.callerName))}</span><span><strong>${esc(t.title)}</strong><span>${esc(t.callerName)} · ${esc(relativeTime(t.updatedAt))}</span></span><small>${esc(last?.topic||'Ready for the next call')}</small><b class="thread-arrow">›</b></button>`; }
-function renderCallers(){
-  if(!account||!data){ $('callerGrid').innerHTML=''; return; }
-  $('callerGrid').innerHTML=data.callers.length?data.callers.map(c=>`<article class="caller-card"><div class="caller-avatar">${esc(initials(c.name))}</div><div><h3>${esc(c.name)}</h3><p>${esc((c.aboutCaller||'No caller details yet').slice(0,150))}</p><span class="caller-dynamics-chip">${esc((DYNAMICS[c.dynamicsMode]||DYNAMICS.custom).label)}</span></div><div class="caller-actions"><button class="btn btn-primary" data-caller-call="${c.id}">Call</button><button class="btn btn-ghost" data-caller-edit="${c.id}">Edit</button><button class="btn btn-ghost" data-caller-delete="${c.id}">Delete</button></div></article>`).join(''):`<div class="empty-state">No callers saved yet. Add a caller or start a completely new call.</div>`;
-}
-function renderRecentThreads(){
-  if(!account||!data){ $('recentThreadList').innerHTML=''; $('threadDetailPanel').innerHTML='<div class="empty-thread-detail">Sign in to view recent calls.</div>'; return; }
-  const threads=sortedThreads(); $('recentThreadList').innerHTML=threads.length?threads.map(t=>{const last=lastCall(t);return `<button class="recent-thread-button ${selectedThreadId===t.id?'active':''}" data-select-thread="${t.id}"><span class="recent-thread-avatar">${esc(initials(t.callerName))}</span><span class="recent-thread-copy"><strong>${esc(t.title)}</strong><span>${esc(t.callerName)}</span><small>${esc(last?.topic||'No recent topic')}</small></span><time class="recent-thread-time">${esc(relativeTime(t.updatedAt))}</time></button>`}).join(''):`<div class="empty-state">No recent calls yet.</div>`;
-  if(selectedThreadId && threads.some(t=>t.id===selectedThreadId)) renderThreadDetail(selectedThreadId); else if(threads.length){ selectedThreadId=threads[0].id; renderRecentThreads(); } else $('threadDetailPanel').innerHTML='<div class="empty-thread-detail">Your recent calls will appear here after your first call.</div>';
-}
-function renderMobileRecents(){
-  const list=$('mobileRecentList'); if(!account||!data){ list.innerHTML='<div class="empty-state" style="border:0;border-radius:0;padding:18px">Sign in to see your recent calls.</div>'; return; }
-  const threads=sortedThreads(); list.innerHTML=threads.length?threads.map(t=>`<button class="mobile-recent-item" data-mobile-thread="${t.id}"><span class="mobile-recent-avatar">${esc(initials(t.callerName))}</span><span><strong>${esc(t.title)}</strong><small>${esc(t.callerName)} · ${esc(relativeTime(t.updatedAt))}</small></span></button>`).join(''):`<div class="empty-state" style="border:0;border-radius:0;padding:18px">No recent calls yet.</div>`;
-}
-function renderProfile(){ if(!account||!data)return; $('profileName').value=data.profile.name||account.name; $('profileRole').value=data.profile.role||''; $('profileAbout').value=data.profile.about||''; $('profileRules').value=data.profile.rules||''; }
-function renderSettings(){ if(!account)return; $('settingsName').textContent=data?.profile?.name||account.name; $('settingsEmail').textContent=account.email; $('settingsCreated').textContent=dateLabel(account.createdAt); }
-
-function renderThreadDetail(id){
-  const t=data.threads.find(x=>x.id===id); if(!t)return; selectedThreadId=id; const last=lastCall(t); const dyn=DYNAMICS[t.dynamicsMode]||DYNAMICS.custom; const admin=loadAdmin();
-  $('threadDetailPanel').innerHTML=`<div class="thread-detail"><div class="thread-detail-head"><div class="thread-detail-avatar">${esc(initials(t.callerName))}</div><div><h2>${esc(t.title)}</h2><span>${esc(t.callerName)} · Last used ${esc(relativeTime(t.updatedAt))}</span></div></div><div class="thread-saved-grid"><div class="saved-info-card"><strong>About you</strong><p>${esc(t.aboutSelf||'Not supplied')}</p></div><div class="saved-info-card"><strong>About caller</strong><p>${esc(t.aboutCaller||'Not supplied')}</p></div><div class="saved-info-card"><strong>Dynamics</strong><p>${esc(dyn.label)}</p></div><div class="saved-info-card"><strong>Last call setup</strong><p>${esc(t.callerA.region||'—')} ↔ ${esc(t.callerB.region||'—')} · ${esc(t.voiceGender||'male')}</p></div></div><div class="repeat-call-box"><div><h3>What is new for today’s call?</h3><p>This is normally the only thing you need to add before calling again.</p></div><label>New conversation details<textarea id="repeatTopic" rows="5" placeholder="What do you want to discuss on this call?"></textarea></label><button class="btn btn-primary large" data-repeat-call="${t.id}">Call ${esc(t.callerName)} again</button></div><details class="thread-edit-details"><summary>Edit both callers or conversation dynamics (optional)</summary><div class="form-grid two"><label>About you<textarea id="repeatAboutSelf" rows="4">${esc(t.aboutSelf||'')}</textarea></label><label>About caller<textarea id="repeatAboutCaller" rows="4">${esc(t.aboutCaller||'')}</textarea></label></div><label>Dynamics type<select id="repeatDynamicsMode">${Object.entries(DYNAMICS).map(([v,d])=>`<option value="${v}" ${v===t.dynamicsMode?'selected':''}>${esc(d.label)}</option>`).join('')}</select></label><label>Custom dynamics<textarea id="repeatDynamics" rows="4">${esc(t.dynamics||'')}</textarea></label></details><details class="thread-edit-details"><summary>Edit last-used location, time zone or voice (optional)</summary><div class="form-grid two"><div class="location-card"><strong>Caller A</strong><label>Location<input id="repeatARegion" value="${esc(t.callerA.region||'')}" /></label><label>Time zone<select id="repeatATimezone">${timezoneOptions(t.callerA.timezone)}</select></label></div><div class="location-card"><strong>Caller B</strong><label>Location<input id="repeatBRegion" value="${esc(t.callerB.region||'')}" /></label><label>Time zone<select id="repeatBTimezone">${timezoneOptions(t.callerB.timezone)}</select></label></div></div><label>Voice<select id="repeatVoiceGender"><option value="male" ${t.voiceGender!=='female'?'selected':''}>Male · ${esc(admin.maleVoice)}</option><option value="female" ${t.voiceGender==='female'?'selected':''}>Female · ${esc(admin.femaleVoice)}</option></select></label></details><div class="thread-edit-details"><summary style="cursor:default">Call history in this thread</summary><div class="thread-history-mini">${(t.calls||[]).slice().reverse().slice(0,8).map(c=>`<div class="call-history-line"><span>${esc(c.topic||'No topic supplied')}</span><span>${esc(dateLabel(c.createdAt))} · ${esc(c.duration||'00:00')}</span></div>`).join('')||'<div class="call-history-line"><span>No completed calls saved yet.</span></div>'}</div></div></div>`;
-}
-function timezoneOptions(selected){ return TIMEZONES.map(([v,l])=>`<option value="${v}" ${v===selected?'selected':''}>${esc(l)}</option>`).join(''); }
-function selectThread(id){ if(!account)return; selectedThreadId=id; renderRecentThreads(); }
-
-function showView(view, scroll=true){
-  if(['callers','recent','profile','settings'].includes(view) && !account){ requireAccount({type:'route',route:view},'Create an account or sign in to open your saved CallFocus workspace.'); return; }
-  activeView=view; qsa('.page-view').forEach(p=>p.classList.toggle('active',p.dataset.view===view)); qsa('.nav-anchor').forEach(n=>n.classList.toggle('active',n.dataset.route===view));
-  closeMobileMenu(); $('headerAccountDropdown').classList.add('hidden');
-  if(view==='recent') renderRecentThreads(); if(view==='profile')renderProfile(); if(view==='settings')renderSettings();
-  if(scroll) window.scrollTo({top:0,behavior:'smooth'});
-}
-function openMobileMenu(){ $('mobileMenuWrap').classList.remove('hidden'); $('mobileMenuBtn').setAttribute('aria-expanded','true'); $('mobileMenuBtn').querySelector('.menu-glyph').textContent='×'; renderMobileAccount(); renderMobileRecents(); }
-function closeMobileMenu(){ $('mobileMenuWrap').classList.add('hidden'); $('mobileMenuBtn').setAttribute('aria-expanded','false'); $('mobileMenuBtn').querySelector('.menu-glyph').textContent='☰'; }
-
-function renderLocationSuggestions(inputId,suggestionsId,timezoneId){
-  const input=$(inputId), box=$(suggestionsId);
-  const query=input.value.trim().toLowerCase();
-  if(query.length<1){box.classList.add('hidden');box.innerHTML='';return;}
-  const matches=US_CITIES.filter(([name])=>name.toLowerCase().includes(query)).slice(0,7);
-  if(!matches.length){box.classList.add('hidden');box.innerHTML='';return;}
-  box.innerHTML=matches.map(([name,tz])=>`<button type="button" data-location="${esc(name)}" data-timezone="${esc(tz)}"><strong>${esc(name)}</strong><small>${esc(TIMEZONES.find(x=>x[0]===tz)?.[1]||tz)}</small></button>`).join('');
-  box.classList.remove('hidden');
-  box.querySelectorAll('button').forEach(btn=>btn.onclick=()=>{input.value=btn.dataset.location;$(timezoneId).value=btn.dataset.timezone;box.classList.add('hidden');});
-}
-function bindLocationAutocomplete(){
-  const pairs=[['newCallARegion','newCallASuggestions','newCallATimezone'],['newCallBRegion','newCallBSuggestions','newCallBTimezone']];
-  pairs.forEach(([inputId,suggestionsId,timezoneId])=>{const input=$(inputId);input.addEventListener('input',()=>renderLocationSuggestions(inputId,suggestionsId,timezoneId));input.addEventListener('focus',()=>renderLocationSuggestions(inputId,suggestionsId,timezoneId));input.addEventListener('blur',()=>setTimeout(()=>$(suggestionsId).classList.add('hidden'),180));});
+function renderPublicApps(apps){
+  $('#publicApps').innerHTML=apps.length?apps.slice(0,8).map(a=>`<article class="public-app-card reveal-on-scroll"><div>${iconHtml(a,'public-app-icon')}<h3>${esc(a.name)}</h3><p>${esc(a.short_description||'Available through ToolCart.')}</p></div><span class="eyebrow">${esc(a.category||humanStatus(a.status)||'APP')}</span></article>`).join(''):empty('A growing ecosystem','Available tools will appear here as they are published by the administrator.');activateMotion();
 }
 
-function resetNewCallForm(){
-  $('newCallForm').reset(); $('newCallAboutSelf').value=data?.profile?.about||''; $('newCallDynamicsMode').value='custom'; $('newCallDynamics').value=''; const picks=[...US_CITIES].sort(()=>Math.random()-.5).slice(0,2); $('newCallARegion').value=picks[0][0]; $('newCallATimezone').value=picks[0][1]; $('newCallBRegion').value=picks[1][0]; $('newCallBTimezone').value=picks[1][1]; selectedNewCallVoice='male'; $('newCallVoiceGender').value='male'; qsa('.voice-option').forEach(b=>b.classList.toggle('active',b.dataset.voice==='male')); updateDynamicsUI('newCall'); applyAdminLabels();
+async function enterApp(showIntro=false){
+  $('#signedOut').classList.add('hidden');$('#appShell').classList.remove('hidden');
+  const data=await api('/api/bootstrap');Object.assign(state,{user:data.user,apps:data.apps||[],products:data.products||[],wallet:data.wallet||{balanceMinor:0,currency:'NGN'},cartCount:Number(data.cartCount||0),updates:data.updates||[],notifications:data.notifications||[],recentApps:data.recentApps||[],currentPlan:data.currentPlan,settings:data.settings||{},promos:data.promos||[]});
+  setTheme(preferredVisualTheme(state.user.preferredTheme,state.settings.default_theme||'midnight'));
+  renderApp();
+  if(showIntro&&!sessionStorage.getItem('toolcart_intro_seen')){sessionStorage.setItem('toolcart_intro_seen','1');$('#introGreeting').textContent=`${greeting()}, ${state.user.firstName}.`;$('#introScreen').classList.remove('hidden');setTimeout(()=>$('#introScreen').classList.add('hidden'),2800)}
 }
-function openNewCall(prefillCaller=null){
-  if(!requireAccount({type:'newcall'},'Create an account or sign in before placing a call. Your caller details and recent-call thread will then be saved to your account.'))return;
-  resetNewCallForm();
-  if(prefillCaller){ $('newCallPersonName').value=prefillCaller.name||''; $('newCallAboutSelf').value=prefillCaller.aboutSelf||data.profile.about||''; $('newCallAboutCaller').value=prefillCaller.aboutCaller||''; $('newCallDynamicsMode').value=prefillCaller.dynamicsMode||'custom'; $('newCallDynamics').value=prefillCaller.dynamics||''; updateDynamicsUI('newCall'); }
-  openModal('newCallModal');
+function renderApp(){renderHeader();renderApps();renderRecent();renderUpdates();renderSubscription();renderPromos();renderSettingsProfile();renderDockVisibility();updateBadges();renderHomeFeatureStrip();activateMotion();updateScrollProgress()}
+function greeting(){const h=new Date().getHours();return h<12?'Good morning':h<18?'Good afternoon':'Good evening'}
+function renderHeader(){
+  $('#greeting').textContent=greeting();$('#firstName').textContent=state.user.firstName||'there';$('#heroName').innerHTML='<span>Everything you run.</span><span>One elevated workspace.</span>';const sub=$('#heroSubcopy');if(sub){sub.textContent='Open your tools, catch updates, manage requests and control your account inside a calmer, more premium ToolCart experience.';sub.hidden=false;sub.style.opacity='1';sub.style.transform='none';}$('#planPill').textContent=state.currentPlan?.name||'Free';
+  const av=$('#avatar');if(state.user.profileImageUrl){av.style.backgroundImage=`url("${state.user.profileImageUrl}")`;av.textContent=''}else{av.style.backgroundImage='';av.textContent=initials(state.user.fullName)}
+  syncHeroMetrics();
 }
-function openCallerModal(caller=null){
-  if(!requireAccount({type:'addcaller'},'Create an account or sign in before saving a caller.'))return;
-  $('callerForm').reset(); $('callerId').value=caller?.id||''; $('callerModalTitle').textContent=caller?'Edit caller':'Add caller'; $('callerName').value=caller?.name||''; $('callerAboutSelf').value=caller?.aboutSelf||data.profile.about||''; $('callerAboutCaller').value=caller?.aboutCaller||''; $('callerDynamicsMode').value=caller?.dynamicsMode||'custom'; $('callerDynamics').value=caller?.dynamics||''; updateDynamicsUI('caller'); openModal('callerModal');
+function appAvailability(a){return a.status==='online'?'online':'offline'}
+function toolCardDescription(a,max=78){const raw=String(a.short_description||'Available through ToolCart.').trim();return raw.length>max?`${raw.slice(0,max-1).trimEnd()}…`:raw}
+function productCardDescription(p,max=110){const raw=String(p.short_description||p.description||'Digital product available through ToolCart.').trim();return raw.length>max?`${raw.slice(0,max-1).trimEnd()}…`:raw}
+function productStockMeta(p){const unlimited=p.stock_mode==='unlimited';const qty=Math.max(0,Number(p.stock_quantity||0));return{label:unlimited?'UNLIMITED':qty>0?`${qty} IN STOCK`:'OUT OF STOCK',availability:unlimited||qty>0?'online':'offline'}}
+function productPrice(p){return p.access_type==='free'||Number(p.price_minor)===0?'Free':fmtMoney(p.price_minor,p.currency||'NGN')}
+function productIconHtml(p){return `<div class="app-icon product-card-icon">${p.display_image_url?`<img src="${esc(p.display_image_url)}" alt="">`:esc(initials(p.name))}</div>`}
+function homeAppCard(a){const availability=appAvailability(a);return `<article class="app-card tool-card home-tool-card reveal-on-scroll" data-app-id="${a.id}" aria-label="Open tool ${esc(a.name)}"><div class="tool-card-top">${iconHtml(a,'app-icon')}<span class="availability ${availability}"><i></i>${availability.toUpperCase()}</span></div><div class="tool-card-copy"><h3>${esc(a.name)}</h3><p>${esc(toolCardDescription(a,110))}</p></div></article>`}
+function appsPageCard(a){const availability=appAvailability(a);return `<article class="app-card catalog-card reveal-on-scroll" data-app-id="${a.id}" aria-label="Open tool ${esc(a.name)}"><div class="tool-card-top">${iconHtml(a,'app-icon')}<span class="availability ${availability}"><i></i>${availability.toUpperCase()}</span></div><div class="tool-card-copy"><h3>${esc(a.name)}</h3><p>${esc(toolCardDescription(a,120))}</p></div></article>`}
+function homeProductCard(p){const stock=productStockMeta(p);return `<article class="app-card tool-card home-tool-card product-card reveal-on-scroll" data-product-id="${p.id}" aria-label="Open product ${esc(p.name)}"><div class="tool-card-top">${productIconHtml(p)}<span class="availability ${stock.availability}"><i></i>${esc(stock.label)}</span></div><div class="tool-card-copy"><h3>${esc(p.name)}</h3><p>${esc(productCardDescription(p,110))}</p><div class="product-card-meta"><span>${esc(productPrice(p))}</span>${p.premium?'<span>Premium</span>':''}</div></div></article>`}
+function appsPageProductCard(p){const stock=productStockMeta(p);return `<article class="app-card catalog-card product-card reveal-on-scroll" data-product-id="${p.id}" aria-label="Open product ${esc(p.name)}"><div class="tool-card-top">${productIconHtml(p)}<span class="availability ${stock.availability}"><i></i>${esc(stock.label)}</span></div><div class="tool-card-copy"><h3>${esc(p.name)}</h3><p>${esc(productCardDescription(p,120))}</p><div class="product-card-meta"><span>${esc(productPrice(p))}</span>${p.premium?'<span>Premium</span>':''}</div></div></article>`}
+function launcherItems(){const tools=state.apps.map(x=>({...x,_kind:'app',_order:Number(x.display_order||0)}));const products=state.products.map(x=>({...x,_kind:'product',_order:Number(x.display_order||0)}));return [...tools,...products].sort((a,b)=>(Number(b.badge_featured||b.featured||0)-Number(a.badge_featured||a.featured||0))||(a._order-b._order)||String(a.name).localeCompare(String(b.name)))}
+function renderHomeLauncherCard(x){return x._kind==='product'?homeProductCard(x):homeAppCard(x)}
+function renderCatalogLauncherCard(x){return x._kind==='product'?appsPageProductCard(x):appsPageCard(x)}
+function renderApps(){
+  const items=launcherItems();
+  $('#homeApps').innerHTML=items.length?items.slice(0,3).map(renderHomeLauncherCard).join(''):empty('No tools yet','Your administrator can add tools or products from the Admin panel.');
+  const categories=['all','products',...new Set(state.apps.map(a=>a.category).filter(Boolean))];$('#categoryChips').innerHTML=categories.map(c=>`<button class="chip ${state.appCategory===c?'active':''}" data-category="${esc(c)}">${c==='all'?'All':c==='products'?'Products':esc(c)}</button>`).join('');renderAppsPage();
+  requestAnimationFrame(()=>activateMotion());
 }
-function saveCallerFromForm(event){
-  event.preventDefault(); const name=$('callerName').value.trim(); if(!name)return toast('Caller name is required'); const item={id:$('callerId').value||uuid(),name,aboutSelf:$('callerAboutSelf').value.trim(),aboutCaller:$('callerAboutCaller').value.trim(),dynamicsMode:$('callerDynamicsMode').value,dynamics:$('callerDynamics').value.trim(),createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}; const index=data.callers.findIndex(c=>c.id===item.id); if(index>=0){item.createdAt=data.callers[index].createdAt;data.callers[index]=item}else data.callers.unshift(item); saveData(); closeModal('callerModal');toast('Caller saved');
-}
-function deleteCaller(id){ data.callers=data.callers.filter(c=>c.id!==id); saveData(); toast('Caller deleted'); }
-function findLatestThreadForCaller(callerId){ return sortedThreads().find(t=>t.callerId===callerId); }
+function renderAppsPage(){const q=($('#appSearch')?.value||'').toLowerCase().trim();let items=launcherItems();items=items.filter(x=>{const catOk=state.appCategory==='all'||(state.appCategory==='products'&&x._kind==='product')||(x._kind==='app'&&x.category===state.appCategory);const hay=`${x.name} ${x.short_description||''} ${x.description||''} ${x.category||''}`.toLowerCase();return catOk&&(!q||hay.includes(q))});$('#appCount').textContent=`${items.length} item${items.length===1?'':'s'}`;$('#appsGrid').innerHTML=items.length?items.map(renderCatalogLauncherCard).join(''):empty('Nothing found','Try another search or category.','⌕');requestAnimationFrame(()=>activateMotion())}
+function renderRecent(){const sec=$('#recentSection');if(!state.recentApps.length){sec.classList.add('hidden');return}sec.classList.remove('hidden');$('#recentApps').innerHTML=state.recentApps.slice(0,4).map(a=>{const availability=appAvailability(a);return `<article class="recent-card reveal-on-scroll" data-app-id="${a.id}">${iconHtml(a,'app-icon')}<div><strong>${esc(a.name)}</strong><span class="availability ${availability}"><i></i>${availability.toUpperCase()}</span><p>${esc(toolCardDescription(a,86))}</p></div></article>`}).join('')}
+function updateCard(u){const unread=!u.is_read;return `<article class="update-card reveal-on-scroll" data-update-id="${u.id}"><div class="update-type">${u.update_type==='security'?'!' : u.update_type==='maintenance'?'M':'U'}</div><div><h3>${esc(u.title)}</h3><p>${esc(u.summary||u.content?.slice(0,150)||'')}</p></div><div>${unread?'<i class="unread-mark"></i>':`<time>${fmtDate(u.publish_at)}</time>`}</div></article>`}
+function renderUpdates(){const home=state.updates.slice(0,3);$('#homeUpdates').innerHTML=home.length?home.map(updateCard).join(''):empty('You are up to date','New ecosystem and product updates will appear here.');renderUpdatesPage()}
+function renderUpdatesPage(){let items=state.updates;if(state.updateFilter==='unread')items=items.filter(x=>!x.is_read);if(state.updateFilter==='important')items=items.filter(x=>x.priority==='important'||x.priority==='urgent'||x.update_type==='important'||x.update_type==='security');$('#updatesList').innerHTML=items.length?items.map(updateCard).join(''):empty('Nothing here','No updates match this filter.')}
+function renderSubscription(){const p=state.currentPlan;$('#subscriptionCard').innerHTML=`<div class="subscription-meta"><div class="subscription-icon">${esc((p?.name||'F')[0])}</div><div><span class="eyebrow">CURRENT PLAN</span><h3>${esc(p?.name||'Free')}</h3><p>${p?.current_period_end?`Renews or ends ${fmtDate(p.current_period_end)}`:'Manage access, billing and premium features from one refined subscription center.'}</p></div></div><button class="btn btn-secondary compact" data-setting="subscription">Manage</button>`}
+function renderPromos(){if(!state.promos.length||state.settings.floating_promo_enabled===false){$('#promoArea').innerHTML=`<article class="promo-card reveal-on-scroll"><span class="eyebrow">PREMIUM EXPERIENCE</span><h3>ToolCart now feels more deliberate.</h3><p>More room, deeper contrast and smoother motion give your ecosystem a cleaner, more premium presence.</p></article>`;return}const p=state.promos[0];$('#promoArea').innerHTML=`<article class="promo-card reveal-on-scroll" ${p.destination_url?`data-promo-url="${esc(p.destination_url)}"`:''}><span class="eyebrow">FEATURED</span><h3>${esc(p.title)}</h3><p>${esc(p.message)}</p></article>`}
+function renderSettingsProfile(){const u=state.user;const appearanceBtn=document.querySelector('[data-setting="appearance"]');if(appearanceBtn)appearanceBtn.classList.toggle('hidden',state.settings.allow_user_theme===false);$('#settingsProfileCard').innerHTML=`<div class="avatar" style="${u.profileImageUrl?`background-image:url('${esc(u.profileImageUrl)}')`:''}">${u.profileImageUrl?'':esc(initials(u.fullName))}</div><div><h3>${esc(u.fullName)}</h3><p>${esc(u.email)} · ${esc(state.currentPlan?.name||'Free')}</p></div>`}
+function renderDockVisibility(){const map={apps:'dock_apps_enabled',updates:'dock_updates_enabled',requests:'dock_requests_enabled',settings:'dock_settings_enabled'};for(const [tab,key]of Object.entries(map)){const btn=$(`[data-tab="${tab}"]`,$('#dock'));if(btn)btn.classList.toggle('hidden',state.settings[key]===false)}}
+function updateBadges(){const unread=state.notifications.filter(n=>!n.read_at).length;$('#notifBadge').classList.toggle('hidden',!unread);$('#notifBadge').textContent=unread>99?'99+':unread;const cart=Number(state.cartCount||0);$('#cartBadge')?.classList.toggle('hidden',!cart);if($('#cartBadge'))$('#cartBadge').textContent=cart>99?'99+':cart;const updates=state.updates.filter(u=>!u.is_read).length;$('#dockUpdateBadge').classList.toggle('hidden',!updates)}
 
-function createOrUpdateCallerFromCall(call){
-  let caller = call.callerId ? data.callers.find(c=>c.id===call.callerId) : null;
-  if(!caller){ caller={id:uuid(),name:call.callerName,aboutSelf:call.aboutSelf,aboutCaller:call.aboutCaller,dynamicsMode:call.dynamicsMode,dynamics:call.rawDynamics,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}; data.callers.unshift(caller); }
-  else Object.assign(caller,{name:call.callerName,aboutSelf:call.aboutSelf,aboutCaller:call.aboutCaller,dynamicsMode:call.dynamicsMode,dynamics:call.rawDynamics,updatedAt:new Date().toISOString()});
-  call.callerId=caller.id; return caller;
-}
-function createThreadFromNewCall(call){
-  const t={id:uuid(),title:call.title,callerId:call.callerId,callerName:call.callerName,aboutSelf:call.aboutSelf,aboutCaller:call.aboutCaller,dynamicsMode:call.dynamicsMode,dynamics:call.rawDynamics,callerA:{region:call.callerA.region,timezone:call.callerA.timezone},callerB:{region:call.callerB.region,timezone:call.callerB.timezone},callLanguage:call.callLanguage||'English',voiceGender:call.voiceGender,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),calls:[]}; data.threads.unshift(t); call.threadId=t.id; selectedThreadId=t.id; return t;
-}
-function prepareNewCall(){
-  const admin=loadAdmin(); const call={mode:'new',threadId:'',callerId:'',title:$('newCallTitle').value.trim(),callerName:$('newCallPersonName').value.trim(),aboutSelf:$('newCallAboutSelf').value.trim(),aboutCaller:$('newCallAboutCaller').value.trim(),dynamicsMode:$('newCallDynamicsMode').value,rawDynamics:$('newCallDynamics').value.trim(),topic:$('newCallTopic').value.trim(),callerA:{region:$('newCallARegion').value.trim(),timezone:$('newCallATimezone').value,localTime:nowInTimezone($('newCallATimezone').value)},callerB:{region:$('newCallBRegion').value.trim(),timezone:$('newCallBTimezone').value,localTime:nowInTimezone($('newCallBTimezone').value)},callLanguage:$('newCallLanguage')?.value||'English',voiceGender:selectedNewCallVoice,voice:selectedNewCallVoice==='female'?admin.femaleVoice:admin.maleVoice,model:admin.model,instructions:admin.instructions,opening:admin.opening,speakFirst:admin.speakFirst!==false,interruptions:admin.interruptions!==false};
-  if(!call.title||!call.callerName||!call.aboutSelf||!call.aboutCaller||!call.topic||!call.callerA.region||!call.callerB.region) return {error:'Complete all required call sections before starting.'};
-  if(call.dynamicsMode==='custom'&&!call.rawDynamics) return {error:'Add your conversation dynamics, or choose a preset.'};
-  createOrUpdateCallerFromCall(call); createThreadFromNewCall(call); saveData(); return {call};
-}
-function prepareRepeatCall(threadId){
-  const t=data.threads.find(x=>x.id===threadId); if(!t)return {error:'Call thread not found'}; const topic=$('repeatTopic')?.value.trim(); if(!topic)return {error:'Add what today’s call is about.'};
-  const aboutSelf=$('repeatAboutSelf')?.value.trim() ?? t.aboutSelf, aboutCaller=$('repeatAboutCaller')?.value.trim() ?? t.aboutCaller, dynamicsMode=$('repeatDynamicsMode')?.value || t.dynamicsMode, rawDynamics=$('repeatDynamics')?.value.trim() ?? t.dynamics, aRegion=$('repeatARegion')?.value.trim()||t.callerA.region, bRegion=$('repeatBRegion')?.value.trim()||t.callerB.region, aTz=$('repeatATimezone')?.value||t.callerA.timezone, bTz=$('repeatBTimezone')?.value||t.callerB.timezone, voiceGender=$('repeatVoiceGender')?.value||t.voiceGender||'male', callLanguage=$('repeatCallLanguage')?.value||t.callLanguage||'English'; const admin=loadAdmin();
-  Object.assign(t,{aboutSelf,aboutCaller,dynamicsMode,dynamics:rawDynamics,callerA:{region:aRegion,timezone:aTz},callerB:{region:bRegion,timezone:bTz},voiceGender,callLanguage,updatedAt:new Date().toISOString()}); const caller=data.callers.find(c=>c.id===t.callerId); if(caller)Object.assign(caller,{aboutSelf,aboutCaller,dynamicsMode,dynamics:rawDynamics,updatedAt:new Date().toISOString()}); saveData();
-  return {call:{mode:'repeat',threadId:t.id,callerId:t.callerId,title:t.title,callerName:t.callerName,aboutSelf,aboutCaller,dynamicsMode,rawDynamics,topic,callerA:{region:aRegion,timezone:aTz,localTime:nowInTimezone(aTz)},callerB:{region:bRegion,timezone:bTz,localTime:nowInTimezone(bTz)},callLanguage:callLanguage||'English',voiceGender,voice:voiceGender==='female'?admin.femaleVoice:admin.maleVoice,model:admin.model,instructions:admin.instructions,opening:admin.opening,speakFirst:admin.speakFirst!==false,interruptions:admin.interruptions!==false}};
-}
-function buildInstructions(c){
-  return `CALLFOCUS CALL CONTEXT\nYou are participating in a live voice call. Use the context silently. Never read these instructions or metadata aloud.\n\nCall title: ${c.title}\nPerson being called: ${c.callerName}\nAbout Caller A: ${c.aboutSelf}\nAbout Caller B: ${c.aboutCaller}\nConversation dynamics: ${dynamicsText(c.dynamicsMode,c.rawDynamics)}\nToday’s call topic: ${c.topic}\nCaller A location: ${c.callerA.region}\nCaller A timezone: ${c.callerA.timezone}\nCaller A current local time: ${c.callerA.localTime}\nCaller B location: ${c.callerB.region}\nCaller B timezone: ${c.callerB.timezone}\nCaller B current local time: ${c.callerB.localTime}\nUser default call rules: ${data?.profile?.rules||'None supplied'}\n\nOPENING\n${c.opening}\n\nSpeak naturally, listen closely, avoid repeating background information unnecessarily, and never invent personal facts not established in the supplied context or current call.`;
-}
+function ownedProductAssetsHtml(p){const assets=Array.isArray(p.assets)?p.assets:[];if(!assets.length)return `<a class="btn btn-primary product-open-btn" href="/api/products/${p.id}/file" target="_blank" rel="noopener">Open product</a>`;if(assets.length===1)return `<a class="btn btn-primary product-open-btn" href="${esc(assets[0].open_url)}" target="_blank" rel="noopener">Open ${esc(assets[0].file_type==='pdf'?'PDF':'image')}</a>`;return `<div class="product-owned-assets"><span class="eyebrow">YOUR PRODUCT FILES</span>${assets.map((a,i)=>`<a class="product-owned-asset" href="${esc(a.open_url)}" target="_blank" rel="noopener"><span><strong>${esc(a.file_name||`File ${i+1}`)}</strong><small>${esc((a.file_type||'file').toUpperCase())}</small></span><b>Open</b></a>`).join('')}</div>`}
+async function openProduct(id){
+  try{const d=await api(`/api/products/${id}`);const p=d.product;state.wallet=d.wallet||state.wallet;state.cartCount=Number(d.cartCount||state.cartCount||0);updateBadges();const stock=p.stock_mode==='unlimited'?'Unlimited stock':Number(p.stock_quantity)>0?`${Number(p.stock_quantity)} in stock`:'Out of stock';const soldOut=p.stock_mode!=='unlimited'&&Number(p.stock_quantity)<=0;const fileMeta=Number(p.asset_count||1)>1?` · ${Number(p.asset_count)} files`:'';showDetail(`<div class="product-detail"><div class="product-balance"><span>Available balance</span><strong>${fmtMoney(state.wallet.balanceMinor,state.wallet.currency)}</strong></div><div class="product-cover">${p.display_image_url?`<img src="${esc(p.display_image_url)}" alt="${esc(p.name)}">`:`<div class="product-cover-fallback">${esc(initials(p.name))}</div>`}</div><div class="product-title-row"><div><span class="eyebrow">${p.premium?'PREMIUM PRODUCT':'DIGITAL PRODUCT'}${fileMeta}</span><h2>${esc(p.name)}</h2></div><strong class="product-price">${esc(productPrice(p))}</strong></div><div class="product-stock ${soldOut?'sold-out':''}">${esc(stock)}</div><p class="product-description">${esc(p.description||p.short_description||'Digital product available through ToolCart.')}</p>${p.has_access?`${ownedProductAssetsHtml(p)}<p class="product-owned-note">Purchased quantity: ${Number(p.owned_quantity||0)}</p>`:`<div class="product-buy-box"><div class="quantity-stepper"><button type="button" data-product-qty="minus">−</button><strong id="productQty">1</strong><button type="button" data-product-qty="plus" data-max="${p.stock_mode==='unlimited'?99:Number(p.stock_quantity||0)}">+</button></div><div class="product-actions"><button class="btn btn-secondary" data-add-cart="${p.id}" ${soldOut?'disabled':''}>Add to cart</button><button class="btn btn-primary" data-buy-product="${p.id}" ${soldOut?'disabled':''}>${p.access_type==='free'?'Get now':'Buy now'}</button></div></div>`}</div>`);$('#detailModal').classList.add('marketplace-detail');$('#detailContent').dataset.productId=String(p.id)}catch(e){toast(e.message,'error')}}
+async function refreshMarketplaceState(){try{const d=await api('/api/products');state.products=d.products||[];state.wallet=d.wallet||state.wallet;state.cartCount=Number(d.cartCount||0);renderApps();updateBadges()}catch{}}
+async function addCurrentProductToCart(id){const q=Number($('#productQty')?.textContent||1);try{const d=await api('/api/cart/items',{method:'POST',body:{productId:Number(id),quantity:q}});state.cartCount=Number(d.cartCount||0);updateBadges();toast('Added to cart.');await openCart()}catch(e){toast(e.message,'error')}}
+async function buyCurrentProduct(id){const q=Number($('#productQty')?.textContent||1);const b=$(`[data-buy-product="${id}"]`);if(b)b.disabled=true;try{const d=await api(`/api/products/${id}/buy`,{method:'POST',body:{quantity:q}});if(d.method==='paystack'&&d.authorizationUrl){location.href=d.authorizationUrl;return}toast(d.message||'Purchase complete.');await refreshMarketplaceState();await openProduct(Number(id))}catch(e){toast(e.message,'error');if(b)b.disabled=false}}
+async function openCart(){try{const d=await api('/api/cart');state.wallet=d.wallet||state.wallet;state.cartCount=Number(d.cartCount||0);updateBadges();showDetail(`<div class="cart-sheet"><div class="product-balance"><span>Available balance</span><strong>${fmtMoney(state.wallet.balanceMinor,state.wallet.currency)}</strong></div><div class="product-title-row"><div><span class="eyebrow">YOUR CART</span><h2>Cart</h2></div><strong>${fmtMoney(d.totalMinor,d.currency)}</strong></div>${d.items.length?`<div class="cart-items">${d.items.map(x=>`<article class="cart-item"><div class="cart-thumb">${x.display_image_url?`<img src="${esc(x.display_image_url)}" alt="">`:esc(initials(x.name))}</div><div class="cart-copy"><strong>${esc(x.name)}</strong><span>${esc(productPrice(x))}</span><div class="cart-qty"><button data-cart-qty="minus" data-cart-product-id="${x.id}" data-qty="${x.quantity}">−</button><b>${x.quantity}</b><button data-cart-qty="plus" data-cart-product-id="${x.id}" data-qty="${x.quantity}" data-max="${x.stock_mode==='unlimited'?99:x.stock_quantity}">+</button><button class="cart-remove" data-cart-remove="${x.id}">Remove</button></div></div></article>`).join('')}</div><button class="btn btn-primary cart-checkout" data-cart-checkout>Checkout ${fmtMoney(d.totalMinor,d.currency)}</button>`:empty('Your cart is empty','Add a product to your cart and it will appear here.')}</div>`);$('#detailModal').classList.add('marketplace-detail')}catch(e){toast(e.message,'error')}}
+async function checkoutCartNow(){const b=$('[data-cart-checkout]');if(b)b.disabled=true;try{const d=await api('/api/cart/checkout',{method:'POST',body:{}});if(d.method==='paystack'&&d.authorizationUrl){location.href=d.authorizationUrl;return}toast(d.message||'Purchase complete.');await refreshMarketplaceState();await openCart()}catch(e){toast(e.message,'error');if(b)b.disabled=false}}
+async function openApp(id){try{const d=await api(`/api/apps/${id}/open`,{method:'POST'});if(d.action==='open'){window.location.href=d.url;return}if(d.action==='maintenance')return showInfo('Under maintenance',d.message,'maintenance');if(d.action==='coming_soon')return showInfo('Coming soon',d.message,'soon');if(d.action==='upgrade')return openSetting('subscription',`This app requires ${d.requiredPlan}.`);showInfo('App unavailable',d.message||'This app cannot be opened right now.')}catch(e){toast(e.message,'error')}}
+async function toggleFavorite(id){try{const d=await api(`/api/apps/${id}/favorite`,{method:'POST'});const a=state.apps.find(x=>x.id===id);if(a)a.favorite=d.favorite;renderApps()}catch(e){toast(e.message,'error')}}
+async function openUpdate(id){const u=state.updates.find(x=>x.id===id);if(!u)return;try{if(!u.is_read){await api(`/api/updates/${id}/read`,{method:'POST'});u.is_read=1;updateBadges();renderUpdates()} }catch{}showDetail(`<div class="detail-hero"><span class="eyebrow">${esc(humanStatus(u.update_type))}</span><h2>${esc(u.title)}</h2><p>${esc(u.summary)}</p><div class="detail-meta"><span class="status-badge">${esc(humanStatus(u.priority))}</span><span class="status-badge">${fmtDate(u.publish_at)}</span></div></div><div class="detail-body"><p style="white-space:pre-wrap;line-height:1.65;color:var(--muted)">${esc(u.content)}</p>${u.external_url?`<div class="detail-actions"><button class="btn btn-primary" data-external="${esc(u.external_url)}">${esc(u.cta_label||'Open link')}</button></div>`:''}</div>`)}
 
-async function startCall(call){
-  closeModal('newCallModal'); document.body.style.overflow='hidden'; $('callScreen').classList.remove('hidden'); $('liveCallerName').textContent=call.callerName; $('liveAvatar').textContent=initials(call.callerName); $('liveRegion').textContent=[call.callerB.region,call.callerB.timezone].filter(Boolean).join(' · '); $('liveStatus').textContent='Connecting to server…'; $('liveTranscript').textContent=''; $('liveTranscript').classList.remove('error-visible'); $('liveCaption').textContent='Preparing realtime connection…'; $('callTimer').textContent='00:00'; $('callMoreTitle').textContent=call.title||call.callerName; $('callMoreTopic').textContent=call.topic||'No new topic supplied'; $('callMoreConnection').textContent='Connecting'; $('callMorePanel').classList.add('hidden'); live.current=call; live.transcript=''; live.connected=false; live.graceful=false; clearTimeout(live.gracefulTimer); resetCallControls();
-  try{
-    const currentAdmin=await refreshPublicConfig();
-    call.voice=call.voiceGender==='female'?currentAdmin.femaleVoice:currentAdmin.maleVoice; call.model=currentAdmin.model; call.opening=currentAdmin.opening; call.speakFirst=currentAdmin.speakFirst!==false; call.interruptions=currentAdmin.interruptions!==false;
-    if(currentAdmin.serverOnline===false){ const msg=currentAdmin.serverMessage||'Server not active right now. Please try again soon.'; $('liveStatus').textContent='Disconnected from server'; $('liveCaption').textContent=msg; $('liveTranscript').textContent=msg; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected'; toast(msg); return; }
-    const stream=await navigator.mediaDevices.getUserMedia({audio:true}); const pc=new RTCPeerConnection(); const dc=pc.createDataChannel('oai-events'); const audio=document.createElement('audio'); audio.autoplay=true;audio.playsInline=true; live.stream=stream;live.pc=pc;live.dc=dc;live.audio=audio; stream.getAudioTracks().forEach(t=>pc.addTrack(t,stream)); pc.ontrack=e=>{audio.srcObject=e.streams[0];audio.play().catch(()=>{})}; dc.onopen=()=>{$('liveCaption').textContent='Voice channel connected.'}; dc.onmessage=e=>handleRealtimeEvent(e.data); dc.onerror=()=>{$('liveCaption').textContent='Voice data channel error.'};
-    const offer=await pc.createOffer(); await pc.setLocalDescription(offer); await waitForIce(pc); const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,contextInstructions:buildInstructions(call)}})}); const text=await res.text(); if(!res.ok)throw new Error(text||'Realtime session failed'); call.speakFirst=res.headers.get('X-CallFocus-Speak-First')!=='0'; try{call.opening=decodeURIComponent(res.headers.get('X-CallFocus-Opening')||call.opening||'')}catch{} await pc.setRemoteDescription({type:'answer',sdp:text});
-  }catch(err){ console.error(err); const raw=String(err?.message||err||'').toLowerCase(); const inactive=raw.includes('server not active')||raw.includes('credit_balance_exhausted')||raw.includes('insufficient_quota')||raw.includes('no credits')||raw.includes('quota'); $('liveStatus').textContent='Disconnected from server'; $('liveCaption').textContent=inactive?'Server not active right now. Please try again soon.':'Server unavailable. Try again soon.'; $('liveTranscript').textContent=inactive?'Server not active right now. Please try again soon.':'We could not connect this call right now. Please try again soon.'; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected'; toast(inactive?'Server not active right now. Please try again soon.':'Server unavailable. Try again soon.'); }
+function switchTab(tab,scroll=true){const valid=['home','apps','updates','requests','settings'];if(!valid.includes(tab))tab='home';state.activeTab=tab;$$('.view').forEach(v=>v.classList.remove('active'));const view=$(`#${tab}View`)||$('#homeView');view.classList.add('active');$$('.dock-item').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));$('.dock-home')?.classList.toggle('active',tab==='home');document.body.dataset.activeView=tab;if(tab==='home'){renderHeader();renderApps();renderRecent();renderUpdates();renderSubscription();renderPromos();renderHomeFeatureStrip()}if(tab==='apps')renderAppsPage();if(tab==='updates')renderUpdatesPage();if(tab==='requests')loadRequests();if(scroll)window.scrollTo({top:0,left:0,behavior:'auto'});requestAnimationFrame(()=>{activateMotion();$$('.view.active .reveal-on-scroll').forEach(el=>el.classList.add('visible'));updateScrollProgress()})}
+
+async function loadRequests(){try{const d=await api('/api/requests');state.requests=d.requests||[];renderRequests()}catch(e){$('#requestsList').innerHTML=empty('Could not load requests',e.message)}}
+function renderRequests(){const box=$('#requestsList');box.innerHTML=state.requests.length?state.requests.map(r=>`<article class="request-card" data-request-id="${r.id}"><div class="request-card-top"><div><strong>${esc(r.subject)}</strong><p>${esc(r.reference_number)} · ${fmtDate(r.updated_at)}</p></div><span class="status-pill ${r.status==='resolved'?'resolved':''}">${esc(humanStatus(r.status))}</span></div></article>`).join(''):empty('No requests yet','Use New request whenever you need help.','↗')}
+function newRequest(){const options=state.apps.map(a=>`<option value="${a.id}">${esc(a.name)}</option>`).join('');showDetail(`<h2>New request</h2><p class="modal-sub">Send your request directly to the ToolCart team.</p><form id="requestForm" class="form-grid"><div class="field"><label>Category</label><select name="category"><option value="feature_request">Feature request</option><option value="bug_report">Bug report</option><option value="general_request">General request</option><option value="payment_issue">Payment issue</option><option value="account_issue">Account issue</option><option value="app_access_request">App access request</option><option value="partnership_inquiry">Partnership inquiry</option><option value="other">Other</option></select></div><div class="field"><label>Associated app</label><select name="appId"><option value="">Ecosystem / none</option>${options}</select></div><div class="field"><label>Subject</label><input name="subject" required maxlength="160"></div><div class="field"><label>Message</label><textarea name="message" required maxlength="5000"></textarea></div><button class="btn btn-primary">Submit request</button></form>`);$('#requestForm').addEventListener('submit',submitRequest)}
+async function submitRequest(e){e.preventDefault();const f=new FormData(e.currentTarget);const btn=$('button',e.currentTarget);btn.disabled=true;try{const d=await api('/api/requests',{method:'POST',body:{category:f.get('category'),appId:f.get('appId')||null,subject:f.get('subject'),message:f.get('message')}});toast(`Request ${d.referenceNumber} submitted.`);closeModals();await loadRequests()}catch(err){toast(err.message,'error');btn.disabled=false}}
+async function openRequest(id){try{const d=await api(`/api/requests/${id}`);const r=d.request;showDetail(`<div class="detail-hero"><span class="eyebrow">${esc(r.reference_number)}</span><h2>${esc(r.subject)}</h2><div class="detail-meta"><span class="status-pill">${esc(humanStatus(r.status))}</span><span class="status-badge">${esc(humanStatus(r.category))}</span></div></div><div class="timeline">${d.messages.map(m=>`<div class="timeline-item ${m.sender_type==='admin'?'admin':''}"><small>${m.sender_type==='admin'?'ToolCart Support':'You'} · ${fmtDate(m.created_at)}</small><p>${esc(m.message)}</p></div>`).join('')}</div>${r.status!=='closed'?`<form id="requestReplyForm" class="form-grid" style="margin-top:14px"><div class="field"><label>Add reply</label><textarea name="message" required maxlength="5000"></textarea></div><button class="btn btn-primary">Send reply</button></form>`:''}`);const form=$('#requestReplyForm');if(form)form.addEventListener('submit',async e=>{e.preventDefault();const msg=new FormData(form).get('message');try{await api(`/api/requests/${id}/messages`,{method:'POST',body:{message:msg}});await openRequest(id);await loadRequests()}catch(err){toast(err.message,'error')}})}catch(e){toast(e.message,'error')}}
+
+async function openNotifications(filter=state.notifFilter){state.notifFilter=filter;try{const d=await api(`/api/notifications?filter=${encodeURIComponent(filter)}`);state.notifications=d.notifications||[];renderNotifications();openModal('#notificationSheet')}catch(e){toast(e.message,'error')}}
+function renderNotifications(){$$('#notificationFilters .chip').forEach(b=>b.classList.toggle('active',b.dataset.notifFilter===state.notifFilter));$('#notificationList').innerHTML=state.notifications.length?state.notifications.map(n=>`<article class="notification-card ${n.read_at?'':'unread'}" data-notification-id="${n.id}"><h3>${esc(n.title)}</h3><p>${esc(n.message)}</p><small>${fmtDate(n.created_at)} · ${esc(humanStatus(n.notification_type))}</small><div class="notification-actions"><button class="micro-btn" data-notif-action="${n.read_at?'unread':'read'}" data-id="${n.id}">${n.read_at?'Mark unread':'Mark read'}</button><button class="micro-btn" data-notif-action="dismiss" data-id="${n.id}">Dismiss</button></div></article>`).join(''):empty('All caught up','There are no notifications in this view.','✓');setupNotificationSwipe()}
+async function notifAction(id,action){try{await api(`/api/notifications/${id}/${action}`,{method:'POST'});if(action==='dismiss')state.notifications=state.notifications.filter(n=>n.id!==id);else{const n=state.notifications.find(n=>n.id===id);if(n)n.read_at=action==='read'?new Date().toISOString():null}renderNotifications();const fresh=await api('/api/bootstrap');state.notifications=fresh.notifications||[];updateBadges()}catch(e){toast(e.message,'error')}}
+function setupNotificationSwipe(){$$('.notification-card').forEach(card=>{let x=0,y=0;card.addEventListener('touchstart',e=>{x=e.touches[0].clientX;y=e.touches[0].clientY},{passive:true});card.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-x,dy=e.changedTouches[0].clientY-y;if(Math.abs(dx)>70||dy<-70)notifAction(Number(card.dataset.notificationId),'dismiss')},{passive:true})})}
+
+async function openSetting(kind,note=''){
+  if(kind==='account')kind='profile';
+  if(kind==='profile')return profileSetting();if(kind==='security')return securitySetting();if(kind==='appearance')return appearanceSetting();if(kind==='devices')return devicesSetting();if(kind==='subscription')return subscriptionSetting(note);if(kind==='payments')return paymentsSetting();if(kind==='support')return supportSetting();if(kind==='privacy')return privacySetting();if(kind==='notifications')return openNotifications('all');
 }
-function waitForIce(pc){ if(pc.iceGatheringState==='complete')return Promise.resolve(); return new Promise(resolve=>{const f=()=>{if(pc.iceGatheringState==='complete'){pc.removeEventListener('icegatheringstatechange',f);resolve();}};pc.addEventListener('icegatheringstatechange',f);setTimeout(resolve,2500);}); }
-function handleRealtimeEvent(raw){
-  let e; try{e=JSON.parse(raw)}catch{return}
-  if(e.type==='session.created'){ live.connected=true; $('liveTranscript').classList.remove('error-visible'); $('liveStatus').textContent='Connected to server'; $('liveCaption').textContent='Call started.'; $('callMoreConnection').textContent='Connected'; startTimer(); if(live.current?.speakFirst&&live.dc?.readyState==='open')setTimeout(()=>live.dc.send(JSON.stringify({type:'response.create',response:{instructions:`Begin the call now. ${live.current.opening}`}})),140); }
-  if(e.type==='input_audio_buffer.speech_started')$('liveStatus').textContent='Connected to server · Listening';
-  if(e.type==='input_audio_buffer.speech_stopped')$('liveStatus').textContent='Connected to server · Thinking';
-  if(e.type==='response.created')$('liveStatus').textContent='Connected to server · Speaking';
-  if(e.type==='response.done'){ $('liveStatus').textContent=live.held?'Connected to server · On hold':'Connected to server'; if(live.graceful){ $('liveCaption').textContent='Natural call ending delivered. Ending call…'; live.graceful=false; clearTimeout(live.gracefulTimer); live.gracefulTimer=setTimeout(()=>cleanupCall(true),5000); } }
-  if(e.type==='response.output_audio_transcript.delta'&&e.delta){ live.transcript+=e.delta; }
-  if(e.type==='conversation.item.input_audio_transcription.completed'&&e.transcript)$('liveCaption').textContent=`Heard: ${e.transcript}`;
-  if(e.type==='error'){ $('liveStatus').textContent='Disconnected from server'; $('liveCaption').textContent='Server unavailable. Try again soon.'; $('liveTranscript').textContent='Server unavailable. Try again soon.'; $('liveTranscript').classList.add('error-visible'); $('callMoreConnection').textContent='Disconnected'; }
+function profileSetting(){const u=state.user;showDetail(`<h2>Account</h2><p class="modal-sub">Update the profile details connected to your ecosystem account.</p><form id="profileForm" class="form-grid"><div class="field"><label>Profile picture</label><input type="file" id="avatarFile" accept="image/jpeg,image/png,image/webp"></div><div class="field"><label>Full name</label><input name="fullName" value="${esc(u.fullName)}" required></div><div class="field"><label>Email</label><input value="${esc(u.email)}" disabled></div><div class="field"><label>Phone</label><input name="phone" value="${esc(u.phone||'')}"></div><div class="field"><label>Country</label><input name="country" value="${esc(u.country||'')}"></div><div class="field"><label>Timezone</label><input name="timezone" value="${esc(u.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone)}"></div><button class="btn btn-primary">Save profile</button></form>`);$('#profileForm').addEventListener('submit',async e=>{e.preventDefault();const fd=new FormData(e.currentTarget);try{await api('/api/profile',{method:'PATCH',body:{fullName:fd.get('fullName'),phone:fd.get('phone'),country:fd.get('country'),timezone:fd.get('timezone'),preferredLanguage:'en',preferredTheme:state.user.preferredTheme}});const file=$('#avatarFile').files[0];if(file){const optimized=await optimizeImage(file,512,.86);const up=new FormData();up.append('file',optimized,'avatar.webp');await api('/api/profile/avatar',{method:'POST',body:up})}const p=await api('/api/profile');state.user=p.user;renderHeader();renderSettingsProfile();closeModals();toast('Profile updated.')}catch(err){toast(err.message,'error')}})}
+function securitySetting(){showDetail(`<h2>Security</h2><p class="modal-sub">Use a strong password unique to ToolCart.</p><form id="passwordForm" class="form-grid"><div class="field"><label>Current password</label><input type="password" name="current" autocomplete="current-password" required></div><div class="field"><label>New password</label><input type="password" name="next" autocomplete="new-password" minlength="10" required></div><button class="btn btn-primary">Change password</button></form>`);$('#passwordForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.currentTarget);try{await api('/api/account/change-password',{method:'POST',body:{currentPassword:f.get('current'),newPassword:f.get('next')}});closeModals();toast('Password changed.')}catch(err){toast(err.message,'error')}})}
+function appearanceSetting(){showDetail(`<h2>Appearance</h2><p class="modal-sub">ToolCart now uses one standard premium dark appearance across the customer experience.</p><div class="detail-hero"><span class="eyebrow">STANDARD THEME</span><h2 style="font-size:22px">Dark</h2><p>Deep black surfaces, neutral gray panels and restrained contrast inspired by premium product interfaces.</p></div>`)}
+async function devicesSetting(){showDetail('<h2>Devices</h2><p class="modal-sub">Loading active sessions...</p>');try{const d=await api('/api/sessions');$('#detailContent').innerHTML=`<h2>Devices</h2><p class="modal-sub">Sessions signed into your ToolCart account.</p><div class="timeline">${d.sessions.map(s=>`<div class="timeline-item"><small>${s.current?'CURRENT DEVICE · ':''}${fmtDate(s.last_seen_at)}</small><p><strong>${esc(s.device_label||'Browser session')}</strong><br>${esc((s.user_agent||'').slice(0,90))}</p>${!s.current&&!s.revoked_at?`<button class="micro-btn" data-revoke-session="${s.id}">Revoke</button>`:''}</div>`).join('')}</div>`}catch(e){toast(e.message,'error')}}
+async function subscriptionSetting(note=''){showDetail(`<h2>Subscription</h2><p class="modal-sub">${esc(note||'Choose the access level that fits how you use the ecosystem.')}</p><div id="plansBox">${empty('Loading plans','')}</div>`);try{const d=await api('/api/subscriptions/plans');$('#plansBox').innerHTML=`<div class="timeline">${d.plans.map(p=>`<div class="timeline-item"><small>${esc(p.billing_frequency.toUpperCase())}</small><p><strong>${esc(p.name)} · ${fmtMoney(p.price_minor,p.currency)}</strong><br>${esc(p.description)}</p><div style="color:var(--muted);font-size:12px;margin:8px 0">${(p.features||[]).map(x=>`• ${esc(x)}`).join('<br>')}</div>${p.price_minor>0?`<button class="btn btn-primary compact" data-buy-plan="${p.id}">Choose ${esc(p.name)}</button>`:'<span class="status-badge ok">Included</span>'}</div>`).join('')}</div>`}catch(e){$('#plansBox').innerHTML=empty('Could not load plans',e.message)}}
+async function paymentsSetting(){showDetail(`<h2>Payments</h2><p class="modal-sub">Verified payment history for your ToolCart account.</p><div id="paymentsBox">${empty('Loading payments','')}</div>`);try{const d=await api('/api/payments');$('#paymentsBox').innerHTML=d.payments.length?`<div class="timeline">${d.payments.map(p=>`<div class="timeline-item" data-payment-id="${p.id}"><small>${fmtDate(p.paid_at||p.created_at)} · ${esc(p.provider_reference)}</small><p><strong>${fmtMoney(p.amount_minor,p.currency)} · ${esc(humanStatus(p.status))}</strong><br>${esc(p.purpose)}</p></div>`).join('')}</div>`:empty('No payments yet','Completed and pending transactions will appear here.') }catch(e){$('#paymentsBox').innerHTML=empty('Could not load payments',e.message)}}
+function supportSetting(){showDetail(`<h2>Support</h2><p class="modal-sub">Get help with ToolCart and products in your ecosystem.</p><div class="settings-group"><button data-support-new><span>Contact Support</span><b>›</b></button><button data-tab-jump="requests"><span>My Requests</span><b>›</b></button><button><span>Payment help</span><b>›</b></button><button><span>Account help</span><b>›</b></button></div><div class="detail-hero" style="margin-top:14px"><span class="eyebrow">SUPPORT EMAIL</span><p>${esc(state.settings.support_email||'Configured by your administrator')}</p></div>`)}
+function privacySetting(){showDetail(`<h2>Privacy</h2><p class="modal-sub">ToolCart records only the ecosystem activity needed to provide features such as recently opened apps, favorites, requests and payment history. It does not capture private page content from external products.</p><div class="detail-hero"><span class="eyebrow">ACCOUNT CONTROL</span><h2 style="font-size:18px">Deletion request</h2><p>Request account deletion. Your session will be signed out and the account will be queued for administrator handling.</p><button class="btn btn-secondary compact" id="deleteRequestBtn">Request deletion</button></div>`)}
+
+function openModal(sel){$('#modalBackdrop').classList.remove('hidden');$(sel).classList.remove('hidden');document.body.style.overflow='hidden'}
+function showDetail(html){$('#detailModal').classList.remove('marketplace-detail');$('#detailContent').innerHTML=html;openModal('#detailModal')}
+function showInfo(title,message,type){showDetail(`<div class="detail-hero"><span class="eyebrow">${esc(type||'TOOLCART')}</span><h2>${esc(title)}</h2><p>${esc(message)}</p></div><button class="btn btn-primary" data-close-modal>Close</button>`)}
+function closeModals(){$$('.modal').forEach(m=>m.classList.add('hidden'));$('#modalBackdrop').classList.add('hidden');document.body.style.overflow=''}
+
+function authForm(mode='login',token=''){
+  if(mode==='login')return `<h2>Welcome back.</h2><p class="modal-sub">Sign in to open your ToolCart ecosystem.</p><form id="loginForm" class="form-grid"><div class="field"><label>Email</label><input name="email" type="email" autocomplete="email" required></div><div class="field"><label>Password</label><input name="password" type="password" autocomplete="current-password" required></div><button class="btn btn-primary">Sign in</button></form><div class="form-foot"><button data-auth-switch="forgot">Forgot password?</button> · <button data-auth-switch="register">Create account</button></div>`;
+  if(mode==='register')return `<h2>Create your account.</h2><p class="modal-sub">One secure account for the products and services in your ToolCart ecosystem.</p><form id="registerForm" class="form-grid"><div class="field"><label>Full name</label><input name="fullName" autocomplete="name" required></div><div class="field"><label>Email</label><input name="email" type="email" autocomplete="email" required></div><div class="field"><label>Password</label><input name="password" type="password" autocomplete="new-password" minlength="10" required></div><button class="btn btn-primary">Create account</button></form><div class="form-foot">Already a member? <button data-auth-switch="login">Sign in</button></div>`;
+  if(mode==='forgot')return `<h2>Reset password.</h2><p class="modal-sub">Enter your email and ToolCart will send a secure reset link if the account exists.</p><form id="forgotForm" class="form-grid"><div class="field"><label>Email</label><input name="email" type="email" required></div><button class="btn btn-primary">Send reset link</button></form><div class="form-foot"><button data-auth-switch="login">Back to sign in</button></div>`;
+  if(mode==='reset')return `<h2>Choose a new password.</h2><p class="modal-sub">Your new password must be at least 10 characters.</p><form id="resetForm" class="form-grid" data-token="${esc(token)}"><div class="field"><label>New password</label><input name="password" type="password" minlength="10" required></div><button class="btn btn-primary">Update password</button></form>`;
+  return '';
 }
-function startTimer(){ clearInterval(live.timer);live.seconds=0;live.timer=setInterval(()=>{const t=fmtDuration(++live.seconds);$('callTimer').textContent=t;$('activeCallTime').textContent=t},1000); }
-function resetCallControls(){ live.muted=false;live.speakerOn=true;live.held=false;live.moreOpen=false;['muteBtn','holdBtn'].forEach(id=>$(id).classList.remove('active')); $('speakerBtn').classList.add('active'); $('moreBtn').classList.remove('active'); $('callMorePanel').classList.add('hidden'); }
-function saveCompletedCall(){ if(!live.current||!data)return; const t=data.threads.find(x=>x.id===live.current.threadId); if(!t)return; t.updatedAt=new Date().toISOString(); t.calls ||= []; t.calls.push({id:uuid(),topic:live.current.topic,createdAt:new Date().toISOString(),duration:fmtDuration(live.seconds),callLanguage:live.current.callLanguage||t.callLanguage||'English',voiceGender:live.current.voiceGender,connected:live.connected}); saveData(); }
-function cleanupCall(save=true){ clearInterval(live.timer);clearTimeout(live.gracefulTimer);if(save&&live.current)saveCompletedCall();try{live.dc?.close()}catch{}try{live.stream?.getTracks().forEach(t=>t.stop())}catch{}try{live.pc?.close()}catch{}live={pc:null,dc:null,stream:null,audio:null,timer:null,seconds:0,connected:false,muted:false,speakerOn:true,held:false,graceful:false,current:null,transcript:'',gracefulTimer:null,minimized:false,moreOpen:false};$('callScreen').classList.add('hidden');$('activeCallBar').classList.add('hidden');document.body.style.overflow='';renderWorkspace(); if(activeView==='recent')renderRecentThreads(); }
+function openAuth(mode,token=''){$('#authContent').innerHTML=authForm(mode,token);openModal('#authModal');bindAuthForms()}
+function bindAuthForms(){
+  $('#loginForm')?.addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.currentTarget),b=$('button',e.currentTarget);b.disabled=true;try{const d=await api('/api/auth/login',{method:'POST',body:{email:f.get('email'),password:f.get('password')}});state.user=d.user;state.csrf=d.csrfToken;closeModals();await enterApp(true)}catch(err){toast(err.message,'error');b.disabled=false}});
+  $('#registerForm')?.addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.currentTarget),b=$('button',e.currentTarget);b.disabled=true;try{const d=await api('/api/auth/register',{method:'POST',body:{fullName:f.get('fullName'),email:f.get('email'),password:f.get('password')}});if(d.user&&d.csrfToken){state.user=d.user;state.csrf=d.csrfToken;closeModals();toast('Account created. Welcome to ToolCart.');await enterApp(true);return}$('#authContent').innerHTML=`<h2>Check your email.</h2><p class="modal-sub">${esc(d.message)}</p><button class="btn btn-primary" data-auth-switch="login">Back to sign in</button>`}catch(err){toast(err.message,'error');b.disabled=false}});
+  $('#forgotForm')?.addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.currentTarget);try{const d=await api('/api/auth/forgot-password',{method:'POST',body:{email:f.get('email')}});$('#authContent').innerHTML=`<h2>Check your inbox.</h2><p class="modal-sub">${esc(d.message)}</p><button class="btn btn-primary" data-auth-switch="login">Back to sign in</button>`}catch(err){toast(err.message,'error')}});
+  $('#resetForm')?.addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.currentTarget);try{const d=await api('/api/auth/reset-password',{method:'POST',body:{token:e.currentTarget.dataset.token,password:f.get('password')}});toast(d.message);history.replaceState({},'',location.pathname);openAuth('login')}catch(err){toast(err.message,'error')}})
+}
+async function handleDeepLinks(){const p=new URLSearchParams(location.search);if(p.get('verify')){try{const d=await api('/api/auth/verify-email',{method:'POST',body:{token:p.get('verify')}});history.replaceState({},'',location.pathname);toast(d.message);openAuth('login')}catch(e){toast(e.message,'error')}}if(p.get('reset'))openAuth('reset',p.get('reset'));if(p.get('payment')==='complete'&&p.get('reference')&&state.user){try{const d=await api(`/api/payments/paystack/verify?reference=${encodeURIComponent(p.get('reference'))}`);toast(d.status==='success'?'Payment confirmed.':'Payment is still being verified.');history.replaceState({},'',location.pathname);await enterApp(false)}catch(e){toast(e.message,'error')}}}
 
-function saveProfile(){ if(!account)return; data.profile={name:$('profileName').value.trim()||account.name,role:$('profileRole').value.trim(),about:$('profileAbout').value.trim(),rules:$('profileRules').value.trim()}; const list=accounts(); const idx=list.findIndex(a=>a.id===account.id); if(idx>=0){list[idx].name=data.profile.name;account.name=data.profile.name;writeJSON(ACCOUNTS_KEY,list);} saveData();toast('Profile saved'); }
-
-function bind(){
-  $('mobileMenuBtn').onclick=()=>$('mobileMenuWrap').classList.contains('hidden')?openMobileMenu():closeMobileMenu();
-  $('mobileMenuWrap').onclick=e=>{ if(e.target===$('mobileMenuWrap'))closeMobileMenu(); };
-  $('headerSignInBtn').onclick=()=>showAuth('signin'); $('headerCreateBtn').onclick=()=>showAuth('signup');
-  $('headerAccountTrigger').onclick=e=>{e.stopPropagation();$('headerAccountDropdown').classList.toggle('hidden');$('headerAccountTrigger').setAttribute('aria-expanded',String(!$('headerAccountDropdown').classList.contains('hidden')))};
-  document.addEventListener('click',e=>{ if(!$('headerAccountDropdown').classList.contains('hidden')&&!$('headerAccountDropdown').contains(e.target)&&!$('headerAccountTrigger').contains(e.target))$('headerAccountDropdown').classList.add('hidden'); });
-  qsa('.nav-anchor').forEach(b=>b.onclick=()=>showView(b.dataset.route)); qsa('[data-route]').filter(b=>!b.classList.contains('nav-anchor')).forEach(b=>b.onclick=()=>showView(b.dataset.route));
-  $('heroHowBtn').onclick=()=>$('how-it-works').scrollIntoView({behavior:'smooth'}); ['heroNewCallBtn','customerNewCallBtn','bottomNewCallBtn'].forEach(id=>$(id).onclick=()=>openNewCall()); $('continuityRecentBtn').onclick=()=>showView('recent');
-  $('headerAccountDropdown').addEventListener('click',e=>{const btn=e.target.closest('[data-account-route]');if(btn)showView(btn.dataset.accountRoute)}); $('dropdownSignOutBtn').onclick=signOut;
-  $('signupForm').onsubmit=createAccount; $('signinForm').onsubmit=signIn; qsa('.auth-tab').forEach(b=>b.onclick=()=>switchAuthTab(b.dataset.authTab)); qsa('[data-close]').forEach(b=>b.onclick=()=>closeModal(b.dataset.close)); qsa('.modal-backdrop').forEach(m=>m.onclick=e=>{if(e.target===m)closeModal(m.id)});
-  $('newCallDynamicsMode').onchange=()=>updateDynamicsUI('newCall'); $('callerDynamicsMode').onchange=()=>updateDynamicsUI('caller'); qsa('.voice-option').forEach(b=>b.onclick=()=>{selectedNewCallVoice=b.dataset.voice;$('newCallVoiceGender').value=selectedNewCallVoice;qsa('.voice-option').forEach(x=>x.classList.toggle('active',x===b))});
-  $('newCallForm').onsubmit=e=>{e.preventDefault();const r=prepareNewCall();if(r.error)return toast(r.error);startCall(r.call)};
-  $('addCallerBtn').onclick=()=>openCallerModal(); $('callerForm').onsubmit=saveCallerFromForm; $('saveProfileBtn').onclick=saveProfile; $('settingsEditProfileBtn').onclick=()=>showView('profile'); $('deleteAccountBtn').onclick=()=>{if(!account)return; $('deleteConfirmInput').value='';openModal('deleteAccountModal')}; $('confirmDeleteAccountBtn').onclick=deleteAccount;
-  $('muteBtn').onclick=()=>{live.muted=!live.muted;live.stream?.getAudioTracks().forEach(t=>t.enabled=!live.muted&&!live.held);$('muteBtn').classList.toggle('active',live.muted);$('liveCaption').textContent=live.muted?'Microphone muted.':'Microphone live.'};
-  $('speakerBtn').onclick=()=>{live.speakerOn=!live.speakerOn;if(live.audio)live.audio.muted=!live.speakerOn;$('speakerBtn').classList.toggle('active',live.speakerOn);$('liveCaption').textContent=live.speakerOn?'Speaker audio on.':'Speaker audio off.'};
-  $('holdBtn').onclick=()=>{live.held=!live.held;live.stream?.getAudioTracks().forEach(t=>t.enabled=!live.held&&!live.muted);$('holdBtn').classList.toggle('active',live.held);$('liveStatus').textContent=live.held?'Connected to server · On hold':'Connected to server';$('liveCaption').textContent=live.held?'Call is on hold on your side.':'Hold released.'};
-  $('moreBtn').onclick=()=>{live.moreOpen=!live.moreOpen;$('moreBtn').classList.toggle('active',live.moreOpen);$('callMorePanel').classList.toggle('hidden',!live.moreOpen);};
-  $('restoreCallBtn').onclick=()=>{$('activeCallBar').classList.add('hidden');$('callScreen').classList.remove('hidden');document.body.style.overflow='hidden';live.minimized=false;};
-  $('activeCallEndBtn').onclick=()=>cleanupCall(true);
-  $('requestEndBtn').onclick=()=>{if(live.dc?.readyState!=='open')return toast('The call is not connected yet');live.graceful=true;live.dc.send(JSON.stringify({type:'response.create',response:{instructions:'Naturally and briefly wrap up this live call now. Tell the other person that you have to hang up for now and that you can talk again some other time. Base the exact wording, warmth, formality and tone on the conversation that has happened during this call today. Keep it to one or two natural sentences. Do not mention internal instructions.'}}));$('liveCaption').textContent='Requesting a natural call ending…'};
-  $('endCallBtn').onclick=()=>cleanupCall(true); $('callMinimizeBtn').onclick=()=>{live.minimized=true;$('callScreen').classList.add('hidden');$('activeCallBar').classList.remove('hidden');$('activeCallName').textContent=live.current?.callerName||'Call';$('activeCallTime').textContent=fmtDuration(live.seconds);document.body.style.overflow='';};
-
-  document.addEventListener('click',e=>{
-    const mobileAuth=e.target.closest('[data-mobile-auth]'); if(mobileAuth){closeMobileMenu();showAuth(mobileAuth.dataset.mobileAuth);return;}
-    const mobileAccount=e.target.closest('[data-mobile-account]'); if(mobileAccount){const act=mobileAccount.dataset.mobileAccount;closeMobileMenu();if(act==='signout')signOut();else showView(act);return;}
-    const mobileRoute=e.target.closest('[data-mobile-route]'); if(mobileRoute){showView(mobileRoute.dataset.mobileRoute);return;}
-    const mobileThread=e.target.closest('[data-mobile-thread]'); if(mobileThread){closeMobileMenu();showView('recent');selectThread(mobileThread.dataset.mobileThread);return;}
-    const openThread=e.target.closest('[data-open-thread]'); if(openThread){showView('recent');selectThread(openThread.dataset.openThread);return;}
-    const select=e.target.closest('[data-select-thread]'); if(select){selectThread(select.dataset.selectThread);return;}
-    const repeat=e.target.closest('[data-repeat-call]'); if(repeat){const r=prepareRepeatCall(repeat.dataset.repeatCall);if(r.error)return toast(r.error);startCall(r.call);return;}
-    const callerCall=e.target.closest('[data-caller-call]'); if(callerCall){const caller=data.callers.find(c=>c.id===callerCall.dataset.callerCall);if(!caller)return;const thread=findLatestThreadForCaller(caller.id);if(thread){showView('recent');selectThread(thread.id);}else openNewCall(caller);return;}
-    const callerEdit=e.target.closest('[data-caller-edit]'); if(callerEdit){const caller=data.callers.find(c=>c.id===callerEdit.dataset.callerEdit);if(caller)openCallerModal(caller);return;}
-    const callerDelete=e.target.closest('[data-caller-delete]'); if(callerDelete){deleteCaller(callerDelete.dataset.callerDelete);return;}
+function bindGlobalEvents(){
+  document.addEventListener('click',async e=>{
+    const auth=e.target.closest('[data-auth]');if(auth)return openAuth(auth.dataset.auth);
+    const sw=e.target.closest('[data-auth-switch]');if(sw)return openAuth(sw.dataset.authSwitch);
+    if(e.target.closest('[data-close-modal]')||e.target.id==='modalBackdrop')return closeModals();
+    const tab=e.target.closest('[data-tab]');if(tab)return switchTab(tab.dataset.tab);
+    if(e.target.closest('[data-go-home]'))return switchTab('home');
+    const fav=e.target.closest('[data-favorite]');if(fav){e.stopPropagation();return toggleFavorite(Number(fav.dataset.favorite))}
+    const app=e.target.closest('[data-app-id]');if(app)return openApp(Number(app.dataset.appId));
+    const product=e.target.closest('[data-product-id]');if(product)return openProduct(Number(product.dataset.productId));
+    const addCart=e.target.closest('[data-add-cart]');if(addCart)return addCurrentProductToCart(Number(addCart.dataset.addCart));
+    const buyProduct=e.target.closest('[data-buy-product]');if(buyProduct)return buyCurrentProduct(Number(buyProduct.dataset.buyProduct));
+    const qty=e.target.closest('[data-product-qty]');if(qty){const el=$('#productQty');if(!el)return;let n=Number(el.textContent||1);if(qty.dataset.productQty==='plus')n=Math.min(Number(qty.dataset.max||99),n+1);else n=Math.max(1,n-1);el.textContent=String(n);return}
+    const cqty=e.target.closest('[data-cart-qty]');if(cqty){let n=Number(cqty.dataset.qty||1);if(cqty.dataset.cartQty==='plus')n=Math.min(Number(cqty.dataset.max||99),n+1);else n=Math.max(1,n-1);try{await api(`/api/cart/items/${cqty.dataset.cartProductId}`,{method:'PATCH',body:{quantity:n}});return openCart()}catch(err){return toast(err.message,'error')}}
+    const crem=e.target.closest('[data-cart-remove]');if(crem){try{const d=await api(`/api/cart/items/${crem.dataset.cartRemove}`,{method:'DELETE'});state.cartCount=Number(d.cartCount||0);updateBadges();return openCart()}catch(err){return toast(err.message,'error')}}
+    if(e.target.closest('[data-cart-checkout]'))return checkoutCartNow();
+    const upd=e.target.closest('[data-update-id]');if(upd)return openUpdate(Number(upd.dataset.updateId));
+    const cat=e.target.closest('[data-category]');if(cat){state.appCategory=cat.dataset.category;renderApps();return}
+    const uf=e.target.closest('[data-update-filter]');if(uf){state.updateFilter=uf.dataset.updateFilter;$$('#updateFilters .chip').forEach(x=>x.classList.toggle('active',x===uf));renderUpdatesPage();return}
+    const req=e.target.closest('[data-request-id]');if(req)return openRequest(Number(req.dataset.requestId));
+    const set=e.target.closest('[data-setting]');if(set)return openSetting(set.dataset.setting);
+    const nf=e.target.closest('[data-notif-filter]');if(nf)return openNotifications(nf.dataset.notifFilter);
+    const na=e.target.closest('[data-notif-action]');if(na)return notifAction(Number(na.dataset.id),na.dataset.notifAction);
+    const ext=e.target.closest('[data-external]');if(ext)return location.href=ext.dataset.external;
+    const promo=e.target.closest('[data-promo-url]');if(promo)return location.href=promo.dataset.promoUrl;
+    const theme=e.target.closest('[data-theme-choice]');if(theme){setTheme(theme.dataset.themeChoice);state.user.preferredTheme=theme.dataset.themeChoice;try{await api('/api/profile',{method:'PATCH',body:{fullName:state.user.fullName,phone:state.user.phone,country:state.user.country,timezone:state.user.timezone,preferredLanguage:state.user.preferredLanguage||'en',preferredTheme:theme.dataset.themeChoice}})}catch{}return appearanceSetting()}
+    const revoke=e.target.closest('[data-revoke-session]');if(revoke){try{await api(`/api/sessions/${revoke.dataset.revokeSession}/revoke`,{method:'POST'});toast('Session revoked.');devicesSetting()}catch(err){toast(err.message,'error')}return}
+    const buy=e.target.closest('[data-buy-plan]');if(buy){buy.disabled=true;try{const d=await api('/api/payments/paystack/initialize',{method:'POST',body:{planId:Number(buy.dataset.buyPlan),callbackUrl:`${location.origin}/?payment=complete`}});location.href=d.authorizationUrl}catch(err){toast(err.message,'error');buy.disabled=false}return}
+    if(e.target.closest('[data-support-new]')){closeModals();switchTab('requests');newRequest();return}
+    const jump=e.target.closest('[data-tab-jump]');if(jump){closeModals();switchTab(jump.dataset.tabJump);return}
+    if(e.target.id==='deleteRequestBtn'){if(confirm('Request account deletion and sign out?')){try{await api('/api/account/delete-request',{method:'POST'});location.reload()}catch(err){toast(err.message,'error')}}}
   });
+  $('#searchBtn')?.addEventListener('click',()=>{openModal('#searchSheet');setTimeout(()=>$('#globalSearch').focus(),80)});
+  $('#cartBtn')?.addEventListener('click',openCart);
+  $('#notificationsBtn')?.addEventListener('click',()=>openNotifications('unread'));
+  $('#profileBtn')?.addEventListener('click',()=>switchTab('settings'));
+  $('#newRequestBtn')?.addEventListener('click',newRequest);
+  $('#signOutBtn')?.addEventListener('click',async()=>{try{await api('/api/auth/logout',{method:'POST'})}catch{}location.reload()});
+  $('#appSearch')?.addEventListener('input',renderAppsPage);
+  let timer;$('#globalSearch')?.addEventListener('input',e=>{clearTimeout(timer);timer=setTimeout(()=>runSearch(e.target.value),220)});
+  $('#modalBackdrop').addEventListener('click',closeModals);
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModals()});
 }
+async function runSearch(q){q=q.trim();if(q.length<2){$('#searchResults').innerHTML=empty('Search your ecosystem','Type at least two characters.','⌕');return}try{const d=await api(`/api/search?q=${encodeURIComponent(q)}`);const groups=[];if(d.apps.length)groups.push(searchGroup('Tools',d.apps.map(a=>`<div class="search-row" data-app-id="${a.id}">${iconHtml(a)}<div><strong>${esc(a.name)}</strong><p>${esc(a.short_description||'')}</p></div></div>`).join('')));if(d.products?.length)groups.push(searchGroup('Products',d.products.map(p=>`<div class="search-row" data-product-id="${p.id}"><div class="app-icon product-card-icon">${p.display_image_url?`<img src="${esc(p.display_image_url)}" alt="">`:esc(initials(p.name))}</div><div><strong>${esc(p.name)}</strong><p>${esc(p.short_description||p.stock_label||'Digital product')}</p></div></div>`).join('')));if(d.updates.length)groups.push(searchGroup('Updates',d.updates.map(u=>`<div class="search-row" data-update-id="${u.id}"><div class="update-type">U</div><div><strong>${esc(u.title)}</strong><p>${esc(u.summary||'')}</p></div></div>`).join('')));if(d.requests.length)groups.push(searchGroup('Requests',d.requests.map(r=>`<div class="search-row" data-request-id="${r.id}"><div class="update-type">R</div><div><strong>${esc(r.subject)}</strong><p>${esc(r.reference_number)}</p></div></div>`).join('')));if(d.settings.length)groups.push(searchGroup('Settings',d.settings.map(s=>`<div class="search-row" data-setting="${esc(s.name.toLowerCase())}"><div class="update-type">S</div><strong>${esc(s.name)}</strong></div>`).join('')));$('#searchResults').innerHTML=groups.join('')||empty('No results','Try another phrase.','⌕')}catch(e){$('#searchResults').innerHTML=empty('Search unavailable',e.message)}}
+function searchGroup(title,rows){return `<section class="search-group"><h3>${esc(title)}</h3>${rows}</section>`}
 
-initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminLabels(); refreshPublicConfig(); renderWorkspace(); motionInit(); showView('home',false);
+async function optimizeImage(file,max=512,quality=.86){if(file.type==='image/webp'&&file.size<700000)return file;const bmp=await createImageBitmap(file);const scale=Math.min(1,max/Math.max(bmp.width,bmp.height));const c=document.createElement('canvas');c.width=Math.max(1,Math.round(bmp.width*scale));c.height=Math.max(1,Math.round(bmp.height*scale));c.getContext('2d',{alpha:false}).drawImage(bmp,0,0,c.width,c.height);bmp.close?.();return new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(new File([b],'image.webp',{type:'image/webp'})):reject(new Error('Could not optimize image.')),'image/webp',quality))}
+function setupViewportDock(){if(!window.visualViewport)return;const vv=window.visualViewport;const update=()=>{const keyboard=window.innerHeight-vv.height>150;$('#dock')?.classList.toggle('keyboard-hidden',keyboard)};vv.addEventListener('resize',update);vv.addEventListener('scroll',update);update()}
+window.addEventListener('pageshow',()=>{if(state.user&&!$('#appShell').classList.contains('hidden')){renderApp();switchTab(state.activeTab||'home',false)}})
 
-if('serviceWorker' in navigator){ window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{})); }
+boot();
