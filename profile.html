@@ -17,7 +17,7 @@
     document.documentElement.dataset.theme='pearl';
     document.documentElement.style.colorScheme='light';
     try{history.scrollRestoration='manual';}catch{}
-    window.__CALLFOCUS_BUILD__='15.70-test';
+    window.__CALLFOCUS_BUILD__='15.80-test';
     (function(){
       const cleanPath=(location.pathname||'/').replace(/\/+$/,'')||'/';
       const topNow=()=>{try{window.scrollTo(0,0);}catch{}};
@@ -29,14 +29,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=15.70-test" />
+  <link rel="stylesheet" href="/callfocus.css?v=15.80-test" />
 </head>
 <body data-cf-document-view="profile">
   <div class="app-root home-page" id="pageRoot">
     <header class="site-header" id="siteHeader">
       <div class="container header-inner">
         <a class="brand" href="#home" aria-label="CallFocus home">
-          <span class="brand-logo-shell" aria-hidden="true"><img class="brand-logo-image" width="256" height="256" decoding="async" src="./logo.png?v=15.70-test" alt="" /></span>
+          <span class="brand-logo-shell" aria-hidden="true"><img class="brand-logo-image" width="256" height="256" decoding="async" src="./logo.png?v=15.80-test" alt="" /></span>
           <span class="brand-copy">
             <strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong>
             <small>Conversation continuity, simplified.</small>
@@ -86,6 +86,7 @@
             <button data-mobile-route="callers"><span class="menu-icon">◉</span><span>My Callers<small>Saved people and caller context</small></span></button>
             <button data-mobile-route="recent"><span class="menu-icon">◷</span><span>Recent Calls<small>Continue previous call threads</small></span></button>
             <button data-mobile-route="credits"><span class="menu-icon">◌</span><span>Call & Voice Credits<small>Shared balance, pricing and top-ups</small></span></button>
+            <button data-mobile-route="history"><span class="menu-icon">≡</span><span>Transactions & Usage<small>Payments and credit usage history</small></span></button>
             <button data-mobile-route="referrals"><span class="menu-icon">R</span><span>My Referrals<small>Share your code and track earned credits</small></span></button>
             <button data-mobile-route="profile"><span class="menu-icon">◎</span><span>My Profile<small>Your reusable information</small></span></button>
           </div>
@@ -500,7 +501,7 @@
 
             <div class="voice-note-result hidden" id="voiceNoteResult">
               <div class="voice-note-result-top">
-                <span class="voice-note-result-avatar"><img src="./logo.png?v=15.70-test" alt="" /></span>
+                <span class="voice-note-result-avatar"><img src="./logo.png?v=15.80-test" alt="" /></span>
                 <div><strong>Voice note ready</strong><small id="voiceNoteResultMeta">Female voice</small></div>
                 <span class="ai-voice-pill">AI-generated voice</span>
               </div>
@@ -621,6 +622,32 @@
         </div>
       </section>
 
+
+      <section class="page-view app-page history-page" id="page-history" data-view="history">
+        <div class="container app-page-inner history-shell">
+          <div class="app-page-head history-page-head">
+            <div><span class="section-eyebrow">Account activity</span><h1>Transactions & Usage</h1><p>Review your CallFocus credit deposits, account adjustments, live-call usage and voice-note usage.</p></div>
+            <button class="btn btn-ghost history-refresh-btn" id="historyRefreshBtn" type="button">Refresh history</button>
+          </div>
+
+          <div class="history-summary-grid">
+            <article><span>Current balance</span><strong id="historyCurrentBalance">—</strong><small>Shared call and voice-note credits</small></article>
+            <article><span>Confirmed deposits</span><strong id="historyFundedTotal">—</strong><small id="historyFundedCount">Verified purchases</small></article>
+            <article><span>Credits used</span><strong id="historyUsedTotal">—</strong><small>Live calls and voice notes</small></article>
+          </div>
+
+          <section class="history-panel">
+            <div class="history-panel-head"><div><span class="section-eyebrow">Money & credits in</span><h2>Transaction history</h2></div><small>Newest first</small></div>
+            <div class="history-list" id="historyTransactions"><div class="history-empty">Your confirmed payments and credit adjustments will appear here.</div></div>
+          </section>
+
+          <section class="history-panel">
+            <div class="history-panel-head"><div><span class="section-eyebrow">Credits out</span><h2>Usage history</h2></div><small>Newest first</small></div>
+            <div class="history-list" id="historyUsage"><div class="history-empty">Your live-call and voice-note usage will appear here.</div></div>
+          </section>
+        </div>
+      </section>
+
       <section class="page-view app-page referrals-page" id="page-referrals" data-view="referrals">
         <div class="container app-page-inner referrals-shell">
           <div class="app-page-head">
@@ -706,7 +733,7 @@
 
     <footer class="premium-footer">
       <div class="container footer-inner">
-        <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="./logo.png?v=15.70-test" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span></div></div>
+        <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="./logo.png?v=15.80-test" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span></div></div>
         <div class="footer-links"><button data-route="home">Home</button><button data-route="recent">Recent Calls</button><button data-route="profile">My Profile</button><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/support">Support</a></div>
       </div>
     </footer>
@@ -917,6 +944,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=15.70-test"></script>
+  <script src="/callfocus.js?v=15.80-test"></script>
 </body>
 </html>

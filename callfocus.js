@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.79-test';
+  const BUILD='15.80-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -533,11 +533,11 @@ function setRecentCallsListMode(showList){
 }
 
 function showView(view, scroll=true){
-  if(['avatar','callers','recent','profile','settings','referrals'].includes(view) && !account){ requireAccount({type:'route',route:view},'Create an account or sign in to open your saved CallFocus workspace.'); return; }
+  if(['avatar','callers','recent','profile','settings','referrals','history'].includes(view) && !account){ requireAccount({type:'route',route:view},'Create an account or sign in to open your saved CallFocus workspace.'); return; }
   if(view==='recent') setRecentCallsListMode(true);
   activeView=view; qsa('.page-view').forEach(p=>p.classList.toggle('active',p.dataset.view===view)); qsa('.nav-anchor').forEach(n=>n.classList.toggle('active',n.dataset.route===view));
   closeMobileMenu(); $('headerAccountDropdown').classList.add('hidden');
-  if(view==='recent') renderRecentThreads(); if(view==='profile')renderProfile(); if(view==='settings')renderSettings(); if(view==='referrals'||view==='credits')window.CallFocusRenderReferrals?.();
+  if(view==='recent') renderRecentThreads(); if(view==='profile')renderProfile(); if(view==='settings')renderSettings(); if(view==='referrals'||view==='credits')window.CallFocusRenderReferrals?.(); if(view==='history')window.CallFocusHistory?.refresh?.();
   if(scroll) window.scrollTo({top:0,behavior:'smooth'});
 }
 function openMobileMenu(){ $('mobileMenuWrap').classList.remove('hidden'); $('mobileMenuBtn').setAttribute('aria-expanded','true'); $('mobileMenuBtn').querySelector('.menu-glyph').textContent='×'; renderMobileAccount(); renderMobileRecents(); }
@@ -4616,8 +4616,8 @@ ${approvedPatterns}
 /* ===== v11.28-router.js ===== */
 /* CallFocus V11.28 — multi-route navigation, preserving V11.23 Recent Calls exactly */
 (()=>{
-  const ROUTES={home:'/', avatar:'/avatar', 'voice-notes':'/voice-notes', credits:'/credits', referrals:'/referrals', callers:'/callers', recent:'/recent-calls', profile:'/profile', settings:'/settings'};
-  const PROTECTED=new Set(['avatar','voice-notes','credits','referrals','callers','recent','profile','settings']);
+  const ROUTES={home:'/', avatar:'/avatar', 'voice-notes':'/voice-notes', credits:'/credits', history:'/history', referrals:'/referrals', callers:'/callers', recent:'/recent-calls', profile:'/profile', settings:'/settings'};
+  const PROTECTED=new Set(['avatar','voice-notes','credits','history','referrals','callers','recent','profile','settings']);
   const SERVER_TOKEN_KEY='callfocus_server_session_v1';
   const oldShow=typeof showView==='function'?showView:null;
   const oldSelect=typeof selectThread==='function'?selectThread:null;
@@ -7574,4 +7574,51 @@ ${approvedPatterns}
       .observe(modal(),{attributes:true,attributeFilter:['class']});
   };
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else bind();
+})();
+
+
+/* ===== V15.80 — customer transaction and usage history ===== */
+(()=>{
+  const root=()=>document.getElementById('page-history');
+  const token=()=>{try{return String(localStorage.getItem('callfocus_server_session_v1')||'').trim()}catch{return ''}};
+  const money=n=>`₦${Math.max(0,Number(n)||0).toLocaleString(undefined,{maximumFractionDigits:2})}`;
+  const credits=n=>{const value=Math.max(0,Number(n)||0);return `${Number.isInteger(value)?value.toLocaleString():value.toLocaleString(undefined,{maximumFractionDigits:1})} credits`;};
+  const balanceCredits=seconds=>window.CallFocusCredits?.creditsForSeconds?window.CallFocusCredits.creditsForSeconds(Math.max(0,Number(seconds)||0)):Math.round((Math.max(0,Number(seconds)||0)/0.6)*10)/10;
+  const when=value=>{try{return new Date(value).toLocaleString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})}catch{return String(value||'')}};
+  const escHistory=value=>String(value??'').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+  const providerLabel=row=>{const provider=String(row?.provider||'').toLowerCase();if(provider==='paystack')return 'Paystack payment';if(provider==='manual_bank_transfer')return 'Manual bank transfer';if(provider==='referral_reward')return 'Referral reward';return provider?provider.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()):'Credit transaction';};
+  const usageLabel=row=>{const type=String(row?.type||'').toLowerCase();if(type==='live_call')return 'Live call';if(type==='voice_note')return 'Voice note';if(type==='admin_credit_grant')return 'Credit added by CallFocus';if(type==='admin_bulk_credit_gift')return 'CallFocus credit gift';if(type==='admin_balance_reset')return 'Balance removed';if(type==='usage')return 'Credit usage';return type?type.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()):'Account adjustment';};
+  const isAdjustment=row=>['admin_credit_grant','admin_bulk_credit_gift','admin_balance_reset'].includes(String(row?.type||'').toLowerCase());
+  const isConsumption=row=>!isAdjustment(row);
+  const transactionHtml=(row,kind='purchase')=>{const isPurchase=kind==='purchase';const isRemoval=!isPurchase&&String(row?.type||'').toLowerCase()==='admin_balance_reset';const title=isPurchase?providerLabel(row):usageLabel(row);const creditValue=Math.max(0,Number(row?.credits)||balanceCredits(Math.abs(Number(row?.seconds)||0)));const amount=isPurchase&&Number(row?.amountNaira)>0?money(row.amountNaira):credits(creditValue);const meta=[];if(isPurchase&&Number(row?.credits)>0)meta.push(credits(row.credits));if(row?.reference)meta.push(String(row.reference));if(row?.note&&!isPurchase)meta.push(String(row.note));const sign=isRemoval?'−':'+';const iconClass=isRemoval?'history-row-out':'history-row-in';const amountClass=isRemoval?'history-negative':'history-positive';return `<article class="history-row"><div class="history-row-main"><span class="history-row-icon ${iconClass}">${sign}</span><div><strong>${escHistory(title)}</strong><span>${escHistory(when(row?.createdAt||row?.updatedAt))}</span>${meta.length?`<small>${escHistory(meta.join(' · '))}</small>`:''}</div></div><b class="history-row-amount ${amountClass}">${sign}${escHistory(amount)}</b></article>`;};
+  const usageHtml=row=>{const used=Math.max(0,Number(row?.credits)||balanceCredits(row?.seconds||0));const meta=[];if(Number(row?.seconds)>0)meta.push(`${Math.round(Number(row.seconds))} sec`);if(row?.note)meta.push(String(row.note));return `<article class="history-row"><div class="history-row-main"><span class="history-row-icon history-row-out">−</span><div><strong>${escHistory(usageLabel(row))}</strong><span>${escHistory(when(row?.updatedAt||row?.createdAt))}</span>${meta.length?`<small>${escHistory(meta.join(' · '))}</small>`:''}</div></div><b class="history-row-amount history-negative">−${escHistory(credits(used))}</b></article>`;};
+  function render(){
+    if(!root())return;
+    const wallet=(typeof data!=='undefined'&&data?.wallet&&typeof data.wallet==='object')?data.wallet:{};
+    const purchases=Array.isArray(wallet.purchases)?wallet.purchases:[];
+    const ledger=Array.isArray(wallet.usage)?wallet.usage:[];
+    const funded=purchases.filter(row=>['paystack','manual_bank_transfer'].includes(String(row?.provider||'').toLowerCase()));
+    const adjustments=ledger.filter(isAdjustment);
+    const consumption=ledger.filter(isConsumption);
+    const txRows=[...purchases.map(row=>({row,kind:'purchase',at:row?.createdAt||''})),...adjustments.map(row=>({row,kind:'adjustment',at:row?.updatedAt||row?.createdAt||''}))].sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0));
+    const usageRows=[...consumption].sort((a,b)=>Date.parse(b?.updatedAt||b?.createdAt||0)-Date.parse(a?.updatedAt||a?.createdAt||0));
+    const fundedNaira=funded.reduce((sum,row)=>sum+Math.max(0,Number(row?.amountNaira)||0),0);
+    const usedCredits=consumption.reduce((sum,row)=>sum+Math.max(0,Number(row?.credits)||balanceCredits(row?.seconds||0)),0);
+    const current=document.getElementById('historyCurrentBalance'),fundedTotal=document.getElementById('historyFundedTotal'),fundedCount=document.getElementById('historyFundedCount'),used=document.getElementById('historyUsedTotal'),tx=document.getElementById('historyTransactions'),usage=document.getElementById('historyUsage');
+    if(current)current.textContent=credits(balanceCredits(wallet.balanceSeconds||0));
+    if(fundedTotal)fundedTotal.textContent=money(fundedNaira);
+    if(fundedCount)fundedCount.textContent=`${funded.length.toLocaleString()} confirmed ${funded.length===1?'deposit':'deposits'}`;
+    if(used)used.textContent=credits(usedCredits);
+    if(tx)tx.innerHTML=txRows.length?txRows.map(item=>transactionHtml(item.row,item.kind)).join(''):'<div class="history-empty">No transactions have been recorded on this account yet.</div>';
+    if(usage)usage.innerHTML=usageRows.length?usageRows.map(usageHtml).join(''):'<div class="history-empty">No live-call or voice-note usage has been recorded yet.</div>';
+  }
+  async function refresh(){
+    render();const t=token();if(!t)return;
+    const btn=document.getElementById('historyRefreshBtn');if(btn){btn.disabled=true;btn.textContent='Refreshing…';}
+    try{const res=await fetch('/api/account/data',{method:'GET',headers:{Authorization:`Bearer ${t}`},cache:'no-store'});let payload={};try{payload=await res.json()}catch{}if(res.ok&&payload?.data?.wallet){if(window.CallFocusCredits?.applyAuthoritativeWallet)window.CallFocusCredits.applyAuthoritativeWallet(payload.data.wallet);else if(typeof data!=='undefined'&&data)data.wallet=payload.data.wallet;}}catch{}
+    finally{render();if(btn){btn.disabled=false;btn.textContent='Refresh history';}}
+  }
+  document.getElementById('historyRefreshBtn')?.addEventListener('click',refresh);
+  window.CallFocusHistory={render,refresh};
+  if(typeof activeView!=='undefined'&&activeView==='history')setTimeout(refresh,0);
 })();
