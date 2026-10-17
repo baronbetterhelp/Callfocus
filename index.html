@@ -1,0 +1,1027 @@
+<!doctype html>
+<html lang="en" data-theme="pearl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,shrink-to-fit=no" />
+  <meta name="theme-color" content="#f7f8f5" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="CallFocus" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+  <link rel="icon" type="image/png" href="./favicon.png" />
+  <title>CallFocus | Realtime Conversation Continuity Platform</title>
+  <script>
+    document.documentElement.dataset.theme='pearl';
+    document.documentElement.style.colorScheme='light';
+    try{history.scrollRestoration='manual';}catch{}
+    window.__CALLFOCUS_BUILD__='15.80-test';
+    (function(){
+      const cleanPath=(location.pathname||'/').replace(/\/+$/,'')||'/';
+      const topNow=()=>{try{window.scrollTo(0,0);}catch{}};
+      if(cleanPath==='/' && document.readyState==='loading') topNow();
+      window.addEventListener('pageshow',()=>{ if(cleanPath==='/'){ topNow(); requestAnimationFrame(topNow); setTimeout(topNow,80); setTimeout(topNow,260); } },{once:false});
+    })();
+  </script>
+  <meta name="description" content="CallFocus at callfocus.link is a web-based conversation continuity platform for realtime voice calls, saved caller context, repeat-call threads, voice notes, live translation and reusable call setups." />
+  <meta name="robots" content="index,follow,max-snippet:-1,max-image-preview:large,max-video-preview:-1" />
+  <link rel="canonical" href="https://callfocus.link/" />
+  <meta property="og:site_name" content="CallFocus" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="CallFocus | Realtime Conversation Continuity Platform" />
+  <meta property="og:description" content="Keep caller context, conversation dynamics and repeat-call continuity together for realtime voice calls." />
+  <meta property="og:url" content="https://callfocus.link/" />
+  <meta property="og:image" content="https://callfocus.link/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="CallFocus | Realtime Conversation Continuity Platform" />
+  <meta name="twitter:description" content="A web-based conversation continuity platform for realtime voice calls and repeat-call context." />
+  <meta name="twitter:image" content="https://callfocus.link/icon-512.png" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://callfocus.link/#website",
+        "url": "https://callfocus.link/",
+        "name": "CallFocus",
+        "alternateName": ["CallFocus app", "CallFocus conversation continuity"],
+        "description": "CallFocus at callfocus.link is a web-based conversation continuity platform for realtime voice calls, saved caller context and repeat-call threads.",
+        "inLanguage": "en"
+      },
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://callfocus.link/#software",
+        "name": "CallFocus",
+        "url": "https://callfocus.link/",
+        "applicationCategory": "CommunicationApplication",
+        "operatingSystem": "Web",
+        "description": "A web-based conversation continuity platform for preparing realtime voice calls, saving caller context, continuing repeat-call threads, creating voice notes and following live translation transcripts.",
+        "image": "https://callfocus.link/icon-512.png",
+        "isAccessibleForFree": true
+      },
+      {
+        "@type": "FAQPage",
+        "@id": "https://callfocus.link/#faq",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "What is CallFocus?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "CallFocus at callfocus.link is a web-based conversation continuity platform for realtime voice calls. It helps users prepare caller context, keep repeat-call threads, create voice notes and continue future calls without rebuilding the same background information."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Is CallFocus at callfocus.link the same as Call Focus in Ireland?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "No. CallFocus at callfocus.link is an independent web software product and is not affiliated with Call Focus at callfocus.ie, the Irish training and consultancy business."
+            }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/callfocus.css?v=15.80-test" />
+</head>
+<body data-cf-document-view="home">
+  <div class="app-root home-page" id="pageRoot">
+    <header class="site-header" id="siteHeader">
+      <div class="container header-inner">
+        <a class="brand" href="#home" aria-label="CallFocus home">
+          <span class="brand-logo-shell" aria-hidden="true"><img class="brand-logo-image" width="256" height="256" decoding="async" src="./logo.png?v=15.80-test" alt="" /></span>
+          <span class="brand-copy">
+            <strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong>
+            <small>Conversation continuity, simplified.</small>
+          </span>
+        </a>
+
+        <nav class="desktop-nav" aria-label="Primary navigation">
+          <button class="nav-anchor active" data-route="home">Home</button>
+          <button class="nav-anchor auth-route" data-route="callers">My Callers</button>
+          <button class="nav-anchor auth-route" data-route="recent">Recent Calls</button>
+          <button class="nav-anchor auth-route" data-route="avatar">Live Avatar</button>
+          <button class="nav-anchor auth-route" data-route="profile">My Profile</button>
+        </nav>
+
+        <div class="header-actions">
+          <div class="guest-actions" id="guestHeaderActions">
+            <button class="header-signin" id="headerSignInBtn">Sign in</button>
+            <button class="btn btn-primary header-create" id="headerCreateBtn">Create account</button>
+          </div>
+          <div class="header-account-menu hidden" id="headerAccountMenu">
+            <button class="header-account-trigger" id="headerAccountTrigger" aria-expanded="false">
+              <span class="header-account-avatar" id="headerAccountAvatar">U</span>
+              <span class="header-account-label" id="headerAccountLabel">My account</span>
+              <span class="chevron">⌄</span>
+            </button>
+            <div class="header-account-dropdown hidden" id="headerAccountDropdown">
+              <div class="account-dropdown-profile">
+                <strong id="dropdownName">User</strong>
+                <small id="dropdownEmail">user@example.com</small>
+              </div>
+              <button data-account-route="credits">Call & voice credits</button>
+              <button data-account-route="referrals">My referrals</button>
+              <button data-account-route="settings">Account settings</button>
+              <button data-account-route="profile">My profile</button>
+              <button id="dropdownSignOutBtn">Sign out</button>
+            </div>
+          </div>
+          <button class="icon-btn mobile-menu-btn" id="mobileMenuBtn" aria-label="Open menu" aria-expanded="false"><span class="menu-glyph">☰</span></button>
+        </div>
+      </div>
+
+      <div class="mobile-menu-wrap hidden" id="mobileMenuWrap">
+        <div class="mobile-menu container">
+          <div class="mobile-account-block" id="mobileAccountBlock"></div>
+          <div class="mobile-menu-main">
+            <button data-mobile-route="home"><span class="menu-icon">⌂</span><span>Home<small>CallFocus overview</small></span></button>
+            <button data-mobile-route="callers"><span class="menu-icon">◉</span><span>My Callers<small>Saved people and caller context</small></span></button>
+            <button data-mobile-route="recent"><span class="menu-icon">◷</span><span>Recent Calls<small>Continue previous call threads</small></span></button>
+            <button data-mobile-route="credits"><span class="menu-icon">◌</span><span>Call & Voice Credits<small>Shared balance, pricing and top-ups</small></span></button>
+            <button data-mobile-route="history"><span class="menu-icon">≡</span><span>Transactions & Usage<small>Payments and credit usage history</small></span></button>
+            <button data-mobile-route="referrals"><span class="menu-icon">R</span><span>My Referrals<small>Share your code and track earned credits</small></span></button>
+            <button data-mobile-route="profile"><span class="menu-icon">◎</span><span>My Profile<small>Your reusable information</small></span></button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="page-view active" id="page-home" data-view="home">
+        <section class="premium-hero" id="home">
+          <div class="hero-media" aria-hidden="true">
+            <div class="cf-hero-aurora cf-hero-aurora-a"></div>
+            <div class="cf-hero-aurora cf-hero-aurora-b"></div>
+            <div class="cf-hero-grid" aria-hidden="true"></div>
+            <div class="hero-media-overlay"></div>
+            <div class="hero-architecture"><span></span><span></span><span></span><span></span></div>
+          </div>
+          <div class="container hero-credit-row">
+            <div class="credit-dock" id="creditDock">
+              <div class="credit-dock-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M7.4 4.8c.8-1 2.3-1.1 3.2-.2l1.1 1.1c.6.6.7 1.5.3 2.2l-1 1.8c-.2.4-.2.8.1 1.1l2.1 2.1c.3.3.8.4 1.1.1l1.8-1c.7-.4 1.6-.3 2.2.3l1.1 1.1c.9.9.8 2.4-.2 3.2l-1.2 1c-1.1.9-2.6 1.2-4 .8-2.5-.7-4.8-2.2-6.8-4.1s-3.4-4.3-4.1-6.8c-.4-1.4-.1-2.9.8-4l1.1-1.3Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <div class="credit-dock-copy">
+                <span id="creditDockLabel">Starter call & voice credit</span>
+                <strong id="creditDockBalance">Referral code unlocks 75 free credits</strong>
+              </div>
+              <button class="credit-dock-action" id="creditDockAction" type="button">View credits</button>
+            </div>
+          </div>
+          <div class="container premium-hero-inner">
+            <div class="hero-copy premium-copy">
+              <div class="hero-badge hero-enter hero-enter-1"><span class="badge-dot"></span> Realtime calls with context</div>
+              <h1 class="hero-enter hero-enter-2"><span class="cf-hero-line cf-hero-line-1">Give every</span> <span class="cf-hero-line cf-hero-line-2">conversation a</span> <span class="cf-hero-line cf-hero-line-3">better</span> <em>continuation.</em></h1>
+              <p class="hero-enter hero-enter-3">Set the full context once for a new person. On future calls, open the recent call thread, add only what is new today, and continue from where the conversation left off.</p>
+              <div class="hero-actions hero-enter hero-enter-4">
+                <button class="btn btn-primary hero-primary" id="heroNewCallBtn">Start a new call</button>
+                <div class="hero-quick-actions" aria-label="Quick tools">
+                  <button class="btn btn-ghost voice-note-launch voice-note-launch-main" id="heroCreateVoiceBtn"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Create a voice note</span></button>
+                  <button class="btn btn-ghost voice-note-launch dynamics-launch" id="heroHowBtn"><span class="voice-note-launch-icon" aria-hidden="true">◎</span><span>Generate conversation dynamics</span></button>
+                  <button class="btn btn-ghost voice-note-launch avatar-launch" id="heroAvatarBtn" data-route="avatar"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Live AI Avatar</span><small>New</small></button>
+                </div>
+              </div>
+              <div class="hero-proof hero-enter hero-enter-4 hero-proof-spaced">
+                <div class="avatar-stack"><span>C</span><span>F</span><span>+</span></div>
+                <div><div class="proof-stars">★★★★★</div><small>Your context stays organized around each caller and call thread.</small></div>
+              </div>
+
+              <div class="cf-phone-hero-stage hero-enter hero-enter-4" aria-hidden="true">
+                <div class="cf-phone-stage-head">
+                  <div><span class="cf-phone-live-dot"></span><strong>Live continuity</strong></div>
+                  <small>Context is ready</small>
+                </div>
+                <div class="cf-phone-stage-canvas">
+                  <span class="cf-phone-orbit orbit-one"></span>
+                  <span class="cf-phone-orbit orbit-two"></span>
+                  <span class="cf-phone-orbit-dot dot-one"></span>
+                  <span class="cf-phone-orbit-dot dot-two"></span>
+                  <span class="cf-phone-orbit-dot dot-three"></span>
+                  <div class="cf-phone-caller-core">
+                    <span class="cf-phone-core-pulse"></span>
+                    <b class="cf-phone-caller-avatar"><img src="./caller-alex.png?v=15.80-test" alt="" width="56" height="56" decoding="async" /></b>
+                    <strong>Alex</strong>
+                    <small>Conversation active</small>
+                  </div>
+                  <div class="cf-phone-signal signal-context"><i></i><span>Caller context</span><b>Ready</b></div>
+                  <div class="cf-phone-signal signal-time"><i></i><span>Local time</span><b>Matched</b></div>
+                  <div class="cf-phone-signal signal-memory"><i></i><span>Recent thread</span><b>Loaded</b></div>
+                </div>
+                <div class="cf-phone-wave" aria-hidden="true">
+                  <span style="--h:14px"></span><span style="--h:27px"></span><span style="--h:18px"></span><span style="--h:37px"></span><span style="--h:22px"></span><span style="--h:46px"></span><span style="--h:28px"></span><span style="--h:39px"></span><span style="--h:17px"></span><span style="--h:31px"></span><span style="--h:21px"></span><span style="--h:43px"></span><span style="--h:24px"></span><span style="--h:33px"></span><span style="--h:16px"></span>
+                </div>
+                <div class="cf-phone-stage-foot"><span>Listen naturally</span><span>Keep context</span><span>Continue later</span></div>
+              </div>
+            </div>
+
+            <div class="hero-float-card hero-enter hero-enter-4">
+              <span class="float-eyebrow">Example call preview</span>
+              <div class="float-status"><span class="status-light"></span> Connected to server</div>
+              <div class="float-avatar">A</div>
+              <strong>Alex Morgan</strong>
+              <span>Romantic Call · 04:18</span>
+              <div class="float-controls"><i>Mute</i><i>Hold</i><i>Request end</i></div>
+            </div>
+          </div>
+          <div class="hero-scroll-cue" aria-hidden="true"><span></span></div>
+        </section>
+
+        <section class="trust-row" aria-label="CallFocus highlights">
+          <div class="trust-marquee container">
+            <div class="trust-marquee-track">
+              <div class="trust-row-set">
+                <span>Set the full context once</span>
+                <span>Call-specific location & time zone</span>
+                <span>Male, female or your own AI voice profile</span>
+                <span>Recent-call continuity</span>
+              </div>
+              <div class="trust-row-set trust-row-clone" aria-hidden="true">
+                <span>Set the full context once</span>
+                <span>Call-specific location & time zone</span>
+                <span>Male, female or your own AI voice profile</span>
+                <span>Recent-call continuity</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="customer-home-panel hidden" id="customerHomePanel">
+          <div class="container">
+            <div class="customer-home-head reveal-card" data-reveal>
+              <div><span class="section-eyebrow">Your workspace</span><h2 id="customerGreeting">Welcome back.</h2><p>Continue a recent thread or start a completely new call.</p></div>
+              <button class="btn btn-primary" id="customerNewCallBtn">New call</button>
+            </div>
+            <div class="customer-stats reveal-card" data-reveal>
+              <div><span>Saved callers</span><strong id="homeCallerCount">0</strong></div>
+              <div><span>Recent threads</span><strong id="homeThreadCount">0</strong></div>
+              <div><span>Voice pair</span><strong id="homeVoicePair">cedar / marin</strong></div>
+            </div>
+            <div class="section-head reveal-card" data-reveal><div><span class="section-eyebrow">Continue</span><h3>Your recent calls</h3></div><button class="text-link" data-route="recent">View all</button></div>
+            <div class="thread-preview-list" id="homeRecentThreads"></div>
+          </div>
+        </section>
+
+
+        <section class="cf-story-section" aria-label="CallFocus conversation flow">
+          <div class="container cf-story-layout">
+            <div class="cf-story-intro reveal-card reveal-left" data-reveal>
+              <span class="section-eyebrow">Continuity, visualized</span>
+              <h2>From context to conversation to the next call.</h2>
+              <p>CallFocus keeps the setup, the live conversation and what comes next connected in one clear flow, so repeat calls feel familiar instead of starting from zero.</p>
+              <div class="cf-story-pills" aria-label="CallFocus flow">
+                <span>Prepare once</span><span>Talk naturally</span><span>Continue later</span>
+              </div>
+            </div>
+
+            <div class="cf-story-stack">
+              <article class="cf-story-card cf-story-card-context reveal-card" data-reveal data-tilt>
+                <div class="cf-story-card-copy">
+                  <span class="cf-story-number">01</span>
+                  <div><small>Context in</small><h3>Everything important, organized before the call.</h3><p>About you, about the caller, conversation dynamics and what today is about stay separated but connected.</p></div>
+                </div>
+                <div class="cf-context-visual" aria-hidden="true">
+                  <div class="cf-context-core"><span>CallFocus</span><small>Call context</small></div>
+                  <span class="cf-context-orbit orbit-1"></span><span class="cf-context-orbit orbit-2"></span>
+                  <div class="cf-context-chip chip-a"><i></i>About you</div>
+                  <div class="cf-context-chip chip-b"><i></i>About caller</div>
+                  <div class="cf-context-chip chip-c"><i></i>Dynamics</div>
+                  <div class="cf-context-chip chip-d"><i></i>Today</div>
+                </div>
+              </article>
+
+              <article class="cf-story-card cf-story-card-live reveal-card" data-reveal data-tilt style="--delay:90ms">
+                <div class="cf-story-card-copy">
+                  <span class="cf-story-number">02</span>
+                  <div><small>Conversation live</small><h3>A calmer interface while the conversation moves.</h3><p>Voice, listening, pacing and call controls stay focused on the moment instead of turning the call into a dashboard.</p></div>
+                </div>
+                <div class="cf-live-visual" aria-hidden="true">
+                  <div class="cf-live-top"><span class="cf-live-dot"></span><strong>Live conversation</strong><small>connected</small></div>
+                  <div class="cf-wave-row">
+                    <span style="--h:24%"></span><span style="--h:52%"></span><span style="--h:78%"></span><span style="--h:42%"></span><span style="--h:90%"></span><span style="--h:62%"></span><span style="--h:34%"></span><span style="--h:72%"></span><span style="--h:96%"></span><span style="--h:54%"></span><span style="--h:38%"></span><span style="--h:82%"></span><span style="--h:47%"></span><span style="--h:68%"></span><span style="--h:30%"></span><span style="--h:74%"></span><span style="--h:58%"></span><span style="--h:88%"></span>
+                  </div>
+                  <div class="cf-live-caption"><span>Listen</span><b></b><span>Respond</span><b></b><span>Remember</span></div>
+                </div>
+              </article>
+
+              <article class="cf-story-card cf-story-card-memory reveal-card" data-reveal data-tilt style="--delay:180ms">
+                <div class="cf-story-card-copy">
+                  <span class="cf-story-number">03</span>
+                  <div><small>Memory forward</small><h3>The next call already knows where the last one ended.</h3><p>Open the thread, add only what is new today and keep the familiar caller context ready for another conversation.</p></div>
+                </div>
+                <div class="cf-memory-visual" aria-hidden="true">
+                  <div class="cf-memory-line"></div>
+                  <div class="cf-memory-item active"><span>Now</span><div><strong>Today’s call</strong><small>New topic added</small></div></div>
+                  <div class="cf-memory-item"><span>1</span><div><strong>Previous call</strong><small>Context retained</small></div></div>
+                  <div class="cf-memory-item"><span>2</span><div><strong>Caller profile</strong><small>Reusable information</small></div></div>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="cf-stage-section">
+          <div class="cf-stage-light cf-stage-light-a" aria-hidden="true"></div>
+          <div class="cf-stage-light cf-stage-light-b" aria-hidden="true"></div>
+          <div class="container cf-stage-layout">
+            <div class="cf-stage-copy reveal-card reveal-left" data-reveal>
+              <span class="section-eyebrow">Built around human rhythm</span>
+              <h2>Less interface. More room for the conversation.</h2>
+              <p>The most important information stays close enough to guide the call, while the live experience stays quiet, responsive and focused on the person speaking.</p>
+              <div class="cf-stage-tags"><span>Natural pacing</span><span>Context aware</span><span>Repeat-call continuity</span></div>
+            </div>
+            <div class="cf-conversation-stage reveal-card reveal-scale" data-reveal data-tilt>
+              <div class="cf-stage-gridlines" aria-hidden="true"></div>
+              <div class="cf-stage-ring ring-a"></div><div class="cf-stage-ring ring-b"></div>
+              <div class="cf-stage-person person-a"><span>A</span><small>You</small></div>
+              <div class="cf-stage-person person-b"><span>C</span><small>Caller</small></div>
+              <div class="cf-stage-center">
+                <span class="cf-stage-status"><i></i> conversation active</span>
+                <strong>CallFocus</strong>
+                <div class="cf-mini-wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              </div>
+              <div class="cf-stage-note note-a"><small>Context</small><strong>Ready before the call</strong></div>
+              <div class="cf-stage-note note-b"><small>Continuity</small><strong>Saved for next time</strong></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="cf-bento-section">
+          <div class="container">
+            <div class="premium-section-head cf-bento-head reveal-card" data-reveal>
+              <div><span class="section-eyebrow">A workspace around the call</span><h2>Useful detail, without visual clutter.</h2></div>
+              <p>CallFocus keeps the pieces that matter before, during and after a conversation in one consistent workspace.</p>
+            </div>
+            <div class="cf-bento-grid">
+              <article class="cf-bento-card cf-bento-wide reveal-card reveal-scale" data-reveal data-tilt>
+                <div class="cf-bento-copy"><span>Conversation memory</span><h3>Keep a thread alive across repeat calls.</h3><p>Saved information and recent-call context stay organized around the person instead of being rebuilt every time.</p></div>
+                <div class="cf-stack-visual" aria-hidden="true"><span class="stack-3"></span><span class="stack-2"></span><span class="stack-1"><i>Recent call</i><b>Continue from here</b><small>Context ready</small></span></div>
+              </article>
+              <article class="cf-bento-card reveal-card" data-reveal data-tilt style="--delay:70ms">
+                <div class="cf-bento-copy"><span>Worldwide time awareness</span><h3>Know where the call is happening.</h3><p>Caller locations and IANA time zones stay attached to the call setup.</p></div>
+                <div class="cf-globe-visual" aria-hidden="true"><i></i><i></i><i></i><b>Local time</b></div>
+              </article>
+              <article class="cf-bento-card reveal-card" data-reveal data-tilt style="--delay:120ms">
+                <div class="cf-bento-copy"><span>Voice profiles</span><h3>Choose the voice that fits the call.</h3><p>Use the available voices and saved profiles without changing the rest of the caller setup.</p></div>
+                <div class="cf-voice-visual" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+              </article>
+              <article class="cf-bento-card reveal-card" data-reveal data-tilt style="--delay:160ms">
+                <div class="cf-bento-copy"><span>Live translation transcript</span><h3>Follow the call in English when needed.</h3><p>The draggable transcript panel keeps translated call text available without taking over the call screen.</p></div>
+                <div class="cf-transcript-visual" aria-hidden="true"><span class="left">Live Caller</span><p>Good to hear your voice again.</p><span class="right">Caller</span><p class="right-p">Likewise, how have you been?</p></div>
+              </article>
+              <article class="cf-bento-card cf-bento-wide reveal-card reveal-scale" data-reveal data-tilt style="--delay:210ms">
+                <div class="cf-bento-copy"><span>One setup, many ways to continue</span><h3>Save information now. Call when you are ready.</h3><p>Prepare a complete setup, save it to the account, come back later and continue from the same foundation.</p></div>
+                <div class="cf-save-visual" aria-hidden="true"><span><i></i>Caller information</span><span><i></i>Conversation dynamics</span><span><i></i>Location & voice</span><b>Saved</b></div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="premium-section" id="how-it-works">
+          <div class="container">
+            <div class="premium-section-head reveal-card" data-reveal>
+              <div><span class="section-eyebrow">How CallFocus works</span><h2>Set it once. Continue naturally.</h2></div>
+              <p>CallFocus separates the permanent caller context from what is new today, so repeat calls do not feel like starting from zero.</p>
+            </div>
+            <div class="process-grid">
+              <article class="process-card reveal-card" data-reveal style="--delay:0ms"><span class="step-number">01</span><h3>Prepare the first call</h3><p>Add the call title, person’s name, both callers’ information, conversation dynamics, today’s topic, both locations/time zones, and the voice.</p></article>
+              <article class="process-card reveal-card" data-reveal style="--delay:90ms"><span class="step-number">02</span><h3>Call with the right context</h3><p>The live voice session receives the saved relationship context and the details that matter for that specific call.</p></article>
+              <article class="process-card reveal-card" data-reveal style="--delay:180ms"><span class="step-number">03</span><h3>Next time, add only what changed</h3><p>Open Recent Calls, enter what today’s new conversation is about, and call again. Edit the saved caller information or dynamics only when you want to.</p></article>
+            </div>
+          </div>
+        </section>
+
+        <section class="continuity-section">
+          <div class="container continuity-grid">
+            <div class="continuity-copy reveal-card" data-reveal>
+              <span class="section-eyebrow">Built around continuity</span>
+              <h2>Your recent calls become reusable conversation threads.</h2>
+              <p>Instead of rebuilding a caller every time, each thread keeps the person, relationship context, conversation dynamics, last-used call location and voice ready for the next call.</p>
+              <button class="btn btn-light" id="continuityRecentBtn">Open recent calls</button>
+            </div>
+            <div class="thread-demo reveal-card" data-reveal>
+              <div class="thread-demo-head"><span>Recent calls</span><small>Most recent first</small></div>
+              <div class="demo-thread"><div class="demo-avatar">D</div><div><strong>Sunday check-in</strong><span>David · 12 minutes ago</span><small>Ask how he feels after the trip and continue the weekend plan.</small></div><b>›</b></div>
+              <div class="demo-thread"><div class="demo-avatar">M</div><div><strong>Client follow-up</strong><span>Melissa · Yesterday</span><small>Continue from the proposal conversation.</small></div><b>›</b></div>
+              <div class="demo-thread"><div class="demo-avatar">J</div><div><strong>Evening call</strong><span>James · Sep 30</span><small>Casual catch-up and update about work.</small></div><b>›</b></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="feature-section">
+          <div class="container">
+            <div class="premium-section-head reveal-card" data-reveal><div><span class="section-eyebrow">Designed for real calls</span><h2>Useful controls without a cluttered interface.</h2></div></div>
+            <div class="feature-grid">
+              <article class="feature-card reveal-card" data-reveal><span>01</span><h3>Caller memory</h3><p>Keep both callers’ background and relationship dynamics attached to the person instead of rewriting them every time.</p></article>
+              <article class="feature-card reveal-card" data-reveal><span>02</span><h3>Per-call time awareness</h3><p>Locations and time zones stay with each call thread, so they can be reused or changed when someone travels.</p></article>
+              <article class="feature-card reveal-card" data-reveal><span>03</span><h3>Graceful call ending</h3><p>Request End asks the voice assistant to wrap up naturally in the tone of that day’s conversation before the call closes.</p></article>
+            </div>
+          </div>
+        </section>
+
+
+        <section class="cf-motion-ribbon" aria-label="CallFocus flow">
+          <div class="cf-motion-ribbon-track" aria-hidden="true">
+            <div class="cf-motion-ribbon-set"><span>Prepare once</span><i>•</i><span>Call naturally</span><i>•</i><span>Keep the context</span><i>•</i><span>Continue later</span><i>•</i><span>Stay familiar</span><i>•</i></div>
+            <div class="cf-motion-ribbon-set"><span>Prepare once</span><i>•</i><span>Call naturally</span><i>•</i><span>Keep the context</span><i>•</i><span>Continue later</span><i>•</i><span>Stay familiar</span><i>•</i></div>
+          </div>
+        </section>
+
+        <section class="cf-identity-section" id="about-callfocus" aria-labelledby="callfocusIdentityTitle">
+          <div class="container cf-identity-grid">
+            <div class="cf-identity-copy reveal-card" data-reveal>
+              <span class="section-eyebrow">About CallFocus</span>
+              <h2 id="callfocusIdentityTitle">CallFocus is a web-based conversation continuity platform.</h2>
+              <p><strong>CallFocus at callfocus.link</strong> helps people prepare realtime voice calls, keep caller background and conversation dynamics attached to repeat-call threads, create voice notes, and continue future conversations without rebuilding the same context.</p>
+              <p class="cf-identity-disambiguation"><strong>Independent product:</strong> CallFocus at callfocus.link is not affiliated with <a href="https://www.callfocus.ie/" rel="nofollow noopener" target="_blank">Call Focus at callfocus.ie</a>, the Irish training and consultancy business.</p>
+              <a class="btn btn-light cf-identity-about-link" href="/about">About CallFocus</a>
+            </div>
+            <div class="cf-identity-faq reveal-card" data-reveal>
+              <span class="section-eyebrow">Quick facts</span>
+              <details open><summary>What does CallFocus do?</summary><p>It keeps reusable caller context, today’s call topic, locations, time zones, voice choices and recent-call continuity together around a realtime conversation.</p></details>
+              <details><summary>What is the official CallFocus website?</summary><p>The official product website is <strong>callfocus.link</strong>.</p></details>
+              <details><summary>Is it the Irish Call Focus training company?</summary><p>No. CallFocus at callfocus.link is a separate web software product and has no affiliation with callfocus.ie.</p></details>
+            </div>
+          </div>
+        </section>
+
+        <section class="home-cta">
+          <div class="container home-cta-inner reveal-card" data-reveal>
+            <div><span class="section-eyebrow">Ready to use CallFocus?</span><h2>Start with one caller. The next call gets easier.</h2></div>
+            <button class="btn btn-primary" id="bottomNewCallBtn">Start a new call</button>
+          </div>
+        </section>
+      </section>
+
+      <section class="page-view app-page avatar-page" id="page-avatar" data-view="avatar">
+        <div class="container avatar-page-shell">
+          <div class="avatar-page-head app-page-head">
+            <button class="cf-route-back avatar-back-btn" id="avatarBackBtn" type="button" data-cf-route-back aria-label="Go back"><span aria-hidden="true">‹</span></button>
+            <div>
+              <span class="section-eyebrow">Realtime visual conversation</span>
+              <h1>Live AI Avatar</h1>
+              <p>Choose an avatar, give it the context for your conversation, and start a natural face-to-face session.</p>
+            </div>
+          </div>
+
+          <div class="avatar-provider-notice hidden" id="avatarProviderNotice">
+            <strong>Live Avatar is temporarily unavailable.</strong>
+            <p id="avatarProviderNoticeText">Please try again in a moment.</p>
+          </div>
+
+          <div class="avatar-layout">
+            <section class="avatar-builder-card avatar-stock-picker-card">
+              <div class="avatar-card-heading">
+                <div><span class="avatar-step">01</span><strong>Choose an avatar</strong></div>
+                <span class="avatar-state-pill" id="avatarBuildState">Loading</span>
+              </div>
+              <p class="avatar-card-copy">Choose a ready-to-use avatar, add the details for your conversation, then start your live session.</p>
+
+              <div class="avatar-stock-toolbar">
+                <div><strong id="avatarStockCount">Checking available avatars…</strong><small>Ready to use with CallFocus</small></div>
+                <button class="btn btn-ghost avatar-stock-refresh" id="avatarStockRefreshBtn" type="button">Refresh</button>
+              </div>
+
+              <div class="avatar-stock-grid" id="avatarStockGrid" aria-live="polite">
+                <div class="avatar-stock-loading"><span class="avatar-spinner"></span><strong>Loading available avatars…</strong></div>
+              </div>
+
+              <div class="avatar-selected-summary hidden" id="avatarSelectedSummary">
+                <span>Selected</span><strong id="avatarSelectedName">Avatar</strong><small>Ready for a live session</small>
+              </div>
+
+              <div class="avatar-custom-later-card">
+                <span class="avatar-lock-badge">Coming soon</span>
+                <div><strong>Create a personal avatar from your selfie</strong><p>Personal avatar creation is being prepared for a future CallFocus release. For now, choose any available avatar and continue with a live session.</p></div>
+              </div>
+            </section>
+
+            <section class="avatar-live-card">
+              <div class="avatar-card-heading">
+                <div><span class="avatar-step">02</span><strong>Live session</strong></div>
+              </div>
+
+              <div class="avatar-call-brief">
+                <div class="avatar-call-brief-head">
+                  <div><span class="section-eyebrow">Conversation setup</span><strong>What is this call about?</strong></div>
+                  <span id="avatarCallDetailsCount">0 / 4000</span>
+                </div>
+                <textarea id="avatarCallDetails" maxlength="4000" rows="5" placeholder="Example: I’m preparing for an interview for a procurement role. Ask realistic questions one at a time, challenge vague answers, and keep the tone professional."></textarea>
+                <small>Give the avatar the people, purpose, background, topics, or outcome it should keep in mind during this session.</small>
+              </div>
+
+              <div class="avatar-stage" id="avatarStage">
+                <div class="avatar-stage-placeholder" id="avatarStagePlaceholder">
+                  <div class="avatar-stage-orb"><span>CF</span></div>
+                  <strong id="avatarStageTitle">Select an avatar</strong>
+                  <p id="avatarStageSubtitle">Choose one of the available faces, add your call details, then start the conversation.</p>
+                </div>
+                <video class="avatar-live-video hidden" id="avatarLiveVideo" autoplay playsinline></video>
+                <audio id="avatarLiveAudio" autoplay></audio>
+                <div class="avatar-stage-loading hidden" id="avatarStageLoading"><span class="avatar-spinner"></span><strong id="avatarLoadingTitle">Preparing live session…</strong><small id="avatarLoadingText">Connecting microphone and avatar.</small></div>
+                <div class="avatar-speaking-state hidden" id="avatarSpeakingState"><span></span><b>Listening</b></div>
+              </div>
+
+              <div class="avatar-session-meta">
+                <div class="avatar-mic-status" id="avatarMicStatus"><span class="avatar-mic-dot"></span><div><small>Microphone</small><strong id="avatarMicLabel">Not connected</strong></div></div>
+                <div class="avatar-session-status"><small>Session</small><strong id="avatarSessionStatus">Choose an avatar first</strong></div>
+              </div>
+
+              <div class="avatar-session-actions">
+                <button class="btn btn-primary" id="avatarStartBtn" type="button" disabled>Start Session</button>
+                <button class="btn btn-ghost hidden" id="avatarMuteBtn" type="button">Mute microphone</button>
+                <button class="btn avatar-end-btn hidden" id="avatarEndBtn" type="button">End Session</button>
+              </div>
+              <p class="avatar-minute-note">Live sessions use realtime video minutes. Each session is currently capped at 5 minutes to keep usage controlled.</p>
+            </section>
+          </div>
+
+          <section class="avatar-transcript-card">
+            <div class="avatar-transcript-head"><div><span class="section-eyebrow">Live transcript</span><h2>Conversation</h2></div><span id="avatarTranscriptState">Waiting for session</span></div>
+            <div class="avatar-transcript" id="avatarTranscript" aria-live="polite">
+              <div class="avatar-transcript-empty" id="avatarTranscriptEmpty"><strong>Your conversation will appear here live.</strong><span>What you say and the avatar’s responses will be separated clearly.</span></div>
+            </div>
+          </section>
+
+          <div class="avatar-privacy-note"><strong>Session privacy</strong><span>Your conversation details, live microphone audio, and avatar video are processed securely for the realtime session. No selfie is uploaded in this mode.</span></div>
+        </div>
+      </section>
+
+
+      <section class="page-view app-page voice-notes-page" id="page-voice-notes" data-view="voice-notes">
+        <div class="container voice-notes-shell">
+          <div class="voice-notes-head">
+            <button class="voice-notes-back" id="voiceNotesBackBtn" type="button" aria-label="Back to home">‹</button>
+            <div>
+              <span class="section-eyebrow">Voice note studio</span>
+              <h1>Create or reply with a voice note</h1>
+              <p>Use one mode to turn your idea into a natural voice-note reply, or switch to script mode to generate the voice note from the exact words you typed.</p>
+            </div>
+          </div>
+
+          <div class="voice-note-chat">
+            <div class="voice-note-mode-bar" role="tablist" aria-label="Voice note mode">
+              <button class="voice-note-mode-btn active" id="voiceNoteModeScriptBtn" type="button" data-vn-mode="script" aria-selected="true">Create a voice note<small>Use your written script</small></button>
+              <button class="voice-note-mode-btn" id="voiceNoteModeReplyBtn" type="button" data-vn-mode="reply" aria-selected="false">Reply with voice note<small>CallFocus drafts the message</small></button>
+            </div>
+            <div class="voice-note-empty" id="voiceNoteEmptyState">
+              <div class="voice-note-orb"><span>◉</span></div>
+              <strong id="voiceNoteEmptyTitle">What should this voice note say?</strong>
+              <p id="voiceNoteEmptyCopy">Write the idea naturally, just like you would explain it to someone before recording.</p>
+            </div>
+
+            <div class="voice-note-result hidden" id="voiceNoteResult">
+              <div class="voice-note-result-top">
+                <span class="voice-note-result-avatar"><img src="./logo.png?v=15.80-test" alt="" /></span>
+                <div><strong>Voice note ready</strong><small id="voiceNoteResultMeta">Female voice</small></div>
+                <span class="ai-voice-pill">AI-generated voice</span>
+              </div>
+              <p class="voice-note-script" id="voiceNoteResultScript"></p>
+              <small class="voice-note-result-mode" id="voiceNoteResultMode">Created from your script</small>
+              <button class="voice-note-play primary" id="voiceNoteResultPlay" type="button" disabled><span class="voice-note-play-icon">▶</span><span>Play voice note</span></button>
+            </div>
+
+            <div class="voice-note-composer">
+              <div class="voice-note-gender-row">
+                <span>Voice</span>
+                <div class="voice-note-gender-switch" role="group" aria-label="Voice gender">
+                  <button type="button" class="voice-note-gender active" data-vn-gender="male"><strong>Male</strong><small id="voiceNoteMaleLabel">cedar</small></button>
+                  <button type="button" class="voice-note-gender" data-vn-gender="female"><strong>Female</strong><small id="voiceNoteFemaleLabel">marin</small></button>
+                </div>
+              </div>
+              <label class="voice-note-prompt-label" for="voiceNotePrompt" id="voiceNotePromptLabel">Script</label>
+              <div class="voice-note-prompt-hint" id="voiceNotePromptHint">Type the exact words you want the voice note to say.</div>
+              <div class="voice-note-input-wrap">
+                <textarea id="voiceNotePrompt" rows="5" maxlength="2200" placeholder="Example: Hey David, good evening. I just wanted to check on you and hear how your day went."></textarea>
+                <div class="voice-note-composer-foot">
+                  <small><span id="voiceNoteCharCount">0</span>/2200</small>
+                  <button class="voice-note-generate" id="voiceNoteGenerateBtn" type="button"><span class="voice-note-generate-icon">✦</span><span id="voiceNoteGenerateLabel">Create voice note</span></button>
+                </div>
+              </div>
+              <div class="voice-note-credit-meter" aria-live="polite">
+                <div><span>Shared credit balance</span><strong id="voiceNoteCreditBalance">—</strong></div>
+                <small id="voiceNoteCreditRate">Shared with live calls · 100 credits = 1 minute</small>
+                <button type="button" data-route="credits">Buy credits</button>
+              </div>
+              <div class="voice-note-status" id="voiceNoteStatus">Create mode uses your exact written script. Reply mode drafts the message for you. Both use your current Admin speech settings and the same shared credit balance as calls.</div>
+            </div>
+          </div>
+
+          <section class="voice-note-history-section">
+            <div class="voice-note-history-head">
+              <div><span class="section-eyebrow">History</span><h2>Voice note history</h2></div>
+              <small>Most recent first</small>
+            </div>
+            <div class="voice-note-history" id="voiceNoteHistory"></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="page-view app-page credit-page" id="page-credits" data-view="credits">
+        <div class="container credit-page-shell">
+          <div class="credit-page-head">
+            <button class="credit-back-btn" id="creditBackBtn" type="button" aria-label="Back to home">‹</button>
+            <div><span class="section-eyebrow">Call credits</span><h1>Minutes that stay in your control.</h1><p>Buy shared credit in simple blocks. The same balance is used by live calls and generated voice notes, charged by actual audio time.</p></div>
+          </div>
+
+          <div class="credit-balance-hero">
+            <div><span>Available balance</span><strong id="creditPageBalance">0 credits</strong><small id="creditPageTime">0:00 shared audio time</small></div>
+            <div class="credit-rate-card"><span>Standard rate</span><strong>100 credits = 1 minute</strong><small>100 credits = ₦1,000 = 1 minute</small></div>
+          </div>
+
+          <section class="referral-credit-card" id="referralCreditCard">
+            <div class="referral-credit-copy">
+              <span class="section-eyebrow">Refer & earn</span>
+              <h2>Share CallFocus. Earn 100 credits.</h2>
+              <p>Your referral code is created automatically. A new user gets 75 free credits when they sign up with it. You receive 100 credits after their first confirmed deposit.</p>
+            </div>
+            <div class="referral-credit-code">
+              <span>Your referral code</span>
+              <strong data-referral-code>Loading…</strong>
+              <div class="referral-credit-actions"><button type="button" data-referral-copy>Copy code</button><button type="button" data-referral-share>Share link</button></div>
+            </div>
+            <button class="referral-credit-view" type="button" data-route="referrals">My referrals</button>
+          </section>
+
+          <section class="paystack-transfer-card hidden" id="paystackTransferCard" aria-hidden="true">
+            <div class="paystack-transfer-head">
+              <div><span class="section-eyebrow">Bank transfer</span><h2>Your reusable payment account</h2><p>Use one Paystack virtual account for future CallFocus top-ups. Verified transfers are converted to shared call and voice-note credit automatically.</p></div>
+              <span class="paystack-mode-badge" id="paystackModeBadge">Paystack</span>
+            </div>
+            <div class="paystack-transfer-body" id="paystackTransferEmpty">
+              <div class="paystack-transfer-icon" aria-hidden="true">▦</div>
+              <div class="paystack-transfer-copy"><strong>No transfer account yet</strong><span>Create one once for this CallFocus account. Your name, email and phone are securely sent to Paystack only when you choose to create it.</span></div>
+              <button class="paystack-transfer-create" id="paystackCreateDvaBtn" type="button">Create transfer account</button>
+            </div>
+            <div class="paystack-account hidden" id="paystackTransferReady">
+              <div class="paystack-account-bank"><span>Bank</span><strong id="paystackDvaBank">—</strong></div>
+              <div class="paystack-account-name"><span>Account name</span><strong id="paystackDvaName">—</strong></div>
+              <div class="paystack-account-number"><span>Account number</span><strong id="paystackDvaNumber">—</strong><button id="paystackCopyDvaBtn" type="button">Copy</button></div>
+              <small>Keep this account number for future top-ups. ₦1,000 = 100 credits = 1 minute.</small>
+            </div>
+            <div class="paystack-transfer-status hidden" id="paystackTransferStatus"></div>
+          </section>
+
+          <section class="credit-purchase-section" id="creditPurchaseSection">
+            <div class="payment-pending-notice" id="paymentPendingNotice"><strong>Manual bank transfer available</strong><span>Paystack activation is still pending. You can request the CallFocus bank account, transfer the exact amount, upload your receipt, and receive credits after manual confirmation.</span></div>
+            <div class="credit-section-title"><div><span class="section-eyebrow">Buy credits</span><h2>Choose your credit amount</h2></div><small>Minimum purchase: 300 credits</small></div>
+            <div class="credit-package-grid">
+              <button class="credit-package active" type="button" data-credit-package="300"><span>Starter top-up</span><strong>300 credits</strong><small>3 minutes</small><b>₦3,000</b></button>
+              <button class="credit-package" type="button" data-credit-package="500"><span>More time</span><strong>500 credits</strong><small>5 minutes</small><b>₦5,000</b></button>
+              <button class="credit-package" type="button" data-credit-package="1000"><span>Longer calls</span><strong>1,000 credits</strong><small>10 minutes</small><b>₦10,000</b></button>
+            </div>
+            <div class="credit-custom-card" id="creditCustomCard">
+              <div><strong>Custom amount</strong><small>Enter any whole credit amount from 300 upward.</small></div>
+              <label><span>Credits</span><input id="customCreditAmount" type="number" min="300" step="1" value="300" inputmode="numeric" /><small class="credit-input-error hidden" id="creditAmountError">Minimum purchase is 300 credits.</small></label>
+              <div class="credit-custom-summary"><span id="customCreditMinutes">3 minutes</span><strong id="customCreditNaira">₦3,000</strong></div>
+            </div>
+            <button class="credit-checkout-btn" id="creditCheckoutBtn" type="button" disabled aria-disabled="true"><span id="creditCheckoutLabel">Continue to payment</span><small id="creditCheckoutSummary">300 credits · ₦3,000</small></button>
+            <p class="credit-payment-note" id="creditPaymentNote">When Paystack is unavailable, CallFocus can use manual bank transfer. Credits are added only after the payment is confirmed by an administrator.</p>
+            <div class="manual-payment-inline-status hidden" id="manualPaymentInlineStatus"><span class="manual-status-dot"></span><div><strong id="manualPaymentInlineTitle">Payment awaiting confirmation</strong><small id="manualPaymentInlineCopy">Your balance will update automatically after approval.</small></div><button type="button" id="manualPaymentViewStatusBtn">View status</button></div>
+          </section>
+
+          <section class="credit-usage-info">
+            <article><span>01</span><div><strong>Credits reduce during the live call</strong><p>The balance begins counting down only after the user presses Start Call.</p></div></article>
+            <article><span>02</span><div><strong>Natural low-credit ending</strong><p>At about 12 seconds remaining, CallFocus automatically requests a natural goodbye so the call does not cut off abruptly.</p></div></article>
+            <article><span>03</span><div><strong>Unused seconds stay available</strong><p>If a call ends early, the unused balance remains for the next call.</p></div></article>
+          </section>
+
+          <div class="credit-starter-note">
+            <div class="credit-starter-icon">01</div>
+            <div><strong>Referral signup bonus</strong><p>New accounts receive <b>75 free credits</b> only when a valid referral code is used at signup. No deposit is required for the new-user bonus.</p></div>
+          </div>
+        </div>
+      </section>
+
+
+      <section class="page-view app-page history-page" id="page-history" data-view="history">
+        <div class="container app-page-inner history-shell">
+          <div class="app-page-head history-page-head">
+            <div><span class="section-eyebrow">Account activity</span><h1>Transactions & Usage</h1><p>Review your CallFocus credit deposits, account adjustments, live-call usage and voice-note usage.</p></div>
+            <button class="btn btn-ghost history-refresh-btn" id="historyRefreshBtn" type="button">Refresh history</button>
+          </div>
+
+          <div class="history-summary-grid">
+            <article><span>Current balance</span><strong id="historyCurrentBalance">—</strong><small>Shared call and voice-note credits</small></article>
+            <article><span>Confirmed deposits</span><strong id="historyFundedTotal">—</strong><small id="historyFundedCount">Verified purchases</small></article>
+            <article><span>Credits used</span><strong id="historyUsedTotal">—</strong><small>Live calls and voice notes</small></article>
+          </div>
+
+          <section class="history-panel">
+            <div class="history-panel-head"><div><span class="section-eyebrow">Money & credits in</span><h2>Transaction history</h2></div><small>Newest first</small></div>
+            <div class="history-list" id="historyTransactions"><div class="history-empty">Your confirmed payments and credit adjustments will appear here.</div></div>
+          </section>
+
+          <section class="history-panel">
+            <div class="history-panel-head"><div><span class="section-eyebrow">Credits out</span><h2>Usage history</h2></div><small>Newest first</small></div>
+            <div class="history-list" id="historyUsage"><div class="history-empty">Your live-call and voice-note usage will appear here.</div></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="page-view app-page referrals-page" id="page-referrals" data-view="referrals">
+        <div class="container app-page-inner referrals-shell">
+          <div class="app-page-head">
+            <div><span class="section-eyebrow">Refer & earn</span><h1>My Referrals</h1><p>Share your personal code. Referred users receive 75 free credits at signup, and you earn 100 credits after each person makes their first confirmed deposit.</p></div>
+          </div>
+
+          <section class="referrals-hero-card">
+            <div class="referrals-code-panel">
+              <span>Your referral code</span>
+              <strong data-referral-code>Loading…</strong>
+              <small>Share your personal signup link or code. Anyone opening the link is taken straight to Create account with your referral code already applied. Your 100-credit reward is issued once per referred account after its first confirmed deposit.</small>
+              <div class="referrals-share-actions"><button class="btn btn-primary" type="button" data-referral-share>Share referral link</button><button class="btn btn-ghost" type="button" data-referral-copy>Copy code</button></div>
+              <div class="referrals-link" data-referral-link>https://callfocus.link/</div>
+            </div>
+            <div class="referrals-stats">
+              <div><span>Total referrals</span><strong id="referralTotalCount">0</strong></div>
+              <div><span>Deposited</span><strong id="referralRewardedCount">0</strong></div>
+              <div><span>Credits earned</span><strong id="referralCreditsEarned">0</strong></div>
+            </div>
+          </section>
+
+          <section class="referrals-list-card">
+            <div class="referrals-list-head"><div><span class="section-eyebrow">Referral activity</span><h2>Your referrals</h2></div><small>Newest first</small></div>
+            <div class="referrals-status hidden" id="referralsStatus"></div>
+            <div class="referrals-list" id="referralsList"><div class="referrals-empty">Loading your referrals…</div></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="page-view app-page" id="page-callers" data-view="callers">
+        <div class="container app-page-inner">
+          <div class="app-page-head">
+            <div><span class="section-eyebrow">Saved people</span><h1>My Callers</h1><p>Caller information and conversation dynamics are saved here so you can reuse them.</p></div>
+            <button class="btn btn-primary" id="addCallerBtn">Add caller</button>
+          </div>
+          <div class="caller-grid" id="callerGrid"></div>
+        </div>
+      </section>
+
+      <section class="page-view app-page" id="page-recent" data-view="recent">
+        <div class="container app-page-inner">
+          <div class="app-page-head"><div><span class="section-eyebrow">Conversation continuity</span><h1>Recent Calls</h1><p>Open a thread, add only what is new today, and call again.</p></div></div>
+          <div class="recent-layout">
+            <div class="recent-list-panel"><div class="recent-list" id="recentThreadList"></div></div>
+            <div class="thread-detail-panel" id="threadDetailPanel"><div class="empty-thread-detail">Select a recent call to view its saved context and call again.</div></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-view app-page" id="page-profile" data-view="profile">
+        <div class="container app-page-inner narrow-app-page">
+          <div class="app-page-head"><div><span class="section-eyebrow">Reusable information</span><h1>My Profile</h1><p>Use this to prefill information about you on new calls. You can still edit it for any specific caller.</p></div></div>
+          <div class="surface-card form-card">
+            <div class="form-grid two">
+              <label>Display name<input id="profileName" placeholder="Your name" /></label>
+              <label>Default identity / role<input id="profileRole" placeholder="e.g. Friend, Founder, Consultant" /></label>
+            </div>
+            <label>About me<textarea id="profileAbout" rows="6" placeholder="Reusable details about you"></textarea></label>
+            <label>Default call rules <span class="optional">Optional</span><textarea id="profileRules" rows="6" placeholder="Personal rules the voice assistant should normally follow"></textarea></label>
+            <div class="info-note">Location and time zone are intentionally not stored on your profile. They belong to individual call threads.</div>
+            <div class="form-actions"><button class="btn btn-primary" id="saveProfileBtn">Save profile</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-view app-page" id="page-settings" data-view="settings">
+        <div class="container app-page-inner narrow-app-page">
+          <div class="app-page-head"><div><span class="section-eyebrow">Account</span><h1>Account Settings</h1><p>Manage your CallFocus account and synced saved data.</p></div></div>
+          <div class="surface-card settings-card">
+            <div class="settings-row"><div><strong>Name</strong><span id="settingsName">—</span></div><button class="btn btn-ghost" id="settingsEditProfileBtn">Edit profile</button></div>
+            <div class="settings-row"><div><strong>Email</strong><span id="settingsEmail">—</span></div></div>
+            <div class="settings-row"><div><strong>Mobile</strong><span id="settingsPhone">—</span></div></div>
+            <div class="settings-row"><div><strong>Call & voice credit</strong><span id="settingsCreditBalance">—</span></div><button class="btn btn-ghost" type="button" data-route="credits">View credits</button></div>
+            <div class="settings-row"><div><strong>Account created</strong><span id="settingsCreated">—</span></div></div>
+          </div>
+          <div class="danger-card">
+            <div><span class="section-eyebrow danger-text">Danger zone</span><h2>Delete account</h2><p>This permanently removes this account and its synced callers, recent call threads, profile and preferences.</p></div>
+            <button class="btn danger-button" id="deleteAccountBtn">Delete account</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="premium-footer">
+      <div class="container footer-inner">
+        <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="./logo.png?v=15.80-test" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span></div></div>
+        <div class="footer-links"><button data-route="home">Home</button><button data-route="recent">Recent Calls</button><button data-route="profile">My Profile</button><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/about">About</a><a href="/support">Support</a></div>
+      </div>
+    </footer>
+  </div>
+
+  <div class="modal-backdrop hidden" id="authModal">
+    <div class="modal auth-modal">
+      <div class="modal-head"><div><span class="section-eyebrow">CallFocus account</span><h2 id="authModalTitle">Create your account</h2><p id="authModalMessage">Your saved callers and recent call threads stay attached to this account.</p></div><button class="modal-close" data-close="authModal">×</button></div>
+      <div class="auth-tabs"><button class="auth-tab active" data-auth-tab="signup">Create account</button><button class="auth-tab" data-auth-tab="signin">Sign in</button></div>
+      <form class="auth-form" id="signupForm">
+        <label>Full name<input id="signupName" autocomplete="name" placeholder="Your name" /></label>
+        <label>Email address<input id="signupEmail" type="email" autocomplete="email" placeholder="you@example.com" /></label>
+        <label>Mobile number<input id="signupPhone" type="tel" autocomplete="tel" inputmode="tel" placeholder="e.g. +234 803 000 0000" /><small class="field-help">Used to help identify your account.</small></label>
+        <label>Referral code <span class="optional">Optional</span><input id="signupReferralCode" autocomplete="off" autocapitalize="characters" maxlength="16" placeholder="e.g. CF7K4P9M" /><small class="field-help">Use a valid referral code to receive 75 free credits when your account is created.</small></label>
+        <label>Password<div class="password-input-shell"><input id="signupPassword" type="password" autocomplete="new-password" placeholder="At least 8 characters" /><button class="password-eye" type="button" data-password-target="signupPassword" aria-label="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg></button></div></label>
+        <label>Confirm password<div class="password-input-shell"><input id="signupConfirm" type="password" autocomplete="new-password" placeholder="Repeat password" /><button class="password-eye" type="button" data-password-target="signupConfirm" aria-label="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg></button></div></label>
+        <button class="btn btn-primary full" type="submit" id="signupSubmitBtn">Create account</button>
+      </form>
+      <form class="auth-form hidden" id="signinForm">
+        <label>Email address<input id="signinEmail" type="email" autocomplete="email" placeholder="you@example.com" /></label>
+        <label>Password<div class="password-input-shell"><input id="signinPassword" type="password" autocomplete="current-password" placeholder="Your password" /><button class="password-eye" type="button" data-password-target="signinPassword" aria-label="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg></button></div></label>
+        <button class="auth-inline-link" id="forgotPasswordBtn" type="button">Forgot password?</button>
+        <button class="btn btn-primary full" type="submit">Sign in</button>
+      </form>
+      <p class="modal-footnote">Your CallFocus account and saved call data are synced securely so the same account can be used on callfocus.link and other devices.</p>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="emailVerifyModal">
+    <div class="modal small-modal verification-modal">
+      <div class="modal-head"><div><span class="section-eyebrow">Email verification</span><h2>Check your email</h2><p>We sent a 6-digit CallFocus verification code to <strong id="verificationEmailDisplay">your email</strong>.</p></div><button class="modal-close" data-close="emailVerifyModal">×</button></div>
+      <label>Verification code<input id="signupVerificationCode" class="verification-code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" /></label>
+      <button class="btn btn-primary full" id="verifySignupCodeBtn" type="button">Verify & create account</button>
+      <button class="auth-inline-link centered" id="resendSignupCodeBtn" type="button">Resend code</button>
+      <p class="modal-footnote">The code expires after 10 minutes. CallFocus never emails your password.</p>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="passwordResetModal">
+    <div class="modal small-modal password-reset-modal">
+      <div class="modal-head"><div><span class="section-eyebrow">Account recovery</span><h2 id="passwordResetTitle">Reset your password</h2><p id="passwordResetCopy">Enter the email address on your CallFocus account.</p></div><button class="modal-close" data-close="passwordResetModal">×</button></div>
+      <div id="passwordResetRequestStep">
+        <label>Email address<input id="passwordResetEmail" type="email" autocomplete="email" placeholder="you@example.com" /></label>
+        <button class="btn btn-primary full" id="sendPasswordResetBtn" type="button">Send reset code</button>
+      </div>
+      <div class="hidden" id="passwordResetVerifyStep">
+        <label>6-digit code<input id="passwordResetCode" class="verification-code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" /></label>
+        <label>New password<div class="password-input-shell"><input id="passwordResetNew" type="password" autocomplete="new-password" placeholder="At least 8 characters" /><button class="password-eye" type="button" data-password-target="passwordResetNew" aria-label="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg></button></div></label>
+        <label>Confirm new password<div class="password-input-shell"><input id="passwordResetConfirm" type="password" autocomplete="new-password" placeholder="Repeat new password" /><button class="password-eye" type="button" data-password-target="passwordResetConfirm" aria-label="Show password"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg></button></div></label>
+        <button class="btn btn-primary full" id="completePasswordResetBtn" type="button">Set new password</button>
+        <button class="auth-inline-link centered" id="resendPasswordResetBtn" type="button">Send another code</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="newCallModal">
+    <div class="modal call-form-modal wide-modal">
+      <div class="modal-head"><div><span class="section-eyebrow">Completely new call</span><h2>Prepare this caller once.</h2><p class="call-once-message">These details create the reusable call thread. Next time, go to <strong>Recent Calls</strong> and add only what is new for that day. You only need to edit both callers’ information or the conversation dynamics when something actually changes.</p></div><button class="modal-close" data-close="newCallModal">×</button></div>
+      <form id="newCallForm" class="new-call-form">
+        <div class="field-section"><span class="field-number">01</span><div class="field-content"><label>Call title<input id="newCallTitle" placeholder="e.g. Sunday evening check-in" /></label><small>Use a name you will recognize later in Recent Calls.</small></div></div>
+        <div class="field-section"><span class="field-number">02</span><div class="field-content"><label>Name of the person you’re calling<input id="newCallPersonName" placeholder="e.g. David" /></label></div></div>
+        <div class="field-section"><span class="field-number">03</span><div class="field-content"><div class="field-heading"><strong>About both callers</strong><small>These are saved with this caller and can be edited later.</small></div><div class="form-grid two"><label>About you on this call<textarea id="newCallAboutSelf" rows="5" placeholder="Who you are, relevant personal context, and anything the voice assistant should know about you"></textarea></label><label>About the person you’re calling<textarea id="newCallAboutCaller" rows="5" placeholder="Information about the person you’re calling"></textarea></label></div></div></div>
+        <div class="field-section"><span class="field-number">04</span><div class="field-content"><div class="field-heading"><strong>Dynamics of the conversation</strong><small>Custom dynamics give the best experience.</small></div><div class="dynamics-warning">For a better call experience, describe the real dynamics yourself. If you prefer not to, choose a preset such as Romantic, Friendship or Business.</div><label>Dynamics type<select id="newCallDynamicsMode"></select></label><label id="newCallDynamicsCustomWrap">Your conversation dynamics<textarea id="newCallDynamics" rows="5" placeholder="How both of you normally speak, how close you are, established tone, boundaries, recurring patterns and anything the voice assistant should understand"></textarea></label><div class="preset-description hidden" id="newCallDynamicsHelp"></div></div></div>
+        <div class="field-section"><span class="field-number">05</span><div class="field-content"><label>What today’s call is about<textarea id="newCallTopic" rows="5" placeholder="What do you want to discuss on this specific call?"></textarea></label></div></div>
+        <div class="field-section"><span class="field-number">06</span><div class="field-content"><div class="field-heading"><strong>Location and time zone for this call</strong><small>These belong to this call thread, not to your account profile.</small></div><div class="form-grid two">
+          <div class="location-card"><strong>Caller A</strong><label>Location<div class="location-autocomplete"><input id="newCallARegion" autocomplete="off" placeholder="e.g. Los Angeles, California, United States" /><button class="location-clear hidden" type="button" data-clear-location="newCallARegion" aria-label="Clear Caller A location">×</button><div class="location-suggestions hidden" id="newCallASuggestions"></div></div></label><label class="timezone-label">Time zone<select id="newCallATimezone"></select></label></div>
+          <div class="location-card"><strong>Caller B</strong><label>Location<div class="location-autocomplete"><input id="newCallBRegion" autocomplete="off" placeholder="e.g. Dhaka, Dhaka Division, Bangladesh" /><button class="location-clear hidden" type="button" data-clear-location="newCallBRegion" aria-label="Clear Caller B location">×</button><div class="location-suggestions hidden" id="newCallBSuggestions"></div></div></label><label class="timezone-label">Time zone<select id="newCallBTimezone"></select></label></div>
+        </div></div></div>
+        <div class="field-section"><span class="field-number">07</span><div class="field-content"><div class="field-heading"><strong>Call language</strong><small>Choose the language for this caller thread. Future calls in this same thread keep this language automatically.</small></div><label>Language<select id="newCallLanguage">
+          <option value="English" selected>English</option>
+          <option value="Spanish">Spanish / Español</option>
+          <option value="French">French / Français</option>
+          <option value="Italian">Italian / Italiano</option>
+          <option value="German">German / Deutsch</option>
+          <option value="Portuguese">Portuguese / Português</option>
+          <option value="Dutch">Dutch / Nederlands</option>
+          <option value="Arabic">Arabic / العربية</option>
+          <option value="Hindi">Hindi / हिन्दी</option>
+          <option value="Mandarin Chinese">Mandarin Chinese / 中文</option>
+          <option value="Cantonese">Cantonese / 粵語</option>
+          <option value="Japanese">Japanese / 日本語</option>
+          <option value="Korean">Korean / 한국어</option>
+          <option value="Russian">Russian / Русский</option>
+          <option value="Turkish">Turkish / Türkçe</option>
+          <option value="Vietnamese">Vietnamese / Tiếng Việt</option>
+          <option value="Polish">Polish / Polski</option>
+          <option value="Ukrainian">Ukrainian / Українська</option>
+          <option value="Greek">Greek / Ελληνικά</option>
+          <option value="Hebrew">Hebrew / עברית</option>
+          <option value="Indonesian">Indonesian / Bahasa Indonesia</option>
+          <option value="Malay">Malay / Bahasa Melayu</option>
+          <option value="Thai">Thai / ไทย</option>
+          <option value="Swahili">Swahili / Kiswahili</option>
+          <option value="Filipino">Filipino / Tagalog</option>
+          <option value="Romanian">Romanian / Română</option>
+          <option value="Czech">Czech / Čeština</option>
+          <option value="Hungarian">Hungarian / Magyar</option>
+          <option value="Swedish">Swedish / Svenska</option>
+          <option value="Norwegian">Norwegian / Norsk</option>
+          <option value="Danish">Danish / Dansk</option>
+          <option value="Finnish">Finnish / Suomi</option>
+        </select></label><div class="opening-preview">CallFocus will keep the entire call in the language you select here. An accent, isolated foreign words, or the other person changing languages will not make the voice switch languages.</div></div></div>
+        <div class="field-section"><span class="field-number">08</span><div class="field-content"><div class="field-heading"><strong>Voice selection</strong><small>Use the standard Male/Female voice or select one of your own saved AI voice profiles below.</small></div><div class="voice-choice"><button type="button" class="voice-option active" data-voice="male"><span>Male</span><small id="maleVoiceLabel">Default male voice</small></button><button type="button" class="voice-option" data-voice="female"><span>Female</span><small id="femaleVoiceLabel">Default female voice</small></button></div><input type="hidden" id="newCallVoiceGender" value="male" />
+          <div class="call-opening-box">
+            <div class="field-heading"><strong>Call opening <span class="optional-label">Optional</span></strong><small>Choose how the first few seconds should sound. This is saved with the call thread.</small></div>
+            <label>Opening style<select id="newCallOpeningMode">
+              <option value="auto">Smart natural greeting (Recommended)</option>
+              <option value="name">Hey + caller name</option>
+              <option value="time">Time-based greeting + caller name</option>
+              <option value="custom">Custom opening</option>
+              <option value="wait">Let the other person speak first</option>
+            </select></label>
+            <label id="newCallOpeningCustomWrap" class="hidden">Custom opening<textarea id="newCallOpeningCustom" rows="3" placeholder="Example: Hey David, how’s your evening going?"></textarea></label>
+            <div class="opening-preview" id="newCallOpeningPreview">CallFocus will greet the person naturally, then ease into today’s topic without sounding scripted.</div>
+          </div>
+        </div></div>
+        <div class="call-form-footer"><div><strong>After this call</strong><span>This caller and thread will appear in My Callers and Recent Calls automatically.</span></div><button class="btn btn-primary large" type="submit">Start call</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="callerModal">
+    <div class="modal medium-modal">
+      <div class="modal-head"><div><span class="section-eyebrow">Saved caller</span><h2 id="callerModalTitle">Add caller</h2><p>Save the reusable person context now, then start a call from My Callers whenever you are ready.</p></div><button class="modal-close" data-close="callerModal">×</button></div>
+      <form id="callerForm" class="stack-form">
+        <input type="hidden" id="callerId" />
+        <label>Name<input id="callerName" placeholder="Person’s name" /></label>
+        <div class="form-grid two"><label>About you<textarea id="callerAboutSelf" rows="5"></textarea></label><label>About this caller<textarea id="callerAboutCaller" rows="5"></textarea></label></div>
+        <div class="dynamics-warning">Custom dynamics are recommended for the best call experience.</div>
+        <label>Dynamics type<select id="callerDynamicsMode"></select></label>
+        <label id="callerDynamicsCustomWrap">Conversation dynamics<textarea id="callerDynamics" rows="5"></textarea></label>
+        <div class="preset-description hidden" id="callerDynamicsHelp"></div>
+        <div class="form-actions end"><button class="btn btn-ghost" type="button" data-close="callerModal">Cancel</button><button class="btn btn-primary" type="submit">Save caller</button></div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="manualPaymentModal">
+    <div class="modal small-modal manual-payment-modal">
+      <div class="modal-head"><div><span class="section-eyebrow">Manual bank transfer</span><h2 id="manualPaymentTitle">Transfer to CallFocus</h2><p id="manualPaymentSummary">300 credits · ₦3,000</p></div><button class="modal-close" id="manualPaymentTopClose" type="button" aria-label="Close">×</button></div>
+
+      <div id="manualPaymentAccountStep">
+        <div class="manual-bank-card">
+          <div><span>Bank</span><strong id="manualBankName">—</strong></div>
+          <div><span>Account name</span><strong id="manualAccountName">—</strong></div>
+          <div class="manual-account-number-row"><span>Account number</span><strong id="manualAccountNumber">—</strong><button type="button" id="manualCopyAccountBtn">Copy</button></div>
+        </div>
+        <div class="manual-payment-amount"><span>Transfer exactly</span><strong id="manualExactAmount">₦3,000</strong><small>Your credits are added only after the transfer is manually confirmed.</small></div>
+        <div class="manual-payment-actions"><button class="btn btn-primary full" id="manualMadePaymentBtn" type="button">I’ve made payment</button><button class="btn btn-ghost full" id="manualCancelPaymentBtn" type="button">Cancel payment</button></div>
+      </div>
+
+      <div class="hidden" id="manualPaymentReceiptStep">
+        <div class="manual-receipt-intro"><strong>Upload your payment receipt</strong><p>Upload the transfer confirmation from your bank. JPG, PNG, WebP, HEIC or PDF, up to 5 MB.</p></div>
+        <label class="manual-receipt-upload" for="manualReceiptInput"><span>Payment receipt</span><strong id="manualReceiptLabel">Choose receipt</strong><small id="manualReceiptMeta">No file selected</small><input id="manualReceiptInput" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf" /></label>
+        <div class="manual-payment-actions"><button class="btn btn-primary full" id="manualSentMoneyBtn" type="button" disabled>I’ve sent the money</button><button class="btn btn-ghost full" id="manualCancelReceiptBtn" type="button">Cancel payment</button></div>
+      </div>
+
+      <div class="hidden" id="manualPaymentWaitingStep">
+        <div class="manual-waiting-visual" id="manualWaitingVisual"><span></span><span></span><span></span></div>
+        <div class="manual-waiting-copy"><span class="section-eyebrow">Payment submitted</span><h3 id="manualWaitingTitle">Waiting for manual confirmation</h3><p id="manualWaitingCopy">Your receipt has been sent for review. Your CallFocus balance will update automatically as soon as the payment is approved.</p><small id="manualWaitingReference">Reference —</small></div>
+        <div class="manual-payment-actions"><button class="btn btn-primary full" id="manualCheckStatusBtn" type="button">Keep waiting here</button><button class="btn btn-ghost full" id="manualBackHomeBtn" type="button">Back to home</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop hidden" id="deleteAccountModal">
+    <div class="modal small-modal">
+      <div class="modal-head"><div><span class="section-eyebrow danger-text">Delete account</span><h2>This cannot be undone.</h2><p>Type <strong>DELETE</strong> to permanently remove this account and all synced CallFocus data.</p></div><button class="modal-close" data-close="deleteAccountModal">×</button></div>
+      <label>Confirmation<input id="deleteConfirmInput" placeholder="DELETE" /></label>
+      <div class="form-actions end"><button class="btn btn-ghost" data-close="deleteAccountModal">Cancel</button><button class="btn danger-button" id="confirmDeleteAccountBtn">Delete permanently</button></div>
+    </div>
+  </div>
+
+  <div class="call-screen hidden" id="callScreen">
+    <div class="call-shell">
+      <div class="call-top"><button class="call-top-btn" id="callMinimizeBtn">⌄</button><div class="call-mode">Realtime audio</div><div></div></div>
+      <div class="call-center">
+        <div class="call-avatar" id="liveAvatar">C</div>
+        <h2 id="liveCallerName">Caller</h2>
+        <div class="live-region" id="liveRegion"></div>
+        <div class="live-status" id="liveStatus">Connecting to server…</div>
+        <div class="call-timer" id="callTimer">00:00</div>
+        <div class="live-credit-pill" id="liveCreditPill"><span>Call credit</span><strong id="liveCreditBalance">—</strong></div>
+        <button class="live-start-call hidden" id="liveStartCallBtn" type="button"><span>▶</span><strong>Start call</strong><small>Server connected · begin when you are ready</small></button>
+        <div class="live-transcript" id="liveTranscript">Call context is ready.</div>
+        <div class="call-failure-actions hidden" id="callFailureActions">
+          <button class="call-retry-btn" id="callRetryBtn" type="button">↻ <span>Try again</span></button>
+          <button class="call-back-setup-btn" id="callBackSetupBtn" type="button">Back to call setup</button>
+        </div>
+      </div>
+      <div class="call-controls dial-grid">
+        <button class="call-control" id="speakerBtn"><span>◖)))</span><small>Speaker</small></button>
+        <button class="call-control" id="muteBtn"><span>⌁</span><small>Mute</small></button>
+        <button class="call-control" id="holdBtn"><span>Ⅱ</span><small>Hold</small></button>
+        <button class="call-control" id="moreBtn"><span>•••</span><small>More</small></button>
+        <button class="call-control request" id="requestEndBtn"><span>↘</span><small>Request end</small></button>
+        <button class="call-control danger" id="endCallBtn"><span>⌕</span><small>End now</small></button>
+      </div>
+      <div class="call-more-panel hidden" id="callMorePanel">
+        <div><strong>Call details</strong><span id="callMoreTitle">Current call</span></div>
+        <div><strong>Connection</strong><span id="callMoreConnection">Connecting</span></div>
+        <div><strong>Today</strong><span id="callMoreTopic">No topic supplied</span></div>
+        <div><strong>Call credit</strong><span id="callMoreCredit">—</span></div>
+      </div>
+      <div class="call-caption" id="liveCaption">Ready to connect.</div>
+    </div>
+  </div>
+
+  <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
+  <div class="toast hidden" id="toast"></div>
+  <script src="/callfocus.js?v=15.80-test"></script>
+</body>
+</html>

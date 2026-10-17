@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en" data-theme="pearl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="robots" content="noindex,nofollow,noarchive" />
+  <meta name="theme-color" content="#f7f8f5" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <title>CallFocus Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/admin.css?v=15.80-test" />
+</head>
+<body class="admin-page">
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="/admin">
+        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.80-test" alt="CallFocus" /></span>
+        <span class="brand-copy"><strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong><small>Private system control</small></span>
+      </a>
+      <div class="header-actions"><a class="btn btn-ghost admin-back-link" href="/">Customer site</a></div>
+    </div>
+  </header>
+
+  <main class="admin-shell">
+    <section class="admin-login-card" id="adminGate">
+      <span class="kicker">Private administration</span>
+      <h1>Admin sign in</h1>
+      <p>Enter the private CallFocus admin passcode stored in Cloudflare.</p>
+      <label>Admin passcode<input id="adminPasscode" type="password" autocomplete="current-password" placeholder="Enter admin passcode" /></label>
+      <button class="btn btn-primary full" id="adminGateBtn">Unlock admin</button>
+      <div class="admin-gate-note" id="adminGateNote"></div>
+    </section>
+
+    <section class="admin-dashboard hidden" id="adminDashboard">
+      <div class="admin-page-head">
+        <div><span class="kicker">Private administration</span><h1>Admin Portal</h1><p>Operate CallFocus from one organized management workspace.</p></div>
+        <div class="admin-head-actions"><button class="btn btn-ghost" type="button" id="adminRefreshAllBtn">Refresh data</button><button class="btn btn-ghost" id="adminLockBtn">Sign out</button></div>
+      </div>
+
+      <nav class="admin-tab-shell" aria-label="Admin sections">
+        <div class="admin-tab-scroll" id="adminTabScroll">
+          <button class="admin-tab active" type="button" data-admin-tab="dashboard" aria-selected="true"><span>▦</span>Dashboard</button>
+          <button class="admin-tab" type="button" data-admin-tab="customers" aria-selected="false"><span>◎</span>Customers</button>
+          <button class="admin-tab" type="button" data-admin-tab="email" aria-selected="false"><span>✉</span>Email</button>
+          <button class="admin-tab" type="button" data-admin-tab="payments" aria-selected="false"><span>▣</span>Payments</button>
+          <button class="admin-tab" type="button" data-admin-tab="ai" aria-selected="false"><span>✦</span>AI usage</button>
+          <button class="admin-tab" type="button" data-admin-tab="voice" aria-selected="false"><span>◉</span>Voice</button>
+          <button class="admin-tab" type="button" data-admin-tab="behavior" aria-selected="false"><span>≋</span>Behavior</button>
+          <button class="admin-tab" type="button" data-admin-tab="appearance" aria-selected="false"><span>◌</span>Appearance</button>
+          <button class="admin-tab" type="button" data-admin-tab="promos" aria-selected="false"><span>▤</span>Quick Start</button>
+          <button class="admin-tab" type="button" data-admin-tab="diagnostics" aria-selected="false"><span>⚙</span>Diagnostics</button>
+        </div>
+      </nav>
+
+      <section class="admin-tab-panel active" data-admin-panel="dashboard">
+        <div class="admin-section-heading"><span class="kicker">CallFocus administration</span><h2>Dashboard</h2><p>A quick overview of the service and items that need your attention.</p></div>
+        <div class="admin-overview-grid">
+          <article class="admin-stat-card"><span>Calling service</span><strong id="adminDashServer">Checking…</strong><small id="adminDashStorage">Global settings</small></article>
+          <article class="admin-stat-card"><span>Customer accounts</span><strong id="adminDashUsers">0</strong><small id="adminDashUsersNote">Loading users…</small></article>
+          <article class="admin-stat-card"><span>Funded customers</span><strong id="adminDashFunded">0</strong><small>Verified payment history</small></article>
+          <article class="admin-stat-card"><span>Manual payments</span><strong id="adminDashManualPending">0</strong><small>Awaiting confirmation</small></article>
+          <article class="admin-stat-card"><span>AI analyses</span><strong id="adminDashAI">0</strong><small id="adminDashAINote">Conversation dynamics</small></article>
+        </div>
+
+        <div class="premium-panel admin-server-panel">
+          <div class="admin-server-copy">
+            <span class="kicker">Global server switch</span>
+            <h3>Calling availability</h3>
+            <p>Turn calls off instantly for every customer. The website stays online, but Start Call will show your maintenance message.</p>
+            <div class="admin-storage-status" id="adminStorageStatus">Checking global settings storage…</div>
+          </div>
+          <div class="admin-server-control">
+            <div class="server-state-badge" id="serverStateBadge"><span></span><b>Online</b></div>
+            <label class="server-switch"><input id="adminServerOnline" type="checkbox" checked /><span></span></label>
+          </div>
+          <label class="admin-maintenance-message">Offline message<input id="adminServerMessage" maxlength="240" placeholder="Server not active right now. Please try again soon." /></label>
+        </div>
+
+        <div class="premium-panel admin-global-settings-panel">
+          <div class="info-note">Voice, behavior, theme and server changes are global. New calls use them immediately after saving.</div>
+          <div class="admin-backup-row"><span class="admin-backup-status" id="adminBackupStatus">A protected browser backup will also be kept automatically.</span><button class="btn btn-ghost admin-backup-btn hidden" type="button" id="restoreAdminBackupBtn">Restore protected backup</button></div>
+        </div>
+      </section>
+
+      <section class="admin-tab-panel" data-admin-panel="customers">
+        <div class="admin-section-heading"><span class="kicker">Customer management</span><h2>All CallFocus users</h2><p>Review every customer, balance, Paystack funding and account access.</p></div>
+        <div class="premium-panel admin-users-panel">
+          <div class="admin-users-heading">
+            <div><h3>Customer accounts</h3><p class="admin-panel-copy">Add custom credits with a customer notification, disable or restore access, control unlimited access, remove a balance, permanently delete an account, or gift every customer at once.</p></div>
+            <div class="admin-users-heading-actions">
+              <button class="btn btn-ghost" type="button" id="adminGiftAllToggleBtn">Gift all customers</button>
+              <button class="btn btn-ghost" type="button" id="adminUsersRefreshBtn">Refresh users</button>
+            </div>
+          </div>
+          <div class="admin-bulk-gift hidden" id="adminBulkGiftPanel">
+            <div class="admin-bulk-gift-head"><div><strong>Gift every customer</strong><small>This affects every existing CallFocus customer account, not only the users currently loaded or shown by search.</small></div><button class="btn btn-ghost" type="button" id="adminBulkGiftCloseBtn">Close</button></div>
+            <div class="admin-bulk-gift-grid">
+              <label>Credits per customer<input id="adminBulkGiftAmount" type="number" min="0.1" step="0.1" inputmode="decimal" value="100" placeholder="100" /></label>
+              <label>Notification message<textarea id="adminBulkGiftMessage" rows="3" maxlength="360">You received {amount} credits courtesy of Baron.</textarea><small>Use {amount} for the credit amount and {name} for each customer's name.</small></label>
+            </div>
+            <button class="btn btn-primary" type="button" id="adminBulkGiftSubmitBtn">Gift every customer</button>
+          </div>
+          <div class="admin-users-tools">
+            <label class="admin-users-search">Search users<input id="adminUsersSearch" type="search" autocomplete="off" placeholder="Name, email or phone" /></label>
+            <div class="admin-users-summary" id="adminUsersSummary">Loading customer accounts…</div>
+          </div>
+          <div class="admin-users-list" id="adminUsersList"><div class="admin-users-empty">Customer accounts will appear here.</div></div>
+          <button class="btn btn-ghost admin-users-more hidden" type="button" id="adminUsersMoreBtn">Load more users</button>
+        </div>
+      </section>
+
+
+      <section class="admin-tab-panel" data-admin-panel="email">
+        <div class="admin-section-heading admin-section-heading-row">
+          <div><span class="kicker">Customer communications</span><h2>Customer email center</h2><p>Send direct non-promotional messages to any email address, or use the promotional studio for opted-in marketing campaigns.</p></div>
+          <button class="btn btn-ghost" type="button" id="marketingRefreshBtn">Refresh email status</button>
+        </div>
+
+        <div class="marketing-status-strip" id="marketingStatusStrip">
+          <span class="marketing-status-dot"></span>
+          <strong id="marketingStatusText">Checking Resend connection…</strong>
+          <small id="marketingSenderText">Sender status will appear here.</small>
+        </div>
+
+        <div class="premium-panel resend-usage-panel" id="resendUsagePanel">
+          <div class="admin-users-heading resend-usage-heading">
+            <div>
+              <h3>Resend email usage</h3>
+              <p class="admin-panel-copy">Live account quota from Resend. This includes emails sent through the connected Resend account.</p>
+            </div>
+            <span class="resend-usage-live" id="resendUsageLive">Checking…</span>
+          </div>
+          <div class="resend-usage-grid">
+            <div class="resend-usage-card"><span>Today</span><strong id="resendDailyUsage">—</strong><small id="resendDailySent">Checking usage…</small></div>
+            <div class="resend-usage-card"><span>This month</span><strong id="resendMonthlyUsage">—</strong><small id="resendMonthlySent">Checking usage…</small></div>
+            <div class="resend-usage-card"><span>Remaining today</span><strong id="resendDailyRemaining">—</strong><small id="resendUsageReset">Refreshes automatically when you check email status.</small></div>
+          </div>
+          <div class="resend-usage-note" id="resendUsageNote">Usage details will appear here.</div>
+        </div>
+
+        <div class="premium-panel form-panel direct-email-panel">
+          <div class="admin-users-heading">
+            <div>
+              <h3>Direct email message</h3>
+              <p class="admin-panel-copy">Send a non-promotional account, service, support or payment message to any email address. Registered CallFocus customers can also be selected below.</p>
+            </div>
+          </div>
+          <div class="direct-email-layout">
+            <div class="direct-email-compose">
+              <label>Recipient email(s)<textarea id="directCustomEmails" rows="2" maxlength="4000" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="name@example.com"></textarea><span class="field-help">Enter one or more email addresses separated by commas, spaces or new lines.</span></label>
+              <div class="direct-recipient-summary" id="directRecipientSummary">No recipients selected yet.</div>
+              <div class="direct-message-library">
+                <div class="direct-message-library-head">
+                  <div><strong>Saved messages</strong><small>Your current draft saves automatically on this device. Save reusable messages here to load them anytime.</small></div>
+                </div>
+                <div class="form-grid two direct-message-library-grid">
+                  <label>Message name<input id="directTemplateName" maxlength="80" placeholder="Welcome message" /></label>
+                  <label>Saved messages<select id="directTemplateSelect"><option value="">No saved messages yet</option></select></label>
+                </div>
+                <div class="direct-message-library-actions">
+                  <button class="btn btn-ghost" type="button" id="directSaveTemplateBtn">Save message</button>
+                  <button class="btn btn-ghost" type="button" id="directLoadTemplateBtn">Load selected</button>
+                  <button class="btn btn-ghost direct-template-delete" type="button" id="directDeleteTemplateBtn">Delete</button>
+                </div>
+              </div>
+              <details class="direct-saved-customers">
+                <summary>Select saved CallFocus customer <span class="field-optional">Optional</span></summary>
+                <div class="direct-saved-customers-body">
+                  <label>Find customer<input id="directRecipientSearch" type="search" autocomplete="off" placeholder="Name, email or phone" /></label>
+                  <div class="direct-customer-tools">
+                    <div class="direct-funding-filters" role="group" aria-label="Filter customers by verified payment status">
+                      <button class="direct-filter-chip active" type="button" data-direct-funding-filter="all" aria-pressed="true">All <span data-direct-filter-count>0</span></button>
+                      <button class="direct-filter-chip" type="button" data-direct-funding-filter="funded" aria-pressed="false">Funded <span data-direct-filter-count>0</span></button>
+                      <button class="direct-filter-chip" type="button" data-direct-funding-filter="not_funded" aria-pressed="false">Not funded <span data-direct-filter-count>0</span></button>
+                    </div>
+                    <div class="direct-customer-bulk-actions">
+                      <button class="btn btn-ghost" type="button" id="directSelectShownBtn">Select shown</button>
+                      <button class="btn btn-ghost" type="button" id="directClearShownBtn">Clear shown</button>
+                    </div>
+                  </div>
+                  <div class="direct-recipient-list" id="directRecipientList"><div class="admin-users-empty">Customer accounts will appear here.</div></div>
+                </div>
+              </details>
+              <label>Email subject<input id="directSubject" maxlength="160" placeholder="Your CallFocus account update" /></label>
+              <label>Message<textarea id="directMessage" rows="6" maxlength="5000" placeholder="Write the message you want the customer to receive. You can use {name} to personalize it."></textarea></label>
+              <div class="form-grid two">
+                <label>Button text <span class="field-optional">Optional</span><input id="directCtaLabel" maxlength="48" value="Open CallFocus" placeholder="Open CallFocus" /></label>
+                <label>Button link <span class="field-optional">Optional</span><input id="directCtaUrl" type="url" maxlength="1200" value="https://callfocus.link" placeholder="https://callfocus.link" /></label>
+              </div>
+              <div class="direct-email-actions">
+                <button class="btn btn-primary" type="button" id="directSendBtn">Send direct message</button>
+              </div>
+              <div class="marketing-send-result hidden" id="directSendResult"></div>
+            </div>
+          </div>
+          <div class="admin-recommendation direct-email-note">Use this only for non-promotional account, service, support or payment messages. You can send to registered customers or any valid email address. Gmail, Outlook and other providers still decide final inbox or tab placement.</div>
+        </div>
+
+        <div class="admin-users-heading email-section-divider"><div><h3>Promotional campaigns</h3><p class="admin-panel-copy">Use this section for opted-in marketing or promotional email.</p></div></div>
+
+        <div class="marketing-studio-grid">
+          <div class="marketing-compose-column">
+            <div class="premium-panel form-panel marketing-compose-panel">
+              <div class="admin-users-heading"><div><h3>Campaign details</h3><p class="admin-panel-copy">Use {name} anywhere in the subject, headline or message to personalize each email.</p><p class="marketing-draft-status" id="marketingDraftStatus">Your most recent email draft will be saved automatically.</p></div><button class="btn btn-ghost" type="button" id="marketingSaveDraftBtn">Save draft</button></div>
+              <label>Email subject<input id="marketingSubject" maxlength="160" placeholder="A better way to keep every conversation moving" /></label>
+              <label>Inbox preview text<input id="marketingPreheader" maxlength="180" placeholder="A short line customers see beside the subject." /></label>
+              <div class="form-grid two">
+                <label>Small heading<input id="marketingEyebrow" maxlength="60" value="CALLFOCUS UPDATE" /></label>
+                <label>Main headline<input id="marketingHeadline" maxlength="160" placeholder="Something new is waiting in CallFocus." /></label>
+              </div>
+              <label>Message<textarea id="marketingMessage" rows="8" maxlength="5000" placeholder="Write the message you want customers to receive. You can use {name} to personalize it."></textarea></label>
+              <div class="form-grid two">
+                <label>Button label<input id="marketingCtaLabel" maxlength="48" placeholder="Open CallFocus" /></label>
+                <label>Button link<input id="marketingCtaUrl" type="url" maxlength="1200" value="https://callfocus.link" placeholder="https://callfocus.link" /></label>
+              </div>
+              <div class="marketing-legal-fields">
+                <label>Legal business / sender name<input id="marketingCompanyName" maxlength="120" value="CallFocus · Baron Luxury Services" /></label>
+                <label>Business mailing address<input id="marketingBusinessAddress" maxlength="300" placeholder="Enter the valid postal address required for promotional email." /></label>
+              </div>
+              <div class="admin-recommendation">This now uses a simpler, normal-email style instead of a large promotional card. Gmail and other providers still decide whether a legitimate promotional message appears in Primary, Promotions, Updates or another tab. CallFocus keeps the required unsubscribe controls and does not try to bypass inbox filtering.</div>
+            </div>
+
+            <div class="premium-panel marketing-audience-panel">
+              <div class="admin-users-heading"><div><h3>Audience</h3><p class="admin-panel-copy">Choose everyone or tick only the customers you want to receive this campaign.</p></div></div>
+              <div class="marketing-audience-choice" role="radiogroup" aria-label="Email audience">
+                <label class="marketing-audience-option active"><input type="radio" name="marketingAudience" value="all" checked /><span><strong>All active customers</strong><small>Send to every active CallFocus customer. Unsubscribed addresses are skipped automatically.</small></span></label>
+                <label class="marketing-audience-option"><input type="radio" name="marketingAudience" value="selected" /><span><strong>Selected customers</strong><small>Tick the individual customers you want below.</small></span></label>
+              </div>
+              <div class="marketing-recipient-tools">
+                <label>Find customer<input id="marketingRecipientSearch" type="search" autocomplete="off" placeholder="Name, email or phone" /></label>
+                <div class="marketing-recipient-buttons"><button class="btn btn-ghost" type="button" id="marketingSelectVisibleBtn">Select visible</button><button class="btn btn-ghost" type="button" id="marketingClearSelectedBtn">Clear selection</button></div>
+              </div>
+              <div class="marketing-recipient-summary" id="marketingRecipientSummary">Loading customers…</div>
+              <div class="marketing-recipient-list" id="marketingRecipientList"><div class="admin-users-empty">Customer accounts will appear here.</div></div>
+            </div>
+
+            <div class="premium-panel marketing-send-panel">
+              <div class="admin-users-heading"><div><h3>Send</h3><p class="admin-panel-copy">Send yourself a test first, then send the final campaign when everything looks right.</p></div></div>
+              <label>Test email address<input id="marketingTestEmail" type="email" autocomplete="email" placeholder="you@example.com" /></label>
+              <label class="marketing-consent-confirm"><input id="marketingConsentConfirmed" type="checkbox" /><span>I confirm the recipients of this promotional campaign have opted in to receive CallFocus marketing or promotional email.</span></label>
+              <div class="marketing-send-actions">
+                <button class="btn btn-ghost" type="button" id="marketingTestBtn">Send test email</button>
+                <button class="btn btn-primary" type="button" id="marketingSendBtn">Send campaign</button>
+              </div>
+              <div class="marketing-send-result hidden" id="marketingSendResult"></div>
+            </div>
+          </div>
+
+          <div class="marketing-preview-column">
+            <div class="premium-panel marketing-preview-panel">
+              <div class="admin-users-heading"><div><h3>Live preview</h3><p class="admin-panel-copy">A close preview of the premium template customers will receive.</p></div></div>
+              <div class="marketing-email-preview" id="marketingEmailPreview"></div>
+            </div>
+            <div class="premium-panel marketing-history-panel">
+              <div class="admin-users-heading"><div><h3>Recent campaigns</h3><p class="admin-panel-copy">A lightweight record of recently sent campaigns and delivery requests.</p></div></div>
+              <div id="marketingCampaignHistory"><div class="admin-users-empty">No campaign history loaded yet.</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="admin-tab-panel" data-admin-panel="payments">
+        <div class="admin-section-heading admin-section-heading-row"><div><span class="kicker">Payment fallback</span><h2>Manual bank transfers</h2><p>Use this while Paystack checkout is unavailable. Customers see your bank account only after requesting a valid purchase of 300 credits or more.</p></div><button class="btn btn-ghost" type="button" id="adminManualPaymentsRefreshBtn">Refresh payments</button></div>
+        <div class="premium-panel form-panel manual-payment-settings-panel">
+          <div class="toggle-row"><span>Enable manual bank-transfer fallback</span><input id="adminManualPaymentsEnabled" type="checkbox" /></div>
+          <div class="admin-recommendation">This fallback is used only when Paystack checkout is unavailable. When Paystack is enabled again, customers automatically return to Paystack.</div>
+          <div class="form-grid two">
+            <label>Bank name<input id="adminManualBankName" maxlength="120" placeholder="e.g. Access Bank" /></label>
+            <label>Account name<input id="adminManualAccountName" maxlength="160" placeholder="Account holder name" /></label>
+          </div>
+          <div class="form-grid two">
+            <label>Account number<input id="adminManualAccountNumber" inputmode="numeric" maxlength="32" placeholder="Account number" /></label>
+            <label>Payment notification email<input id="adminManualPaymentEmail" type="email" autocomplete="email" placeholder="support@callfocus.link" /></label>
+          </div>
+          <p class="admin-panel-copy">Receipt emails are sent through your existing Resend configuration. The uploaded receipt is also available privately from this admin panel for 60 days.</p>
+        </div>
+        <div class="admin-overview-grid manual-payment-stats">
+          <article class="admin-stat-card"><span>Awaiting confirmation</span><strong id="adminManualPending">0</strong><small>Needs your review</small></article>
+          <article class="admin-stat-card"><span>Approved</span><strong id="adminManualApproved">0</strong><small>Credits issued</small></article>
+          <article class="admin-stat-card"><span>Rejected</span><strong id="adminManualRejected">0</strong><small>Not credited</small></article>
+        </div>
+        <div class="premium-panel admin-manual-payments-panel">
+          <div class="admin-users-heading"><div><h3>Manual payment requests</h3><p class="admin-panel-copy">Verify the transfer in your bank before approving. Approval immediately adds the requested credits to that customer’s server wallet.</p></div></div>
+          <div class="admin-manual-payments-list" id="adminManualPaymentsList"><div class="admin-users-empty">No manual payment requests yet.</div></div>
+        </div>
+      </section>
+
+      <section class="admin-tab-panel" data-admin-panel="ai">
+        <div class="admin-section-heading admin-section-heading-row"><div><span class="kicker">AI conversation analysis</span><h2>AI usage</h2><p>Monitor call duration, customer credits, API usage costs and screenshot analyses.</p></div><button class="btn btn-ghost" type="button" id="aiUsageRefreshBtn">Refresh usage</button></div>
+        <div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel">
+          <div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div>
+          <div class="form-grid two admin-screenshot-limit-grid">
+            <label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label>
+            <label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label>
+          </div>
+          <div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div>
+          <button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button>
+        </div>
+        <div class="premium-panel call-usage-panel" id="adminCallUsagePanel">
+          <div class="admin-users-heading"><div><h3>Call usage and cost</h3><p class="admin-panel-copy">See each customer’s call time, credits used and API cost calculated from recorded usage. Monitoring starts with calls prepared after this update.</p></div></div>
+          <div class="admin-overview-grid call-usage-grid">
+            <article class="admin-stat-card"><span>Tracked calls</span><strong id="callUsageCount">0</strong><small>Including prepared sessions</small></article>
+            <article class="admin-stat-card"><span>Customer call time</span><strong id="callUsageDuration">00:00</strong><small>Time in the customer’s call</small></article>
+            <article class="admin-stat-card"><span>Customer credits used</span><strong id="callUsageCredits">0</strong><small>Unlimited accounts use 0 credits</small></article>
+            <article class="admin-stat-card"><span>Calculated API cost</span><strong id="callUsageCost">$0.0000</strong><small>Voice + recorded backend usage</small></article>
+          </div>
+          <p class="admin-panel-copy call-usage-note" id="callUsageNote">GPT-Live voice pricing: $0.05 per minute, billed per second. Setup bills 15 seconds while connecting; reported session usage replaces this initial charge estimate, so it is never added twice. Per-call values are calculated costs, not individual invoice charges.</p>
+          <div class="call-usage-list" id="callUsageRecent"><div class="admin-users-empty">No call usage recorded yet.</div></div>
+          <button class="btn btn-ghost hidden" type="button" id="callUsageMoreBtn">Load older calls</button>
+        </div>
+        <div class="premium-panel call-billing-panel" id="adminBilledCostsPanel">
+          <div class="admin-users-heading"><div><h3>OpenAI billed spend</h3><p class="admin-panel-copy">Actual provider-reported spend, grouped by UTC day. These totals cover all API activity in the selected project or organization and can include other apps.</p></div><button class="btn btn-ghost" type="button" id="billedCostsRefreshBtn">Refresh billed spend</button></div>
+          <div class="admin-overview-grid call-billing-grid">
+            <article class="admin-stat-card"><span>Billed today</span><strong id="billedCostsToday">—</strong><small>UTC day</small></article>
+            <article class="admin-stat-card"><span>Billed last 30 days</span><strong id="billedCostsTotal">—</strong><small id="billedCostsScope">Provider billing connection</small></article>
+          </div>
+          <p class="admin-panel-copy" id="billedCostsStatus">Checking billing connection…</p>
+          <details class="call-billing-setup"><summary>Connect provider billing</summary><p class="admin-panel-copy">In Cloudflare’s CallFocus runtime settings, add an OpenAI organization Admin API key as the secret <code>OPENAI_ADMIN_KEY</code>. Add <code>OPENAI_BILLING_PROJECT_ID</code> to filter billed spend to the CallFocus project. The key stays on the server. Your existing call API key continues to run calls.</p></details>
+        </div>
+        <div class="admin-overview-grid ai-usage-grid">
+          <article class="admin-stat-card"><span>Completed analyses</span><strong id="aiUsageAnalyses">0</strong><small>Generated dynamics</small></article>
+          <article class="admin-stat-card"><span>Screenshots analyzed</span><strong id="aiUsageScreenshots">0</strong><small>Across completed analyses</small></article>
+          <article class="admin-stat-card"><span>OpenAI requests</span><strong id="aiUsageRequests">0</strong><small>Batch + final requests</small></article>
+          <article class="admin-stat-card"><span>Estimated API cost</span><strong id="aiUsageCost">$0.0000</strong><small>GPT-6 Luna standard pricing</small></article>
+        </div>
+        <div class="premium-panel ai-token-panel">
+          <div class="ai-token-row"><span>Input tokens</span><strong id="aiUsageInputTokens">0</strong></div>
+          <div class="ai-token-row"><span>Cached input tokens</span><strong id="aiUsageCachedTokens">0</strong></div>
+          <div class="ai-token-row"><span>Output tokens</span><strong id="aiUsageOutputTokens">0</strong></div>
+          <div class="ai-token-row"><span>Last updated</span><strong id="aiUsageLastUpdated">No usage recorded yet</strong></div>
+        </div>
+        <div class="premium-panel">
+          <div class="admin-users-heading"><div><h3>Recent analyses</h3><p class="admin-panel-copy">No screenshots are stored here. This log contains only usage metadata such as the customer, screenshot count, token usage and estimated cost.</p></div></div>
+          <div class="ai-usage-recent" id="aiUsageRecent"><div class="admin-users-empty">No AI analyses recorded yet.</div></div>
+        </div>
+      </section>
+
+      <section class="admin-tab-panel" data-admin-panel="voice">
+        <div class="admin-section-heading"><span class="kicker">Voice engine</span><h2>Customer voice pair</h2><p>Choose the base live-call voices customers hear. Customers can now design their own AI voice style profiles from the New Call screen without uploading recordings.</p></div>
+        <div class="premium-panel form-panel">
+          <p class="admin-panel-copy">These Male and Female selections are the base voices. A customer-created AI voice profile layers accent, age impression, warmth, energy, pace and presence on top of the appropriate base voice.</p>
+          <div class="voice-admin-card"><label>Male voice<select id="adminMaleVoice"></select></label><button class="btn btn-ghost voice-preview-btn" data-preview="male">Preview male voice</button></div>
+          <div class="voice-admin-card"><label>Female voice<select id="adminFemaleVoice"></select></label><button class="btn btn-ghost voice-preview-btn" data-preview="female">Preview female voice</button></div>
+          <label>Voice engine<input id="adminModel" value="gpt-live-1" readonly /></label>
+          <div class="admin-recommendation">CallFocus uses <strong>GPT-Live 1</strong>. Customer AI voice profiles work on live calls and generated voice notes without cloning a real person.</div>
+          <audio id="voicePreviewAudio" class="hidden" controls></audio>
+          <div class="toggle-row"><span>Allow natural interruption / barge-in</span><input id="adminInterruptions" type="checkbox" /></div>
+          <div class="toggle-row"><span>Speak first after the customer taps Start Call</span><input id="adminSpeakFirst" type="checkbox" /></div>
+        </div>
+
+      </section>
+
+      <section class="admin-tab-panel" data-admin-panel="behavior">
+        <div class="admin-section-heading"><span class="kicker">Conversation behavior</span><h2>Global call behavior</h2><p>Control how new calls listen, respond and open conversations.</p></div>
+        <div class="premium-panel form-panel">
+          <label>Speaking pace<select id="adminSpeakingPace"><option value="relaxed">Relaxed — recommended</option><option value="normal">Normal</option><option value="brisk">Brisk</option></select></label>
+          <div class="admin-recommendation">For a natural phone-call feel, use <strong>Relaxed</strong>.</div>
+          <label>Natural speech style<textarea id="adminSpeechStyle" rows="9" placeholder="Keep this short: tone, turn length, listening style and emotional delivery"></textarea></label>
+          <label>Master call rules<textarea id="adminInstructions" rows="11" placeholder="Your global rules for every call. These are loaded server-side into every new Live session."></textarea></label>
+          <label>Default opening behavior<textarea id="adminOpening" rows="5" placeholder="How the first line should begin"></textarea></label>
+        </div>
+      </section>
+
+      <section class="admin-tab-panel" data-admin-panel="appearance">
+        <div class="admin-section-heading"><span class="kicker">Website appearance</span><h2>Customer site theme</h2><p>Switch the customer website globally. New visitors and refreshed pages use the selected theme immediately.</p></div>
+        <div class="premium-panel admin-theme-panel">
+          <div class="admin-theme-choice" role="radiogroup" aria-label="Customer site theme">
+            <button class="admin-theme-option" type="button" data-site-theme="black" aria-pressed="false"><span class="admin-theme-preview admin-theme-preview-black"><i></i><b></b><em></em></span><strong>Midnight Black</strong><small>Premium dark theme</small></button>
+            <button class="admin-theme-option active" type="button" data-site-theme="pearl" aria-pressed="true"><span class="admin-theme-preview admin-theme-preview-pearl"><i></i><b></b><em></em></span><strong>Pearl Aurora</strong><small>Porcelain pearl, jade, champagne and icy blue</small></button>
+          </div>
+          <input type="hidden" id="adminSiteTheme" value="pearl" />
+        </div>
+      </section>
+
+      <section class="admin-tab-panel" data-admin-panel="promos">
+        <div class="admin-section-heading"><span class="kicker">Home promotion controls</span><h2>Quick Start & promo manager</h2><p>Turn promo items on individually, choose whether each one can appear in the popup, the floating circle, or both, then control each display method with its own timing.</p></div>
+
+        <div class="premium-panel form-panel admin-quickstart-controls">
+          <div class="admin-users-heading"><div><h3>Display methods</h3><p class="admin-panel-copy">The popup panel and floating promotion tab are independent. You can use either one or both at the same time.</p></div></div>
+          <div class="quickstart-display-grid">
+            <article class="quickstart-display-card popup">
+              <label class="quickstart-switch-card quickstart-display-switch"><span><strong>Popup panel</strong><small>Automatically show the larger promotion / guide panel on Home.</small></span><input id="adminQuickPopupEnabled" type="checkbox" checked /></label>
+              <div class="form-grid two quickstart-time-grid">
+                <label>Open after (seconds)<input id="adminQuickPopupAppearSeconds" type="number" min="0" step="0.5" inputmode="decimal" value="2" /></label>
+                <label>Close after being shown (seconds)<input id="adminQuickPopupHideSeconds" type="number" min="0" step="0.5" inputmode="decimal" placeholder="Leave blank to stay open" /></label>
+              </div>
+            </article>
+            <article class="quickstart-display-card floating">
+              <label class="quickstart-switch-card quickstart-display-switch"><span><strong>Floating promotion tab</strong><small>Show the animated circular promo button and rotate the enabled promo logos.</small></span><input id="adminQuickFloatingEnabled" type="checkbox" checked /></label>
+              <div class="form-grid two quickstart-time-grid">
+                <label>Open after (seconds)<input id="adminQuickFloatingAppearSeconds" type="number" min="0" step="0.5" inputmode="decimal" value="10" /></label>
+                <label>Close after being shown (seconds)<input id="adminQuickFloatingHideSeconds" type="number" min="0" step="0.5" inputmode="decimal" placeholder="Leave blank to stay visible" /></label>
+              </div>
+            </article>
+          </div>
+          <div class="admin-recommendation">There is no maximum opening delay. Leave a closing-time field blank (or set it to 0) if you want that display method to remain available until the customer closes or leaves it.</div>
+        </div>
+
+        <div class="premium-panel form-panel">
+          <div class="admin-users-heading"><div><h3>Popup heading</h3><p class="admin-panel-copy">This heading is used when the popup opens automatically and when a customer taps the floating promotion tab.</p></div></div>
+          <label>Small heading<input id="adminQuickEyebrow" maxlength="60" placeholder="CallFocus quick start" /></label>
+          <label>Main heading<input id="adminQuickTitle" maxlength="120" placeholder="Learn how to use CallFocus" /></label>
+          <label>Intro message<textarea id="adminQuickMessage" rows="4" maxlength="320" placeholder="Short explanation shown above the promo actions"></textarea></label>
+        </div>
+
+        <div class="premium-panel form-panel">
+          <div class="admin-users-heading"><div><h3>Built-in promos</h3><p class="admin-panel-copy">First turn the promo on, then choose where it is allowed to display. Selecting both makes it available in both display methods.</p></div></div>
+          <div class="quickstart-builtins-grid">
+            <article class="quickstart-builtin-card youtube">
+              <div class="quickstart-builtin-head"><span class="quickstart-brand-mark youtube">▶</span><div><strong>YouTube guide</strong><small>Video guide promotion.</small></div></div>
+              <div class="quickstart-channel-row">
+                <label class="admin-promo-enabled"><span>Promo on</span><input id="adminQuickYoutubeEnabled" type="checkbox" checked /></label>
+                <label class="admin-promo-enabled"><span>Popup</span><input id="adminQuickYoutubePopupEnabled" type="checkbox" checked /></label>
+                <label class="admin-promo-enabled"><span>Floating</span><input id="adminQuickYoutubeFloatingEnabled" type="checkbox" checked /></label>
+              </div>
+              <label>Title<input id="adminQuickYoutubeTitle" maxlength="120" /></label>
+              <label>Short message<textarea id="adminQuickYoutubeMessage" rows="3" maxlength="240"></textarea></label>
+              <label>YouTube link<input id="adminQuickYoutubeUrl" type="url" maxlength="1200" placeholder="https://youtu.be/..." /></label>
+            </article>
+            <article class="quickstart-builtin-card telegram">
+              <div class="quickstart-builtin-head"><span class="quickstart-brand-mark telegram">➤</span><div><strong>Telegram</strong><small>Telegram channel promotion.</small></div></div>
+              <div class="quickstart-channel-row">
+                <label class="admin-promo-enabled"><span>Promo on</span><input id="adminQuickTelegramEnabled" type="checkbox" checked /></label>
+                <label class="admin-promo-enabled"><span>Popup</span><input id="adminQuickTelegramPopupEnabled" type="checkbox" checked /></label>
+                <label class="admin-promo-enabled"><span>Floating</span><input id="adminQuickTelegramFloatingEnabled" type="checkbox" checked /></label>
+              </div>
+              <label>Title<input id="adminQuickTelegramTitle" maxlength="120" /></label>
+              <label>Short message<textarea id="adminQuickTelegramMessage" rows="3" maxlength="240"></textarea></label>
+              <label>Telegram link<input id="adminQuickTelegramUrl" type="url" maxlength="1200" placeholder="https://t.me/callfocus" /></label>
+            </article>
+          </div>
+        </div>
+
+        <div class="premium-panel form-panel admin-custom-promos-panel">
+          <div class="admin-users-heading"><div><h3>Custom promos</h3><p class="admin-panel-copy">Each custom promo can be saved while off, or enabled for the popup, floating circle, or both.</p></div><button class="btn btn-ghost" type="button" id="adminAddPromoBtn">Add promo</button></div>
+          <div class="admin-custom-promos" id="adminCustomPromos"><div class="admin-users-empty">No custom promos yet.</div></div>
+          <div class="admin-recommendation">Logo uploads are resized on this device before saving. Use a square PNG, JPG or WebP for the cleanest floating-button rotation.</div>
+          <button class="btn btn-primary admin-inline-save" type="button" id="saveQuickStartBtn">Save Quick Start settings</button>
+        </div>
+      </section>
+
+      <section class="admin-tab-panel" data-admin-panel="diagnostics">
+        <div class="admin-section-heading"><span class="kicker">Diagnostics</span><h2>System checks</h2><p>Check GPT-Live access, OpenAI configuration, KV storage and the latest live-session result.</p></div>
+        <div class="premium-panel">
+          <button class="btn btn-ghost" id="runDiagnosticsBtn">Run diagnostics</button>
+          <div class="admin-diagnostics hidden" id="adminDiagnostics"></div>
+        </div>
+      </section>
+
+      <div class="admin-save-dock" aria-label="Global settings save action">
+        <button class="btn btn-primary large" id="saveAdminBtn">Save global settings</button>
+      </div>
+    </section>
+  </main>
+  <div class="toast hidden" id="toast"></div>
+  <script src="/admin.js?v=15.80-test"></script>
+</body>
+</html>
