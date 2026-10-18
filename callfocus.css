@@ -3919,3 +3919,27 @@ input,textarea,select{min-width:0;max-width:100%}
 @media(prefers-reduced-motion:reduce){.korapay-checkout-btn{transition:none}}
 .korapay-enabled .credit-package,.korapay-enabled #customCreditAmount{pointer-events:auto!important;opacity:1!important}
 .korapay-enabled .credit-payment-note:before{content:''}
+
+/* V15.89: customer credits page shortcut to existing transaction history only. */
+#page-credits .credit-page-shell{position:relative}
+#page-credits .cf-credit-history-shortcut{
+  position:absolute;top:-30px;right:0;z-index:1;
+  display:inline-flex;align-items:center;justify-content:center;gap:9px;
+  min-height:42px;padding:0 13px 0 12px;
+  border:1px solid rgba(33,119,104,.22);border-radius:13px;
+  background:linear-gradient(145deg,#ffffff,#f3f8f6);color:#1b6358;
+  box-shadow:0 5px 17px rgba(34,92,78,.08);
+  font:750 12px/1.3 'Manrope',system-ui,sans-serif;letter-spacing:-.01em;
+  cursor:pointer;white-space:nowrap;
+  -webkit-tap-highlight-color:transparent;
+}
+#page-credits .cf-credit-history-shortcut:hover{border-color:rgba(27,117,101,.45);background:#f2faf6}
+#page-credits .cf-credit-history-shortcut:active{transform:translateY(1px)}
+#page-credits .cf-credit-history-shortcut:focus-visible{outline:3px solid #4ca58e;outline-offset:2px}
+#page-credits .cf-credit-history-icon{flex:none;color:#2a8a78}
+#page-credits .cf-credit-history-arrow{flex:none;color:#6b9b90}
+@media(max-width:375px){
+  #page-credits .cf-credit-history-shortcut{top:-28px;min-height:39px;padding:0 10px;gap:6px;font-size:11px}
+  #page-credits .cf-credit-history-icon{width:16px;height:16px}
+  #page-credits .cf-credit-history-arrow{width:13px;height:13px}
+}
