@@ -3989,3 +3989,7 @@ html[data-theme="dark"] #page-history .history-close-btn{background:#19302b;bord
 @media(prefers-reduced-motion:reduce){.cf-purchase-promo-deposit{transition:none}}
 .admin-tab-panel .cf-offer-admin .cf-offer-packages{gap:12px}
 @media(max-width:600px){.admin-tab-panel .cf-offer-admin .cf-offer-packages{display:grid;grid-template-columns:1fr}}
+/* V15.95: fit four existing/new home quick actions without changing their shared behavior */
+.hero-quick-actions:has(> #heroImageVideoBtn){grid-template-columns:repeat(4,minmax(0,1fr))!important;width:min(100%,630px)!important}
+.hero-quick-actions #heroImageVideoBtn{border-color:rgba(39,157,133,.5);background:linear-gradient(130deg,rgba(18,141,115,.15),rgba(255,255,255,.06))}
+@media(max-width:760px){.hero-quick-actions:has(> #heroImageVideoBtn){grid-template-columns:repeat(2,minmax(0,1fr))!important;width:100%!important}.hero-quick-actions #heroImageVideoBtn{min-height:78px}}
