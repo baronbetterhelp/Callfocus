@@ -11,13 +11,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=15.85-test" />
+  <link rel="stylesheet" href="/admin.css?v=15.84-test" />
 </head>
 <body class="admin-page">
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="/admin">
-        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.85-test" alt="CallFocus" /></span>
+        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.84-test" alt="CallFocus" /></span>
         <span class="brand-copy"><strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong><small>Private system control</small></span>
       </a>
       <div class="header-actions"><a class="btn btn-ghost admin-back-link" href="/">Customer site</a></div>
@@ -77,14 +77,6 @@
             <label class="server-switch"><input id="adminServerOnline" type="checkbox" checked /><span></span></label>
           </div>
           <label class="admin-maintenance-message">Offline message<input id="adminServerMessage" maxlength="240" placeholder="Server not active right now. Please try again soon." /></label>
-        </div>
-
-        <div class="premium-panel admin-availability-panel" id="adminWebsiteMaintenancePanel">
-          <div class="admin-users-heading"><div><span class="kicker">Website access</span><h3>Website maintenance mode</h3><p class="admin-panel-copy">When enabled, customers see a dedicated “We'll be back shortly” page immediately, instead of the CallFocus homepage. The admin portal stays accessible so you can turn the website back on.</p></div></div>
-          <label class="toggle-row admin-availability-toggle"><span>Show maintenance page to visitors</span><input id="adminWebsiteMaintenanceEnabled" type="checkbox" /></label>
-          <p class="admin-availability-note">Existing payment notifications and pending payment approvals can still be completed during maintenance. Turn this off to restore the website.</p>
-          <button type="button" class="btn btn-primary admin-availability-save" id="saveWebsiteMaintenanceBtn">Apply website availability</button>
-          <div class="admin-availability-feedback" id="adminWebsiteMaintenanceFeedback" aria-live="polite"></div>
         </div>
 
         <div class="premium-panel admin-global-settings-panel">
@@ -271,13 +263,10 @@
       </section>
 
       <section class="admin-tab-panel" data-admin-panel="payments">
-        <div class="admin-section-heading admin-section-heading-row"><div><span class="kicker">Payment methods</span><h2>Payment availability</h2><p>Choose which payment methods appear on CallFocus. Disabled methods disappear from the credit purchase page and cannot start new payment requests.</p></div><button class="btn btn-ghost" type="button" id="adminManualPaymentsRefreshBtn">Refresh payments</button></div>
+        <div class="admin-section-heading admin-section-heading-row"><div><span class="kicker">Payment fallback</span><h2>Manual bank transfers</h2><p>Use this while Paystack checkout is unavailable. Customers see your bank account only after requesting a valid purchase of 300 credits or more.</p></div><button class="btn btn-ghost" type="button" id="adminManualPaymentsRefreshBtn">Refresh payments</button></div>
         <div class="premium-panel form-panel manual-payment-settings-panel">
-          <label class="toggle-row admin-availability-toggle"><span>Manual Bank Transfer</span><input id="adminManualPaymentsEnabled" type="checkbox" /></label>
-          <label class="toggle-row admin-availability-toggle"><span>KoraPay checkout</span><input id="adminKorapayPaymentsEnabled" type="checkbox" checked /></label>
-          <p class="admin-availability-note">Each switch controls visibility and new checkout requests. Previously received payment confirmations and pending transfers can still be processed. Paystack is not changed.</p>
-          <button type="button" class="btn btn-primary admin-availability-save" id="savePaymentAvailabilityBtn">Apply payment availability</button>
-          <div class="admin-availability-feedback" id="adminPaymentAvailabilityFeedback" aria-live="polite"></div>
+          <div class="toggle-row"><span>Enable manual bank-transfer fallback</span><input id="adminManualPaymentsEnabled" type="checkbox" /></div>
+          <div class="admin-recommendation">This fallback is used only when Paystack checkout is unavailable. When Paystack is enabled again, customers automatically return to Paystack.</div>
           <div class="form-grid two">
             <label>Bank name<input id="adminManualBankName" maxlength="120" placeholder="e.g. Access Bank" /></label>
             <label>Account name<input id="adminManualAccountName" maxlength="160" placeholder="Account holder name" /></label>
@@ -286,7 +275,7 @@
             <label>Account number<input id="adminManualAccountNumber" inputmode="numeric" maxlength="32" placeholder="Account number" /></label>
             <label>Payment notification email<input id="adminManualPaymentEmail" type="email" autocomplete="email" placeholder="support@callfocus.link" /></label>
           </div>
-          <p class="admin-panel-copy">When enabled, customers can request your bank account if Paystack is unavailable. Receipt emails are sent through your existing Resend configuration. The uploaded receipt is also available privately from this admin panel for 60 days.</p>
+          <p class="admin-panel-copy">Receipt emails are sent through your existing Resend configuration. The uploaded receipt is also available privately from this admin panel for 60 days.</p>
         </div>
         <div class="admin-overview-grid manual-payment-stats">
           <article class="admin-stat-card"><span>Awaiting confirmation</span><strong id="adminManualPending">0</strong><small>Needs your review</small></article>
@@ -467,6 +456,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=15.85-test"></script>
+  <script src="/admin.js?v=15.84-test"></script>
 </body>
 </html>

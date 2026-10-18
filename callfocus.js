@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.85-test';
+  const BUILD='15.84-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -5201,7 +5201,6 @@ ${approvedPatterns}
     const amountValid=Number.isFinite(amount)&&Math.floor(amount)>=300;
     const checkout=document.getElementById('creditCheckoutBtn');
     if(checkout){
-      checkout.classList.toggle('hidden',known&&!paystack&&!manual);
       // When availability is still unknown, keep a valid amount clickable so
       // the click can perform a just-in-time retry instead of leaving the UI dead.
       checkout.disabled=!amountValid||(known&&!available);
