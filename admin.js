@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.84-test';
+const ADMIN_BUILD_VERSION='15.92-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -187,7 +187,7 @@ function bindQuickStartManager(){
 
 function screenshotLimits(){const min=Math.max(1,Math.min(50,Math.round(Number($('adminAnalysisScreenshotMin')?.value)||20)));const max=Math.max(1,Math.min(50,Math.round(Number($('adminAnalysisScreenshotMax')?.value)||50)));return {min,max};}
 function renderScreenshotLimitsSummary(){const box=$('adminScreenshotLimitsSummary');if(!box)return;const {min,max}=screenshotLimits();box.innerHTML=min<=max?`Customers must upload between <strong>${min} and ${max} screenshot${max===1?'':'s'}</strong> before either generator can run. Allowed admin range: 1–50.`:`Minimum cannot be higher than maximum. Current values: <strong>${min}</strong> minimum and <strong>${max}</strong> maximum.`;box.classList.toggle('bad',min>max);}
-function formPayload(){const limits=screenshotLimits();return {customVoices:[...customVoices],unlimitedCreditEmails:[...unlimitedCreditEmails],siteTheme:$('adminSiteTheme').value||'black',serverOnline:$('adminServerOnline').checked,serverMessage:$('adminServerMessage').value.trim(),maleVoice:$('adminMaleVoice').value,femaleVoice:$('adminFemaleVoice').value,model:'gpt-live-1',speakingPace:$('adminSpeakingPace').value,speechStyle:$('adminSpeechStyle').value.trim(),instructions:$('adminInstructions').value.trim(),opening:$('adminOpening').value.trim(),speakFirst:$('adminSpeakFirst').checked,interruptions:$('adminInterruptions').checked,manualPaymentsEnabled:$('adminManualPaymentsEnabled')?.checked===true,manualPaymentBankName:$('adminManualBankName')?.value.trim()||'',manualPaymentAccountName:$('adminManualAccountName')?.value.trim()||'',manualPaymentAccountNumber:$('adminManualAccountNumber')?.value.replace(/[^0-9]/g,'')||'',manualPaymentNotificationEmail:$('adminManualPaymentEmail')?.value.trim().toLowerCase()||'support@callfocus.link',analysisScreenshotMin:limits.min,analysisScreenshotMax:limits.max,autoFillScreenshotLimit:limits.max,quickStart:quickStartPayload()}}
+function formPayload(){const limits=screenshotLimits();return {customVoices:[...customVoices],unlimitedCreditEmails:[...unlimitedCreditEmails],siteTheme:$('adminSiteTheme').value||'black',serverOnline:$('adminServerOnline').checked,serverMessage:$('adminServerMessage').value.trim(),maleVoice:$('adminMaleVoice').value,femaleVoice:$('adminFemaleVoice').value,model:'gpt-live-1',speakingPace:$('adminSpeakingPace').value,speechStyle:$('adminSpeechStyle').value.trim(),instructions:$('adminInstructions').value.trim(),opening:$('adminOpening').value.trim(),speakFirst:$('adminSpeakFirst').checked,interruptions:$('adminInterruptions').checked,websiteMaintenanceEnabled:$('adminWebsiteMaintenanceEnabled')?.checked===true,korapayPaymentsEnabled:$('adminKorapayPaymentsEnabled')?.checked!==false,manualPaymentsEnabled:$('adminManualPaymentsEnabled')?.checked===true,manualPaymentBankName:$('adminManualBankName')?.value.trim()||'',manualPaymentAccountName:$('adminManualAccountName')?.value.trim()||'',manualPaymentAccountNumber:$('adminManualAccountNumber')?.value.replace(/[^0-9]/g,'')||'',manualPaymentNotificationEmail:$('adminManualPaymentEmail')?.value.trim().toLowerCase()||'support@callfocus.link',analysisScreenshotMin:limits.min,analysisScreenshotMax:limits.max,autoFillScreenshotLimit:limits.max,quickStart:quickStartPayload()}}
 function renderBackupStatus(storageConnected=true){const el=$('adminBackupStatus'),btn=$('restoreAdminBackupBtn');if(!el||!btn)return;const b=readBackup();btn.classList.toggle('hidden',!b?.config);if(!b?.config){el.textContent='A protected browser backup will also be kept automatically.';el.className='admin-backup-status';return}const when=b.savedAt?new Date(b.savedAt).toLocaleString():'recently';if(!storageConnected){el.textContent=`KV is disconnected, but your last admin settings are protected on this device (${when}). Reconnect KV, then restore and save.`;el.className='admin-backup-status warn'}else{el.textContent=`Protected browser backup available from ${when}.`;el.className='admin-backup-status good'}}
 function normalizeUnlimitedEmail(value=''){return String(value||'').trim().toLowerCase()}
 function validUnlimitedEmail(value=''){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeUnlimitedEmail(value))}
@@ -217,7 +217,7 @@ async function addUnlimitedUser(){
   if(unlimitedCreditEmails.includes(email))return toast('That email already has unlimited access');
   const ok=await setUnlimitedUser('add',email,btn); if(ok&&input)input.value='';
 }
-function fill(config,storageConnected){currentConfig=config;customVoices=Array.isArray(config.customVoices)?config.customVoices:[];populateVoices();renderCustomVoiceLibrary();unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;if($('adminManualPaymentsEnabled'))$('adminManualPaymentsEnabled').checked=config.manualPaymentsEnabled===true;if($('adminManualBankName'))$('adminManualBankName').value=config.manualPaymentBankName||'';if($('adminManualAccountName'))$('adminManualAccountName').value=config.manualPaymentAccountName||'';if($('adminManualAccountNumber'))$('adminManualAccountNumber').value=config.manualPaymentAccountNumber||'';if($('adminManualPaymentEmail'))$('adminManualPaymentEmail').value=config.manualPaymentNotificationEmail||'support@callfocus.link';if($('adminAnalysisScreenshotMin'))$('adminAnalysisScreenshotMin').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMin)||20)));if($('adminAnalysisScreenshotMax'))$('adminAnalysisScreenshotMax').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMax)||Number(config.autoFillScreenshotLimit)||50)));fillQuickStart(config.quickStart||{});renderScreenshotLimitsSummary();$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);if($('adminDashStorage'))$('adminDashStorage').textContent=storageConnected?'Global storage connected':'Storage needs attention';renderServerState();renderBackupStatus(storageConnected)}
+function fill(config,storageConnected){fillPurchaseOfferControls(config);currentConfig=config;customVoices=Array.isArray(config.customVoices)?config.customVoices:[];populateVoices();renderCustomVoiceLibrary();unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;if($('adminManualPaymentsEnabled'))$('adminManualPaymentsEnabled').checked=config.manualPaymentsEnabled===true;if($('adminKorapayPaymentsEnabled'))$('adminKorapayPaymentsEnabled').checked=config.korapayPaymentsEnabled!==false;if($('adminWebsiteMaintenanceEnabled'))$('adminWebsiteMaintenanceEnabled').checked=config.websiteMaintenanceEnabled===true;if($('adminManualBankName'))$('adminManualBankName').value=config.manualPaymentBankName||'';if($('adminManualAccountName'))$('adminManualAccountName').value=config.manualPaymentAccountName||'';if($('adminManualAccountNumber'))$('adminManualAccountNumber').value=config.manualPaymentAccountNumber||'';if($('adminManualPaymentEmail'))$('adminManualPaymentEmail').value=config.manualPaymentNotificationEmail||'support@callfocus.link';if($('adminAnalysisScreenshotMin'))$('adminAnalysisScreenshotMin').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMin)||20)));if($('adminAnalysisScreenshotMax'))$('adminAnalysisScreenshotMax').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMax)||Number(config.autoFillScreenshotLimit)||50)));fillQuickStart(config.quickStart||{});renderScreenshotLimitsSummary();$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);if($('adminDashStorage'))$('adminDashStorage').textContent=storageConnected?'Global storage connected':'Storage needs attention';renderServerState();renderBackupStatus(storageConnected)}
 async function api(path,options={}){const res=await fetch(path,{credentials:'same-origin',...options,headers:authHeaders(options.headers||{})});const type=res.headers.get('content-type')||'';const data=type.includes('application/json')?await res.json():await res.text();if(!res.ok)throw Object.assign(new Error(data?.error||data||'Request failed'),{status:res.status});return data}
 async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{const auth=await api('/api/admin/login',{method:'POST'});adminKey=auth.adminToken||key;rememberAdminSession(adminKey);$('adminPasscode').value='';const result=await api('/api/admin/config');$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminManualPayments().then(()=>loadAdminUsers(true));loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadMarketingStatus();loadDirectTemplates();}catch(err){adminKey='';if(err.status===401||err.status===403)forgetAdminSession();$('adminGateNote').textContent=err.message;toast(err.message)}}
 async function saveConfig(message='Global CallFocus settings saved'){
@@ -289,6 +289,34 @@ $('adminFemaleVoice')?.addEventListener('change',renderCustomVoiceLibrary);
 
 populateVoices();
 document.querySelectorAll('[data-site-theme]').forEach(btn=>btn.addEventListener('click',()=>{const value=btn.dataset.siteTheme==='pearl'?'pearl':'black';$('adminSiteTheme').value=value;document.querySelectorAll('[data-site-theme]').forEach(x=>{const on=x===btn;x.classList.toggle('active',on);x.setAttribute('aria-pressed',String(on));});scheduleDraftBackup()}));
+// V15.85: dedicated switches save only their own fields to the existing global KV config.
+async function saveAvailabilitySwitches(kind) {
+  const payment=kind==='payments';
+  const btn=$(payment?'savePaymentAvailabilityBtn':'saveWebsiteMaintenanceBtn');
+  const feedback=$(payment?'adminPaymentAvailabilityFeedback':'adminWebsiteMaintenanceFeedback');
+  if(!btn)return;
+  const payload=payment?{
+    manualPaymentsEnabled:$('adminManualPaymentsEnabled').checked,
+    korapayPaymentsEnabled:$('adminKorapayPaymentsEnabled').checked
+  }:{ websiteMaintenanceEnabled:$('adminWebsiteMaintenanceEnabled').checked };
+  const text=btn.textContent;btn.disabled=true;btn.textContent='Applying…';
+  if(feedback){feedback.textContent='Saving your changes…';feedback.className='admin-availability-feedback';}
+  try {
+    const result=await api('/api/admin/availability',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    currentConfig=result.config;
+    if(payment){$('adminManualPaymentsEnabled').checked=result.manualPaymentsEnabled===true;$('adminKorapayPaymentsEnabled').checked=result.korapayPaymentsEnabled!==false;}
+    else $('adminWebsiteMaintenanceEnabled').checked=result.websiteMaintenanceEnabled===true;
+    saveBackup(result.config);
+    if(feedback){feedback.textContent=payment?'Payment methods updated. Disabled choices disappear on the customer payment page.':result.websiteMaintenanceEnabled?'Maintenance mode enabled. Visitors now see the maintenance page.':'Maintenance mode disabled. Your website is open again.';feedback.className='admin-availability-feedback ok';}
+    toast('Availability settings updated');
+  } catch(error) {
+    if(feedback){feedback.textContent=error.message||'Could not update availability. No changes were confirmed.';feedback.className='admin-availability-feedback error';}
+    toast(error.message||'Could not save availability');
+  } finally {btn.disabled=false;btn.textContent=text;}
+}
+$('savePaymentAvailabilityBtn')?.addEventListener('click',()=>saveAvailabilitySwitches('payments'));
+$('saveWebsiteMaintenanceBtn')?.addEventListener('click',()=>saveAvailabilitySwitches('website'));
+['adminKorapayPaymentsEnabled','adminWebsiteMaintenanceEnabled'].forEach(id=>$(id)?.addEventListener('change',scheduleDraftBackup));
 $('adminGateBtn').onclick=login;$('adminPasscode').addEventListener('keydown',e=>{if(e.key==='Enter')login()});$('adminServerOnline').onchange=()=>{renderServerState();scheduleDraftBackup()};$('saveAdminBtn').onclick=()=>saveConfig();$('saveScreenshotLimitsBtn')?.addEventListener('click',saveScreenshotLimitsDirect);$('restoreAdminBackupBtn')?.addEventListener('click',restoreBackup);$('adminLockBtn').onclick=()=>{const key=adminKey;forgetAdminSession();adminKey='';fetch('/api/admin/logout',{method:'POST',headers:{'X-CallFocus-Admin-Key':key},keepalive:true}).catch(()=>{});location.reload()};document.querySelectorAll('[data-preview]').forEach(btn=>btn.onclick=()=>previewVoice(btn.dataset.preview,btn));
 ['adminServerMessage','adminMaleVoice','adminFemaleVoice','adminSpeakingPace','adminSpeechStyle','adminInstructions','adminOpening','adminSpeakFirst','adminInterruptions','adminAnalysisScreenshotMin','adminAnalysisScreenshotMax'].forEach(id=>$(id)?.addEventListener('input',()=>{if(id==='adminAnalysisScreenshotMin'||id==='adminAnalysisScreenshotMax')renderScreenshotLimitsSummary();scheduleDraftBackup();}));
 ['adminQuickPopupEnabled','adminQuickPopupAppearSeconds','adminQuickPopupHideSeconds','adminQuickFloatingEnabled','adminQuickFloatingAppearSeconds','adminQuickFloatingHideSeconds','adminQuickYoutubeEnabled','adminQuickYoutubePopupEnabled','adminQuickYoutubeFloatingEnabled','adminQuickTelegramEnabled','adminQuickTelegramPopupEnabled','adminQuickTelegramFloatingEnabled','adminQuickEyebrow','adminQuickTitle','adminQuickMessage','adminQuickYoutubeTitle','adminQuickYoutubeMessage','adminQuickYoutubeUrl','adminQuickTelegramTitle','adminQuickTelegramMessage','adminQuickTelegramUrl'].forEach(id=>$(id)?.addEventListener('input',scheduleDraftBackup));
@@ -883,6 +911,36 @@ function initialAdminTab(){const m=String(location.hash||'').match(/^#admin-([a-
 document.querySelectorAll('[data-admin-tab]').forEach(btn=>btn.addEventListener('click',()=>setAdminTab(btn.dataset.adminTab)));
 setAdminTab(initialAdminTab());
 
+/* V15.92: lightweight navigation only. Existing controls and save handlers are unchanged. */
+const ADMIN_CONTROL_TARGETS={
+  'payment-methods':['payments','adminPaymentMethodsPanel'],
+  'credit-offers':['payments','purchaseOffersPanel'],
+  'maintenance':['dashboard','adminWebsiteMaintenancePanel']
+};
+document.querySelectorAll('[data-admin-control]').forEach(btn=>btn.addEventListener('click',()=>{
+  const [tab,id]=ADMIN_CONTROL_TARGETS[btn.dataset.adminControl]||[];
+  if(!tab)return;
+  setAdminTab(tab);
+  requestAnimationFrame(()=>document.getElementById(id)?.scrollIntoView({block:'start',behavior:'auto'}));
+}));
+(async()=>{
+  const stamp=$('adminBuildStamp'),status=$('adminControlStatus');
+  const ids=['adminManualPaymentsEnabled','adminKorapayPaymentsEnabled','adminWebsiteMaintenanceEnabled','adminOffer3000','adminOffer5000','adminOffer10000','adminPurchaseBonusEnabled','adminPurchasePopupEnabled','savePurchaseOffersBtn'];
+  const missing=ids.filter(id=>!$(id));
+  try{
+    const response=await fetch('/api/app-version',{cache:'no-store'});
+    if(!response.ok)throw new Error('Version unavailable');
+    const data=await response.json();const running=String(data.version||'unknown');
+    if(stamp)stamp.textContent=`Admin 15.92-test · Worker ${running}`;
+    if(running!==ADMIN_BUILD_VERSION||missing.length){
+      if(status){status.textContent='A different or incomplete set of CallFocus files is active. Do not save admin settings until the matching complete build is uploaded and promoted.';status.classList.add('admin-control-warning');}
+    }
+  }catch{
+    if(stamp)stamp.textContent='Admin 15.92-test · Worker status unavailable';
+    if(missing.length&&status){status.textContent='Some required controls were not found. Verify that the complete build was uploaded.';status.classList.add('admin-control-warning');}
+  }
+})();
+
 function fmtInt(value){return Math.max(0,Number(value)||0).toLocaleString();}
 function fmtUsd(value){const n=Math.max(0,Number(value)||0);return n<0.01?`$${n.toFixed(5)}`:`$${n.toFixed(4)}`;}
 function renderAdminAiUsage(payload){
@@ -981,3 +1039,32 @@ async function loadAdminBilledCosts(){
 $('callUsageMoreBtn')?.addEventListener('click',()=>loadAdminCallUsage(true));
 $('billedCostsRefreshBtn')?.addEventListener('click',loadAdminBilledCosts);
 window.addEventListener('storage',e=>{if(e.key===ADMIN_SESSION_KEY&&!e.newValue){adminKey='';$('adminDashboard').classList.add('hidden');$('adminGate').classList.remove('hidden')}});
+
+
+/* V15.91 — independent real-time credit and promo settings. */
+function fillPurchaseOfferControls(config={}) {
+ const packages=config.purchasePackages||{};
+ for(const amount of ['3000','5000','10000']) {const input=$('adminOffer'+amount);if(input)input.value=Number(packages[amount])||Number(amount)/10;}
+ if($('adminPurchaseBonusEnabled'))$('adminPurchaseBonusEnabled').checked=config.purchaseBonusEnabled===true;
+ if($('adminPurchaseBonusPercent'))$('adminPurchaseBonusPercent').value=Number(config.purchaseBonusPercent??30);
+ if($('adminPurchasePopupEnabled'))$('adminPurchasePopupEnabled').checked=config.purchasePromoPopupEnabled===true;
+ if($('adminPurchasePopupOpen'))$('adminPurchasePopupOpen').value=Number(config.purchasePromoPopupOpenSeconds??8);
+ if($('adminPurchasePopupClose'))$('adminPurchasePopupClose').value=Number(config.purchasePromoPopupCloseSeconds??0);
+ renderPurchaseOffersPreview();
+}
+function renderPurchaseOffersPreview(){
+ const sample=Number($('adminOffer10000')?.value)||1000,pct=$('adminPurchaseBonusEnabled')?.checked?Number($('adminPurchaseBonusPercent')?.value)||0:0;
+ const bonus=Math.round(sample*pct/100*10)/10;
+ const el=$('adminOfferPreview');if(el)el.textContent=`Example: ₦10,000 buys ${sample.toLocaleString()} base credits${bonus?` plus ${bonus.toLocaleString()} free credits (${pct}% bonus), for ${(sample+bonus).toLocaleString()} credits total`:'. No purchase bonus while disabled'}.`;
+}
+['adminOffer3000','adminOffer5000','adminOffer10000','adminPurchaseBonusEnabled','adminPurchaseBonusPercent'].forEach(id=>$(id)?.addEventListener('input',renderPurchaseOffersPreview));
+$('savePurchaseOffersBtn')?.addEventListener('click',async()=>{
+ const btn=$('savePurchaseOffersBtn'),feedback=$('purchaseOffersFeedback');
+ const payload={purchasePackages:{'3000':Number($('adminOffer3000').value),'5000':Number($('adminOffer5000').value),'10000':Number($('adminOffer10000').value)},purchaseBonusEnabled:$('adminPurchaseBonusEnabled').checked,purchaseBonusPercent:Number($('adminPurchaseBonusPercent').value),purchasePromoPopupEnabled:$('adminPurchasePopupEnabled').checked,purchasePromoPopupOpenSeconds:Number($('adminPurchasePopupOpen').value),purchasePromoPopupCloseSeconds:Number($('adminPurchasePopupClose').value)};
+ btn.disabled=true;const old=btn.textContent;btn.textContent='Saving…';
+ try{const result=await api('/api/admin/purchase-offers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+   currentConfig=result.config;fillPurchaseOfferControls(result.config);saveBackup(result.config);
+   feedback.textContent='Saved. New offers are available on the customer payment page; existing pending payments keep their original offer.';feedback.className='admin-availability-feedback ok';toast('Credit offers updated');
+ }catch(error){feedback.textContent=error.message||'Could not save offers';feedback.className='admin-availability-feedback error';toast(error.message||'Could not save offers');}
+ finally{btn.disabled=false;btn.textContent=old;}
+});

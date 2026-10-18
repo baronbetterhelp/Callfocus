@@ -189,6 +189,14 @@ const DEFAULT_CONFIG = {
   interruptions: true,
   unlimitedCreditEmails: [],
   manualPaymentsEnabled: false,
+  korapayPaymentsEnabled: true,
+  websiteMaintenanceEnabled: false,
+  purchaseBonusEnabled: false,
+  purchaseBonusPercent: 30,
+  purchasePackages: { '3000': 300, '5000': 500, '10000': 1000 },
+  purchasePromoPopupEnabled: false,
+  purchasePromoPopupOpenSeconds: 8,
+  purchasePromoPopupCloseSeconds: 0,
   manualPaymentBankName: '',
   manualPaymentAccountName: '',
   manualPaymentAccountNumber: '',
@@ -1788,6 +1796,7 @@ async function getConfig(env) {
     }
     merged.customVoices = normalizeCustomVoices(merged.customVoices);
     merged.quickStart = sanitizeQuickStartConfig(merged.quickStart);
+    Object.assign(merged, cleanPurchaseOffers(merged));
     return merged;
   } catch {
     return { ...DEFAULT_CONFIG, customVoices: [], quickStart: sanitizeQuickStartConfig(DEFAULT_QUICK_START) };
@@ -1823,6 +1832,9 @@ function sanitizeConfig(input = {}) {
     interruptions: input.interruptions !== false,
     unlimitedCreditEmails,
     manualPaymentsEnabled: input.manualPaymentsEnabled === true,
+    korapayPaymentsEnabled: input.korapayPaymentsEnabled !== false,
+    websiteMaintenanceEnabled: input.websiteMaintenanceEnabled === true,
+    ...cleanPurchaseOffers(input),
     manualPaymentBankName: String(input.manualPaymentBankName || '').trim().slice(0, 120),
     manualPaymentAccountName: String(input.manualPaymentAccountName || '').trim().slice(0, 160),
     manualPaymentAccountNumber,
@@ -2020,7 +2032,7 @@ async function handlePublicConfig(env) {
     updatedAt: c.updatedAt || null,
     engine: 'GPT-Live 1',
     paymentsEnabled: callFocusPaymentsEnabled(env),
-    korapayEnabled: korapayConfigured(env),
+    korapayEnabled: korapayConfigured(env) && c.korapayPaymentsEnabled !== false,
     paymentStatus: callFocusPaymentsEnabled(env) ? 'available' : 'awaiting_paystack_activation',
     manualPaymentsEnabled: manualPaymentReady(c),
     manualPaymentStatus: manualPaymentReady(c) ? 'available' : 'not_configured',
@@ -2028,6 +2040,7 @@ async function handlePublicConfig(env) {
     analysisScreenshotMax: Math.max(Math.max(1, Math.min(50, Math.round(Number(c.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin))), Math.min(50, Math.round(Number(c.analysisScreenshotMax ?? c.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax))),
     autoFillScreenshotLimit: Math.max(Math.max(1, Math.min(50, Math.round(Number(c.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin))), Math.min(50, Math.round(Number(c.analysisScreenshotMax ?? c.autoFillScreenshotLimit) || DEFAULT_CONFIG.analysisScreenshotMax))),
     quickStart: sanitizeQuickStartConfig(c.quickStart),
+    purchaseOffers: cleanPurchaseOffers(c),
     pricing: {
       creditsPerMinute: CALLFOCUS_CREDIT_POLICY.creditsPerMinute,
       nairaPerCredit: CALLFOCUS_CREDIT_POLICY.nairaPerCredit,
@@ -2479,6 +2492,94 @@ async function handleAdminConfig(request, env) {
   const config = sanitizeConfig({ ...current, ...body, customVoices: current.customVoices });
   await env.CALLFOCUS_CONFIG.put('global_config', JSON.stringify(config));
   return json({ ok: true, config, engine: 'GPT-Live 1' });
+}
+
+
+async function handleAdminPurchaseOffers(request,env) {
+  if (!await adminAuthorized(request,env)) return json({error:'Administrator sign-in required.'},401);
+  if(request.method==='GET')return json({ok:true,offers:cleanPurchaseOffers(await getConfig(env))});
+  if(request.method!=='POST')return new Response('Method not allowed.',{status:405});
+  if(!env.CALLFOCUS_CONFIG)return json({error:'Global storage unavailable.'},503);
+  let body;try{body=await request.json()}catch{return json({error:'Invalid request.'},400)}
+  const packages=body?.purchasePackages;
+  if(!packages||typeof packages!=='object'||Array.isArray(packages))return json({error:'Provide all three package credit amounts.'},400);
+  const credits=['3000','5000','10000'].map(k=>Number(packages[k]));
+  if(credits.some(c=>!Number.isInteger(c)||c<300||c>100000)||new Set(credits).size!==3)
+    return json({error:'Package credits must be distinct whole numbers between 300 and 100,000.'},400);
+  if(typeof body.purchaseBonusEnabled!=='boolean'||typeof body.purchasePromoPopupEnabled!=='boolean')return json({error:'Invalid promotion switches.'},400);
+  const percent=Number(body.purchaseBonusPercent);
+  if(!Number.isInteger(percent)||percent<0||percent>100)return json({error:'Bonus percentage must be a whole number from 0 to 100.'},400);
+  const opening=Number(body.purchasePromoPopupOpenSeconds),closing=Number(body.purchasePromoPopupCloseSeconds);
+  if(![opening,closing].every(n=>Number.isFinite(n)&&n>=0&&n<=86400))return json({error:'Popup timers must be between 0 and 86,400 seconds.'},400);
+  const current=await getConfig(env);
+  const config=sanitizeConfig({...current,purchasePackages:{'3000':credits[0],'5000':credits[1],'10000':credits[2]},
+    purchaseBonusEnabled:body.purchaseBonusEnabled,purchaseBonusPercent:percent,purchasePromoPopupEnabled:body.purchasePromoPopupEnabled,
+    purchasePromoPopupOpenSeconds:opening,purchasePromoPopupCloseSeconds:closing});
+  await env.CALLFOCUS_CONFIG.put('global_config',JSON.stringify(config));
+  return json({ok:true,offers:cleanPurchaseOffers(config),config});
+}
+
+// V15.85: independent payment availability and whole-site maintenance controls.
+async function handleAdminAvailability(request, env) {
+  if (!await adminAuthorized(request, env)) return json({ error: 'Administrator sign-in required.' }, 401);
+  if (request.method === 'GET') {
+    const c = await getConfig(env);
+    return json({ manualPaymentsEnabled: c.manualPaymentsEnabled === true,
+      korapayPaymentsEnabled: c.korapayPaymentsEnabled !== false,
+      websiteMaintenanceEnabled: c.websiteMaintenanceEnabled === true });
+  }
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET, POST' } });
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.put !== 'function') return json({ error: 'Global settings storage is not connected.' }, 503);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const allowed = ['manualPaymentsEnabled', 'korapayPaymentsEnabled', 'websiteMaintenanceEnabled'];
+  const changes = {};
+  for (const key of allowed) if (Object.prototype.hasOwnProperty.call(body || {}, key)) {
+    if (typeof body[key] !== 'boolean') return json({ error: 'Invalid switch value.' }, 400);
+    changes[key] = body[key];
+  }
+  if (!Object.keys(changes).length) return json({ error: 'No availability switch was provided.' }, 400);
+  const current = await getConfig(env);
+  const config = sanitizeConfig({ ...current, ...changes });
+  await env.CALLFOCUS_CONFIG.put('global_config', JSON.stringify(config));
+  return json({ ok: true, config, manualPaymentsEnabled: config.manualPaymentsEnabled,
+    korapayPaymentsEnabled: config.korapayPaymentsEnabled,
+    websiteMaintenanceEnabled: config.websiteMaintenanceEnabled });
+}
+
+// Render maintenance directly in the Worker, without loading any homepage JS or CSS.
+function websiteMaintenanceResponse(request) {
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#071917"><meta name="robots" content="noindex,nofollow"><title>Scheduled maintenance | CallFocus</title><style>
+  *{box-sizing:border-box}html,body{min-height:100%;margin:0}body{min-height:100svh;display:grid;place-items:center;padding:28px 18px;background:radial-gradient(ellipse at 15% 0%,#164c43 0%,transparent 46%),linear-gradient(160deg,#061613,#0c2421 85%);color:#f5fbf9;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;line-height:1.55}
+  .wrap{max-width:580px;width:100%;text-align:center}.brand{display:flex;align-items:center;justify-content:center;gap:11px;margin-bottom:43px;font-size:24px;font-weight:800;letter-spacing:-.8px}.mark{width:36px;height:36px;border:3px solid #63d5ab;border-radius:50%;display:inline-grid;place-items:center;color:#77e5bd;font-size:23px;line-height:1}.card{background:rgba(255,255,255,.065);border:1px solid rgba(255,255,255,.14);border-radius:30px;padding:48px 35px;box-shadow:0 28px 90px rgba(0,0,0,.22)}.status{display:inline-flex;align-items:center;gap:9px;border:1px solid rgba(119,229,189,.27);background:rgba(81,188,152,.13);color:#bcf2db;border-radius:100px;padding:8px 15px;font-size:12px;font-weight:750;letter-spacing:1px;text-transform:uppercase}.dot{width:7px;height:7px;background:#75e2ad;border-radius:50%}h1{font-size:clamp(29px,7vw,46px);letter-spacing:-1.5px;line-height:1.14;margin:24px 0 19px}p{color:#ccddd8;font-size:16px;max-width:420px;margin:0 auto 14px}.fine{font-size:13px;color:#a9c3bb;margin-top:23px}.foot{margin-top:32px;font-size:12px;color:#9bb4ac}@media(max-width:480px){.brand{margin-bottom:30px}.card{padding:36px 22px;border-radius:23px}p{font-size:15px}}
+  </style></head><body><main class="wrap"><div class="brand"><span class="mark" aria-hidden="true">✓</span><span>CallFocus</span></div><section class="card" role="status" aria-live="polite"><div class="status"><span class="dot"></span>Service update</div><h1>We’ll be back shortly.</h1><p>CallFocus is temporarily unavailable while we carry out an update to our website.</p><p>Please check back later. Thank you for your patience and understanding.</p><div class="fine">Our team is working to restore access as soon as possible.</div></section><div class="foot">CallFocus · Conversation continuity, simplified.</div></main></body></html>`;
+  return new Response(request.method === 'HEAD' ? null : html, { status: 503,
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0', 'Pragma': 'no-cache', 'Retry-After': '300', 'X-Robots-Tag': 'noindex, nofollow' } });
+}
+
+function maintenanceAllowedPath(path) {
+  // Keep admin access and payment settlement/confirmation available. Do not break
+  // webhook delivery or manual approvals that began before maintenance.
+  return path === '/admin' || path === '/admin/' || path === '/admin.html' || path === '/admin.css' || path === '/admin.js'
+    || path.startsWith('/api/admin/') || path === '/api/korapay/webhook' || path === '/api/paystack/webhook'
+    || path === '/api/korapay/verify' || path === '/api/paystack/verify' || path === '/api/paystack/recover'
+    || path === '/api/manual-payment/submit' || path === '/api/manual-payment/status' || path === '/api/manual-payment/cancel'
+    || path === '/manual-payment-review' || path === '/manual-payment-review/'
+    || path === '/api/auth/signout' || path === '/email/unsubscribe' || path === '/email/unsubscribe-preview';
+}
+
+async function maybeMaintenanceResponse(request, env, url) {
+  if (maintenanceAllowedPath(url.pathname)) return null;
+  const isApi = url.pathname.startsWith('/api/');
+  // Assets (JS/images/styles) are still served so the administrator can use the portal;
+  // all public HTML navigation is intercepted before any app content is loaded.
+  const htmlPage = request.method === 'GET' || request.method === 'HEAD';
+  const isAsset = /\.(?:css|js|mjs|json|png|jpe?g|webp|gif|svg|ico|txt|xml|woff2?|ttf|webmanifest|map)$/i.test(url.pathname);
+  if (!isApi && (!htmlPage || isAsset)) return null;
+  const c = await getConfig(env);
+  if (c.websiteMaintenanceEnabled !== true) return null;
+  if (isApi) return json({ error: 'CallFocus is undergoing an update. Please check back later.', code: 'website_maintenance' }, 503);
+  return websiteMaintenanceResponse(request);
 }
 
 async function handleAdminScreenshotLimits(request, env) {
@@ -3116,6 +3217,62 @@ const PAYSTACK_CREDIT_STEP = CALLFOCUS_CREDIT_POLICY.purchaseStepCredits;
 const PAYSTACK_NAIRA_PER_CREDIT = CALLFOCUS_CREDIT_POLICY.nairaPerCredit;
 const PAYSTACK_SECONDS_PER_CREDIT = CALLFOCUS_SECONDS_PER_CREDIT;
 const PAYSTACK_PENDING_TTL = 60 * 60 * 24 * 2;
+// V15.91: bonuses and custom bundle values apply only to NEW payment requests.
+// Pricing is snapshotted with each provider's pending payment, not recalculated
+// at the time of settlement. The minute rate and minimum remain unchanged.
+function cleanPurchaseOffers(config = {}) {
+  const defaults = { '3000':300, '5000':500, '10000':1000 };
+  const submitted = config.purchasePackages && typeof config.purchasePackages === 'object' ? config.purchasePackages : {};
+  const packages = {};
+  for (const [amount, fallback] of Object.entries(defaults)) {
+    const input = Number(submitted[amount]);
+    packages[amount] = Number.isInteger(input) && input >= PAYSTACK_MIN_CREDITS && input <= 100000 ? input : fallback;
+  }
+  return {
+    purchasePackages: packages,
+    purchaseBonusEnabled: config.purchaseBonusEnabled === true,
+    purchaseBonusPercent: Number.isInteger(Number(config.purchaseBonusPercent)) && Number(config.purchaseBonusPercent) >= 0 && Number(config.purchaseBonusPercent) <= 100 ? Number(config.purchaseBonusPercent) : 30,
+    purchasePromoPopupEnabled: config.purchasePromoPopupEnabled === true,
+    purchasePromoPopupOpenSeconds: Math.max(0, Math.min(86400, Number(config.purchasePromoPopupOpenSeconds) || 0)),
+    purchasePromoPopupCloseSeconds: Math.max(0, Math.min(86400, Number(config.purchasePromoPopupCloseSeconds) || 0))
+  };
+}
+function quotePurchase(config, requestedCredits) {
+  const requested = Number(requestedCredits);
+  if(!Number.isInteger(requested) || requested < PAYSTACK_MIN_CREDITS || requested > 1000000) return null;
+  const offers = cleanPurchaseOffers(config);
+  const baseCredits = Object.values(offers.purchasePackages).includes(requested) ? requested : normalizePurchaseCredits(requestedCredits);
+  let amountNaira = baseCredits * PAYSTACK_NAIRA_PER_CREDIT;
+  // Package rates are applied when the customer chooses the exact bundle value.
+  const packageEntry = Object.entries(offers.purchasePackages).find(([, credits]) => credits === baseCredits);
+  if (packageEntry) amountNaira = Number(packageEntry[0]);
+  const percent = offers.purchaseBonusEnabled ? offers.purchaseBonusPercent : 0;
+  const bonusCredits = Math.round(baseCredits * percent / 100 * 10) / 10;
+  const credits = Math.round((baseCredits + bonusCredits)*10)/10;
+  return { amountNaira, baseCredits, bonusCredits, credits, bonusPercent:percent, packageAmountNaira:packageEntry?amountNaira:null };
+}
+function paymentPurchaseBreakdown(pending, amountNaira) {
+  const baseCredits = Number(pending?.baseCredits ?? pending?.credits);
+  const bonusCredits = Number(pending?.bonusCredits || 0);
+  const credits = Math.round((baseCredits + bonusCredits)*10)/10;
+  if (!Number.isFinite(baseCredits) || baseCredits < PAYSTACK_MIN_CREDITS ||
+      !Number.isFinite(bonusCredits) || bonusCredits < 0 || bonusCredits > baseCredits ||
+      !Number.isFinite(credits) || credits > 2000000 ||
+      Math.abs(Number(pending?.amountNaira)-amountNaira) > 0.01) return null;
+  return {baseCredits,bonusCredits,credits,bonusPercent:Math.max(0,Number(pending?.bonusPercent)||0)};
+}
+async function notifyPurchaseBonus(env, userId, provider, reference, breakdown) {
+  if (!(breakdown?.bonusCredits > 0)) return;
+  const value = breakdown.bonusCredits.toLocaleString('en-NG',{maximumFractionDigits:1});
+  const total = breakdown.credits.toLocaleString('en-NG',{maximumFractionDigits:1});
+  // Fixed ID ensures retries update the same notice rather than duplicate it.
+  await appendCustomerNotification(env,userId,{
+    id:`purchase-bonus:${provider}:${reference}`,type:'purchase_bonus',title:'Your bonus credits are ready',
+    message:`Your payment is confirmed! You received ${value} free bonus credits (${breakdown.bonusPercent}% extra). ${total} credits were added to your CallFocus balance. Thank you for funding your account.`,
+    credits:breakdown.bonusCredits
+  });
+}
+
 
 function paystackConfigured(env) {
   return !!String(env.PAYSTACK_SECRET_KEY || '').trim();
@@ -3294,13 +3451,9 @@ async function reconcileProcessedPaystackTransaction(env, transaction = {}, proc
 
   const markerCredits = Math.max(0, Number(processed?.credits) || 0);
   const amountCredits = Math.max(0, amountNaira / PAYSTACK_NAIRA_PER_CREDIT);
-  const credits = markerCredits > 0 && Math.abs((markerCredits * PAYSTACK_NAIRA_PER_CREDIT) - amountNaira) < 0.01
-    ? markerCredits
-    : amountCredits;
+  const credits = markerCredits > 0 ? markerCredits : amountCredits;
   const markerSeconds = Math.max(0, Math.floor(Number(processed?.secondsAdded) || 0));
-  const secondsAdded = markerSeconds > 0 && Math.abs(markerSeconds - purchaseSecondsForCredits(credits)) <= 1
-    ? markerSeconds
-    : purchaseSecondsForCredits(credits);
+  const secondsAdded = markerSeconds > 0 ? markerSeconds : purchaseSecondsForCredits(credits);
   if (credits <= 0 || secondsAdded <= 0) {
     return { credited: false, duplicate: true, reason: 'processed_invalid_amount', record: processed || null, wallet };
   }
@@ -3314,7 +3467,7 @@ async function reconcileProcessedPaystackTransaction(env, transaction = {}, proc
     provider: 'paystack',
     channel: String(transaction?.channel || transaction?.authorization?.channel || 'paystack'),
     amountNaira,
-    credits: Math.round(credits * 10) / 10,
+    credits: Math.round(credits * 10) / 10, baseCredits:Number(processed.baseCredits||credits), bonusCredits:Number(processed.bonusCredits||0),bonusPercent:Number(processed.bonusPercent||0),
     seconds: secondsAdded,
     createdAt: transaction?.paid_at || transaction?.paidAt || processed?.at || now,
     reconciledAt: now
@@ -3372,11 +3525,13 @@ async function creditVerifiedPaystackTransaction(env, transaction = {}) {
   const metadata = typeof transaction?.metadata === 'string'
     ? (() => { try { return JSON.parse(transaction.metadata); } catch { return {}; } })()
     : (transaction?.metadata || {});
+  const expectedOffer=resolved.pending?.baseCredits != null ? paymentPurchaseBreakdown(resolved.pending,amountNaira) : null;
+  if(resolved.pending?.baseCredits!=null && !expectedOffer)return {credited:false,reason:'amount_mismatch'};
   const requestedCredits = Number(resolved.pending?.credits || metadata?.callfocus_credits || 0);
   const exactCredits = Math.max(0, amountNaira / PAYSTACK_NAIRA_PER_CREDIT);
-  const credits = requestedCredits > 0 && Math.abs((requestedCredits * PAYSTACK_NAIRA_PER_CREDIT) - amountNaira) < 0.01
-    ? requestedCredits
-    : exactCredits;
+  const fallbackCredits = requestedCredits > 0 && Math.abs((requestedCredits * PAYSTACK_NAIRA_PER_CREDIT) - amountNaira) < 0.01 ? requestedCredits : exactCredits;
+  const credits = expectedOffer ? expectedOffer.credits : fallbackCredits;
+  const baseCredits=expectedOffer?.baseCredits||credits,bonusCredits=expectedOffer?.bonusCredits||0,bonusPercent=expectedOffer?.bonusPercent||0;
   const secondsAdded = purchaseSecondsForCredits(credits);
   if (credits <= 0 || secondsAdded <= 0) return { credited: false, reason: 'invalid_amount' };
 
@@ -3399,20 +3554,21 @@ async function creditVerifiedPaystackTransaction(env, transaction = {}) {
     provider: 'paystack',
     channel: String(transaction?.channel || transaction?.authorization?.channel || 'paystack'),
     amountNaira,
-    credits: Math.round(credits * 10) / 10,
+    credits: Math.round(credits * 10) / 10, baseCredits, bonusCredits, bonusPercent,
     seconds: secondsAdded,
     createdAt: transaction?.paid_at || transaction?.paidAt || now
   });
   wallet.purchases = wallet.purchases.slice(0, 250);
   data.wallet = wallet;
 
-  const record = { userId: user.id, reference, credits: Math.round(credits * 10) / 10, secondsAdded, amountNaira, at: now };
+  const record = { userId: user.id, reference, credits: Math.round(credits * 10) / 10, baseCredits,bonusCredits,bonusPercent,secondsAdded, amountNaira, at: now };
   // The purchase itself is also stored in the wallet. That makes normal webhook
   // retries idempotent even if the processed marker is read slightly later.
   await env.CALLFOCUS_CONFIG.put(customerDataKey(user.id), JSON.stringify(data));
   await env.CALLFOCUS_CONFIG.put(paystackProcessedKey(reference), JSON.stringify(record), { expirationTtl: 60 * 60 * 24 * 365 });
   if (reference) await env.CALLFOCUS_CONFIG.delete(paystackPendingKey(reference));
   const referralReward = await safeAwardReferralAfterDeposit(env, user.id, { provider: 'paystack', reference, at: transaction?.paid_at || transaction?.paidAt || now });
+  try{await notifyPurchaseBonus(env,user.id,'paystack',reference,{credits,baseCredits,bonusCredits,bonusPercent})}catch(error){console.error('Purchase bonus notification:',error)}
   return { credited: true, record, wallet, referralReward };
 }
 
@@ -3424,9 +3580,11 @@ async function handlePaystackInitialize(request, env) {
   if (!paystackConfigured(env)) return json({ error: 'Paystack is not configured yet.', code: 'paystack_not_configured' }, 503);
   let body = {};
   try { body = await request.json(); } catch {}
-  const credits = normalizePurchaseCredits(body?.credits);
-  if (!credits) return json({ error: `The minimum purchase is ${PAYSTACK_MIN_CREDITS} credits.`, code: 'minimum_purchase' }, 400);
-  const amountNaira = credits * PAYSTACK_NAIRA_PER_CREDIT;
+  const credits = Number(body?.credits);
+  if (!Number.isInteger(credits) || credits < PAYSTACK_MIN_CREDITS || credits > 1000000) return json({ error: `The minimum purchase is ${PAYSTACK_MIN_CREDITS} credits.`, code: 'minimum_purchase' }, 400);
+  const offer=quotePurchase(await getConfig(env),credits);
+  if(!offer)return json({error:'Invalid credit package.'},400);
+  const {amountNaira}=offer;
   const amountKobo = Math.round(amountNaira * 100);
   const reference = `CF-${Date.now()}-${crypto.randomUUID().replace(/-/g, '').slice(0, 14)}`;
   const origin = new URL(request.url).origin;
@@ -3437,7 +3595,7 @@ async function handlePaystackInitialize(request, env) {
     callfocus_amount_ngn: amountNaira,
     product: 'CallFocus shared call and voice-note credits'
   };
-  await env.CALLFOCUS_CONFIG.put(paystackPendingKey(reference), JSON.stringify({ userId: auth.user.id, credits, amountNaira, amountKobo, createdAt: new Date().toISOString() }), { expirationTtl: PAYSTACK_PENDING_TTL });
+  await env.CALLFOCUS_CONFIG.put(paystackPendingKey(reference), JSON.stringify({ userId: auth.user.id, ...offer, amountKobo, createdAt: new Date().toISOString() }), { expirationTtl: PAYSTACK_PENDING_TTL });
   try {
     const payload = await paystackRequest(env, '/transaction/initialize', {
       method: 'POST',
@@ -3826,14 +3984,15 @@ async function handleKorapayInitialize(request,env){
   if(request.method!=='POST')return new Response('Method not allowed.',{status:405,headers:{Allow:'POST'}});
   const auth=await authenticatedCustomer(request,env);
   if(!auth)return json({error:'Sign in before purchasing credits.'},401);
-  if(!korapayConfigured(env))return json({error:'KoraPay is not available yet.'},503);
+  if(!korapayConfigured(env) || (await getConfig(env)).korapayPaymentsEnabled === false)return json({error:'KoraPay is temporarily unavailable.'},503);
   let body={};try{body=await request.json()}catch{}
-  const credits=normalizePurchaseCredits(body?.credits);
-  if(!credits)return json({error:`Minimum purchase is ${PAYSTACK_MIN_CREDITS} credits.`},400);
-  const amountNaira=credits*PAYSTACK_NAIRA_PER_CREDIT;
+  const credits=Number(body?.credits);
+  if(!Number.isInteger(credits)||credits<PAYSTACK_MIN_CREDITS||credits>1000000)return json({error:`Minimum purchase is ${PAYSTACK_MIN_CREDITS} credits.`},400);
+  const offer=quotePurchase(await getConfig(env),credits);if(!offer)return json({error:'Invalid credit package.'},400);
+  const amountNaira=offer.amountNaira;
   const reference=`CFK-${Date.now()}-${crypto.randomUUID().replace(/-/g,'').slice(0,18)}`;
   const origin=new URL(request.url).origin;
-  const pending={userId:auth.user.id,credits,amountNaira,createdAt:new Date().toISOString()};
+  const pending={userId:auth.user.id,...offer,createdAt:new Date().toISOString()};
   await env.CALLFOCUS_CONFIG.put(korapayPendingKey(reference),JSON.stringify(pending),{expirationTtl:KORAPAY_PENDING_TTL});
   try{
     const result=await korapayRequest(env,'/charges/initialize',{method:'POST',body:{
@@ -3874,8 +4033,9 @@ async function creditVerifiedKorapayTransaction(env,reference){
   const amount=Number(payment.amount);
   const paid=payment.amount_paid==null?amount:Number(payment.amount_paid);
   if(!Number.isFinite(amount)||!Number.isFinite(paid)||Math.abs(amount-Number(expected.amountNaira))>0.01||paid+0.01<Number(expected.amountNaira))return {credited:false,reason:'amount_mismatch'};
-  const credits=Number(expected.credits);
-  if(!Number.isInteger(credits)||credits<PAYSTACK_MIN_CREDITS||Math.abs(credits*PAYSTACK_NAIRA_PER_CREDIT-Number(expected.amountNaira))>0.01)return {credited:false,reason:'credits_mismatch'};
+  const breakdown=paymentPurchaseBreakdown(expected,amount);
+  if(!breakdown)return {credited:false,reason:'credits_mismatch'};
+  const {credits,baseCredits,bonusCredits,bonusPercent}=breakdown;
   const user=await env.CALLFOCUS_CONFIG.get(customerUserKey(expected.userId),{type:'json'});
   if(!user?.id)return {credited:false,reason:'customer_missing'};
   // The processed marker survives purchase-list pruning and protects against replays.
@@ -3886,14 +4046,15 @@ async function creditVerifiedKorapayTransaction(env,reference){
   const seconds=purchaseSecondsForCredits(credits);
   const committed=await commitWalletPurchaseCredit(env,user,{
     reference:ref,provider:'korapay',channel:String(payment.payment_method||payment.channel||'korapay'),
-    amountNaira:Number(expected.amountNaira),credits,seconds,createdAt:new Date().toISOString()
+    amountNaira:Number(expected.amountNaira),credits,baseCredits,bonusCredits,bonusPercent,seconds,createdAt:new Date().toISOString()
   });
   if(!committed.verified)return {credited:false,reason:'wallet_not_verified'};
   if(committed.ledgerPruned)return {credited:false,duplicate:true,reason:'ledger_pruned'};
-  const record={userId:user.id,reference:ref,credits,secondsAdded:seconds,amountNaira:Number(expected.amountNaira),at:new Date().toISOString()};
+  const record={userId:user.id,reference:ref,credits,baseCredits,bonusCredits,bonusPercent,secondsAdded:seconds,amountNaira:Number(expected.amountNaira),at:new Date().toISOString()};
   await env.CALLFOCUS_CONFIG.put(korapayProcessedKey(ref),JSON.stringify(record),{expirationTtl:KORAPAY_PROCESSED_TTL});
   await env.CALLFOCUS_CONFIG.delete(korapayPendingKey(ref));
   const referralReward=await safeAwardReferralAfterDeposit(env,user.id,{provider:'korapay',reference:ref,at:record.at});
+  if(!committed.duplicate)try{await notifyPurchaseBonus(env,user.id,'korapay',ref,breakdown)}catch(error){console.error('Kora bonus notice:',error)}
   return {credited:!committed.duplicate,duplicate:!!committed.duplicate,record,wallet:committed.wallet,referralReward};
 }
 
@@ -5017,14 +5178,15 @@ async function handleManualPaymentRequest(request, env) {
   if (!manualPaymentReady(config)) return json({ error: 'Manual bank transfer is not configured right now.', code: 'manual_payment_unavailable' }, 503);
   const now = new Date().toISOString();
   const id = manualPaymentReference();
-  const amountNaira = credits * PAYSTACK_NAIRA_PER_CREDIT;
+  const offer=quotePurchase(config,credits);if(!offer)return json({error:'Invalid purchase amount.'},400);
+  const {amountNaira}=offer;
   const record = {
     id,
     userId: auth.user.id,
     customerName: auth.user.name || '',
     customerEmail: auth.user.email || '',
     customerPhone: auth.user.phone || '',
-    credits,
+    credits:offer.credits,baseCredits:offer.baseCredits,bonusCredits:offer.bonusCredits,bonusPercent:offer.bonusPercent,
     amountNaira,
     bankName: config.manualPaymentBankName,
     accountName: config.manualPaymentAccountName,
@@ -5241,7 +5403,7 @@ async function ensureApprovedManualPaymentCredit(env, record = {}) {
     provider: 'manual_bank_transfer',
     channel: 'manual_bank_transfer',
     amountNaira: Math.max(0, Number(record.amountNaira) || 0),
-    credits,
+    credits,baseCredits:Number(record.baseCredits||credits),bonusCredits:Number(record.bonusCredits||0),bonusPercent:Number(record.bonusPercent||0),
     seconds: secondsAdded,
     createdAt: record.submittedAt || record.createdAt || now,
     approvedAt: record.approvedAt || now
@@ -5294,6 +5456,7 @@ async function applyManualPaymentDecision(env, id, action, reason = '') {
     await putManualPaymentRecord(env, record);
     await invalidateManualPaymentDecisionTokens(env, record);
     await sendManualPaymentDecisionEmail(env, record, true);
+    if(!credited.duplicate)try{await notifyPurchaseBonus(env,credited.user.id,'manual_bank_transfer',record.id,{credits:Number(record.credits),baseCredits:Number(record.baseCredits||record.credits),bonusCredits:Number(record.bonusCredits||0),bonusPercent:Number(record.bonusPercent||0)})}catch(error){console.error('Manual bonus notice:',error)}
     const referralReward = await safeAwardReferralAfterDeposit(env, credited.user.id, { provider: 'manual_bank_transfer', reference: record.id, at: now });
     const config = await getConfig(env);
     const unlimitedEmails = Array.isArray(config.unlimitedCreditEmails) ? config.unlimitedCreditEmails.map(normalizeCustomerEmail).filter(Boolean) : [];
@@ -5421,6 +5584,8 @@ export default {
   async fetch(request, env) {
     try {
     const url = new URL(request.url);
+    const maintenance = await maybeMaintenanceResponse(request, env, url);
+    if (maintenance) return maintenance;
     if (url.pathname === '/api/auth/health' && request.method === 'GET') {
       return json({ ok: true, storageConnected: !!env.CALLFOCUS_CONFIG, passwordHashVersion: 3, passwordIterations: CUSTOMER_PASSWORD_ITERATIONS });
     }
@@ -5453,13 +5618,15 @@ export default {
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
     if (url.pathname === '/email/unsubscribe-preview' && request.method === 'GET') return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#173d37"><div style="max-width:560px;margin:70px auto;padding:20px"><div style="background:#fff;border:1px solid #d8e6e1;border-radius:26px;padding:34px"><h1>Test email only</h1><p>This is the unsubscribe preview from a CallFocus test email. No customer preference was changed.</p></div></div></body>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
     if (url.pathname === '/email/unsubscribe' && (request.method === 'GET' || request.method === 'POST')) return handleMarketingUnsubscribe(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.84-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.92-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
     if (url.pathname === '/api/wallet/consume') return safeCustomerRoute('wallet-consume', () => handleWalletConsume(request, env));
     if (url.pathname === '/api/admin/login' && request.method === 'POST') { const limited = await callFocusRateLimit(request, env, 'admin-login', 8, 900); if (limited) return limited; return handleAdminLogin(request, env); }
     if (url.pathname === '/api/admin/config') return handleAdminConfig(request, env);
+    if (url.pathname === '/api/admin/purchase-offers') return handleAdminPurchaseOffers(request,env);
+    if (url.pathname === '/api/admin/availability') return handleAdminAvailability(request, env);
     if (url.pathname === '/api/admin/screenshot-limits') return handleAdminScreenshotLimits(request, env);
     if (url.pathname === '/api/admin/quick-start') return handleAdminQuickStart(request, env);
     if (url.pathname === '/api/admin/users') return handleAdminUsers(request, env);
@@ -5497,10 +5664,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.84-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.92-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.84-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.84-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.92-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.92-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -5510,16 +5677,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.84-test');
+      headers.set('X-CallFocus-Admin-Build', '15.92-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.84-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.92-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.84-test');
+      headers.set('X-CallFocus-Admin-Build', '15.92-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {

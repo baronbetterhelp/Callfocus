@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.84-test';
+  const BUILD='15.92-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -92,6 +92,7 @@ function applyPublicPricing(pricing = {}){
     referralRewardCredits: Math.max(0, Math.round(Number.isFinite(Number(pricing.referralRewardCredits))?Number(pricing.referralRewardCredits):CALLFOCUS_PRICING_FALLBACK.referralRewardCredits))
   };
   if(typeof window.CallFocusSyncPricingUI==='function') window.CallFocusSyncPricingUI();
+  if(typeof window.CallFocusSyncOffersUI==='function')window.CallFocusSyncOffersUI();
 }
 const ADMIN_KEY = 'callfocus_admin_global_v4';
 const LEGACY_ADMIN_KEY = 'callfocus_admin_global_v3';
@@ -182,7 +183,7 @@ function applyGlobalTheme(theme){
   const meta=document.querySelector('meta[name="theme-color"]');
   if(meta) meta.setAttribute('content',next==='pearl'?'#f7f8f5':'#080808');
 }
-async function refreshPublicConfig(){ try{ const res=await fetch('/api/public-config',{cache:'no-store'}); if(res.ok){ const payload=await res.json(); remoteAdmin={...ADMIN_DEFAULTS,...payload}; applyPublicPricing(payload.pricing||{}); applyGlobalTheme(remoteAdmin.siteTheme); applyAdminLabels(); if(typeof window.callFocusRefreshDynamicsLimits==='function') window.callFocusRefreshDynamicsLimits(); if(typeof window.callFocusRefreshAutoFillLimit==='function') window.callFocusRefreshAutoFillLimit(); } }catch{} return loadAdmin(); }
+async function refreshPublicConfig(){ try{ const res=await fetch('/api/public-config',{cache:'no-store'}); if(res.ok){ const payload=await res.json(); remoteAdmin={...ADMIN_DEFAULTS,...payload}; applyPublicPricing(payload.pricing||{}); window.CallFocusPurchaseOffers=payload.purchaseOffers||null;window.CallFocusSyncOffersUI?.();window.CallFocusPurchasePromo?.refresh?.(window.CallFocusPurchaseOffers); applyGlobalTheme(remoteAdmin.siteTheme); applyAdminLabels(); if(typeof window.callFocusRefreshDynamicsLimits==='function') window.callFocusRefreshDynamicsLimits(); if(typeof window.callFocusRefreshAutoFillLimit==='function') window.callFocusRefreshAutoFillLimit(); } }catch{} return loadAdmin(); }
 function initials(name='?'){ return (String(name).trim()[0] || '?').toUpperCase(); }
 function normalizeName(name=''){ return String(name).trim().toLowerCase().replace(/\s+/g,' '); }
 function toast(message){ $('toast').textContent = message; $('toast').classList.remove('hidden'); clearTimeout(toast._t); toast._t = setTimeout(()=>$('toast').classList.add('hidden'), 2400); }
@@ -2403,6 +2404,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     if($('creditPageBalance')) $('creditPageBalance').textContent=`${formatCredits(credits)} credits`;
     if($('creditPageTime')) $('creditPageTime').textContent=`${humanTime(wallet.balanceSeconds)} call time`;
     updateCreditCheckoutSummary();
+    window.CallFocusSyncOffersUI?.();
   }
 
   function renderSettingsCredit(){
@@ -5201,6 +5203,7 @@ ${approvedPatterns}
     const amountValid=Number.isFinite(amount)&&Math.floor(amount)>=300;
     const checkout=document.getElementById('creditCheckoutBtn');
     if(checkout){
+      checkout.classList.toggle('hidden',known&&!paystack&&!manual);
       // When availability is still unknown, keep a valid amount clickable so
       // the click can perform a just-in-time retry instead of leaving the UI dead.
       checkout.disabled=!amountValid||(known&&!available);
@@ -7676,3 +7679,76 @@ ${approvedPatterns}
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
 
+
+
+/* V15.91 — customer purchase rates and independent bonus popup. */
+(()=>{
+ const money=n=>`₦${Math.round(n).toLocaleString('en-NG')}`;
+ const defaults={'3000':300,'5000':500,'10000':1000};
+ const offers=()=>window.CallFocusPurchaseOffers||{};
+ const packages=()=>({...defaults,...(offers().purchasePackages||{})});
+ const percent=()=>offers().purchaseBonusEnabled?Number(offers().purchaseBonusPercent)||0:0;
+ const quote=base=>{
+   const n=Number(base)||0;
+   const match=Object.entries(packages()).find(([,v])=>Number(v)===n);
+   const amount=match?Number(match[0]):n*10;
+   const bonus=Math.round(n*percent()/100*10)/10;
+   return {amount,bonus,total:Math.round((n+bonus)*10)/10};
+ };
+ const update=()=>{
+   const opts=offers();if(!opts||!Object.keys(opts).length)return;
+   const previous=window.__lastOfferPackages||defaults, next=packages();
+   const active=document.querySelector('.credit-package.active[data-credit-package]');
+   for(const button of document.querySelectorAll('.credit-package[data-credit-package]')){
+     const old=Number(button.dataset.creditPackage),price=Number(button.dataset.packageNaira)||(Object.keys(defaults).find(k=>Number(previous[k])===old));
+     if(!price||!next[price])continue;
+     button.dataset.packageNaira=price;button.dataset.creditPackage=String(next[price]);
+     button.querySelector('strong').textContent=`${Number(next[price]).toLocaleString()} credits`;
+     const time=button.querySelector('small');if(time)time.textContent=`${Math.round(Number(next[price])/100*10)/10} minutes`;
+     const amount=button.querySelector('b');if(amount)amount.textContent=money(Number(price));
+     let badge=button.querySelector('.cf-offer-package-bonus');if(!badge){badge=document.createElement('em');badge.className='cf-offer-package-bonus';button.append(badge);}
+     const bonus=Math.round(next[price]*percent()/100*10)/10;
+     badge.textContent=bonus>0?`+${bonus.toLocaleString()} free · ${(Number(next[price])+bonus).toLocaleString()} total`:'';
+     badge.hidden=!(bonus>0);
+   }
+   window.__lastOfferPackages=next;
+   if(active){const input=document.getElementById('customCreditAmount');if(input)input.value=active.dataset.creditPackage;}
+   const input=document.getElementById('customCreditAmount'),base=Number(input?.value||300),q=quote(base),p=document.getElementById('customCreditNaira'),summary=document.getElementById('creditCheckoutSummary');
+   if(p)p.textContent=money(q.amount);
+   if(summary)summary.textContent=`${base.toLocaleString()} credits${q.bonus?` + ${q.bonus.toLocaleString()} bonus`:''} · ${money(q.amount)}`;
+   let message=document.getElementById('cfPurchaseBonusMessage');
+   const wrapper=document.querySelector('#page-credits .credit-purchase-panel, #page-credits .credit-amount-panel')||document.getElementById('korapayCheckoutBtn')?.parentElement;
+   if(wrapper&&!message){message=document.createElement('div');message.id='cfPurchaseBonusMessage';message.className='cf-purchase-bonus-message';const button=document.getElementById('creditCheckoutBtn');if(button)button.before(message);}
+   if(message){message.hidden=!(q.bonus>0);message.textContent=q.bonus>0?`Bonus offer: receive ${q.bonus.toLocaleString()} extra credits (${percent()}%). After payment you will get ${q.total.toLocaleString()} credits in total.`:'';}
+ };
+ window.CallFocusSyncOffersUI=update;
+ // Payment selection listeners are registered in earlier CallFocus code. Run after them.
+ document.querySelectorAll('[data-credit-package]').forEach(b=>b.addEventListener('click',()=>queueMicrotask(update)));
+ document.getElementById('customCreditAmount')?.addEventListener('input',()=>queueMicrotask(update));
+ const popupId='cfPurchasePromoPopup';let openTimer=null,closeTimer=null,alreadyShown=false;
+ function closePopup(){document.getElementById(popupId)?.remove();clearTimeout(closeTimer);}
+ function showPopup(){if(alreadyShown||!offers().purchasePromoPopupEnabled||!offers().purchaseBonusEnabled||!percent())return;
+   if(!document.getElementById('page-home')||!document.getElementById('page-home').classList.contains('active'))return;
+   alreadyShown=true;
+   const el=document.createElement('div');el.id=popupId;el.className='cf-purchase-promo-overlay';
+   el.innerHTML=`<section class="cf-purchase-promo-card" role="dialog" aria-modal="true" aria-label="CallFocus bonus credits"><button class="cf-purchase-promo-close" type="button" aria-label="Close bonus offer">×</button><span class="cf-purchase-promo-label">LIMITED PROMOTIONAL OFFER</span><h2>Get ${percent()}% extra call credits</h2><p>Top up your CallFocus balance today and receive free bonus credits automatically when your payment is confirmed.</p><strong>₦10,000 → ${(Number(packages()['10000'])*(1+percent()/100)).toLocaleString('en-NG',{maximumFractionDigits:1})} credits</strong><button class="cf-purchase-promo-deposit" type="button">Deposit now →</button><small>Bonus applies to confirmed purchases while the offer is enabled.</small></section>`;
+   document.body.append(el);
+   el.querySelector('.cf-purchase-promo-close').onclick=closePopup;
+   el.querySelector('.cf-purchase-promo-deposit').onclick=()=>{closePopup();location.href='/credits';};
+   el.addEventListener('click',e=>{if(e.target===el)closePopup()});
+   const hide=Number(offers().purchasePromoPopupCloseSeconds)||0;
+   if(hide>0)closeTimer=setTimeout(closePopup,hide*1000);
+ }
+ function schedule(){clearTimeout(openTimer);if(!offers().purchasePromoPopupEnabled||!offers().purchaseBonusEnabled||alreadyShown){if(!offers().purchasePromoPopupEnabled||!offers().purchaseBonusEnabled||!percent())closePopup();return;}
+   openTimer=setTimeout(showPopup,(Number(offers().purchasePromoPopupOpenSeconds)||0)*1000);
+ }
+ window.CallFocusPurchasePromo={refresh:()=>{update();schedule();}};
+ const ready=()=>{update();schedule();const home=document.getElementById('page-home');if(home)new MutationObserver(()=>{if(!home.classList.contains('active'))closePopup();else schedule();}).observe(home,{attributes:true,attributeFilter:['class']});};
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ready,{once:true});else ready();
+ const refreshOffers=()=>fetch('/api/public-config',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d){window.CallFocusPurchaseOffers=d.purchaseOffers||null;update();schedule();}}).catch(()=>{});
+ window.addEventListener('pageshow',refreshOffers);
+ window.addEventListener('focus',refreshOffers);
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshOffers();});
+ // Keep the displayed offer current while a signed-in customer is on the credits page.
+ setInterval(()=>{if(!document.hidden&&(document.getElementById('page-credits')?.classList.contains('active')||document.getElementById('page-home')?.classList.contains('active')))refreshOffers();},15000);
+})();

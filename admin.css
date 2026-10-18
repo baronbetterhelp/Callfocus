@@ -997,3 +997,25 @@ body.admin-page{
 .admin-availability-save{width:100%;max-width:330px;min-height:46px}
 .admin-availability-feedback{font-size:13px;line-height:1.5;min-height:22px;margin-top:12px}
 .admin-availability-feedback.ok{color:#29947a}.admin-availability-feedback.error{color:#d65e58}
+
+/* V15.91: scoped purchase-offer administrator controls. */
+.admin-tab-panel[data-admin-panel="payments"] .cf-offer-admin{display:grid;gap:18px}
+.admin-tab-panel[data-admin-panel="payments"] .cf-offer-admin .cf-offer-packages{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.admin-tab-panel[data-admin-panel="payments"] .cf-offer-admin label{min-width:0}
+.admin-tab-panel[data-admin-panel="payments"] .cf-offer-admin input[type="number"]{width:100%;min-width:0}
+.admin-tab-panel[data-admin-panel="payments"] .cf-offer-admin .toggle-row{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 0}
+.admin-tab-panel[data-admin-panel="payments"] .cf-offer-admin .toggle-row>span{display:grid;gap:4px}
+.admin-tab-panel[data-admin-panel="payments"] .cf-offer-admin .toggle-row small{font-size:11px;color:#658078;font-weight:500;line-height:1.4}
+.admin-tab-panel[data-admin-panel="payments"] .cf-offer-admin .toggle-row input{flex:none;width:22px;height:22px}
+@media(max-width:640px){.admin-tab-panel[data-admin-panel="payments"] .cf-offer-admin .cf-offer-packages{grid-template-columns:1fr}}
+
+/* V15.92: admin control recovery navigation and build confirmation only. */
+.admin-build-stamp{display:inline-block;margin-top:9px;font-size:11px;letter-spacing:.03em;color:var(--muted,#758982);font-weight:700}
+.admin-control-centre{display:grid;gap:12px}
+.admin-control-centre .admin-users-heading{margin-bottom:0}
+.admin-control-links{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.admin-control-links .btn{min-width:0;min-height:48px;white-space:normal;text-align:center;line-height:1.35;border:1px solid rgba(39,124,106,.25)}
+.admin-control-status{font-size:12px;line-height:1.5;color:var(--muted,#758982)}
+.admin-control-status.admin-control-warning{border:1px solid rgba(178,93,59,.45);background:rgba(191,112,66,.09);border-radius:12px;padding:12px;color:#aa5a3d;font-weight:700}
+#adminPaymentMethodsPanel,#purchaseOffersPanel,#adminWebsiteMaintenancePanel{scroll-margin-top:18px}
+@media(max-width:620px){.admin-control-links{grid-template-columns:1fr}.admin-control-links .btn{width:100%;min-height:44px}.admin-control-centre{gap:10px}}
