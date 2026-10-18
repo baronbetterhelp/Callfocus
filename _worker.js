@@ -2020,6 +2020,7 @@ async function handlePublicConfig(env) {
     updatedAt: c.updatedAt || null,
     engine: 'GPT-Live 1',
     paymentsEnabled: callFocusPaymentsEnabled(env),
+    korapayEnabled: korapayConfigured(env),
     paymentStatus: callFocusPaymentsEnabled(env) ? 'available' : 'awaiting_paystack_activation',
     manualPaymentsEnabled: manualPaymentReady(c),
     manualPaymentStatus: manualPaymentReady(c) ? 'available' : 'not_configured',
@@ -2134,9 +2135,10 @@ async function handleAdminUnlimitedUser(request, env) {
 
 function adminUserSummary(user, data, unlimitedEmails = []) {
   const wallet = normalizeServerWallet(data?.wallet || {});
-  const purchases = wallet.purchases.filter(p => ['paystack','manual_bank_transfer'].includes(String(p?.provider || '').toLowerCase()));
+  const purchases = wallet.purchases.filter(p => ['paystack','manual_bank_transfer','korapay'].includes(String(p?.provider || '').toLowerCase()));
   const paystackPurchases = purchases.filter(p => String(p?.provider || '').toLowerCase() === 'paystack');
   const manualPurchases = purchases.filter(p => String(p?.provider || '').toLowerCase() === 'manual_bank_transfer');
+  const korapayPurchases = purchases.filter(p => String(p?.provider || '').toLowerCase() === 'korapay');
   const paidNaira = purchases.reduce((sum, p) => sum + Math.max(0, Number(p?.amountNaira) || 0), 0);
   const purchasedCredits = purchases.reduce((sum, p) => sum + Math.max(0, Number(p?.credits) || 0), 0);
   const lastPurchaseAt = purchases.map(p => p?.createdAt).filter(Boolean).sort().reverse()[0] || null;
@@ -2160,6 +2162,7 @@ function adminUserSummary(user, data, unlimitedEmails = []) {
       purchaseCount: purchases.length,
       paystackPurchaseCount: paystackPurchases.length,
       manualPurchaseCount: manualPurchases.length,
+      korapayPurchaseCount: korapayPurchases.length,
       totalPaidNaira: Math.round(paidNaira * 100) / 100,
       totalPurchasedCredits: Math.round(purchasedCredits * 10) / 10,
       lastPurchaseAt,
@@ -3790,6 +3793,154 @@ async function handlePaystackWebhook(request, env) {
 }
 
 
+// V15.84 KoraPay: additional, optional hosted NGN checkout alongside existing providers.
+// Configure KORAPAY_SECRET_KEY only in the CallFocus Worker runtime secrets.
+// All customer credit is granted after an authenticated server-to-Kora verification.
+const KORAPAY_PENDING_TTL = 60 * 60 * 24 * 30;
+const KORAPAY_PROCESSED_TTL = 60 * 60 * 24 * 365;
+function korapayConfigured(env) { return String(env.KORAPAY_SECRET_KEY || '').trim().startsWith('sk_live_'); }
+function korapayPendingKey(reference) { return `korapay:pending:${reference}`; }
+function korapayProcessedKey(reference) { return `korapay:processed:${reference}`; }
+function korapayReference(value) { const v=String(value||'').trim(); return /^CFK-[A-Za-z0-9-]{12,80}$/.test(v)?v:''; }
+
+async function korapayRequest(env, endpoint, {method='GET', body=null}={}) {
+  if (!korapayConfigured(env)) { const error=new Error('KoraPay is not yet configured.'); error.status=503; throw error; }
+  let response;
+  try {
+    response=await fetch(`https://api.korapay.com/merchant/api/v1${endpoint}`, {
+      method,
+      headers: {Authorization:`Bearer ${String(env.KORAPAY_SECRET_KEY).trim()}`, 'Content-Type':'application/json'},
+      body:body===null?undefined:JSON.stringify(body)
+    });
+  } catch { const error=new Error('Could not reach KoraPay right now.'); error.status=502; throw error; }
+  let result={}; try{result=await response.json();}catch{}
+  if(!response.ok || result?.status!==true) {
+    const error=new Error(String(result?.message||'KoraPay payment request could not be completed.'));
+    error.status=response.status>=400&&response.status<500?response.status:502;
+    throw error;
+  }
+  return result;
+}
+
+async function handleKorapayInitialize(request,env){
+  if(request.method!=='POST')return new Response('Method not allowed.',{status:405,headers:{Allow:'POST'}});
+  const auth=await authenticatedCustomer(request,env);
+  if(!auth)return json({error:'Sign in before purchasing credits.'},401);
+  if(!korapayConfigured(env))return json({error:'KoraPay is not available yet.'},503);
+  let body={};try{body=await request.json()}catch{}
+  const credits=normalizePurchaseCredits(body?.credits);
+  if(!credits)return json({error:`Minimum purchase is ${PAYSTACK_MIN_CREDITS} credits.`},400);
+  const amountNaira=credits*PAYSTACK_NAIRA_PER_CREDIT;
+  const reference=`CFK-${Date.now()}-${crypto.randomUUID().replace(/-/g,'').slice(0,18)}`;
+  const origin=new URL(request.url).origin;
+  const pending={userId:auth.user.id,credits,amountNaira,createdAt:new Date().toISOString()};
+  await env.CALLFOCUS_CONFIG.put(korapayPendingKey(reference),JSON.stringify(pending),{expirationTtl:KORAPAY_PENDING_TTL});
+  try{
+    const result=await korapayRequest(env,'/charges/initialize',{method:'POST',body:{
+      amount:amountNaira,currency:'NGN',reference,
+      redirect_url:`${origin}/?korapay=return`,
+      notification_url:`${origin}/api/korapay/webhook`,
+      narration:'CallFocus shared calling and voice-note credits',
+      customer:{email:auth.user.email,name:auth.user.name||'CallFocus customer'},
+      metadata:{callfocus:'credits',cfcredits:String(credits)}
+    }});
+    const checkoutUrl=String(result?.data?.checkout_url||'');
+    let checkout;
+    try{checkout=new URL(checkoutUrl)}catch{}
+    if(!checkout||checkout.protocol!=='https:'||checkout.hostname!=='checkout.korapay.com')throw new Error('KoraPay did not return a trusted checkout link.');
+    return json({ok:true,reference,credits,amountNaira,checkoutUrl});
+  }catch(error){
+    // Do not discard a reference if the provider may have initialized it before a network timeout.
+    console.error('KoraPay initialize failed:',error?.message||error);
+    return json({error:error?.message||'Could not initialize KoraPay checkout.'},error?.status||502);
+  }
+}
+
+// Kora's hosted redirect and signed webhook only trigger a verification call;
+// neither browser success messages nor webhook amounts are trusted for credit.
+async function creditVerifiedKorapayTransaction(env,reference){
+  const ref=korapayReference(reference);
+  if(!ref)return {credited:false,reason:'invalid_reference'};
+  const prior=await env.CALLFOCUS_CONFIG.get(korapayProcessedKey(ref),{type:'json'});
+  const pending=await env.CALLFOCUS_CONFIG.get(korapayPendingKey(ref),{type:'json'});
+  if(!pending?.userId && !prior?.userId)return {credited:false,reason:'unknown_payment'};
+  const expected=pending||prior;
+  const verify=await korapayRequest(env,`/charges/${encodeURIComponent(ref)}`);
+  const payment=verify?.data||{};
+  const refs=[payment.reference,payment.payment_reference,payment.transaction_reference].map(v=>String(v||'').trim()).filter(Boolean);
+  if(!refs.includes(ref))return {credited:false,reason:'reference_mismatch'};
+  if(String(payment.status||'').toLowerCase()!=='success' || String(payment.currency||'').toUpperCase()!=='NGN')return {credited:false,reason:'not_successful',status:payment.status||'pending'};
+  if(payment.transaction_status && String(payment.transaction_status).toLowerCase()!=='success')return {credited:false,reason:'payment_not_fully_paid'};
+  const amount=Number(payment.amount);
+  const paid=payment.amount_paid==null?amount:Number(payment.amount_paid);
+  if(!Number.isFinite(amount)||!Number.isFinite(paid)||Math.abs(amount-Number(expected.amountNaira))>0.01||paid+0.01<Number(expected.amountNaira))return {credited:false,reason:'amount_mismatch'};
+  const credits=Number(expected.credits);
+  if(!Number.isInteger(credits)||credits<PAYSTACK_MIN_CREDITS||Math.abs(credits*PAYSTACK_NAIRA_PER_CREDIT-Number(expected.amountNaira))>0.01)return {credited:false,reason:'credits_mismatch'};
+  const user=await env.CALLFOCUS_CONFIG.get(customerUserKey(expected.userId),{type:'json'});
+  if(!user?.id)return {credited:false,reason:'customer_missing'};
+  // The processed marker survives purchase-list pruning and protects against replays.
+  if(prior?.userId){
+    const data=await getCustomerDataForUpdate(env,user.id,user.name);
+    return {credited:false,duplicate:true,reason:'already_processed',wallet:data.wallet,record:prior};
+  }
+  const seconds=purchaseSecondsForCredits(credits);
+  const committed=await commitWalletPurchaseCredit(env,user,{
+    reference:ref,provider:'korapay',channel:String(payment.payment_method||payment.channel||'korapay'),
+    amountNaira:Number(expected.amountNaira),credits,seconds,createdAt:new Date().toISOString()
+  });
+  if(!committed.verified)return {credited:false,reason:'wallet_not_verified'};
+  if(committed.ledgerPruned)return {credited:false,duplicate:true,reason:'ledger_pruned'};
+  const record={userId:user.id,reference:ref,credits,secondsAdded:seconds,amountNaira:Number(expected.amountNaira),at:new Date().toISOString()};
+  await env.CALLFOCUS_CONFIG.put(korapayProcessedKey(ref),JSON.stringify(record),{expirationTtl:KORAPAY_PROCESSED_TTL});
+  await env.CALLFOCUS_CONFIG.delete(korapayPendingKey(ref));
+  const referralReward=await safeAwardReferralAfterDeposit(env,user.id,{provider:'korapay',reference:ref,at:record.at});
+  return {credited:!committed.duplicate,duplicate:!!committed.duplicate,record,wallet:committed.wallet,referralReward};
+}
+
+async function handleKorapayVerify(request,env){
+  if(request.method!=='GET')return new Response('Method not allowed.',{status:405,headers:{Allow:'GET'}});
+  const auth=await authenticatedCustomer(request,env);
+  if(!auth)return json({error:'Sign in to verify your KoraPay payment.'},401);
+  const ref=korapayReference(new URL(request.url).searchParams.get('reference'));
+  if(!ref)return json({error:'Invalid payment reference.'},400);
+  const expected=await env.CALLFOCUS_CONFIG.get(korapayPendingKey(ref),{type:'json'})||await env.CALLFOCUS_CONFIG.get(korapayProcessedKey(ref),{type:'json'});
+  if(!expected)return json({error:'Payment reference not found. Contact support if you have been charged.'},404);
+  if(String(expected.userId)!==String(auth.user.id))return json({error:'This payment belongs to another account.'},403);
+  try{
+    const result=await creditVerifiedKorapayTransaction(env,ref);
+    if(result.reason==='reference_mismatch'||result.reason==='amount_mismatch'||result.reason==='credits_mismatch')return json({error:'This payment could not be reconciled automatically. Contact support.',code:result.reason},409);
+    const updated=await getCustomerDataForUpdate(env,auth.user.id,auth.user.name);
+    return json({ok:true,credited:!!result.credited,duplicate:!!result.duplicate,transactionStatus:result.status||(result.credited||result.duplicate?'success':'pending'),reason:result.reason||'',wallet:updated.wallet,record:result.record||null});
+  }catch(error){return json({error:error?.message||'KoraPay verification is temporarily unavailable.'},error?.status||502);}
+}
+
+async function korapayHmacHex(secret,data){
+  const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(String(secret)),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+  const signature=await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(JSON.stringify(data)));
+  return [...new Uint8Array(signature)].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+async function handleKorapayWebhook(request,env){
+  if(request.method!=='POST')return new Response('Method not allowed.',{status:405,headers:{Allow:'POST'}});
+  if(!korapayConfigured(env))return new Response('Not configured.',{status:503});
+  const raw=await request.text();
+  if(raw.length>150000)return new Response('Payload too large.',{status:413});
+  let event;try{event=JSON.parse(raw)}catch{return new Response('Invalid payload.',{status:400})}
+  if(!event?.data||typeof event.data!=='object'||Array.isArray(event.data))return new Response('Invalid payload.',{status:400});
+  const signature=String(request.headers.get('x-korapay-signature')||'');
+  const calculated=await korapayHmacHex(env.KORAPAY_SECRET_KEY,event.data);
+  if(!constantTimeHexEqual(signature,calculated))return new Response('Invalid signature.',{status:401});
+  if(event.event!=='charge.success')return new Response('OK',{status:200});
+  const candidates=[event.data.reference,event.data.payment_reference].map(korapayReference).filter(Boolean);
+  if(!candidates.length)return new Response('OK',{status:200});
+  try{
+    let ref='';for(const candidate of candidates){if(await env.CALLFOCUS_CONFIG.get(korapayPendingKey(candidate))||await env.CALLFOCUS_CONFIG.get(korapayProcessedKey(candidate))){ref=candidate;break}}
+    if(!ref)return new Response('OK',{status:200});
+    const result=await creditVerifiedKorapayTransaction(env,ref);
+    if(result.reason==='wallet_not_verified'||(result.reason==='not_successful'&&String(result.status||'').toLowerCase()!=='failed'))return new Response('Retry later.',{status:503});
+  }catch(error){console.error('KoraPay webhook verification failed:',error?.message||error);return new Response('Retry later.',{status:503});}
+  return new Response('OK',{status:200,headers:{'Cache-Control':'no-store'}});
+}
+
 // -----------------------------------------------------------------------------
 // V11.32 conversation screenshot dynamics generator
 // Accepts small browser-prepared batches so customers can select up to 50
@@ -5292,6 +5443,9 @@ export default {
     if (url.pathname === '/api/paystack/recover') return safeCustomerRoute('paystack-recover', () => handlePaystackRecover(request, env));
     if (url.pathname === '/api/paystack/dva') return safeCustomerRoute('paystack-dva', () => handlePaystackDva(request, env));
     if (url.pathname === '/api/paystack/webhook') return handlePaystackWebhook(request, env);
+    if (url.pathname === '/api/korapay/initialize') return safeCustomerRoute('korapay-initialize', () => handleKorapayInitialize(request, env));
+    if (url.pathname === '/api/korapay/verify') return safeCustomerRoute('korapay-verify', () => handleKorapayVerify(request, env));
+    if (url.pathname === '/api/korapay/webhook') return handleKorapayWebhook(request, env);
     if (url.pathname === '/api/manual-payment/request') { const limited = await callFocusRateLimit(request, env, 'manual-payment-request', 12, 900); if (limited) return limited; return safeCustomerRoute('manual-payment-request', () => handleManualPaymentRequest(request, env)); }
     if (url.pathname === '/api/manual-payment/submit') { const limited = await callFocusRateLimit(request, env, 'manual-payment-submit', 10, 900); if (limited) return limited; return safeCustomerRoute('manual-payment-submit', () => handleManualPaymentSubmit(request, env)); }
     if (url.pathname === '/api/manual-payment/cancel') return safeCustomerRoute('manual-payment-cancel', () => handleManualPaymentCancel(request, env));
@@ -5299,7 +5453,7 @@ export default {
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
     if (url.pathname === '/email/unsubscribe-preview' && request.method === 'GET') return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#173d37"><div style="max-width:560px;margin:70px auto;padding:20px"><div style="background:#fff;border:1px solid #d8e6e1;border-radius:26px;padding:34px"><h1>Test email only</h1><p>This is the unsubscribe preview from a CallFocus test email. No customer preference was changed.</p></div></div></body>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
     if (url.pathname === '/email/unsubscribe' && (request.method === 'GET' || request.method === 'POST')) return handleMarketingUnsubscribe(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.83-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.84-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -5343,10 +5497,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.83-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.84-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.83-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.83-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.84-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.84-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -5356,16 +5510,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.83-test');
+      headers.set('X-CallFocus-Admin-Build', '15.84-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.83-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.84-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.83-test');
+      headers.set('X-CallFocus-Admin-Build', '15.84-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {

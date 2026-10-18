@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.83-test';
+  const BUILD='15.84-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -4332,6 +4332,7 @@ ${approvedPatterns}
 
   async function verifyReturn(){
     const url=new URL(location.href);
+    if(url.searchParams.get('korapay')==='return'||String(url.searchParams.get('reference')||'').startsWith('CFK-'))return;
     const isReturn=url.searchParams.get('paystack')==='return';
     const reference=url.searchParams.get('reference')||url.searchParams.get('trxref')||sessionStorage.getItem('callfocus_paystack_reference')||'';
     if(!isReturn&&!url.searchParams.get('reference')&&!url.searchParams.get('trxref'))return;
@@ -5186,13 +5187,16 @@ ${approvedPatterns}
   let attempts=0;
 
   function paint(state){
-    const paystack=state.paystack===true, manual=state.manual===true, known=state.known===true;
+    const paystack=state.paystack===true, manual=state.manual===true, korapay=state.korapay===true, known=state.known===true;
     const available=known&&(paystack||manual);
-    window.CallFocusPaymentAvailability={paystack,manual,available,known,error:state.error||''};
+    window.CallFocusPaymentAvailability={paystack,manual,korapay,available,known,error:state.error||''};
+    document.documentElement.classList.toggle('korapay-enabled',korapay);
+    const koraButton=document.getElementById('korapayCheckoutBtn');
+    if(koraButton){koraButton.classList.toggle('hidden',!korapay);koraButton.disabled=!korapay||!Number.isFinite(Number(document.getElementById('customCreditAmount')?.value))||Number(document.getElementById('customCreditAmount')?.value)<300;}
     document.documentElement.classList.toggle('payments-enabled',paystack);
     document.documentElement.classList.toggle('payments-disabled',known&&!paystack);
     document.documentElement.classList.toggle('manual-payments-enabled',manual&&!paystack);
-    document.documentElement.classList.toggle('all-payments-unavailable',known&&!available);
+    document.documentElement.classList.toggle('all-payments-unavailable',known&&!available&&!korapay);
     const amount=Number(document.getElementById('customCreditAmount')?.value||300);
     const amountValid=Number.isFinite(amount)&&Math.floor(amount)>=300;
     const checkout=document.getElementById('creditCheckoutBtn');
@@ -5205,12 +5209,12 @@ ${approvedPatterns}
     const label=document.getElementById('creditCheckoutLabel');
     if(label)label.textContent=!known?'Retry payment options':paystack?'Continue to payment':manual?'Request account number':'Payments unavailable';
     const note=document.getElementById('creditPaymentNote');
-    if(note)note.textContent=!known?'CallFocus could not confirm payment availability yet. Tap the button to retry.':paystack?'Secure checkout is handled by Paystack. Credits are added only after CallFocus verifies a successful payment on the server.':manual?'Pay by bank transfer, upload your receipt, and receive credits after manual confirmation.':'Payments are temporarily unavailable while Paystack activation is pending.';
+    if(note)note.textContent=!known?'CallFocus could not confirm payment availability yet. Tap the button to retry.':paystack?(korapay?'Choose Paystack or KoraPay for secure checkout. Credits are added only after successful server verification.':'Secure checkout is handled by Paystack. Credits are added only after CallFocus verifies a successful payment on the server.'):manual?(korapay?'Choose KoraPay for secure checkout, or use manual transfer and submit your receipt for approval.':'Pay by bank transfer, upload your receipt, and receive credits after manual confirmation.'):korapay?'Use KoraPay secure checkout. Credits are added after CallFocus verifies your successful payment.':'Payments are temporarily unavailable while Paystack activation is pending.';
     const notice=document.getElementById('paymentPendingNotice');
     if(notice){
       const strong=notice.querySelector('strong'),span=notice.querySelector('span');
       if(!known){if(strong)strong.textContent='Checking payment options';if(span)span.textContent='CallFocus will retry automatically. You can also tap the payment button to retry now.';}
-      else if(!paystack){if(strong)strong.textContent=manual?'Manual bank transfer available':'Payments are temporarily unavailable';if(span)span.textContent=manual?'Transfer the exact amount, upload your receipt, and your credits will be added after confirmation.':'Payments are temporarily unavailable. Please try again later.';}
+      else if(!paystack){if(strong)strong.textContent=manual?'Manual bank transfer available':korapay?'KoraPay available':'Payments are temporarily unavailable';if(span)span.textContent=manual?'Transfer the exact amount, upload your receipt, and your credits will be added after confirmation.':korapay?'Pay with KoraPay using secure checkout. Credits are added once payment is verified.':'Payments are temporarily unavailable. Please try again later.';}
     }
     const dva=document.getElementById('paystackCreateDvaBtn'); if(dva)dva.disabled=!paystack;
     try{window.CallFocusManualPayments?.validateAmount?.();}catch{}
@@ -5229,9 +5233,9 @@ ${approvedPatterns}
         if(!res.ok)throw new Error(`HTTP ${res.status}`);
         const cfg=await res.json();
         attempts=0;clearTimeout(retryTimer);
-        return paint({known:true,paystack:cfg?.paymentsEnabled===true,manual:cfg?.manualPaymentsEnabled===true});
+        return paint({known:true,paystack:cfg?.paymentsEnabled===true,manual:cfg?.manualPaymentsEnabled===true,korapay:cfg?.korapayEnabled===true});
       }catch(error){
-        const state=paint({known:false,paystack:false,manual:false,error:String(error?.message||error||'unavailable')});
+        const state=paint({known:false,paystack:false,manual:false,korapay:false,error:String(error?.message||error||'unavailable')});
         if(retry&&attempts<4){attempts+=1;clearTimeout(retryTimer);retryTimer=setTimeout(()=>syncPaymentAvailability({force:true,retry:true}),Math.min(8000,1000*attempts));}
         return state;
       }finally{syncPromise=null;}
@@ -5671,6 +5675,7 @@ ${approvedPatterns}
     const known=availability.known===true;
     const available=availability.available===true;
     if(btn){btn.disabled=!valid||(known&&!available);btn.setAttribute('aria-disabled',String(btn.disabled));}
+    const koraBtn=$('korapayCheckoutBtn');if(koraBtn)koraBtn.disabled=!valid||availability.korapay!==true;
     return valid;
   }
   function saveActive(id){try{id?localStorage.setItem(ACTIVE_KEY,id):localStorage.removeItem(ACTIVE_KEY)}catch{}}
@@ -7586,7 +7591,7 @@ ${approvedPatterns}
   const balanceCredits=seconds=>window.CallFocusCredits?.creditsForSeconds?window.CallFocusCredits.creditsForSeconds(Math.max(0,Number(seconds)||0)):Math.round((Math.max(0,Number(seconds)||0)/0.6)*10)/10;
   const when=value=>{try{return new Date(value).toLocaleString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})}catch{return String(value||'')}};
   const escHistory=value=>String(value??'').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
-  const providerLabel=row=>{const provider=String(row?.provider||'').toLowerCase();if(provider==='paystack')return 'Paystack payment';if(provider==='manual_bank_transfer')return 'Manual bank transfer';if(provider==='referral_reward')return 'Referral reward';return provider?provider.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()):'Credit transaction';};
+  const providerLabel=row=>{const provider=String(row?.provider||'').toLowerCase();if(provider==='paystack')return 'Paystack payment';if(provider==='korapay')return 'KoraPay payment';if(provider==='manual_bank_transfer')return 'Manual bank transfer';if(provider==='referral_reward')return 'Referral reward';return provider?provider.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()):'Credit transaction';};
   const usageLabel=row=>{const type=String(row?.type||'').toLowerCase();if(type==='live_call')return 'Live call';if(type==='voice_note')return 'Voice note';if(type==='admin_credit_grant')return 'Credit added by CallFocus';if(type==='admin_bulk_credit_gift')return 'CallFocus credit gift';if(type==='admin_balance_reset')return 'Balance removed';if(type==='usage')return 'Credit usage';return type?type.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()):'Account adjustment';};
   const isAdjustment=row=>['admin_credit_grant','admin_bulk_credit_gift','admin_balance_reset'].includes(String(row?.type||'').toLowerCase());
   const isConsumption=row=>!isAdjustment(row);
@@ -7597,7 +7602,7 @@ ${approvedPatterns}
     const wallet=(typeof data!=='undefined'&&data?.wallet&&typeof data.wallet==='object')?data.wallet:{};
     const purchases=Array.isArray(wallet.purchases)?wallet.purchases:[];
     const ledger=Array.isArray(wallet.usage)?wallet.usage:[];
-    const funded=purchases.filter(row=>['paystack','manual_bank_transfer'].includes(String(row?.provider||'').toLowerCase()));
+    const funded=purchases.filter(row=>['paystack','manual_bank_transfer','korapay'].includes(String(row?.provider||'').toLowerCase()));
     const adjustments=ledger.filter(isAdjustment);
     const consumption=ledger.filter(isConsumption);
     const txRows=[...purchases.map(row=>({row,kind:'purchase',at:row?.createdAt||''})),...adjustments.map(row=>({row,kind:'adjustment',at:row?.updatedAt||row?.createdAt||''}))].sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0));
@@ -7622,3 +7627,52 @@ ${approvedPatterns}
   window.CallFocusHistory={render,refresh};
   if(typeof activeView!=='undefined'&&activeView==='history')setTimeout(refresh,0);
 })();
+
+/* ===== V15.84 — optional KoraPay hosted checkout ===== */
+(()=>{
+  const btn=()=>document.getElementById('korapayCheckoutBtn');
+  const token=()=>{try{return localStorage.getItem('callfocus_server_session_v1')||''}catch{return ''}};
+  const cfFetch=(path,opts={})=>{const h=new Headers(opts.headers||{});if(token())h.set('Authorization',`Bearer ${token()}`);if(opts.body&&!h.has('Content-Type'))h.set('Content-Type','application/json');return fetch(path,{...opts,headers:h,cache:'no-store'})};
+  const readJson=async res=>{try{return await res.json()}catch{return {}}};
+  let busy=false;
+  async function checkout(){
+    if(busy)return;
+    const amount=Math.floor(Number(document.getElementById('customCreditAmount')?.value||0));
+    if(!Number.isFinite(amount)||amount<300){window.toast?.('Minimum purchase is 300 credits.');return}
+    if(!token()){try{window.showAuth?.('signin',null,'Sign in before purchasing credits.')}catch{}return}
+    if(window.CallFocusPaymentAvailability?.korapay!==true){window.toast?.('KoraPay is not available yet.');return}
+    busy=true;const button=btn(),old=button?.textContent;
+    if(button){button.disabled=true;button.textContent='Opening KoraPay…'}
+    try{
+      const res=await cfFetch('/api/korapay/initialize',{method:'POST',body:JSON.stringify({credits:amount})});
+      const json=await readJson(res);if(!res.ok)throw new Error(json?.error||'Could not start KoraPay checkout.');
+      if(!json?.checkoutUrl||!json?.reference)throw new Error('KoraPay checkout did not initialize.');
+      sessionStorage.setItem('callfocus_korapay_reference',json.reference);
+      location.href=json.checkoutUrl;
+    }catch(error){window.toast?.(error?.message||'Could not open KoraPay checkout.');busy=false;if(button){button.disabled=false;button.textContent=old||'Pay with KoraPay'}}
+  }
+  async function verifyReturn(){
+    const url=new URL(location.href);
+    if(url.searchParams.get('korapay')!=='return')return;
+    const reference=url.searchParams.get('reference')||sessionStorage.getItem('callfocus_korapay_reference')||'';
+    if(!reference)return;
+    for(let i=0;i<24&&!token();i++)await new Promise(resolve=>setTimeout(resolve,250));
+    if(!token()){window.toast?.('Sign in to check your KoraPay payment.');return}
+    window.toast?.('Checking KoraPay payment…');
+    try{
+      const res=await cfFetch(`/api/korapay/verify?reference=${encodeURIComponent(reference)}`),payload=await readJson(res);
+      if(!res.ok)throw new Error(payload.error||'Could not verify this KoraPay payment.');
+      if(payload?.wallet)try{window.CallFocusPaystack?.refreshWallet?.({quiet:true})}catch{}
+      if(payload.credited)window.toast?.('KoraPay payment verified. Your credits have been added.');
+      else if(payload.duplicate)window.toast?.('KoraPay payment already credited. Your balance is up to date.');
+      else window.toast?.('KoraPay has not confirmed this payment yet. Your credits will arrive after verification.');
+      if(payload.credited||payload.duplicate)sessionStorage.removeItem('callfocus_korapay_reference');
+      url.searchParams.delete('korapay');url.searchParams.delete('reference');
+      history.replaceState({},'',url.pathname+url.search+url.hash);
+      try{window.showView?.('credits',false)}catch{}
+    }catch(error){window.toast?.(error?.message||'Could not verify KoraPay payment. Please contact support if charged.')}
+  }
+  const init=()=>{btn()?.addEventListener('click',checkout);setTimeout(verifyReturn,650)};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+
