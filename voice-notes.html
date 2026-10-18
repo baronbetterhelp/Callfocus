@@ -17,7 +17,7 @@
     document.documentElement.dataset.theme='pearl';
     document.documentElement.style.colorScheme='light';
     try{history.scrollRestoration='manual';}catch{}
-    window.__CALLFOCUS_BUILD__='15.89-test';
+    window.__CALLFOCUS_BUILD__='15.90-test';
     (function(){
       const cleanPath=(location.pathname||'/').replace(/\/+$/,'')||'/';
       const topNow=()=>{try{window.scrollTo(0,0);}catch{}};
@@ -29,14 +29,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=15.89-test" />
+  <link rel="stylesheet" href="/callfocus.css?v=15.90-test" />
 </head>
 <body data-cf-document-view="voice-notes">
   <div class="app-root home-page" id="pageRoot">
     <header class="site-header" id="siteHeader">
       <div class="container header-inner">
         <a class="brand" href="#home" aria-label="CallFocus home">
-          <span class="brand-logo-shell" aria-hidden="true"><img class="brand-logo-image" width="256" height="256" decoding="async" src="./logo.png?v=15.89-test" alt="" /></span>
+          <span class="brand-logo-shell" aria-hidden="true"><img class="brand-logo-image" width="256" height="256" decoding="async" src="./logo.png?v=15.90-test" alt="" /></span>
           <span class="brand-copy">
             <strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong>
             <small>Conversation continuity, simplified.</small>
@@ -501,7 +501,7 @@
 
             <div class="voice-note-result hidden" id="voiceNoteResult">
               <div class="voice-note-result-top">
-                <span class="voice-note-result-avatar"><img src="./logo.png?v=15.89-test" alt="" /></span>
+                <span class="voice-note-result-avatar"><img src="./logo.png?v=15.90-test" alt="" /></span>
                 <div><strong>Voice note ready</strong><small id="voiceNoteResultMeta">Female voice</small></div>
                 <span class="ai-voice-pill">AI-generated voice</span>
               </div>
@@ -631,6 +631,7 @@
 
       <section class="page-view app-page history-page" id="page-history" data-view="history">
         <div class="container app-page-inner history-shell">
+          <button class="history-close-btn" type="button" data-route="credits" aria-label="Close transaction history and return to credits" title="Close transaction history"><span aria-hidden="true">&times;</span></button>
           <div class="app-page-head history-page-head">
             <div><span class="section-eyebrow">Account activity</span><h1>Transactions & Usage</h1><p>Review your CallFocus credit deposits, account adjustments, live-call usage and voice-note usage.</p></div>
             <button class="btn btn-ghost history-refresh-btn" id="historyRefreshBtn" type="button">Refresh history</button>
@@ -739,7 +740,7 @@
 
     <footer class="premium-footer">
       <div class="container footer-inner">
-        <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="./logo.png?v=15.89-test" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span><strong style="margin-top:8px">Business Name: Baron Luxury Services</strong></div></div>
+        <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="./logo.png?v=15.90-test" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span><strong style="margin-top:8px">Business Name: Baron Luxury Services</strong></div></div>
         <div class="footer-links"><button data-route="home">Home</button><button data-route="recent">Recent Calls</button><button data-route="profile">My Profile</button><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/support">Support</a></div>
       </div>
     </footer>
@@ -950,6 +951,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=15.89-test"></script>
+  <script src="/callfocus.js?v=15.90-test"></script>
 </body>
 </html>

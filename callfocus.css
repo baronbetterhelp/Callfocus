@@ -3943,3 +3943,20 @@ input,textarea,select{min-width:0;max-width:100%}
   #page-credits .cf-credit-history-icon{width:16px;height:16px}
   #page-credits .cf-credit-history-arrow{width:13px;height:13px}
 }
+
+/* V15.90: Transaction history close control. Scoped exclusively to the history page. */
+#page-history .history-shell{position:relative}
+#page-history .history-close-btn{
+  position:absolute;top:-27px;left:0;z-index:2;
+  display:grid;place-items:center;width:44px;height:44px;padding:0;
+  border:1px solid rgba(42,110,98,.21);border-radius:50%;
+  background:rgba(255,255,255,.91);color:#235a51;
+  font:400 29px/1 'Manrope',system-ui,sans-serif;
+  box-shadow:0 5px 15px rgba(22,82,70,.07);
+  cursor:pointer;-webkit-tap-highlight-color:transparent;
+}
+#page-history .history-close-btn>span{display:block;line-height:1;transform:translateY(-1px)}
+#page-history .history-close-btn:hover{border-color:rgba(35,111,95,.45);background:#fff}
+#page-history .history-close-btn:active{transform:scale(.97)}
+#page-history .history-close-btn:focus-visible{outline:3px solid #58a99a;outline-offset:3px}
+html[data-theme="dark"] #page-history .history-close-btn{background:#19302b;border-color:#35524b;color:#e8f7f1}
