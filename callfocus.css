@@ -3993,3 +3993,7 @@ html[data-theme="dark"] #page-history .history-close-btn{background:#19302b;bord
 .hero-quick-actions:has(> #heroImageVideoBtn){grid-template-columns:repeat(4,minmax(0,1fr))!important;width:min(100%,630px)!important}
 .hero-quick-actions #heroImageVideoBtn{border-color:rgba(39,157,133,.5);background:linear-gradient(130deg,rgba(18,141,115,.15),rgba(255,255,255,.06))}
 @media(max-width:760px){.hero-quick-actions:has(> #heroImageVideoBtn){grid-template-columns:repeat(2,minmax(0,1fr))!important;width:100%!important}.hero-quick-actions #heroImageVideoBtn{min-height:78px}}
+
+/* V15.99: Keep the credit amount controls usable when PocketFi is the only provider. */
+.pocketfi-enabled .credit-package,.pocketfi-enabled #customCreditAmount{pointer-events:auto!important;opacity:1!important}
+.pocketfi-enabled .credit-payment-note:before{content:""}

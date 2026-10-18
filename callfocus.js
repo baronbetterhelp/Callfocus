@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.98-test';
+  const BUILD='15.99-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -5189,16 +5189,18 @@ ${approvedPatterns}
   let attempts=0;
 
   function paint(state){
-    const paystack=state.paystack===true, manual=state.manual===true, korapay=state.korapay===true, known=state.known===true;
+    const paystack=state.paystack===true, manual=state.manual===true, korapay=state.korapay===true, pocketfi=state.pocketfi===true, known=state.known===true;
     const available=known&&(paystack||manual);
-    window.CallFocusPaymentAvailability={paystack,manual,korapay,available,known,error:state.error||''};
+    window.CallFocusPaymentAvailability={paystack,manual,korapay,pocketfi,available,known,error:state.error||''};
     document.documentElement.classList.toggle('korapay-enabled',korapay);
+    document.documentElement.classList.toggle('pocketfi-enabled',pocketfi);
+    const pocketfiButton=document.getElementById('pocketfiCheckoutBtn');if(pocketfiButton){pocketfiButton.classList.toggle('hidden',!pocketfi);pocketfiButton.disabled=!pocketfi||!Number.isFinite(Number(document.getElementById('customCreditAmount')?.value))||Number(document.getElementById('customCreditAmount')?.value)<300;}
     const koraButton=document.getElementById('korapayCheckoutBtn');
     if(koraButton){koraButton.classList.toggle('hidden',!korapay);koraButton.disabled=!korapay||!Number.isFinite(Number(document.getElementById('customCreditAmount')?.value))||Number(document.getElementById('customCreditAmount')?.value)<300;}
     document.documentElement.classList.toggle('payments-enabled',paystack);
     document.documentElement.classList.toggle('payments-disabled',known&&!paystack);
     document.documentElement.classList.toggle('manual-payments-enabled',manual&&!paystack);
-    document.documentElement.classList.toggle('all-payments-unavailable',known&&!available&&!korapay);
+    document.documentElement.classList.toggle('all-payments-unavailable',known&&!available&&!korapay&&!pocketfi);
     const amount=Number(document.getElementById('customCreditAmount')?.value||300);
     const amountValid=Number.isFinite(amount)&&Math.floor(amount)>=300;
     const checkout=document.getElementById('creditCheckoutBtn');
@@ -5212,12 +5214,12 @@ ${approvedPatterns}
     const label=document.getElementById('creditCheckoutLabel');
     if(label)label.textContent=!known?'Retry payment options':paystack?'Continue to payment':manual?'Request account number':'Payments unavailable';
     const note=document.getElementById('creditPaymentNote');
-    if(note)note.textContent=!known?'CallFocus could not confirm payment availability yet. Tap the button to retry.':paystack?(korapay?'Choose Paystack or KoraPay for secure checkout. Credits are added only after successful server verification.':'Secure checkout is handled by Paystack. Credits are added only after CallFocus verifies a successful payment on the server.'):manual?(korapay?'Choose KoraPay for secure checkout, or use manual transfer and submit your receipt for approval.':'Pay by bank transfer, upload your receipt, and receive credits after manual confirmation.'):korapay?'Use KoraPay secure checkout. Credits are added after CallFocus verifies your successful payment.':'Payments are temporarily unavailable while Paystack activation is pending.';
+    if(note)note.textContent=!known?'CallFocus could not confirm payment availability yet. Tap the button to retry.':paystack?(korapay?'Choose Paystack or KoraPay for secure checkout. Credits are added only after successful server verification.':'Secure checkout is handled by Paystack. Credits are added only after CallFocus verifies a successful payment on the server.'):manual?(korapay?'Choose KoraPay for secure checkout, or use manual transfer and submit your receipt for approval.':'Pay by bank transfer, upload your receipt, and receive credits after manual confirmation.'):korapay?'Use KoraPay secure checkout. Credits are added after CallFocus verifies your successful payment.':pocketfi?'Use PocketFi checkout. Credits are added after CallFocus verifies your successful payment.':'Payments are temporarily unavailable while Paystack activation is pending.';
     const notice=document.getElementById('paymentPendingNotice');
     if(notice){
       const strong=notice.querySelector('strong'),span=notice.querySelector('span');
       if(!known){if(strong)strong.textContent='Checking payment options';if(span)span.textContent='CallFocus will retry automatically. You can also tap the payment button to retry now.';}
-      else if(!paystack){if(strong)strong.textContent=manual?'Manual bank transfer available':korapay?'KoraPay available':'Payments are temporarily unavailable';if(span)span.textContent=manual?'Transfer the exact amount, upload your receipt, and your credits will be added after confirmation.':korapay?'Pay with KoraPay using secure checkout. Credits are added once payment is verified.':'Payments are temporarily unavailable. Please try again later.';}
+      else if(!paystack){if(strong)strong.textContent=manual?'Manual bank transfer available':korapay?'KoraPay available':pocketfi?'PocketFi available':'Payments are temporarily unavailable';if(span)span.textContent=manual?'Transfer the exact amount, upload your receipt, and your credits will be added after confirmation.':korapay?'Pay with KoraPay using secure checkout. Credits are added once payment is verified.':pocketfi?'Pay with PocketFi. Credits are added after your payment is verified.':'Payments are temporarily unavailable. Please try again later.';}
     }
     const dva=document.getElementById('paystackCreateDvaBtn'); if(dva)dva.disabled=!paystack;
     try{window.CallFocusManualPayments?.validateAmount?.();}catch{}
@@ -5236,9 +5238,9 @@ ${approvedPatterns}
         if(!res.ok)throw new Error(`HTTP ${res.status}`);
         const cfg=await res.json();
         attempts=0;clearTimeout(retryTimer);
-        return paint({known:true,paystack:cfg?.paymentsEnabled===true,manual:cfg?.manualPaymentsEnabled===true,korapay:cfg?.korapayEnabled===true});
+        return paint({known:true,paystack:cfg?.paymentsEnabled===true,manual:cfg?.manualPaymentsEnabled===true,korapay:cfg?.korapayEnabled===true,pocketfi:cfg?.pocketfiEnabled===true});
       }catch(error){
-        const state=paint({known:false,paystack:false,manual:false,korapay:false,error:String(error?.message||error||'unavailable')});
+        const state=paint({known:false,paystack:false,manual:false,korapay:false,pocketfi:false,error:String(error?.message||error||'unavailable')});
         if(retry&&attempts<4){attempts+=1;clearTimeout(retryTimer);retryTimer=setTimeout(()=>syncPaymentAvailability({force:true,retry:true}),Math.min(8000,1000*attempts));}
         return state;
       }finally{syncPromise=null;}
@@ -7595,7 +7597,7 @@ ${approvedPatterns}
   const balanceCredits=seconds=>window.CallFocusCredits?.creditsForSeconds?window.CallFocusCredits.creditsForSeconds(Math.max(0,Number(seconds)||0)):Math.round((Math.max(0,Number(seconds)||0)/0.6)*10)/10;
   const when=value=>{try{return new Date(value).toLocaleString(undefined,{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'})}catch{return String(value||'')}};
   const escHistory=value=>String(value??'').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
-  const providerLabel=row=>{const provider=String(row?.provider||'').toLowerCase();if(provider==='paystack')return 'Paystack payment';if(provider==='korapay')return 'KoraPay payment';if(provider==='manual_bank_transfer')return 'Manual bank transfer';if(provider==='referral_reward')return 'Referral reward';return provider?provider.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()):'Credit transaction';};
+  const providerLabel=row=>{const provider=String(row?.provider||'').toLowerCase();if(provider==='paystack')return 'Paystack payment';if(provider==='korapay')return 'KoraPay payment';if(provider==='pocketfi')return 'PocketFi payment';if(provider==='manual_bank_transfer')return 'Manual bank transfer';if(provider==='referral_reward')return 'Referral reward';return provider?provider.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()):'Credit transaction';};
   const usageLabel=row=>{const type=String(row?.type||'').toLowerCase();if(type==='live_call')return 'Live call';if(type==='voice_note')return 'Voice note';if(type==='admin_credit_grant')return 'Credit added by CallFocus';if(type==='admin_bulk_credit_gift')return 'CallFocus credit gift';if(type==='admin_balance_reset')return 'Balance removed';if(type==='usage')return 'Credit usage';return type?type.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()):'Account adjustment';};
   const isAdjustment=row=>['admin_credit_grant','admin_bulk_credit_gift','admin_balance_reset'].includes(String(row?.type||'').toLowerCase());
   const isConsumption=row=>!isAdjustment(row);
@@ -7606,7 +7608,7 @@ ${approvedPatterns}
     const wallet=(typeof data!=='undefined'&&data?.wallet&&typeof data.wallet==='object')?data.wallet:{};
     const purchases=Array.isArray(wallet.purchases)?wallet.purchases:[];
     const ledger=Array.isArray(wallet.usage)?wallet.usage:[];
-    const funded=purchases.filter(row=>['paystack','manual_bank_transfer','korapay'].includes(String(row?.provider||'').toLowerCase()));
+    const funded=purchases.filter(row=>['paystack','manual_bank_transfer','korapay','pocketfi'].includes(String(row?.provider||'').toLowerCase()));
     const adjustments=ledger.filter(isAdjustment);
     const consumption=ledger.filter(isConsumption);
     const txRows=[...purchases.map(row=>({row,kind:'purchase',at:row?.createdAt||''})),...adjustments.map(row=>({row,kind:'adjustment',at:row?.updatedAt||row?.createdAt||''}))].sort((a,b)=>Date.parse(b.at||0)-Date.parse(a.at||0));
@@ -7792,4 +7794,54 @@ ${approvedPatterns}
  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshOffers();});
  // Keep the displayed offer current while a signed-in customer is on the credits page.
  setInterval(()=>{if(!document.hidden&&(document.getElementById('page-credits')?.classList.contains('active')||document.getElementById('page-home')?.classList.contains('active')))refreshOffers();},15000);
+})();
+
+
+/* V15.99 — optional PocketFi payment button. Verifies only through CallFocus Worker. */
+(()=>{
+ const btn=()=>document.getElementById('pocketfiCheckoutBtn');
+ const token=()=>{try{return localStorage.getItem('callfocus_server_session_v1')||''}catch{return ''}};
+ const api=(path,options={})=>{const headers=new Headers(options.headers||{});if(token())headers.set('Authorization','Bearer '+token());if(options.body)headers.set('Content-Type','application/json');return fetch(path,{...options,headers,cache:'no-store'})};
+ const data=async res=>{try{return await res.json()}catch{return {}}};
+ let working=false;
+ async function checkout(){
+   if(working)return;
+   const credits=Math.floor(Number(document.getElementById('customCreditAmount')?.value||0));
+   if(!Number.isInteger(credits)||credits<300){window.toast?.('Minimum purchase is 300 credits.');return}
+   if(!token()){window.showAuth?.('signin',null,'Sign in before purchasing credits.');return}
+   if(window.CallFocusPaymentAvailability?.pocketfi!==true){window.toast?.('PocketFi is not available yet.');return}
+   working=true;const button=btn(),old=button?.textContent;
+   if(button){button.disabled=true;button.textContent='Opening PocketFi…'}
+   try{
+     const response=await api('/api/pocketfi/initialize',{method:'POST',body:JSON.stringify({credits})});const result=await data(response);
+     if(!response.ok)throw new Error(result.error||'Could not start PocketFi payment.');
+     if(!result.checkoutUrl||!result.paymentId)throw new Error('PocketFi did not return a checkout link.');
+     sessionStorage.setItem('callfocus_pocketfi_payment_id',result.paymentId);
+     location.assign(result.checkoutUrl);
+   }catch(error){window.toast?.(error?.message||'Could not start PocketFi payment.');working=false;if(button){button.disabled=false;button.textContent=old||'Pay with PocketFi'}}
+ }
+ async function verifyReturn(){
+   const url=new URL(location.href);if(url.searchParams.get('pocketfi')!=='return')return;
+   // Provider redirect success is NOT sufficient for crediting; always verify server-side.
+   let paymentId=sessionStorage.getItem('callfocus_pocketfi_payment_id')||'';
+   for(let i=0;i<32&&!token();i++)await new Promise(resolve=>setTimeout(resolve,250));
+   if(!token()){window.toast?.('Sign in to verify your PocketFi payment.');return}
+   window.toast?.('Verifying PocketFi payment…');
+   let completed=false;
+   for(let attempt=0;attempt<15&&!completed;attempt++){
+      try{
+        const route='/api/pocketfi/verify'+(paymentId?'?payment_id='+encodeURIComponent(paymentId):'');
+        const response=await api(route),result=await data(response);
+        if(!response.ok)throw new Error(result.error||'Could not verify PocketFi payment.');
+        if(result.credited||result.duplicate){completed=true;sessionStorage.removeItem('callfocus_pocketfi_payment_id');try{window.CallFocusPaystack?.refreshWallet?.({quiet:true})}catch{}window.toast?.(result.credited?'PocketFi confirmed. Your credits are ready.':'PocketFi payment already credited.');break}
+        if(['failed','cancelled','canceled'].includes(String(result.status||'').toLowerCase()))break;
+        if(attempt<14)await new Promise(resolve=>setTimeout(resolve,4000));
+      }catch(error){window.toast?.(error?.message||'Could not confirm payment yet.');break}
+   }
+   if(!completed)window.toast?.('Payment is still pending. Your credits will appear after verification.');
+   url.searchParams.delete('pocketfi');url.searchParams.delete('payment_id');history.replaceState({},'',url.pathname+url.search+url.hash);
+   try{window.showView?.('credits',false)}catch{}
+ }
+ const init=()=>{btn()?.addEventListener('click',checkout);setTimeout(verifyReturn,550)};
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();

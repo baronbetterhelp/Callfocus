@@ -190,6 +190,7 @@ const DEFAULT_CONFIG = {
   unlimitedCreditEmails: [],
   manualPaymentsEnabled: false,
   korapayPaymentsEnabled: true,
+  pocketfiPaymentsEnabled: false,
   websiteMaintenanceEnabled: false,
   // Emergency V15.96: OFF until Resend quota resets. Accounts remain unverified.
   signupEmailVerificationEnabled: false,
@@ -1849,6 +1850,7 @@ function sanitizeConfig(input = {}) {
     unlimitedCreditEmails,
     manualPaymentsEnabled: input.manualPaymentsEnabled === true,
     korapayPaymentsEnabled: input.korapayPaymentsEnabled !== false,
+    pocketfiPaymentsEnabled: input.pocketfiPaymentsEnabled === true,
     websiteMaintenanceEnabled: input.websiteMaintenanceEnabled === true,
     signupEmailVerificationEnabled: input.signupEmailVerificationEnabled === true,
     ...cleanPurchaseOffers(input),
@@ -2050,6 +2052,7 @@ async function handlePublicConfig(env) {
     engine: 'GPT-Live 1',
     paymentsEnabled: callFocusPaymentsEnabled(env),
     korapayEnabled: korapayConfigured(env) && c.korapayPaymentsEnabled !== false,
+    pocketfiEnabled: pocketfiConfigured(env) && c.pocketfiPaymentsEnabled === true,
     paymentStatus: callFocusPaymentsEnabled(env) ? 'available' : 'awaiting_paystack_activation',
     manualPaymentsEnabled: manualPaymentReady(c),
     manualPaymentStatus: manualPaymentReady(c) ? 'available' : 'not_configured',
@@ -2165,10 +2168,11 @@ async function handleAdminUnlimitedUser(request, env) {
 
 function adminUserSummary(user, data, unlimitedEmails = []) {
   const wallet = normalizeServerWallet(data?.wallet || {});
-  const purchases = wallet.purchases.filter(p => ['paystack','manual_bank_transfer','korapay'].includes(String(p?.provider || '').toLowerCase()));
+  const purchases = wallet.purchases.filter(p => ['paystack','manual_bank_transfer','korapay','pocketfi'].includes(String(p?.provider || '').toLowerCase()));
   const paystackPurchases = purchases.filter(p => String(p?.provider || '').toLowerCase() === 'paystack');
   const manualPurchases = purchases.filter(p => String(p?.provider || '').toLowerCase() === 'manual_bank_transfer');
   const korapayPurchases = purchases.filter(p => String(p?.provider || '').toLowerCase() === 'korapay');
+  const pocketfiPurchases = purchases.filter(p => String(p?.provider || '').toLowerCase() === 'pocketfi');
   const paidNaira = purchases.reduce((sum, p) => sum + Math.max(0, Number(p?.amountNaira) || 0), 0);
   const purchasedCredits = purchases.reduce((sum, p) => sum + Math.max(0, Number(p?.credits) || 0), 0);
   const lastPurchaseAt = purchases.map(p => p?.createdAt).filter(Boolean).sort().reverse()[0] || null;
@@ -2193,6 +2197,7 @@ function adminUserSummary(user, data, unlimitedEmails = []) {
       paystackPurchaseCount: paystackPurchases.length,
       manualPurchaseCount: manualPurchases.length,
       korapayPurchaseCount: korapayPurchases.length,
+      pocketfiPurchaseCount: pocketfiPurchases.length,
       totalPaidNaira: Math.round(paidNaira * 100) / 100,
       totalPurchasedCredits: Math.round(purchasedCredits * 10) / 10,
       lastPurchaseAt,
@@ -2243,7 +2248,8 @@ async function handleAdminFundingReport(request, env) {
   const totals = { amountKobo: 0, transactions: 0, fundedCustomers: 0, scannedCustomers: 0, unavailableCustomers: 0, truncatedWallets: 0, undatedPayments: 0, providers: {
     korapay: { amountKobo: 0, transactions: 0 },
     paystack: { amountKobo: 0, transactions: 0 },
-    manual_bank_transfer: { amountKobo: 0, transactions: 0 }
+    manual_bank_transfer: { amountKobo: 0, transactions: 0 },
+    pocketfi: { amountKobo: 0, transactions: 0 }
   }};
   const validProviders = new Set(Object.keys(totals.providers));
   await Promise.all((page.keys || []).map(async entry => {
@@ -2646,13 +2652,14 @@ async function handleAdminAvailability(request, env) {
     const c = await getConfig(env);
     return json({ manualPaymentsEnabled: c.manualPaymentsEnabled === true,
       korapayPaymentsEnabled: c.korapayPaymentsEnabled !== false,
+      pocketfiPaymentsEnabled: c.pocketfiPaymentsEnabled === true,
       websiteMaintenanceEnabled: c.websiteMaintenanceEnabled === true });
   }
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET, POST' } });
   if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.put !== 'function') return json({ error: 'Global settings storage is not connected.' }, 503);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
-  const allowed = ['manualPaymentsEnabled', 'korapayPaymentsEnabled', 'websiteMaintenanceEnabled'];
+  const allowed = ['manualPaymentsEnabled', 'korapayPaymentsEnabled', 'pocketfiPaymentsEnabled', 'websiteMaintenanceEnabled'];
   const changes = {};
   for (const key of allowed) if (Object.prototype.hasOwnProperty.call(body || {}, key)) {
     if (typeof body[key] !== 'boolean') return json({ error: 'Invalid switch value.' }, 400);
@@ -2664,6 +2671,7 @@ async function handleAdminAvailability(request, env) {
   await env.CALLFOCUS_CONFIG.put('global_config', JSON.stringify(config));
   return json({ ok: true, config, manualPaymentsEnabled: config.manualPaymentsEnabled,
     korapayPaymentsEnabled: config.korapayPaymentsEnabled,
+    pocketfiPaymentsEnabled: config.pocketfiPaymentsEnabled,
     websiteMaintenanceEnabled: config.websiteMaintenanceEnabled });
 }
 
@@ -4070,6 +4078,103 @@ async function handlePaystackWebhook(request, env) {
   return new Response('OK', { status: 200, headers: { 'Cache-Control': 'no-store' } });
 }
 
+
+// V15.99 — PocketFi optional hosted checkout. Independent admin toggle and credentials.
+// The secret and business ID are configured on Cloudflare, never exposed to browsers.
+const POCKETFI_PENDING_TTL=60*60*24*30;
+const POCKETFI_PROCESSED_TTL=60*60*24*365;
+function pocketfiConfigured(env){return !!String(env.POCKETFI_SECRET_KEY||'').trim()&&!!String(env.POCKETFI_BUSINESS_ID||'').trim()}
+function pocketfiPaymentId(value){const id=String(value||'').trim();return /^PFI\|[A-Za-z0-9_-]{5,100}$/.test(id)?id:''}
+function pocketfiPendingKey(id){return 'pocketfi:pending:'+id}
+function pocketfiProcessedKey(id){return 'pocketfi:processed:'+id}
+function pocketfiLastKey(userId){return 'pocketfi:last:'+String(userId||'')}
+async function pocketfiRequest(env,path,body){
+  if(!pocketfiConfigured(env)){const e=new Error('PocketFi is not configured.');e.status=503;throw e}
+  let res;
+  try{res=await fetch('https://api.pocketfi.ng'+path,{method:'POST',headers:{Authorization:'Bearer '+String(env.POCKETFI_SECRET_KEY).trim(),'Content-Type':'application/json'},body:JSON.stringify(body)})}
+  catch{const e=new Error('Could not reach PocketFi. Please retry.');e.status=502;throw e}
+  let data={};try{data=await res.json()}catch{}
+  if(!res.ok){const e=new Error(String(data?.message||data?.error||'PocketFi request failed.').slice(0,220));e.status=res.status<500?res.status:502;throw e}
+  return data;
+}
+function pocketfiTrustedCheckout(value){
+  try{const url=new URL(String(value||''));return url.protocol==='https:'&&['pocketfi.ng','www.pocketfi.ng'].includes(url.hostname)&&url.pathname.startsWith('/checkout/')?url.href:''}catch{return ''}
+}
+async function handlePocketfiInitialize(request,env){
+  if(request.method!=='POST')return new Response('Method not allowed.',{status:405,headers:{Allow:'POST'}});
+  const auth=await authenticatedCustomer(request,env);
+  if(!auth)return json({error:'Sign in before purchasing credits.'},401);
+  if(!pocketfiConfigured(env)||(await getConfig(env)).pocketfiPaymentsEnabled!==true)return json({error:'PocketFi checkout is temporarily unavailable.'},503);
+  let body={};try{body=await request.json()}catch{}
+  const credits=Number(body?.credits);
+  if(!Number.isInteger(credits)||credits<PAYSTACK_MIN_CREDITS||credits>1000000)return json({error:'Choose a valid credit amount.'},400);
+  const offer=quotePurchase(await getConfig(env),credits);if(!offer)return json({error:'Invalid credit package.'},400);
+  const origin=new URL(request.url).origin;
+  const tokens=String(auth.user.name||'CallFocus Customer').trim().split(/\s+/).filter(Boolean);
+  const firstName=tokens.shift()||'CallFocus',lastName=tokens.join(' ')||'Customer';
+  const phone=String(auth.user.phone||'').trim();
+  if(!phone)return json({error:'Your account needs a valid phone number for PocketFi checkout.'},400);
+  const response=await pocketfiRequest(env,'/api/v1/checkout/request',{
+    first_name:firstName,last_name:lastName,phone,
+    business_id:String(env.POCKETFI_BUSINESS_ID).trim(),email:auth.user.email,
+    redirect_link:origin+'/?pocketfi=return',amount:String(offer.amountNaira)
+  });
+  const paymentId=pocketfiPaymentId(response?.payment_id||response?.data?.payment_id);
+  const checkoutUrl=pocketfiTrustedCheckout(response?.payment_link||response?.data?.payment_link);
+  if(!paymentId||!checkoutUrl)return json({error:'PocketFi did not return a verified checkout session. No credits were charged.'},502);
+  const record={userId:auth.user.id,paymentId,...offer,createdAt:new Date().toISOString()};
+  // Persist both records before redirecting, so a failed KV write cannot cause an orphaned payment.
+  await env.CALLFOCUS_CONFIG.put(pocketfiPendingKey(paymentId),JSON.stringify(record),{expirationTtl:POCKETFI_PENDING_TTL});
+  await env.CALLFOCUS_CONFIG.put(pocketfiLastKey(auth.user.id),paymentId,{expirationTtl:POCKETFI_PENDING_TTL});
+  return json({ok:true,paymentId,checkoutUrl,credits,amountNaira:offer.amountNaira});
+}
+async function creditVerifiedPocketfi(env,paymentId){
+  const id=pocketfiPaymentId(paymentId);if(!id)return {credited:false,reason:'invalid_payment_id'};
+  const prior=await env.CALLFOCUS_CONFIG.get(pocketfiProcessedKey(id),{type:'json'});
+  const pending=await env.CALLFOCUS_CONFIG.get(pocketfiPendingKey(id),{type:'json'});
+  const expected=pending||prior;if(!expected?.userId)return {credited:false,reason:'unknown_payment'};
+  // A redirect, webhook, or browser claim is never evidence of payment.
+  const confirmation=await pocketfiRequest(env,'/api/v1/checkout/confirm',{payment_id:id});
+  const result=confirmation?.data&&typeof confirmation.data==='object'?confirmation.data:confirmation;
+  if(pocketfiPaymentId(result?.payment_id)!==id)return {credited:false,reason:'payment_id_mismatch'};
+  const status=String(result?.status||'').toLowerCase();
+  if(!['success','successful','completed','paid'].includes(status))return {credited:false,reason:'not_successful',status:status||'pending'};
+  const amount=Number(result?.amount);
+  if(!Number.isFinite(amount)||Math.abs(amount-Number(expected.amountNaira))>0.01)return {credited:false,reason:'amount_mismatch'};
+  const breakdown=paymentPurchaseBreakdown(expected,amount);if(!breakdown)return {credited:false,reason:'credits_mismatch'};
+  const user=await env.CALLFOCUS_CONFIG.get(customerUserKey(expected.userId),{type:'json'});
+  if(!user?.id)return {credited:false,reason:'customer_missing'};
+  if(prior?.userId)return {credited:false,duplicate:true,reason:'already_processed',record:prior};
+  const {credits,baseCredits,bonusCredits,bonusPercent}=breakdown;
+  const seconds=purchaseSecondsForCredits(credits);
+  const commit=await commitWalletPurchaseCredit(env,user,{reference:id,provider:'pocketfi',channel:'pocketfi',amountNaira:Number(expected.amountNaira),credits,baseCredits,bonusCredits,bonusPercent,seconds,createdAt:new Date().toISOString()});
+  if(!commit.verified)return {credited:false,reason:'wallet_not_verified'};
+  if(commit.ledgerPruned)return {credited:false,duplicate:true,reason:'ledger_pruned'};
+  const record={userId:user.id,paymentId:id,reference:id,credits,baseCredits,bonusCredits,bonusPercent,secondsAdded:seconds,amountNaira:Number(expected.amountNaira),at:new Date().toISOString()};
+  await env.CALLFOCUS_CONFIG.put(pocketfiProcessedKey(id),JSON.stringify(record),{expirationTtl:POCKETFI_PROCESSED_TTL});
+  await env.CALLFOCUS_CONFIG.delete(pocketfiPendingKey(id));
+  if(!commit.duplicate){
+    try{await safeAwardReferralAfterDeposit(env,user.id,{provider:'pocketfi',reference:id,at:record.at})}catch(e){console.error('PocketFi referral reward failed',e?.message||e)}
+    try{await notifyPurchaseBonus(env,user.id,'pocketfi',id,breakdown)}catch(e){console.error('PocketFi bonus notification failed',e?.message||e)}
+  }
+  return {credited:!commit.duplicate,duplicate:!!commit.duplicate,record};
+}
+async function handlePocketfiVerify(request,env){
+  if(request.method!=='GET')return new Response('Method not allowed.',{status:405,headers:{Allow:'GET'}});
+  const auth=await authenticatedCustomer(request,env);if(!auth)return json({error:'Sign in to verify PocketFi payment.'},401);
+  const url=new URL(request.url);let id=pocketfiPaymentId(url.searchParams.get('payment_id'));
+  if(!id)id=pocketfiPaymentId(await env.CALLFOCUS_CONFIG.get(pocketfiLastKey(auth.user.id)));
+  if(!id)return json({error:'No PocketFi payment reference found.'},404);
+  const expected=await env.CALLFOCUS_CONFIG.get(pocketfiPendingKey(id),{type:'json'})||await env.CALLFOCUS_CONFIG.get(pocketfiProcessedKey(id),{type:'json'});
+  if(!expected)return json({error:'Payment reference has expired. Contact support if you were charged.'},404);
+  if(String(expected.userId)!==String(auth.user.id))return json({error:'This payment belongs to another account.'},403);
+  try{
+    const result=await creditVerifiedPocketfi(env,id);
+    if(['payment_id_mismatch','amount_mismatch','credits_mismatch'].includes(result.reason))return json({error:'PocketFi payment could not be reconciled. Contact support.',code:result.reason},409);
+    const data=await getCustomerDataForUpdate(env,auth.user.id,auth.user.name);
+    return json({ok:true,credited:!!result.credited,duplicate:!!result.duplicate,status:result.status||(result.credited||result.duplicate?'success':'pending'),reason:result.reason||'',wallet:data.wallet,paymentId:id});
+  }catch(error){return json({error:error?.message||'PocketFi confirmation temporarily unavailable.'},error?.status||502)}
+}
 
 // V15.84 KoraPay: additional, optional hosted NGN checkout alongside existing providers.
 // Configure KORAPAY_SECRET_KEY only in the CallFocus Worker runtime secrets.
@@ -5781,6 +5886,8 @@ export default {
     if (url.pathname === '/api/korapay/initialize') return safeCustomerRoute('korapay-initialize', () => handleKorapayInitialize(request, env));
     if (url.pathname === '/api/korapay/verify') return safeCustomerRoute('korapay-verify', () => handleKorapayVerify(request, env));
     if (url.pathname === '/api/korapay/webhook') return handleKorapayWebhook(request, env);
+    if (url.pathname === '/api/pocketfi/initialize') { const limited=await callFocusRateLimit(request,env,'pocketfi-initialize',12,900); if(limited)return limited; return safeCustomerRoute('pocketfi-initialize',()=>handlePocketfiInitialize(request,env)); }
+    if (url.pathname === '/api/pocketfi/verify') { const limited=await callFocusRateLimit(request,env,'pocketfi-verify',60,900); if(limited)return limited; return safeCustomerRoute('pocketfi-verify',()=>handlePocketfiVerify(request,env)); }
     if (url.pathname === '/api/manual-payment/request') { const limited = await callFocusRateLimit(request, env, 'manual-payment-request', 12, 900); if (limited) return limited; return safeCustomerRoute('manual-payment-request', () => handleManualPaymentRequest(request, env)); }
     if (url.pathname === '/api/manual-payment/submit') { const limited = await callFocusRateLimit(request, env, 'manual-payment-submit', 10, 900); if (limited) return limited; return safeCustomerRoute('manual-payment-submit', () => handleManualPaymentSubmit(request, env)); }
     if (url.pathname === '/api/manual-payment/cancel') return safeCustomerRoute('manual-payment-cancel', () => handleManualPaymentCancel(request, env));
@@ -5796,7 +5903,7 @@ export default {
     if (url.pathname === '/api/image-to-video/link' && request.method === 'GET') return safeCustomerRoute('image-video-link',()=>cfVideoFileLink(request,env));
     if (url.pathname.startsWith('/api/image-to-video/file/') && request.method === 'GET') return safeCustomerRoute('image-video-file',()=>cfVideoFile(request,env,decodeURIComponent(url.pathname.slice('/api/image-to-video/file/'.length))));
     if (url.pathname === '/api/admin/image-video') return cfAdminVideo(request,env);
-    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '15.98-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '15.99-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -5844,10 +5951,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.98-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.99-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.98-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.98-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.99-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.99-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -5857,16 +5964,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.98-test');
+      headers.set('X-CallFocus-Admin-Build', '15.99-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.98-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.99-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.98-test');
+      headers.set('X-CallFocus-Admin-Build', '15.99-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {

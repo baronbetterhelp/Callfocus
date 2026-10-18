@@ -11,13 +11,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=15.98-test" />
+  <link rel="stylesheet" href="/admin.css?v=15.99-test" />
 </head>
 <body class="admin-page">
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="/admin">
-        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.98-test" alt="CallFocus" /></span>
+        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.99-test" alt="CallFocus" /></span>
         <span class="brand-copy"><strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong><small>Private system control</small></span>
       </a>
       <div class="header-actions"><a class="btn btn-ghost admin-back-link" href="/">Customer site</a></div>
@@ -36,7 +36,7 @@
 
     <section class="admin-dashboard hidden" id="adminDashboard">
       <div class="admin-page-head">
-        <div><span class="kicker">Private administration</span><h1>Admin Portal</h1><p>Operate CallFocus from one organized management workspace.</p><small class="admin-build-stamp" id="adminBuildStamp">CallFocus Admin 15.98-test</small></div>
+        <div><span class="kicker">Private administration</span><h1>Admin Portal</h1><p>Operate CallFocus from one organized management workspace.</p><small class="admin-build-stamp" id="adminBuildStamp">CallFocus Admin 15.99-test</small></div>
         <div class="admin-head-actions"><button class="btn btn-ghost" type="button" id="adminRefreshAllBtn">Refresh data</button><button class="btn btn-ghost" id="adminLockBtn">Sign out</button></div>
       </div>
 
@@ -99,6 +99,7 @@
             <div><span>KoraPay</span><strong id="adminFundingKora">—</strong></div>
             <div><span>Paystack</span><strong id="adminFundingPaystack">—</strong></div>
             <div><span>Manual transfers</span><strong id="adminFundingManual">—</strong></div>
+            <div class="admin-funding-provider"><span>PocketFi</span><strong id="adminFundingPocketfi">—</strong></div>
           </div>
           <p class="cf-funding-note" id="adminFundingCaveat">Dates use Nigeria time (WAT, UTC+1). Totals come from saved verified purchases in existing customer wallets. An account with more than 250 older purchases may have earlier entries pruned; deleted accounts are not included.</p>
         </div>
@@ -349,6 +350,7 @@
         <div class="premium-panel form-panel manual-payment-settings-panel" id="adminPaymentMethodsPanel">
           <label class="toggle-row admin-availability-toggle"><span>Manual Bank Transfer</span><input id="adminManualPaymentsEnabled" type="checkbox" /></label>
           <label class="toggle-row admin-availability-toggle"><span>KoraPay checkout</span><input id="adminKorapayPaymentsEnabled" type="checkbox" checked /></label>
+          <label class="toggle-row admin-availability-toggle"><span>PocketFi checkout</span><input id="adminPocketfiPaymentsEnabled" type="checkbox" /><small>Requires POCKETFI_SECRET_KEY and POCKETFI_BUSINESS_ID in Cloudflare. Starts off.</small></label>
           <p class="admin-availability-note">Each switch controls visibility and new checkout requests. Previously received payment confirmations and pending transfers can still be processed. Paystack is not changed.</p>
           <button type="button" class="btn btn-primary admin-availability-save" id="savePaymentAvailabilityBtn">Apply payment availability</button>
           <div class="admin-availability-feedback" id="adminPaymentAvailabilityFeedback" aria-live="polite"></div>
@@ -541,6 +543,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=15.98-test"></script><script src="/admin-video.js?v=15.98-test"></script>
+  <script src="/admin.js?v=15.99-test"></script><script src="/admin-video.js?v=15.99-test"></script>
 </body>
 </html>
