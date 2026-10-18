@@ -17,6 +17,7 @@
       "TAVUS_API_KEY"
     ]
   },
+  "triggers": { "crons": ["*/5 * * * *"] },
   "observability": {
     "logs": {
       "enabled": true,
@@ -44,6 +45,7 @@
       "/404.html",
       "/about.html",
       "/avatar.html",
+      "/image-video.html",
       "/callers.html",
       "/credits.html",
       "/index.html",
@@ -58,6 +60,7 @@
       "/about",
       "/history",
       "/avatar",
+      "/image-to-video",
       "/voice-notes",
       "/credits",
       "/referrals",
