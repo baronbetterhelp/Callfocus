@@ -1022,3 +1022,25 @@ body.admin-page{
 
 /* V15.95 isolated Image to Video admin panel */
 .iv-admin-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:20px 0}.iv-admin-stats article{border:1px solid #d8e7e1;background:#f5faf7;padding:14px;border-radius:16px}.iv-admin-stats span,.iv-admin-stats strong{display:block}.iv-admin-stats span{font-size:12px;color:#68867e}.iv-admin-stats strong{font-size:23px;color:#18594e}.iv-admin-activity{padding:12px;border-bottom:1px solid #e3ebe7}.iv-admin-activity strong,.iv-admin-activity small{display:block}.iv-admin-activity small{font-size:12px;color:#668079;margin-top:5px}
+
+
+/* V15.98 — read-only confirmed funding overview, dashboard only */
+.cf-funding-panel{display:grid;gap:18px;background:linear-gradient(145deg,rgba(216,239,231,.09),rgba(255,255,255,.025));}
+.cf-funding-heading{align-items:flex-start;gap:16px;}
+.cf-funding-heading h3{font-size:clamp(21px,3vw,27px);margin:8px 0 5px;}
+.cf-funding-filters{display:flex;flex-wrap:wrap;align-items:end;gap:11px;}
+.cf-funding-filters label{flex:1 1 160px;min-width:130px;display:grid;gap:7px;font-weight:700;font-size:12px;}
+.cf-funding-filters select,.cf-funding-filters input{width:100%;min-height:44px;max-width:100%;}
+.cf-funding-filters .hidden{display:none!important;}
+.cf-funding-filters>button{min-height:44px;}
+.cf-funding-primary{padding:20px;border:1px solid rgba(43,137,115,.25);border-radius:18px;background:rgba(61,162,133,.08);display:grid;gap:8px;}
+.cf-funding-primary>span{font-size:12px;font-weight:700;opacity:.8;}
+.cf-funding-primary strong{font-size:clamp(30px,6vw,43px);letter-spacing:-1px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}
+.cf-funding-primary small{font-size:11px;line-height:1.55;}
+.cf-funding-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;}
+.cf-funding-grid>div{padding:14px 11px;border-radius:14px;border:1px solid rgba(125,161,145,.25);display:grid;gap:8px;min-width:0;}
+.cf-funding-grid span{font-size:11px;line-height:1.5;}
+.cf-funding-grid strong{font-size:clamp(14px,2vw,20px);font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}
+.cf-funding-note{font-size:11px;line-height:1.7;opacity:.78;}
+@media(max-width:850px){.cf-funding-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@media(max-width:450px){.cf-funding-filters{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.cf-funding-filters label:first-child{grid-column:1/-1}.cf-funding-filters>button{grid-column:1/-1}.cf-funding-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}

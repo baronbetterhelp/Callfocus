@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.96-test';
+const ADMIN_BUILD_VERSION='15.98-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -52,6 +52,85 @@ let marketingDraftTimer=0;
 let marketingDraftSaving=false;
 function toast(msg){$('toast').textContent=msg;$('toast').classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>$('toast').classList.add('hidden'),2400)}
 function authHeaders(extra={}){return {'X-CallFocus-Admin-Key':adminKey,...extra}}
+
+/* V15.98: Funding overview uses the existing authenticated admin session and
+   paginates every account without modifying payment ledgers or settings. */
+let adminFundingRequestId = 0;
+const cfFundingNaira = kobo => '₦' + (Math.max(0, Number(kobo) || 0) / 100).toLocaleString('en-NG', {minimumFractionDigits: 0, maximumFractionDigits: 2});
+function cfFundingTodayWAT() {
+  const parts = new Intl.DateTimeFormat('en-GB', {timeZone:'Africa/Lagos',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+  const get = key => parts.find(p=>p.type===key)?.value || '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+function cfFundingSelection() {
+  const mode = $('adminFundingPeriod')?.value || 'all';
+  const qs = new URLSearchParams({period:mode});
+  const show = (id,visible)=>$(id)?.classList.toggle('hidden', !visible);
+  show('adminFundingDayWrap',mode==='daily');show('adminFundingMonthWrap',mode==='monthly');
+  show('adminFundingFromWrap',mode==='custom');show('adminFundingToWrap',mode==='custom');
+  let label = 'All recorded confirmed deposits';
+  if(mode==='daily'){const day=$('adminFundingDay').value;if(!day)throw new Error('Choose a day.');qs.set('day',day);label=`Deposits on ${day}`;}
+  if(mode==='monthly'){const month=$('adminFundingMonth').value;if(!month)throw new Error('Choose a month.');qs.set('month',month);label=`Deposits in ${month}`;}
+  if(mode==='custom'){
+    const from=$('adminFundingFrom').value,to=$('adminFundingTo').value;
+    if(!from||!to||to<from)throw new Error('Choose a valid start and end date.');
+    qs.set('from',from);qs.set('to',to);label=`Deposits from ${from} to ${to}`;
+  }
+  return {qs,label};
+}
+async function loadAdminFundingReport(){
+  if(!adminKey)return;
+  const seq=++adminFundingRequestId, btn=$('adminFundingApplyBtn'), refresh=$('adminFundingRefreshBtn'), status=$('adminFundingStatus');
+  let selection;
+  try{selection=cfFundingSelection();}catch(err){toast(err.message);return;}
+  const keys=['adminFundingTotal','adminFundingCount','adminFundingCustomers','adminFundingKora','adminFundingPaystack','adminFundingManual'];
+  keys.forEach(id=>{if($(id))$(id).textContent='—';});
+  if($('adminFundingLabel'))$('adminFundingLabel').textContent=selection.label;
+  if(btn)btn.disabled=true;if(refresh)refresh.disabled=true;
+  if(status)status.textContent='Reading confirmed deposits…';
+  const totals={amountKobo:0,transactions:0,fundedCustomers:0,scannedCustomers:0,unavailableCustomers:0,truncatedWallets:0,undatedPayments:0,providers:{korapay:0,paystack:0,manual_bank_transfer:0}};
+  let cursor='',pages=0,complete=false;
+  try{
+    do{
+      if(seq!==adminFundingRequestId)return;
+      const qs=new URLSearchParams(selection.qs);if(cursor)qs.set('cursor',cursor);
+      const data=await api(`/api/admin/funding-report?${qs}`);
+      if(seq!==adminFundingRequestId)return;
+      for(const key of ['amountKobo','transactions','fundedCustomers','scannedCustomers','unavailableCustomers','truncatedWallets','undatedPayments'])totals[key]+=Number(data[key])||0;
+      for(const provider of Object.keys(totals.providers))totals.providers[provider]+=Number(data.providers?.[provider]?.amountKobo)||0;
+      complete=data.listComplete===true;
+      cursor=String(data.cursor||'');
+      pages++;
+      if(!complete&&!cursor)throw new Error('The customer list stopped before the report was complete.');
+      if(pages>10000)throw new Error('Funding report exceeded the safety limit.');
+      if(status)status.textContent=`Scanning customer records… ${totals.scannedCustomers} checked`;
+    }while(!complete);
+    if(seq!==adminFundingRequestId)return;
+    $('adminFundingTotal').textContent=cfFundingNaira(totals.amountKobo);
+    $('adminFundingCount').textContent=totals.transactions.toLocaleString();
+    $('adminFundingCustomers').textContent=totals.fundedCustomers.toLocaleString();
+    $('adminFundingKora').textContent=cfFundingNaira(totals.providers.korapay);
+    $('adminFundingPaystack').textContent=cfFundingNaira(totals.providers.paystack);
+    $('adminFundingManual').textContent=cfFundingNaira(totals.providers.manual_bank_transfer);
+    const warnings=[];
+    if(totals.unavailableCustomers)warnings.push(`${totals.unavailableCustomers} account records unavailable`);
+    if(totals.truncatedWallets)warnings.push(`${totals.truncatedWallets} wallets may have older entries trimmed`);
+    if(totals.undatedPayments)warnings.push(`${totals.undatedPayments} payments had no usable date`);
+    if(status)status.textContent=`Loaded ${totals.scannedCustomers} customer accounts · ${new Date().toLocaleTimeString()}${warnings.length?' · Incomplete: '+warnings.join('; '):''}`;
+  }catch(err){if(seq===adminFundingRequestId){if(status)status.textContent='Could not finish the funding report: '+(err.message||'Please retry.');toast('Funding report unavailable');}}
+  finally{if(seq===adminFundingRequestId){if(btn)btn.disabled=false;if(refresh)refresh.disabled=false;}}
+}
+(function(){
+  const today=cfFundingTodayWAT();
+  if($('adminFundingDay'))$('adminFundingDay').value=today;
+  if($('adminFundingMonth'))$('adminFundingMonth').value=today.slice(0,7);
+  if($('adminFundingFrom'))$('adminFundingFrom').value=today;
+  if($('adminFundingTo'))$('adminFundingTo').value=today;
+  $('adminFundingPeriod')?.addEventListener('change',()=>{try{cfFundingSelection();}catch{}});
+  $('adminFundingApplyBtn')?.addEventListener('click',loadAdminFundingReport);
+  $('adminFundingRefreshBtn')?.addEventListener('click',loadAdminFundingReport);
+})();
+
 function coreVoiceOptions(){return CORE_VOICES.map(v=>`<option value="${v}">${v}${v==='marin'||v==='cedar'?' · recommended':''}</option>`).join('')}
 function liveVoiceOptions(rows){return rows.map(([id,label])=>`<option value="${id}">${label} · Live only</option>`).join('')}
 function customVoiceOptions(){return customVoices.map(v=>`<option value="${esc(v.id)}">${esc(v.name)} · Custom clone</option>`).join('')}
@@ -219,7 +298,7 @@ async function addUnlimitedUser(){
 }
 function fill(config,storageConnected){fillPurchaseOfferControls(config);currentConfig=config;customVoices=Array.isArray(config.customVoices)?config.customVoices:[];populateVoices();renderCustomVoiceLibrary();unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;if($('adminManualPaymentsEnabled'))$('adminManualPaymentsEnabled').checked=config.manualPaymentsEnabled===true;if($('adminKorapayPaymentsEnabled'))$('adminKorapayPaymentsEnabled').checked=config.korapayPaymentsEnabled!==false;if($('adminWebsiteMaintenanceEnabled'))$('adminWebsiteMaintenanceEnabled').checked=config.websiteMaintenanceEnabled===true;if($('adminSignupEmailVerificationRequired'))$('adminSignupEmailVerificationRequired').checked=config.signupEmailVerificationEnabled===true;if($('adminManualBankName'))$('adminManualBankName').value=config.manualPaymentBankName||'';if($('adminManualAccountName'))$('adminManualAccountName').value=config.manualPaymentAccountName||'';if($('adminManualAccountNumber'))$('adminManualAccountNumber').value=config.manualPaymentAccountNumber||'';if($('adminManualPaymentEmail'))$('adminManualPaymentEmail').value=config.manualPaymentNotificationEmail||'support@callfocus.link';if($('adminAnalysisScreenshotMin'))$('adminAnalysisScreenshotMin').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMin)||20)));if($('adminAnalysisScreenshotMax'))$('adminAnalysisScreenshotMax').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMax)||Number(config.autoFillScreenshotLimit)||50)));fillQuickStart(config.quickStart||{});renderScreenshotLimitsSummary();$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);if($('adminDashStorage'))$('adminDashStorage').textContent=storageConnected?'Global storage connected':'Storage needs attention';renderServerState();renderBackupStatus(storageConnected)}
 async function api(path,options={}){const res=await fetch(path,{credentials:'same-origin',...options,headers:authHeaders(options.headers||{})});const type=res.headers.get('content-type')||'';const data=type.includes('application/json')?await res.json():await res.text();if(!res.ok)throw Object.assign(new Error(data?.error||data||'Request failed'),{status:res.status});return data}
-async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{const auth=await api('/api/admin/login',{method:'POST'});adminKey=auth.adminToken||key;rememberAdminSession(adminKey);$('adminPasscode').value='';const result=await api('/api/admin/config');$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminManualPayments().then(()=>loadAdminUsers(true));loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadMarketingStatus();loadDirectTemplates();}catch(err){adminKey='';if(err.status===401||err.status===403)forgetAdminSession();$('adminGateNote').textContent=err.message;toast(err.message)}}
+async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{const auth=await api('/api/admin/login',{method:'POST'});adminKey=auth.adminToken||key;rememberAdminSession(adminKey);$('adminPasscode').value='';const result=await api('/api/admin/config');$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminManualPayments().then(()=>loadAdminUsers(true));loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadMarketingStatus();loadDirectTemplates();loadAdminFundingReport();}catch(err){adminKey='';if(err.status===401||err.status===403)forgetAdminSession();$('adminGateNote').textContent=err.message;toast(err.message)}}
 async function saveConfig(message='Global CallFocus settings saved'){
   const btn=$('saveAdminBtn'),old=btn?.textContent||'Save global settings';
   if(btn){btn.disabled=true;btn.textContent='Saving…'}
@@ -333,7 +412,7 @@ async function restoreRememberedAdmin(){
     $('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');
     const backup=readBackup();
     if(!r.storageConnected&&backup?.config)fill(backup.config,false);else{fill(r.config,r.storageConnected);if(r.storageConnected)saveBackup(r.config);}
-    loadAdminManualPayments().then(()=>loadAdminUsers(true));loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadMarketingStatus();loadDirectTemplates();
+    loadAdminManualPayments().then(()=>loadAdminUsers(true));loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadMarketingStatus();loadDirectTemplates();loadAdminFundingReport();
   }catch(err){
     if(adminKey!==remembered)return;
     adminKey='';if(err.status===401||err.status===403)forgetAdminSession();else $('adminGateNote').textContent='Your sign-in is remembered. Refresh when the connection is available.';
@@ -931,12 +1010,12 @@ document.querySelectorAll('[data-admin-control]').forEach(btn=>btn.addEventListe
     const response=await fetch('/api/app-version',{cache:'no-store'});
     if(!response.ok)throw new Error('Version unavailable');
     const data=await response.json();const running=String(data.version||'unknown');
-    if(stamp)stamp.textContent=`Admin 15.96-test · Worker ${running}`;
+    if(stamp)stamp.textContent=`Admin 15.98-test · Worker ${running}`;
     if(running!==ADMIN_BUILD_VERSION||missing.length){
       if(status){status.textContent='A different or incomplete set of CallFocus files is active. Do not save admin settings until the matching complete build is uploaded and promoted.';status.classList.add('admin-control-warning');}
     }
   }catch{
-    if(stamp)stamp.textContent='Admin 15.96-test · Worker status unavailable';
+    if(stamp)stamp.textContent='Admin 15.98-test · Worker status unavailable';
     if(missing.length&&status){status.textContent='Some required controls were not found. Verify that the complete build was uploaded.';status.classList.add('admin-control-warning');}
   }
 })();
@@ -975,7 +1054,7 @@ async function loadAdminAiUsage(){
 $('aiUsageRefreshBtn')?.addEventListener('click',loadAdminAiUsage);
 $('adminRefreshAllBtn')?.addEventListener('click',async()=>{
   const btn=$('adminRefreshAllBtn');const old=btn?.textContent||'Refresh data';if(btn){btn.disabled=true;btn.textContent='Refreshing…';}
-  try{await loadAdminManualPayments();await Promise.all([loadAdminUsers(true),loadAdminAiUsage(),loadMarketingStatus()]);toast('Admin data refreshed');}
+  try{await loadAdminManualPayments();await Promise.all([loadAdminUsers(true),loadAdminAiUsage(),loadMarketingStatus(),loadAdminFundingReport()]);toast('Admin data refreshed');}
   finally{if(btn){btn.disabled=false;btn.textContent=old;}}
 });
 

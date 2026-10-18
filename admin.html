@@ -11,13 +11,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=15.96-test" />
+  <link rel="stylesheet" href="/admin.css?v=15.98-test" />
 </head>
 <body class="admin-page">
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="/admin">
-        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.96-test" alt="CallFocus" /></span>
+        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.98-test" alt="CallFocus" /></span>
         <span class="brand-copy"><strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong><small>Private system control</small></span>
       </a>
       <div class="header-actions"><a class="btn btn-ghost admin-back-link" href="/">Customer site</a></div>
@@ -36,7 +36,7 @@
 
     <section class="admin-dashboard hidden" id="adminDashboard">
       <div class="admin-page-head">
-        <div><span class="kicker">Private administration</span><h1>Admin Portal</h1><p>Operate CallFocus from one organized management workspace.</p><small class="admin-build-stamp" id="adminBuildStamp">CallFocus Admin 15.96-test</small></div>
+        <div><span class="kicker">Private administration</span><h1>Admin Portal</h1><p>Operate CallFocus from one organized management workspace.</p><small class="admin-build-stamp" id="adminBuildStamp">CallFocus Admin 15.98-test</small></div>
         <div class="admin-head-actions"><button class="btn btn-ghost" type="button" id="adminRefreshAllBtn">Refresh data</button><button class="btn btn-ghost" id="adminLockBtn">Sign out</button></div>
       </div>
 
@@ -75,6 +75,32 @@
           <article class="admin-stat-card"><span>Funded customers</span><strong id="adminDashFunded">0</strong><small>Verified payment history</small></article>
           <article class="admin-stat-card"><span>Manual payments</span><strong id="adminDashManualPending">0</strong><small>Awaiting confirmation</small></article>
           <article class="admin-stat-card"><span>AI analyses</span><strong id="adminDashAI">0</strong><small id="adminDashAINote">Conversation dynamics</small></article>
+        </div>
+
+
+        <!-- V15.98: read-only confirmed funding overview. -->
+        <div class="premium-panel cf-funding-panel" id="adminFundingReportPanel">
+          <div class="admin-users-heading cf-funding-heading">
+            <div><span class="kicker">Confirmed revenue</span><h3>Total Funded</h3><p class="admin-panel-copy">Successful KoraPay, Paystack and approved bank transfers. Free credits and gifts are excluded.</p></div>
+            <button class="btn btn-ghost" type="button" id="adminFundingRefreshBtn">Refresh totals</button>
+          </div>
+          <div class="cf-funding-filters">
+            <label>Period<select id="adminFundingPeriod"><option value="all">All time (default)</option><option value="daily">Daily</option><option value="monthly">Monthly</option><option value="custom">Custom date range</option></select></label>
+            <label class="hidden" id="adminFundingDayWrap">Date<input id="adminFundingDay" type="date" /></label>
+            <label class="hidden" id="adminFundingMonthWrap">Month<input id="adminFundingMonth" type="month" /></label>
+            <label class="hidden" id="adminFundingFromWrap">From<input id="adminFundingFrom" type="date" /></label>
+            <label class="hidden" id="adminFundingToWrap">Through<input id="adminFundingTo" type="date" /></label>
+            <button class="btn btn-primary" type="button" id="adminFundingApplyBtn">Apply filter</button>
+          </div>
+          <div class="cf-funding-primary"><span id="adminFundingLabel">All recorded confirmed deposits</span><strong id="adminFundingTotal">—</strong><small id="adminFundingStatus" aria-live="polite">Loading verified funding…</small></div>
+          <div class="cf-funding-grid">
+            <div><span>Confirmed payments</span><strong id="adminFundingCount">—</strong></div>
+            <div><span>Customers who funded</span><strong id="adminFundingCustomers">—</strong></div>
+            <div><span>KoraPay</span><strong id="adminFundingKora">—</strong></div>
+            <div><span>Paystack</span><strong id="adminFundingPaystack">—</strong></div>
+            <div><span>Manual transfers</span><strong id="adminFundingManual">—</strong></div>
+          </div>
+          <p class="cf-funding-note" id="adminFundingCaveat">Dates use Nigeria time (WAT, UTC+1). Totals come from saved verified purchases in existing customer wallets. An account with more than 250 older purchases may have earlier entries pruned; deleted accounts are not included.</p>
         </div>
 
         <div class="premium-panel admin-server-panel">
@@ -515,6 +541,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=15.96-test"></script><script src="/admin-video.js?v=15.96-test"></script>
+  <script src="/admin.js?v=15.98-test"></script><script src="/admin-video.js?v=15.98-test"></script>
 </body>
 </html>

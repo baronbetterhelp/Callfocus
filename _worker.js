@@ -2201,6 +2201,90 @@ function adminUserSummary(user, data, unlimitedEmails = []) {
   };
 }
 
+
+// V15.98: read-only confirmed funding report. Wallet records remain authoritative;
+// never update balances, payments, or account data from this endpoint.
+function cfFundingReportWindow(params) {
+  const mode = String(params.get('period') || 'all');
+  if (!['all', 'daily', 'monthly', 'custom'].includes(mode)) return null;
+  if (mode === 'all') return { mode, start: -Infinity, end: Infinity };
+  const validDate = value => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const d = new Date(value + 'T00:00:00+01:00');
+    return Number.isFinite(d.getTime()) && new Date(d.getTime() + 3600000).toISOString().slice(0, 10) === value;
+  };
+  const dayStart = value => Date.parse(value + 'T00:00:00+01:00');
+  let from = '', to = '';
+  if (mode === 'daily') { from = to = String(params.get('day') || ''); }
+  if (mode === 'monthly') {
+    const month = String(params.get('month') || '');
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return null;
+    const first = month + '-01';
+    const next = new Date(Date.UTC(Number(month.slice(0,4)), Number(month.slice(5,7)), 1)).toISOString().slice(0,10);
+    return { mode, start: dayStart(first), end: dayStart(next) };
+  }
+  if (mode === 'custom') {
+    from = String(params.get('from') || ''); to = String(params.get('to') || '');
+  }
+  if (!validDate(from) || !validDate(to)) return null;
+  const start = dayStart(from), end = dayStart(to) + 86400000;
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  return { mode, start, end };
+}
+async function handleAdminFundingReport(request, env) {
+  if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
+  if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.list !== 'function') return json({ error: 'Global account storage is not connected.' }, 503);
+  const params = new URL(request.url).searchParams;
+  const window = cfFundingReportWindow(params);
+  if (!window) return json({ error: 'Select a valid date, month or date range.' }, 400);
+  const cursor = String(params.get('cursor') || '');
+  const page = await env.CALLFOCUS_CONFIG.list({ prefix: 'customer:user:', limit: 20, ...(cursor ? { cursor } : {}) });
+  const totals = { amountKobo: 0, transactions: 0, fundedCustomers: 0, scannedCustomers: 0, unavailableCustomers: 0, truncatedWallets: 0, undatedPayments: 0, providers: {
+    korapay: { amountKobo: 0, transactions: 0 },
+    paystack: { amountKobo: 0, transactions: 0 },
+    manual_bank_transfer: { amountKobo: 0, transactions: 0 }
+  }};
+  const validProviders = new Set(Object.keys(totals.providers));
+  await Promise.all((page.keys || []).map(async entry => {
+    try {
+      const user = await env.CALLFOCUS_CONFIG.get(entry.name, { type: 'json' });
+      if (!user?.id) { totals.unavailableCustomers++; return; }
+      const data = await env.CALLFOCUS_CONFIG.get(customerDataKey(user.id), { type: 'json' });
+      if (!data?.wallet) { totals.unavailableCustomers++; return; }
+      const raw = Array.isArray(data.wallet.purchases) ? data.wallet.purchases : [];
+      if (raw.length >= 250) totals.truncatedWallets++;
+      const seen = new Set();
+      let hasFunding = false;
+      for (const purchase of raw) {
+        const provider = String(purchase?.provider || '').toLowerCase();
+        if (!validProviders.has(provider)) continue;
+        const reference = String(purchase?.reference || purchase?.id || '').trim();
+        if (reference) {
+          const dedupe = provider + ':' + reference;
+          if (seen.has(dedupe)) continue;
+          seen.add(dedupe);
+        }
+        const amountKobo = Math.round(Number(purchase?.amountNaira) * 100);
+        if (!Number.isSafeInteger(amountKobo) || amountKobo <= 0) continue;
+        if (window.mode !== 'all') {
+          const at = Date.parse(String(purchase?.createdAt || ''));
+          if (!Number.isFinite(at)) { totals.undatedPayments++; continue; }
+          if (at < window.start || at >= window.end) continue;
+        }
+        totals.amountKobo += amountKobo;
+        totals.transactions++;
+        totals.providers[provider].amountKobo += amountKobo;
+        totals.providers[provider].transactions++;
+        hasFunding = true;
+      }
+      if (hasFunding) totals.fundedCustomers++;
+      totals.scannedCustomers++;
+    } catch { totals.unavailableCustomers++; }
+  }));
+  return json({ ok: true, ...totals, cursor: page.list_complete ? '' : String(page.cursor || ''), listComplete: !!page.list_complete, period: window.mode, timezone: 'Africa/Lagos' }, 200, { 'Cache-Control': 'private, no-store' });
+}
+
 async function handleAdminUsers(request, env) {
   if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
@@ -5654,8 +5738,10 @@ async function cfVideoWalletChange(env,user,job,action){const id='image-video:'+
 async function cfVideoRefund(env,job){if(!job.charged||job.refunded)return job;const user=await env.CALLFOCUS_CONFIG.get(customerUserKey(job.userId),{type:'json'});if(!user){job.error='Refund needs account recovery';await cfPutVideoJob(env,job);return job;}const res=await cfVideoWalletChange(env,user,job,'refund');if(res.ok){job.refunded=true;job.status='refunded';job.stage='Credits refunded';await cfPutVideoJob(env,job);}return job;}
 async function cfVideoPoll(env,job){if(!job||!['processing','accepted','submitting'].includes(job.status))return job;if(job.status==='submitting'&&!job.requestId){if(Date.now()-Date.parse(job.createdAt)>120000){job.status='failed';job.error='Generation was not accepted. No credits were deducted.';await cfPutVideoJob(env,job);}return job;}if(!job.requestId)return job;let response;try{response=await cfXaiFetch(env,'https://api.x.ai/v1/videos/'+encodeURIComponent(job.requestId));}catch{return job;}if(!response.ok)return job;let raw;try{raw=await response.json()}catch{return job;}if(raw.status==='done'){const fileId=String(raw.video?.file_output?.file_id||'');const url=String(raw.video?.url||'');if(!/^file_[a-zA-Z0-9_-]+$/.test(fileId)&&!cfVideoAllowedHost(url)){job.status='failed';job.error='Provider did not return a usable video';if(job.charged)return cfVideoRefund(env,job);await cfPutVideoJob(env,job);return job;}job.fileId=fileId;job.ephemeralUrl=cfVideoAllowedHost(url)?url:'';job.status='completed';job.stage='Ready to download';await cfPutVideoJob(env,job);}else if(['failed','expired'].includes(raw.status)){job.status='failed';job.error='Video generation could not be completed.';if(job.charged)return cfVideoRefund(env,job);await cfPutVideoJob(env,job);return job;}return job;}
 async function cfVideoGenerate(request,env){if(request.method!=='POST')return json({error:'Method not allowed'},405);const auth=await authenticatedCustomer(request,env);if(!auth)return json({error:'Sign in to generate videos'},401);const s=await cfGetVideoSettings(env);if(!s.enabled)return json({error:'Image to Video is currently unavailable.'},403);if(!env.XAI_API_KEY)return json({error:'Image to Video is not configured yet.'},503);let b;try{if(Number(request.headers.get('content-length')||0)>3000000)return json({error:'Image file is too large.'},413);b=await request.json()}catch{return json({error:'Invalid generation request'},400)}const duration=Number(b.duration);const cost=duration===10?s.cost10:duration===15?s.cost15:0;const prompt=String(b.prompt||'').trim().slice(0,1100);const aspectRatio=String(b.aspectRatio||'9:16');const motionStyle=String(b.motionStyle||'Natural');const image=String(b.image||'');const thumbnail=String(b.thumbnail||'');if(!cost||!s.aspectRatios.includes(aspectRatio)||!s.motionStyles.includes(motionStyle)||!prompt||prompt.length<5)return json({error:'Choose valid video settings and describe the motion.'},400);if(!/^data:image\/(?:jpeg|png|webp);base64,[a-zA-Z0-9+/=]+$/.test(image)||image.length>2100000)return json({error:'Upload a valid JPEG, PNG, or WebP image (max 1.5 MB compressed).'},400);const jobs=await cfListVideoJobs(env,CF_VIDEO_PREFIX+auth.user.id+':',100);if(jobs.some(j=>['submitting','processing','accepted'].includes(j.status)))return json({error:'Finish your current generation before starting another.'},409);const today=new Date().toISOString().slice(0,10);if(jobs.filter(j=>j.createdAt?.startsWith(today)).length>=s.dailyLimit)return json({error:'Daily Image to Video limit reached.'},429);const wallet=normalizeServerWallet((await getCustomerDataForUpdate(env,auth.user.id,auth.user.name)).wallet);const unlimited=(await getConfig(env)).unlimitedCreditEmails.map(normalizeCustomerEmail).includes(normalizeCustomerEmail(auth.user.email));if(!unlimited&&wallet.balanceSeconds<callFocusSecondsForCredits(cost))return json({error:'Not enough CallFocus credits. Deposit to continue.',code:'insufficient_credit',required:cost},402);const inFlightKey='image_video:busy:'+auth.user.id;if(await env.CALLFOCUS_CONFIG.get(inFlightKey))return json({error:'A generation request is already starting. Please wait before trying again.'},409);await env.CALLFOCUS_CONFIG.put(inFlightKey,'1',{expirationTtl:120});const id=crypto.randomUUID();const job={id,userId:auth.user.id,userEmail:auth.user.email,prompt,duration,cost,aspectRatio,motionStyle,thumbnail:/^data:image\/jpeg;base64,[\w+/=]+$/.test(thumbnail)&&thumbnail.length<46000?thumbnail:'',status:'submitting',charged:false,refunded:false,stage:'Preparing',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
-const motions={'Natural':'natural realistic movement, retain identity and scene details','Cinematic':'cinematic tracking camera, natural film motion','Subtle motion':'subtle breathing and environmental motion, mostly locked camera','Dynamic':'dynamic camera movement with coherent physical action','Dramatic':'dramatic cinematic lighting and expressive camera motion'};
-let r;try{r=await cfXaiFetch(env,'https://api.x.ai/v1/videos/generations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'grok-imagine-video-1.5-lite',image:{url:image},prompt:prompt+'; '+motions[motionStyle]+'. Preserve the source image visual identity.',duration,resolution:'720p',storage_options:{filename:'callfocus-'+id+'.mp4'}})});}catch(e){job.status='failed';job.error='Could not reach video provider. No credits charged.';await cfPutVideoJob(env,job);await env.CALLFOCUS_CONFIG.delete(inFlightKey);return json({error:job.error},502)}let body;try{body=await r.json()}catch{body={}}if(!r.ok||!body.request_id){job.status='failed';job.error='Provider did not accept the request. No credits charged.';await cfPutVideoJob(env,job);await env.CALLFOCUS_CONFIG.delete(inFlightKey);return json({error:job.error,details:String(body?.error?.message||'').slice(0,160)},502)}job.requestId=String(body.request_id);job.status='accepted';job.stage='Generating';const charged=await cfVideoWalletChange(env,auth.user,job,'charge');if(!charged.ok){job.status='failed';job.error='Generation accepted but wallet charge could not be secured. Please contact support.';await cfPutVideoJob(env,job);return json({error:job.error},503)}job.charged=true;job.unlimited=charged.unlimited===true;job.status='processing';await cfPutVideoJob(env,job);await env.CALLFOCUS_CONFIG.delete(inFlightKey);return json({ok:true,job:cfPublicVideo(job)});}
+// V15.97: realism-focused image-to-video direction. Preserve the user's prompt and selected motion style.
+const motions={'Natural':'Natural documentary-like camera behavior and lifelike movement at an unhurried pace.','Cinematic':'A gentle, physically plausible cinematic camera move with realistic depth of field.','Subtle motion':'Mostly steady framing with tiny believable movements, such as breathing, blinking, fabric or environmental motion where appropriate.','Dynamic':'Energetic but physically coherent movement, natural inertia and stable scene continuity.','Dramatic':'Expressive but believable camera movement and authentic lighting transitions, without unnatural morphing.'};
+const cfVideoRealismDirection='Use the uploaded image as the first frame. Create a convincing real-world video of the action described by the customer. Keep the same person or subject, facial identity, proportions, clothing, surroundings, objects, framing, and original scene details consistent throughout. Preserve natural skin texture, fine details, accurate shadows, reflections and depth. Animate with physically plausible weight, timing, human posture and anatomy; use natural breathing and occasional blinking only where appropriate. Keep camera motion smooth and believable, with realistic focus and stable exposure. Avoid face deformation, flickering, warped hands or limbs, duplicated objects, rubbery motion, sudden scene changes, and unrequested text or stylization. Do not add speaking or lip movement unless the requested action calls for it. Prioritize the customer-requested action and do not add unrelated events.';
+let r;try{r=await cfXaiFetch(env,'https://api.x.ai/v1/videos/generations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'grok-imagine-video-1.5-lite',image:{url:image},prompt:prompt+'\nMotion direction: '+motions[motionStyle]+'\nRealism and visual continuity: '+cfVideoRealismDirection,duration,resolution:'720p',storage_options:{filename:'callfocus-'+id+'.mp4'}})});}catch(e){job.status='failed';job.error='Could not reach video provider. No credits charged.';await cfPutVideoJob(env,job);await env.CALLFOCUS_CONFIG.delete(inFlightKey);return json({error:job.error},502)}let body;try{body=await r.json()}catch{body={}}if(!r.ok||!body.request_id){job.status='failed';job.error='Provider did not accept the request. No credits charged.';await cfPutVideoJob(env,job);await env.CALLFOCUS_CONFIG.delete(inFlightKey);return json({error:job.error,details:String(body?.error?.message||'').slice(0,160)},502)}job.requestId=String(body.request_id);job.status='accepted';job.stage='Generating';const charged=await cfVideoWalletChange(env,auth.user,job,'charge');if(!charged.ok){job.status='failed';job.error='Generation accepted but wallet charge could not be secured. Please contact support.';await cfPutVideoJob(env,job);return json({error:job.error},503)}job.charged=true;job.unlimited=charged.unlimited===true;job.status='processing';await cfPutVideoJob(env,job);await env.CALLFOCUS_CONFIG.delete(inFlightKey);return json({ok:true,job:cfPublicVideo(job)});}
 async function cfVideoStatus(request,env){const auth=await authenticatedCustomer(request,env);if(!auth)return json({error:'Sign in required'},401);const id=new URL(request.url).searchParams.get('id')||'';let job=await cfLoadVideoJob(env,auth.user.id,id);if(!job)return json({error:'Video not found'},404);job=await cfVideoPoll(env,job);return json({ok:true,job:cfPublicVideo(job)});}
 async function cfVideoHistory(request,env){const auth=await authenticatedCustomer(request,env);if(!auth)return json({error:'Sign in required'},401);const jobs=await cfListVideoJobs(env,CF_VIDEO_PREFIX+auth.user.id+':',80);const refreshed=[];for(const j of jobs.slice(0,3))refreshed.push(await cfVideoPoll(env,j));return json({ok:true,jobs:jobs.map(j=>cfPublicVideo(refreshed.find(x=>x.id===j.id)||j))});}
 async function cfVideoFile(request,env,id){const auth=await authenticatedCustomer(request,env);const suppliedToken=new URL(request.url).searchParams.get('access')||'';const access=!auth&&/^[a-f0-9-]{36}$/.test(suppliedToken)?await env.CALLFOCUS_CONFIG.get('image_video:access:'+suppliedToken,{type:'json'}):null;if(!auth&&(!access||access.id!==id))return json({error:'Sign in required'},401);const job=await cfLoadVideoJob(env,auth?.user?.id||access.userId,id);if(!job||job.status!=='completed')return json({error:'Video not available'},404);let res;if(job.fileId){res=await cfXaiFetch(env,'https://api.x.ai/v1/files/'+encodeURIComponent(job.fileId)+'/content',{headers:request.headers.get('range')?{'Range':request.headers.get('range')}: {}});}else if(cfVideoAllowedHost(job.ephemeralUrl)){res=await fetch(job.ephemeralUrl,{headers:request.headers.get('range')?{'Range':request.headers.get('range')}:{}});}else return json({error:'Stored video not available. Contact support.'},404);if(!res.ok)return json({error:'Video storage temporarily unavailable'},502);const headers=new Headers({'Content-Type':'video/mp4','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Disposition':new URL(request.url).searchParams.get('download')==='1'?`attachment; filename="CallFocus-${job.duration}s-${job.id.slice(0,8)}.mp4"`:'inline'});for(const k of ['Content-Length','Content-Range','Accept-Ranges']){if(res.headers.has(k))headers.set(k,res.headers.get(k));}return new Response(res.body,{status:res.status,headers});}
@@ -5710,7 +5796,7 @@ export default {
     if (url.pathname === '/api/image-to-video/link' && request.method === 'GET') return safeCustomerRoute('image-video-link',()=>cfVideoFileLink(request,env));
     if (url.pathname.startsWith('/api/image-to-video/file/') && request.method === 'GET') return safeCustomerRoute('image-video-file',()=>cfVideoFile(request,env,decodeURIComponent(url.pathname.slice('/api/image-to-video/file/'.length))));
     if (url.pathname === '/api/admin/image-video') return cfAdminVideo(request,env);
-    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '15.96-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '15.98-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -5722,6 +5808,7 @@ export default {
     if (url.pathname === '/api/admin/availability') return handleAdminAvailability(request, env);
     if (url.pathname === '/api/admin/screenshot-limits') return handleAdminScreenshotLimits(request, env);
     if (url.pathname === '/api/admin/quick-start') return handleAdminQuickStart(request, env);
+    if (url.pathname === '/api/admin/funding-report') return handleAdminFundingReport(request, env);
     if (url.pathname === '/api/admin/users') return handleAdminUsers(request, env);
     if (url.pathname === '/api/admin/direct-email') return handleAdminDirectEmail(request, env);
     if (url.pathname === '/api/admin/direct-email-templates') return handleAdminDirectEmailTemplates(request, env);
@@ -5757,10 +5844,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.96-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.98-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.96-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.96-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.98-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.98-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -5770,16 +5857,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.96-test');
+      headers.set('X-CallFocus-Admin-Build', '15.98-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.96-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.98-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.96-test');
+      headers.set('X-CallFocus-Admin-Build', '15.98-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {
