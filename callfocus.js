@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.92-test';
+  const BUILD='15.93-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -7726,24 +7726,64 @@ ${approvedPatterns}
  document.querySelectorAll('[data-credit-package]').forEach(b=>b.addEventListener('click',()=>queueMicrotask(update)));
  document.getElementById('customCreditAmount')?.addEventListener('input',()=>queueMicrotask(update));
  const popupId='cfPurchasePromoPopup';let openTimer=null,closeTimer=null,alreadyShown=false;
- function closePopup(){document.getElementById(popupId)?.remove();clearTimeout(closeTimer);}
- function showPopup(){if(alreadyShown||!offers().purchasePromoPopupEnabled||!offers().purchaseBonusEnabled||!percent())return;
-   if(!document.getElementById('page-home')||!document.getElementById('page-home').classList.contains('active'))return;
+ // The promotional offer is for authenticated customers only, including new
+ // customers once email verification has completed and their session is ready.
+ const isSignedInCustomer=()=>Boolean(window.CallFocusServerAccount?.isServerReady?.()&&typeof account!=='undefined'&&account?.id);
+ const isHomeActive=()=>document.getElementById('page-home')?.classList.contains('active')===true;
+ const offerAvailable=()=>offers().purchasePromoPopupEnabled===true&&offers().purchaseBonusEnabled===true&&percent()>0;
+ const eligible=()=>offerAvailable()&&isSignedInCustomer()&&isHomeActive();
+ function closePopup(){document.getElementById(popupId)?.remove();clearTimeout(closeTimer);closeTimer=null;}
+ function openFunding(){
+   closePopup();
+   // Same-page CallFocus navigation. A full /credits reload starts at the hero
+   // and was the cause of the reported wrong destination.
+   try{showView('credits',false);}catch{location.assign('/credits');return;}
+   const scrollToPurchase=()=>{
+     const target=document.getElementById('creditPurchaseSection');
+     if(!target||!document.getElementById('page-credits')?.classList.contains('active'))return;
+     const headerHeight=document.querySelector('.site-header')?.getBoundingClientRect().height||0;
+     const top=window.scrollY+target.getBoundingClientRect().top-headerHeight-14;
+     window.scrollTo({top:Math.max(0,top),left:0,behavior:'auto'});
+   };
+   requestAnimationFrame(()=>requestAnimationFrame(scrollToPurchase));
+ }
+ function showPopup(){
+   if(alreadyShown||!eligible())return;
    alreadyShown=true;
    const el=document.createElement('div');el.id=popupId;el.className='cf-purchase-promo-overlay';
-   el.innerHTML=`<section class="cf-purchase-promo-card" role="dialog" aria-modal="true" aria-label="CallFocus bonus credits"><button class="cf-purchase-promo-close" type="button" aria-label="Close bonus offer">×</button><span class="cf-purchase-promo-label">LIMITED PROMOTIONAL OFFER</span><h2>Get ${percent()}% extra call credits</h2><p>Top up your CallFocus balance today and receive free bonus credits automatically when your payment is confirmed.</p><strong>₦10,000 → ${(Number(packages()['10000'])*(1+percent()/100)).toLocaleString('en-NG',{maximumFractionDigits:1})} credits</strong><button class="cf-purchase-promo-deposit" type="button">Deposit now →</button><small>Bonus applies to confirmed purchases while the offer is enabled.</small></section>`;
+   el.innerHTML=`<section class="cf-purchase-promo-card" role="dialog" aria-modal="true" aria-labelledby="cfPurchasePromoTitle" aria-describedby="cfPurchasePromoDescription">
+     <button class="cf-purchase-promo-close" type="button" aria-label="Close bonus credit offer">&times;</button>
+     <div class="cf-purchase-promo-emblem" aria-hidden="true"><svg viewBox="0 0 40 40" fill="none"><rect x="7" y="9" width="26" height="22" rx="5" stroke="currentColor" stroke-width="2.3"/><path d="M20 10v20M8 18h24M12 10c-4-3-3-8 1-8 4 0 7 6 7 8 0-2 3-8 7-8 4 0 5 5 1 8" transform="translate(0 1)" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"/></svg></div>
+     <span class="cf-purchase-promo-label">BONUS CREDITS · LIMITED OFFER</span>
+     <h2 id="cfPurchasePromoTitle">More credits with every top-up.</h2>
+     <div class="cf-purchase-promo-benefit"><span class="cf-purchase-promo-rate">+${percent()}%</span><span>EXTRA CALL CREDITS<br>ON ELIGIBLE DEPOSITS</span></div>
+     <p id="cfPurchasePromoDescription">Choose the amount that works for you. Get <b>${percent()}% extra credits</b> automatically after your payment is confirmed.</p>
+     <div class="cf-purchase-promo-info"><span aria-hidden="true">✓</span> Your bonus is calculated for your selected amount, not a single package.</div>
+     <button class="cf-purchase-promo-deposit" type="button">Deposit now <span aria-hidden="true">→</span></button>
+     <small>Applies to eligible purchases while the bonus promotion is active.</small>
+   </section>`;
    document.body.append(el);
-   el.querySelector('.cf-purchase-promo-close').onclick=closePopup;
-   el.querySelector('.cf-purchase-promo-deposit').onclick=()=>{closePopup();location.href='/credits';};
+   el.querySelector('.cf-purchase-promo-close').addEventListener('click',closePopup);
+   el.querySelector('.cf-purchase-promo-deposit').addEventListener('click',openFunding);
    el.addEventListener('click',e=>{if(e.target===el)closePopup()});
-   const hide=Number(offers().purchasePromoPopupCloseSeconds)||0;
+   el.querySelector('.cf-purchase-promo-close').focus({preventScroll:true});
+   const hide=Math.max(0,Number(offers().purchasePromoPopupCloseSeconds)||0);
    if(hide>0)closeTimer=setTimeout(closePopup,hide*1000);
  }
- function schedule(){clearTimeout(openTimer);if(!offers().purchasePromoPopupEnabled||!offers().purchaseBonusEnabled||alreadyShown){if(!offers().purchasePromoPopupEnabled||!offers().purchaseBonusEnabled||!percent())closePopup();return;}
-   openTimer=setTimeout(showPopup,(Number(offers().purchasePromoPopupOpenSeconds)||0)*1000);
+ function schedule(){
+   // Keep the configured delay steady across public-config refreshes.
+   if(!eligible()){
+     clearTimeout(openTimer);openTimer=null;closePopup();return;
+   }
+   if(alreadyShown||openTimer||document.getElementById(popupId))return;
+   const delay=Math.max(0,Number(offers().purchasePromoPopupOpenSeconds)||0);
+   openTimer=setTimeout(()=>{openTimer=null;showPopup();},delay*1000);
  }
+ window.addEventListener('callfocus:account-ready',schedule);
+ window.addEventListener('storage',event=>{if(event.key==='callfocus_server_session_v1')schedule();});
+ document.addEventListener('keydown',event=>{if(event.key==='Escape'&&document.getElementById(popupId))closePopup();});
  window.CallFocusPurchasePromo={refresh:()=>{update();schedule();}};
- const ready=()=>{update();schedule();const home=document.getElementById('page-home');if(home)new MutationObserver(()=>{if(!home.classList.contains('active'))closePopup();else schedule();}).observe(home,{attributes:true,attributeFilter:['class']});};
+ const ready=()=>{update();schedule();const home=document.getElementById('page-home');if(home)new MutationObserver(schedule).observe(home,{attributes:true,attributeFilter:['class']});};
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ready,{once:true});else ready();
  const refreshOffers=()=>fetch('/api/public-config',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(d=>{if(d){window.CallFocusPurchaseOffers=d.purchaseOffers||null;update();schedule();}}).catch(()=>{});
  window.addEventListener('pageshow',refreshOffers);

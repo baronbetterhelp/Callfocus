@@ -3965,14 +3965,27 @@ html[data-theme="dark"] #page-history .history-close-btn{background:#19302b;bord
 #page-credits .cf-offer-package-bonus{display:block;font-style:normal;font-size:10px;font-weight:800;color:#168a70;margin-top:4px}
 #page-credits .cf-purchase-bonus-message{margin:12px 0 2px;padding:12px 14px;border:1px solid #90dac2;border-radius:14px;background:#ebfaf3;color:#075e48;font-size:13px;font-weight:750;line-height:1.4}
 #page-credits .cf-purchase-bonus-message[hidden],#page-credits .cf-offer-package-bonus[hidden]{display:none!important}
-.cf-purchase-promo-overlay{position:fixed;inset:0;z-index:91000;background:rgba(5,24,20,.65);display:grid;place-items:center;padding:18px;overflow-y:auto}
-.cf-purchase-promo-card{position:relative;width:min(100%,430px);padding:34px 24px 25px;border-radius:26px;background:#fbfffd;border:1px solid #cde5dd;color:#10352c;box-shadow:0 24px 80px rgba(0,0,0,.25);display:flex;flex-direction:column;gap:16px;text-align:center}
-.cf-purchase-promo-close{position:absolute;top:12px;right:12px;width:35px;height:35px;border:1px solid #d4e2df;border-radius:50%;background:#fff;color:#1f3d36;font-size:24px;line-height:1;cursor:pointer}
-.cf-purchase-promo-label{color:#087765;font-size:10px;letter-spacing:.18em;font-weight:850}
-.cf-purchase-promo-card h2{font-size:clamp(25px,6vw,35px);line-height:1.15;margin:0;color:#09382e}
-.cf-purchase-promo-card p{line-height:1.6;font-size:14px;color:#506862;margin:0}
-.cf-purchase-promo-card strong{border-radius:14px;padding:13px;background:#edf9f4;color:#0b6754}
-.cf-purchase-promo-deposit{border:0;border-radius:16px;background:linear-gradient(110deg,#0a685a,#14907a);color:white;padding:17px;font-weight:850;font-size:16px;cursor:pointer}
-.cf-purchase-promo-card small{color:#64766f;font-size:11px}
+/* V15.93: Customer-only, amount-neutral bonus offer modal. Scoped exclusively to purchase popup. */
+.cf-purchase-promo-overlay{position:fixed;inset:0;z-index:91000;background:rgba(5,27,24,.72);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);display:grid;place-items:center;padding:clamp(14px,4vw,24px);overflow-y:auto;overscroll-behavior:contain}
+.cf-purchase-promo-card{position:relative;box-sizing:border-box;width:min(100%,450px);max-height:calc(100dvh - 30px);overflow-y:auto;padding:32px 27px 23px;border:1px solid rgba(166,209,193,.5);border-radius:28px;background:radial-gradient(circle at 0 0,rgba(217,247,235,.96),transparent 47%),linear-gradient(180deg,#fbfffc 0%,#f7faf7 100%);box-shadow:0 26px 82px rgba(0,0,0,.28);display:flex;flex-direction:column;align-items:center;gap:13px;text-align:center;color:#143e35}
+.cf-purchase-promo-close{position:absolute;top:14px;right:14px;display:grid;place-items:center;width:38px;height:38px;border:1px solid #d2e3db;border-radius:50%;background:#fff;color:#285347;font:500 26px/1 system-ui;cursor:pointer}
+.cf-purchase-promo-emblem{display:grid;place-items:center;width:56px;height:56px;border-radius:18px;color:#f8fffb;background:linear-gradient(145deg,#168b70,#0a5b4f);box-shadow:0 8px 20px rgba(12,103,81,.2)}
+.cf-purchase-promo-emblem svg{width:34px;height:34px}
+.cf-purchase-promo-label{color:#1a8370;font-size:10px;letter-spacing:.16em;font-weight:900}
+.cf-purchase-promo-card h2{margin:0;max-width:340px;color:#103d32;font:850 clamp(27px,6vw,36px)/1.12 'Manrope',system-ui,sans-serif;letter-spacing:-.04em}
+.cf-purchase-promo-benefit{display:flex;align-items:center;justify-content:center;gap:13px;width:100%;padding:15px 12px;border-radius:19px;background:#e7f5ed;border:1px solid #cfebde}
+.cf-purchase-promo-rate{font:900 clamp(39px,10vw,55px)/.98 'Manrope',system-ui,sans-serif;letter-spacing:-.05em;color:#086b58}
+.cf-purchase-promo-benefit>span:last-child{font-size:10px;font-weight:850;letter-spacing:.08em;line-height:1.55;text-align:left;color:#3c6659}
+.cf-purchase-promo-card p{margin:0;color:#486c60;font-size:14px;line-height:1.6}
+.cf-purchase-promo-card p b{color:#0d6655}
+.cf-purchase-promo-info{display:flex;align-items:flex-start;gap:8px;width:100%;padding:11px 13px;border-radius:12px;background:rgba(255,255,255,.8);border:1px solid #deebe5;color:#45685d;font-size:12px;line-height:1.5;text-align:left}
+.cf-purchase-promo-info span{flex:none;display:grid;place-items:center;width:19px;height:19px;border-radius:50%;background:#13826b;color:#fff;font-weight:900;font-size:12px}
+.cf-purchase-promo-deposit{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;min-height:58px;padding:15px;border:0;border-radius:17px;background:linear-gradient(110deg,#096e5d,#15927d);box-shadow:0 12px 25px rgba(7,96,77,.20);color:#fff;font-size:16px;font-weight:850;cursor:pointer}
+.cf-purchase-promo-deposit span{font-size:21px}
+.cf-purchase-promo-deposit:active{transform:translateY(1px)}
+.cf-purchase-promo-close:focus-visible,.cf-purchase-promo-deposit:focus-visible{outline:3px solid #2d9e85;outline-offset:3px}
+.cf-purchase-promo-card small{color:#71847c;font-size:11px;line-height:1.5}
+@media(max-width:390px){.cf-purchase-promo-card{padding:28px 17px 20px;gap:11px}.cf-purchase-promo-benefit{gap:9px}.cf-purchase-promo-benefit>span:last-child{font-size:9px}}
+@media(prefers-reduced-motion:reduce){.cf-purchase-promo-deposit{transition:none}}
 .admin-tab-panel .cf-offer-admin .cf-offer-packages{gap:12px}
 @media(max-width:600px){.admin-tab-panel .cf-offer-admin .cf-offer-packages{display:grid;grid-template-columns:1fr}}
