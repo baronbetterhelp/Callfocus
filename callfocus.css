@@ -3906,57 +3906,8 @@ input,textarea,select{min-width:0;max-width:100%}
 .history-shell{max-width:960px;padding-top:24px;padding-bottom:84px}.history-page-head{align-items:center}.history-refresh-btn{min-width:132px}.history-summary-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:18px}.history-summary-grid article,.history-panel{background:#111;border:1px solid #282828;border-radius:21px}.history-summary-grid article{padding:18px;display:grid;gap:6px}.history-summary-grid span{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:#737d7a;font-weight:800}.history-summary-grid strong{font:800 24px/1.08 'Manrope',system-ui,sans-serif;color:#f3f3f3}.history-summary-grid small{font-size:10px;color:#747d7a;line-height:1.45}.history-panel{padding:18px;margin-top:14px}.history-panel-head{display:flex;align-items:end;justify-content:space-between;gap:16px;padding-bottom:13px;border-bottom:1px solid #242424}.history-panel-head h2{margin:4px 0 0;font:800 22px/1.1 'Manrope',system-ui,sans-serif}.history-panel-head>small{font-size:9px;color:#777}.history-list{display:grid}.history-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:15px 0;border-bottom:1px solid #242424}.history-row:last-child{border-bottom:0}.history-row-main{display:grid;grid-template-columns:38px minmax(0,1fr);gap:11px;align-items:center;min-width:0}.history-row-icon{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;font:800 20px/1 'Manrope',system-ui,sans-serif}.history-row-in{background:rgba(38,145,124,.12);color:#66b9a7;border:1px solid rgba(63,157,138,.24)}.history-row-out{background:rgba(193,107,107,.10);color:#d88c8c;border:1px solid rgba(193,107,107,.22)}.history-row-main strong{display:block;font-size:12px;color:#ecefee}.history-row-main span,.history-row-main small{display:block;color:#78817f;margin-top:3px;line-height:1.4}.history-row-main span{font-size:10px}.history-row-main small{font-size:9px;overflow-wrap:anywhere}.history-row-amount{font-size:12px;white-space:nowrap}.history-positive{color:#65b8a6}.history-negative{color:#d58a8a}.history-empty{padding:28px 8px;text-align:center;color:#777;font-size:11px;line-height:1.6}html[data-theme="pearl"] .history-summary-grid article,html[data-theme="pearl"] .history-panel{background:#fff;border-color:#dce7e3;box-shadow:0 14px 36px rgba(40,77,70,.055)}html[data-theme="pearl"] .history-summary-grid strong,html[data-theme="pearl"] .history-panel-head h2,html[data-theme="pearl"] .history-row-main strong{color:#17312e}html[data-theme="pearl"] .history-summary-grid span,html[data-theme="pearl"] .history-summary-grid small,html[data-theme="pearl"] .history-row-main span,html[data-theme="pearl"] .history-row-main small,html[data-theme="pearl"] .history-panel-head>small,html[data-theme="pearl"] .history-empty{color:#7a8985}html[data-theme="pearl"] .history-panel-head,html[data-theme="pearl"] .history-row{border-color:#e4ebe8}@media(max-width:620px){.history-shell{padding-top:18px;padding-bottom:68px}.history-page-head{align-items:flex-start}.history-refresh-btn{width:100%}.history-summary-grid{grid-template-columns:1fr}.history-summary-grid article{padding:16px}.history-panel{padding:16px}.history-row{align-items:flex-start}.history-row-amount{font-size:11px}.history-panel-head h2{font-size:20px}}
 
 /* V15.84 additional KoraPay payment choice; existing Paystack/manual design unchanged */
-/* V15.87: premium KoraPay checkout button, customer-facing style only. */
-.korapay-checkout-btn{display:flex;position:relative;isolation:isolate;align-items:center;justify-content:center;width:100%;min-height:70px;margin-top:12px;padding:17px 64px;overflow:hidden;border:1px solid rgba(183,245,222,.32);border-radius:18px;background:linear-gradient(115deg,#0d645a 0%,#198b7a 52%,#0b605d 100%);color:#fff;font:800 16px/1.35 'Manrope',system-ui,sans-serif;letter-spacing:.005em;text-align:center;box-shadow:0 14px 26px rgba(11,92,78,.22),inset 0 1px 0 rgba(255,255,255,.28),inset 0 -1px 0 rgba(9,55,52,.16);cursor:pointer;transition:box-shadow .18s ease,transform .18s ease,filter .18s ease}
-.korapay-checkout-btn::before{content:"";position:absolute;left:16px;top:50%;transform:translateY(-50%);width:38px;height:38px;border-radius:13px;background:rgba(255,255,255,.13) url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2224%22%20height%3D%2224%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22white%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M12%2022s8-4%208-10V5l-8-3-8%203v7c0%206%208%2010%208%2010Z%22%2F%3E%3Cpath%20d%3D%22m9%2012%202%202%204-4%22%2F%3E%3C%2Fsvg%3E") center/21px 21px no-repeat;border:1px solid rgba(255,255,255,.24);box-shadow:inset 0 1px 0 rgba(255,255,255,.13);pointer-events:none}
-.korapay-checkout-btn::after{content:"\2192";display:grid;place-items:center;position:absolute;right:16px;top:50%;transform:translateY(-50%);width:37px;height:37px;border-radius:50%;background:rgba(255,255,255,.95);color:#146c62;font:800 21px/1 system-ui,sans-serif;box-shadow:0 3px 10px rgba(4,57,49,.13);pointer-events:none}
-.korapay-checkout-btn:not(:disabled):hover{filter:brightness(1.06);box-shadow:0 17px 30px rgba(11,92,78,.28),inset 0 1px 0 rgba(255,255,255,.28)}
-.korapay-checkout-btn:not(:disabled):active{transform:translateY(1px);box-shadow:0 7px 17px rgba(11,92,78,.2)}
-.korapay-checkout-btn:focus-visible{outline:3px solid #65c6b8;outline-offset:3px}
+.korapay-checkout-btn{display:block;width:100%;margin-top:10px;padding:15px 18px;border:1px solid rgba(51,132,177,.45);border-radius:16px;background:transparent;color:inherit;font-weight:800;font-size:14px;line-height:1.3;cursor:pointer;text-align:center}
 .korapay-checkout-btn.hidden{display:none!important}
-.korapay-checkout-btn:disabled{opacity:.55;cursor:not-allowed;box-shadow:none}
-@media(max-width:360px){.korapay-checkout-btn{min-height:64px;padding:14px 56px;font-size:14px}.korapay-checkout-btn::before{left:11px;width:34px;height:34px}.korapay-checkout-btn::after{right:11px;width:34px;height:34px}}
-@media(prefers-reduced-motion:reduce){.korapay-checkout-btn{transition:none}}
+.korapay-checkout-btn:disabled{opacity:.55;cursor:not-allowed}
 .korapay-enabled .credit-package,.korapay-enabled #customCreditAmount{pointer-events:auto!important;opacity:1!important}
 .korapay-enabled .credit-payment-note:before{content:''}
-
-/* V15.89: customer credits page shortcut to existing transaction history only. */
-#page-credits .credit-page-shell{position:relative}
-#page-credits .cf-credit-history-shortcut{
-  position:absolute;top:-30px;right:0;z-index:1;
-  display:inline-flex;align-items:center;justify-content:center;gap:9px;
-  min-height:42px;padding:0 13px 0 12px;
-  border:1px solid rgba(33,119,104,.22);border-radius:13px;
-  background:linear-gradient(145deg,#ffffff,#f3f8f6);color:#1b6358;
-  box-shadow:0 5px 17px rgba(34,92,78,.08);
-  font:750 12px/1.3 'Manrope',system-ui,sans-serif;letter-spacing:-.01em;
-  cursor:pointer;white-space:nowrap;
-  -webkit-tap-highlight-color:transparent;
-}
-#page-credits .cf-credit-history-shortcut:hover{border-color:rgba(27,117,101,.45);background:#f2faf6}
-#page-credits .cf-credit-history-shortcut:active{transform:translateY(1px)}
-#page-credits .cf-credit-history-shortcut:focus-visible{outline:3px solid #4ca58e;outline-offset:2px}
-#page-credits .cf-credit-history-icon{flex:none;color:#2a8a78}
-#page-credits .cf-credit-history-arrow{flex:none;color:#6b9b90}
-@media(max-width:375px){
-  #page-credits .cf-credit-history-shortcut{top:-28px;min-height:39px;padding:0 10px;gap:6px;font-size:11px}
-  #page-credits .cf-credit-history-icon{width:16px;height:16px}
-  #page-credits .cf-credit-history-arrow{width:13px;height:13px}
-}
-
-/* V15.90: Transaction history close control. Scoped exclusively to the history page. */
-#page-history .history-shell{position:relative}
-#page-history .history-close-btn{
-  position:absolute;top:-27px;left:0;z-index:2;
-  display:grid;place-items:center;width:44px;height:44px;padding:0;
-  border:1px solid rgba(42,110,98,.21);border-radius:50%;
-  background:rgba(255,255,255,.91);color:#235a51;
-  font:400 29px/1 'Manrope',system-ui,sans-serif;
-  box-shadow:0 5px 15px rgba(22,82,70,.07);
-  cursor:pointer;-webkit-tap-highlight-color:transparent;
-}
-#page-history .history-close-btn>span{display:block;line-height:1;transform:translateY(-1px)}
-#page-history .history-close-btn:hover{border-color:rgba(35,111,95,.45);background:#fff}
-#page-history .history-close-btn:active{transform:scale(.97)}
-#page-history .history-close-btn:focus-visible{outline:3px solid #58a99a;outline-offset:3px}
-html[data-theme="dark"] #page-history .history-close-btn{background:#19302b;border-color:#35524b;color:#e8f7f1}
