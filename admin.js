@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='15.94-test';
+const ADMIN_BUILD_VERSION='15.96-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -217,7 +217,7 @@ async function addUnlimitedUser(){
   if(unlimitedCreditEmails.includes(email))return toast('That email already has unlimited access');
   const ok=await setUnlimitedUser('add',email,btn); if(ok&&input)input.value='';
 }
-function fill(config,storageConnected){fillPurchaseOfferControls(config);currentConfig=config;customVoices=Array.isArray(config.customVoices)?config.customVoices:[];populateVoices();renderCustomVoiceLibrary();unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;if($('adminManualPaymentsEnabled'))$('adminManualPaymentsEnabled').checked=config.manualPaymentsEnabled===true;if($('adminKorapayPaymentsEnabled'))$('adminKorapayPaymentsEnabled').checked=config.korapayPaymentsEnabled!==false;if($('adminWebsiteMaintenanceEnabled'))$('adminWebsiteMaintenanceEnabled').checked=config.websiteMaintenanceEnabled===true;if($('adminManualBankName'))$('adminManualBankName').value=config.manualPaymentBankName||'';if($('adminManualAccountName'))$('adminManualAccountName').value=config.manualPaymentAccountName||'';if($('adminManualAccountNumber'))$('adminManualAccountNumber').value=config.manualPaymentAccountNumber||'';if($('adminManualPaymentEmail'))$('adminManualPaymentEmail').value=config.manualPaymentNotificationEmail||'support@callfocus.link';if($('adminAnalysisScreenshotMin'))$('adminAnalysisScreenshotMin').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMin)||20)));if($('adminAnalysisScreenshotMax'))$('adminAnalysisScreenshotMax').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMax)||Number(config.autoFillScreenshotLimit)||50)));fillQuickStart(config.quickStart||{});renderScreenshotLimitsSummary();$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);if($('adminDashStorage'))$('adminDashStorage').textContent=storageConnected?'Global storage connected':'Storage needs attention';renderServerState();renderBackupStatus(storageConnected)}
+function fill(config,storageConnected){fillPurchaseOfferControls(config);currentConfig=config;customVoices=Array.isArray(config.customVoices)?config.customVoices:[];populateVoices();renderCustomVoiceLibrary();unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;if($('adminManualPaymentsEnabled'))$('adminManualPaymentsEnabled').checked=config.manualPaymentsEnabled===true;if($('adminKorapayPaymentsEnabled'))$('adminKorapayPaymentsEnabled').checked=config.korapayPaymentsEnabled!==false;if($('adminWebsiteMaintenanceEnabled'))$('adminWebsiteMaintenanceEnabled').checked=config.websiteMaintenanceEnabled===true;if($('adminSignupEmailVerificationRequired'))$('adminSignupEmailVerificationRequired').checked=config.signupEmailVerificationEnabled===true;if($('adminManualBankName'))$('adminManualBankName').value=config.manualPaymentBankName||'';if($('adminManualAccountName'))$('adminManualAccountName').value=config.manualPaymentAccountName||'';if($('adminManualAccountNumber'))$('adminManualAccountNumber').value=config.manualPaymentAccountNumber||'';if($('adminManualPaymentEmail'))$('adminManualPaymentEmail').value=config.manualPaymentNotificationEmail||'support@callfocus.link';if($('adminAnalysisScreenshotMin'))$('adminAnalysisScreenshotMin').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMin)||20)));if($('adminAnalysisScreenshotMax'))$('adminAnalysisScreenshotMax').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMax)||Number(config.autoFillScreenshotLimit)||50)));fillQuickStart(config.quickStart||{});renderScreenshotLimitsSummary();$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);if($('adminDashStorage'))$('adminDashStorage').textContent=storageConnected?'Global storage connected':'Storage needs attention';renderServerState();renderBackupStatus(storageConnected)}
 async function api(path,options={}){const res=await fetch(path,{credentials:'same-origin',...options,headers:authHeaders(options.headers||{})});const type=res.headers.get('content-type')||'';const data=type.includes('application/json')?await res.json():await res.text();if(!res.ok)throw Object.assign(new Error(data?.error||data||'Request failed'),{status:res.status});return data}
 async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{const auth=await api('/api/admin/login',{method:'POST'});adminKey=auth.adminToken||key;rememberAdminSession(adminKey);$('adminPasscode').value='';const result=await api('/api/admin/config');$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminManualPayments().then(()=>loadAdminUsers(true));loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadMarketingStatus();loadDirectTemplates();}catch(err){adminKey='';if(err.status===401||err.status===403)forgetAdminSession();$('adminGateNote').textContent=err.message;toast(err.message)}}
 async function saveConfig(message='Global CallFocus settings saved'){
@@ -931,12 +931,12 @@ document.querySelectorAll('[data-admin-control]').forEach(btn=>btn.addEventListe
     const response=await fetch('/api/app-version',{cache:'no-store'});
     if(!response.ok)throw new Error('Version unavailable');
     const data=await response.json();const running=String(data.version||'unknown');
-    if(stamp)stamp.textContent=`Admin 15.94-test · Worker ${running}`;
+    if(stamp)stamp.textContent=`Admin 15.96-test · Worker ${running}`;
     if(running!==ADMIN_BUILD_VERSION||missing.length){
       if(status){status.textContent='A different or incomplete set of CallFocus files is active. Do not save admin settings until the matching complete build is uploaded and promoted.';status.classList.add('admin-control-warning');}
     }
   }catch{
-    if(stamp)stamp.textContent='Admin 15.94-test · Worker status unavailable';
+    if(stamp)stamp.textContent='Admin 15.96-test · Worker status unavailable';
     if(missing.length&&status){status.textContent='Some required controls were not found. Verify that the complete build was uploaded.';status.classList.add('admin-control-warning');}
   }
 })();
@@ -1067,4 +1067,28 @@ $('savePurchaseOffersBtn')?.addEventListener('click',async()=>{
    feedback.textContent='Saved. New offers are available on the customer payment page; existing pending payments keep their original offer.';feedback.className='admin-availability-feedback ok';toast('Credit offers updated');
  }catch(error){feedback.textContent=error.message||'Could not save offers';feedback.className='admin-availability-feedback error';toast(error.message||'Could not save offers');}
  finally{btn.disabled=false;btn.textContent=old;}
+});
+
+/* V15.96 — Emergency signup code pause, isolated from other admin saves. */
+$('saveSignupEmailVerificationBtn')?.addEventListener('click', async () => {
+  const btn=$('saveSignupEmailVerificationBtn');
+  const feedback=$('adminSignupEmailFeedback');
+  if(!btn||!feedback)return;
+  const required=$('adminSignupEmailVerificationRequired')?.checked===true;
+  btn.disabled=true;const original=btn.textContent;btn.textContent='Saving…';
+  try {
+    const result=await api('/api/admin/signup-email-verification', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({required})
+    });
+    if(result.config){currentConfig=result.config;saveBackup(result.config);}
+    $('adminSignupEmailVerificationRequired').checked=result.required===true;
+    feedback.textContent=result.required?'Email verification required for new signups. Codes will be sent through Resend.':'Temporary signup mode active. New accounts can register without an email code and remain unverified.';
+    feedback.className='admin-availability-feedback ok';
+    toast(result.required?'Signup verification enabled':'Temporary signup enabled');
+  } catch(err) {
+    feedback.textContent=err.message||'Unable to save signup setting.';
+    feedback.className='admin-availability-feedback error';
+    toast(err.message||'Unable to save signup setting');
+    if(currentConfig)$('adminSignupEmailVerificationRequired').checked=currentConfig.signupEmailVerificationEnabled===true;
+  } finally {btn.disabled=false;btn.textContent=original;}
 });

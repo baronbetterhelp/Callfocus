@@ -11,13 +11,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=15.94-test" />
+  <link rel="stylesheet" href="/admin.css?v=15.96-test" />
 </head>
 <body class="admin-page">
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="/admin">
-        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.94-test" alt="CallFocus" /></span>
+        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=15.96-test" alt="CallFocus" /></span>
         <span class="brand-copy"><strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong><small>Private system control</small></span>
       </a>
       <div class="header-actions"><a class="btn btn-ghost admin-back-link" href="/">Customer site</a></div>
@@ -36,7 +36,7 @@
 
     <section class="admin-dashboard hidden" id="adminDashboard">
       <div class="admin-page-head">
-        <div><span class="kicker">Private administration</span><h1>Admin Portal</h1><p>Operate CallFocus from one organized management workspace.</p><small class="admin-build-stamp" id="adminBuildStamp">CallFocus Admin 15.94-test</small></div>
+        <div><span class="kicker">Private administration</span><h1>Admin Portal</h1><p>Operate CallFocus from one organized management workspace.</p><small class="admin-build-stamp" id="adminBuildStamp">CallFocus Admin 15.96-test</small></div>
         <div class="admin-head-actions"><button class="btn btn-ghost" type="button" id="adminRefreshAllBtn">Refresh data</button><button class="btn btn-ghost" id="adminLockBtn">Sign out</button></div>
       </div>
 
@@ -46,6 +46,7 @@
           <button class="admin-tab" type="button" data-admin-tab="customers" aria-selected="false"><span>◎</span>Customers</button>
           <button class="admin-tab" type="button" data-admin-tab="email" aria-selected="false"><span>✉</span>Email</button>
           <button class="admin-tab" type="button" data-admin-tab="payments" aria-selected="false"><span>▣</span>Payments</button>
+          <button class="admin-tab" type="button" data-admin-tab="image-video" aria-selected="false"><span>▧</span>Image to Video</button>
           <button class="admin-tab" type="button" data-admin-tab="ai" aria-selected="false"><span>✦</span>AI usage</button>
           <button class="admin-tab" type="button" data-admin-tab="voice" aria-selected="false"><span>◉</span>Voice</button>
           <button class="admin-tab" type="button" data-admin-tab="behavior" aria-selected="false"><span>≋</span>Behavior</button>
@@ -96,6 +97,15 @@
           <p class="admin-availability-note">Existing payment notifications and pending payment approvals can still be completed during maintenance. Turn this off to restore the website.</p>
           <button type="button" class="btn btn-primary admin-availability-save" id="saveWebsiteMaintenanceBtn">Apply website availability</button>
           <div class="admin-availability-feedback" id="adminWebsiteMaintenanceFeedback" aria-live="polite"></div>
+        </div>
+
+        <!-- V15.96: emergency signup availability while Resend daily email quota is exhausted. -->
+        <div class="premium-panel admin-availability-panel" id="adminSignupEmailPanel">
+          <div class="admin-users-heading"><div><span class="kicker">Account registration</span><h3>Signup email verification</h3><p class="admin-panel-copy">Temporarily allow new customers to create accounts while Resend has reached its daily sending quota. This switch affects new signups only.</p></div></div>
+          <label class="toggle-row admin-availability-toggle"><span>Require email code when creating an account</span><input id="adminSignupEmailVerificationRequired" type="checkbox" /></label>
+          <p class="admin-availability-note"><strong>Emergency mode:</strong> OFF means customers can register immediately, but their email addresses remain <strong>unverified</strong>. This does not disable other emails, reset old accounts or verify anyone automatically. Turn ON again when Resend can send emails.</p>
+          <button type="button" class="btn btn-primary admin-availability-save" id="saveSignupEmailVerificationBtn">Apply signup setting</button>
+          <div class="admin-availability-feedback" id="adminSignupEmailFeedback" aria-live="polite"></div>
         </div>
 
         <div class="premium-panel admin-global-settings-panel">
@@ -281,7 +291,17 @@
         </div>
       </section>
 
-      <section class="admin-tab-panel" data-admin-panel="payments">
+      <section class="admin-tab-panel" data-admin-panel="image-video">
+  <div class="admin-section-heading"><span class="kicker">Grok Imagine 1.5 Lite</span><h2>Image to Video</h2><p>Control image-to-video availability, shared-wallet pricing and daily usage limits. Existing Live AI Avatar is separate.</p></div>
+  <div class="premium-panel form-panel"><div class="admin-users-heading"><div><h3>Generation availability & pricing</h3><p id="adminVideoConfigured">Checking API configuration…</p></div><button type="button" class="btn btn-ghost" id="refreshAdminVideo">Refresh</button></div>
+    <label class="toggle-row"><span><strong>Enable Image to Video</strong><small>Initially OFF until you approve the live test</small></span><input id="adminVideoEnabled" type="checkbox"></label>
+    <div class="form-grid three"><label>10-second cost (credits)<input id="adminVideo10" type="number" min="1" max="100000" value="300"></label><label>15-second cost (credits)<input id="adminVideo15" type="number" min="1" max="100000" value="450"></label><label>Max generations / user / day<input id="adminVideoDailyLimit" type="number" min="1" max="20" value="3"></label></div>
+    <h3>Image crop ratios</h3><p class="admin-panel-copy">The selected picture is cropped on the customer's device; xAI image-to-video preserves its input ratio.</p><div class="form-grid two"><label><input type="checkbox" data-video-ratio="9:16" checked> 9:16</label><label><input type="checkbox" data-video-ratio="1:1" checked> 1:1</label><label><input type="checkbox" data-video-ratio="16:9" checked> 16:9</label><label><input type="checkbox" data-video-ratio="4:5" checked> 4:5</label></div>
+    <h3>Motion styles</h3><div class="form-grid two"><label><input type="checkbox" data-video-motion="Natural" checked> Natural</label><label><input type="checkbox" data-video-motion="Cinematic" checked> Cinematic</label><label><input type="checkbox" data-video-motion="Subtle motion" checked> Subtle motion</label><label><input type="checkbox" data-video-motion="Dynamic" checked> Dynamic</label><label><input type="checkbox" data-video-motion="Dramatic" checked> Dramatic</label></div>
+    <button class="btn btn-primary" type="button" id="saveAdminVideo">Save Image to Video settings</button><p class="admin-availability-feedback" id="adminVideoFeedback"></p>
+  </div><div class="premium-panel"><h3>Video usage analytics (most recent 150 jobs)</h3><div class="iv-admin-stats"><article><span>Total jobs</span><strong id="ivStat-total">0</strong></article><article><span>Completed</span><strong id="ivStat-completed">0</strong></article><article><span>Failed</span><strong id="ivStat-failed">0</strong></article><article><span>Refunded</span><strong id="ivStat-refunded">0</strong></article><article><span>Credits charged</span><strong id="ivStat-creditsCharged">0</strong></article><article><span>Credits refunded</span><strong id="ivStat-creditsRefunded">0</strong></article><article><span>10-second jobs</span><strong id="ivStat-duration10">0</strong></article><article><span>15-second jobs</span><strong id="ivStat-duration15">0</strong></article></div><h3>Recent generation activity</h3><div id="adminVideoActivity">Loading activity…</div></div>
+</section>
+<section class="admin-tab-panel" data-admin-panel="payments">
         <div class="premium-panel form-panel cf-offer-admin" id="purchaseOffersPanel">
           <div class="admin-users-heading"><div><span class="kicker">Payment bonuses</span><h3>Credit packages & extra-credit promotion</h3><p class="admin-panel-copy">Edit how many base credits each fixed NGN package gives. A bonus adds extra credits after a confirmed payment and never reduces the amount charged. New settings apply only to new payment requests.</p></div></div>
           <div class="form-grid three cf-offer-packages">
@@ -495,6 +515,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=15.94-test"></script>
+  <script src="/admin.js?v=15.96-test"></script><script src="/admin-video.js?v=15.96-test"></script>
 </body>
 </html>
