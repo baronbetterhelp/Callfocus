@@ -189,6 +189,8 @@ const DEFAULT_CONFIG = {
   interruptions: true,
   unlimitedCreditEmails: [],
   manualPaymentsEnabled: false,
+  korapayPaymentsEnabled: true,
+  websiteMaintenanceEnabled: false,
   manualPaymentBankName: '',
   manualPaymentAccountName: '',
   manualPaymentAccountNumber: '',
@@ -1823,6 +1825,8 @@ function sanitizeConfig(input = {}) {
     interruptions: input.interruptions !== false,
     unlimitedCreditEmails,
     manualPaymentsEnabled: input.manualPaymentsEnabled === true,
+    korapayPaymentsEnabled: input.korapayPaymentsEnabled !== false,
+    websiteMaintenanceEnabled: input.websiteMaintenanceEnabled === true,
     manualPaymentBankName: String(input.manualPaymentBankName || '').trim().slice(0, 120),
     manualPaymentAccountName: String(input.manualPaymentAccountName || '').trim().slice(0, 160),
     manualPaymentAccountNumber,
@@ -2020,7 +2024,7 @@ async function handlePublicConfig(env) {
     updatedAt: c.updatedAt || null,
     engine: 'GPT-Live 1',
     paymentsEnabled: callFocusPaymentsEnabled(env),
-    korapayEnabled: korapayConfigured(env),
+    korapayEnabled: korapayConfigured(env) && c.korapayPaymentsEnabled !== false,
     paymentStatus: callFocusPaymentsEnabled(env) ? 'available' : 'awaiting_paystack_activation',
     manualPaymentsEnabled: manualPaymentReady(c),
     manualPaymentStatus: manualPaymentReady(c) ? 'available' : 'not_configured',
@@ -2479,6 +2483,69 @@ async function handleAdminConfig(request, env) {
   const config = sanitizeConfig({ ...current, ...body, customVoices: current.customVoices });
   await env.CALLFOCUS_CONFIG.put('global_config', JSON.stringify(config));
   return json({ ok: true, config, engine: 'GPT-Live 1' });
+}
+
+// V15.85: independent payment availability and whole-site maintenance controls.
+async function handleAdminAvailability(request, env) {
+  if (!await adminAuthorized(request, env)) return json({ error: 'Administrator sign-in required.' }, 401);
+  if (request.method === 'GET') {
+    const c = await getConfig(env);
+    return json({ manualPaymentsEnabled: c.manualPaymentsEnabled === true,
+      korapayPaymentsEnabled: c.korapayPaymentsEnabled !== false,
+      websiteMaintenanceEnabled: c.websiteMaintenanceEnabled === true });
+  }
+  if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET, POST' } });
+  if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.put !== 'function') return json({ error: 'Global settings storage is not connected.' }, 503);
+  let body;
+  try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
+  const allowed = ['manualPaymentsEnabled', 'korapayPaymentsEnabled', 'websiteMaintenanceEnabled'];
+  const changes = {};
+  for (const key of allowed) if (Object.prototype.hasOwnProperty.call(body || {}, key)) {
+    if (typeof body[key] !== 'boolean') return json({ error: 'Invalid switch value.' }, 400);
+    changes[key] = body[key];
+  }
+  if (!Object.keys(changes).length) return json({ error: 'No availability switch was provided.' }, 400);
+  const current = await getConfig(env);
+  const config = sanitizeConfig({ ...current, ...changes });
+  await env.CALLFOCUS_CONFIG.put('global_config', JSON.stringify(config));
+  return json({ ok: true, config, manualPaymentsEnabled: config.manualPaymentsEnabled,
+    korapayPaymentsEnabled: config.korapayPaymentsEnabled,
+    websiteMaintenanceEnabled: config.websiteMaintenanceEnabled });
+}
+
+// Render maintenance directly in the Worker, without loading any homepage JS or CSS.
+function websiteMaintenanceResponse(request) {
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#071917"><meta name="robots" content="noindex,nofollow"><title>Scheduled maintenance | CallFocus</title><style>
+  *{box-sizing:border-box}html,body{min-height:100%;margin:0}body{min-height:100svh;display:grid;place-items:center;padding:28px 18px;background:radial-gradient(ellipse at 15% 0%,#164c43 0%,transparent 46%),linear-gradient(160deg,#061613,#0c2421 85%);color:#f5fbf9;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;line-height:1.55}
+  .wrap{max-width:580px;width:100%;text-align:center}.brand{display:flex;align-items:center;justify-content:center;gap:11px;margin-bottom:43px;font-size:24px;font-weight:800;letter-spacing:-.8px}.mark{width:36px;height:36px;border:3px solid #63d5ab;border-radius:50%;display:inline-grid;place-items:center;color:#77e5bd;font-size:23px;line-height:1}.card{background:rgba(255,255,255,.065);border:1px solid rgba(255,255,255,.14);border-radius:30px;padding:48px 35px;box-shadow:0 28px 90px rgba(0,0,0,.22)}.status{display:inline-flex;align-items:center;gap:9px;border:1px solid rgba(119,229,189,.27);background:rgba(81,188,152,.13);color:#bcf2db;border-radius:100px;padding:8px 15px;font-size:12px;font-weight:750;letter-spacing:1px;text-transform:uppercase}.dot{width:7px;height:7px;background:#75e2ad;border-radius:50%}h1{font-size:clamp(29px,7vw,46px);letter-spacing:-1.5px;line-height:1.14;margin:24px 0 19px}p{color:#ccddd8;font-size:16px;max-width:420px;margin:0 auto 14px}.fine{font-size:13px;color:#a9c3bb;margin-top:23px}.foot{margin-top:32px;font-size:12px;color:#9bb4ac}@media(max-width:480px){.brand{margin-bottom:30px}.card{padding:36px 22px;border-radius:23px}p{font-size:15px}}
+  </style></head><body><main class="wrap"><div class="brand"><span class="mark" aria-hidden="true">✓</span><span>CallFocus</span></div><section class="card" role="status" aria-live="polite"><div class="status"><span class="dot"></span>Service update</div><h1>We’ll be back shortly.</h1><p>CallFocus is temporarily unavailable while we carry out an update to our website.</p><p>Please check back later. Thank you for your patience and understanding.</p><div class="fine">Our team is working to restore access as soon as possible.</div></section><div class="foot">CallFocus · Conversation continuity, simplified.</div></main></body></html>`;
+  return new Response(request.method === 'HEAD' ? null : html, { status: 503,
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0', 'Pragma': 'no-cache', 'Retry-After': '300', 'X-Robots-Tag': 'noindex, nofollow' } });
+}
+
+function maintenanceAllowedPath(path) {
+  // Keep admin access and payment settlement/confirmation available. Do not break
+  // webhook delivery or manual approvals that began before maintenance.
+  return path === '/admin' || path === '/admin/' || path === '/admin.html' || path === '/admin.css' || path === '/admin.js'
+    || path.startsWith('/api/admin/') || path === '/api/korapay/webhook' || path === '/api/paystack/webhook'
+    || path === '/api/korapay/verify' || path === '/api/paystack/verify' || path === '/api/paystack/recover'
+    || path === '/api/manual-payment/submit' || path === '/api/manual-payment/status' || path === '/api/manual-payment/cancel'
+    || path === '/manual-payment-review' || path === '/manual-payment-review/'
+    || path === '/api/auth/signout' || path === '/email/unsubscribe' || path === '/email/unsubscribe-preview';
+}
+
+async function maybeMaintenanceResponse(request, env, url) {
+  if (maintenanceAllowedPath(url.pathname)) return null;
+  const isApi = url.pathname.startsWith('/api/');
+  // Assets (JS/images/styles) are still served so the administrator can use the portal;
+  // all public HTML navigation is intercepted before any app content is loaded.
+  const htmlPage = request.method === 'GET' || request.method === 'HEAD';
+  const isAsset = /\.(?:css|js|mjs|json|png|jpe?g|webp|gif|svg|ico|txt|xml|woff2?|ttf|webmanifest|map)$/i.test(url.pathname);
+  if (!isApi && (!htmlPage || isAsset)) return null;
+  const c = await getConfig(env);
+  if (c.websiteMaintenanceEnabled !== true) return null;
+  if (isApi) return json({ error: 'CallFocus is undergoing an update. Please check back later.', code: 'website_maintenance' }, 503);
+  return websiteMaintenanceResponse(request);
 }
 
 async function handleAdminScreenshotLimits(request, env) {
@@ -3826,7 +3893,7 @@ async function handleKorapayInitialize(request,env){
   if(request.method!=='POST')return new Response('Method not allowed.',{status:405,headers:{Allow:'POST'}});
   const auth=await authenticatedCustomer(request,env);
   if(!auth)return json({error:'Sign in before purchasing credits.'},401);
-  if(!korapayConfigured(env))return json({error:'KoraPay is not available yet.'},503);
+  if(!korapayConfigured(env) || (await getConfig(env)).korapayPaymentsEnabled === false)return json({error:'KoraPay is temporarily unavailable.'},503);
   let body={};try{body=await request.json()}catch{}
   const credits=normalizePurchaseCredits(body?.credits);
   if(!credits)return json({error:`Minimum purchase is ${PAYSTACK_MIN_CREDITS} credits.`},400);
@@ -5421,6 +5488,8 @@ export default {
   async fetch(request, env) {
     try {
     const url = new URL(request.url);
+    const maintenance = await maybeMaintenanceResponse(request, env, url);
+    if (maintenance) return maintenance;
     if (url.pathname === '/api/auth/health' && request.method === 'GET') {
       return json({ ok: true, storageConnected: !!env.CALLFOCUS_CONFIG, passwordHashVersion: 3, passwordIterations: CUSTOMER_PASSWORD_ITERATIONS });
     }
@@ -5453,13 +5522,14 @@ export default {
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
     if (url.pathname === '/email/unsubscribe-preview' && request.method === 'GET') return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#173d37"><div style="max-width:560px;margin:70px auto;padding:20px"><div style="background:#fff;border:1px solid #d8e6e1;border-radius:26px;padding:34px"><h1>Test email only</h1><p>This is the unsubscribe preview from a CallFocus test email. No customer preference was changed.</p></div></div></body>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
     if (url.pathname === '/email/unsubscribe' && (request.method === 'GET' || request.method === 'POST')) return handleMarketingUnsubscribe(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.84-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.88-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
     if (url.pathname === '/api/wallet/consume') return safeCustomerRoute('wallet-consume', () => handleWalletConsume(request, env));
     if (url.pathname === '/api/admin/login' && request.method === 'POST') { const limited = await callFocusRateLimit(request, env, 'admin-login', 8, 900); if (limited) return limited; return handleAdminLogin(request, env); }
     if (url.pathname === '/api/admin/config') return handleAdminConfig(request, env);
+    if (url.pathname === '/api/admin/availability') return handleAdminAvailability(request, env);
     if (url.pathname === '/api/admin/screenshot-limits') return handleAdminScreenshotLimits(request, env);
     if (url.pathname === '/api/admin/quick-start') return handleAdminQuickStart(request, env);
     if (url.pathname === '/api/admin/users') return handleAdminUsers(request, env);
@@ -5497,10 +5567,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.84-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.88-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.84-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.84-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.88-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.88-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -5510,16 +5580,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.84-test');
+      headers.set('X-CallFocus-Admin-Build', '15.88-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.84-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.88-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.84-test');
+      headers.set('X-CallFocus-Admin-Build', '15.88-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {
