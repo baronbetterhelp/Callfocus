@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='15.93-test';
+  const BUILD='15.94-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -6238,9 +6238,9 @@ ${approvedPatterns}
   function refreshAutoFillLimitUI(){
     const min=minImages(),max=maxImages();
     const shortcut=byId('cfFirstCallAutoFillDescription');
-    if(shortcut)shortcut.textContent=`Auto-fill can create About you, About the caller and Conversation dynamics from ${autoFillRangeLabel(max)}. Nothing is added to the form until you review it.`;
+    if(shortcut)shortcut.textContent=`Auto-fill creates About you (the CallFocus user placing the call), About the person being called, and Conversation dynamics from ${autoFillRangeLabel(max)}. Review before adding anything to your call.`;
     const intro=byId('cfAutoFillIntro');
-    if(intro)intro.textContent=`Upload ${autoFillRangeLabel(max)}. Add a few facts about the caller first so CallFocus can identify them correctly throughout the conversation.`;
+    if(intro)intro.textContent=`Upload ${autoFillRangeLabel(max)}. Enter the CallFocus user’s details below, NOT those of the person receiving the call. CallFocus will identify the other person from your screenshots when possible.`;
     const uploadCopy=byId('cfAutoFillUploadCopy');
     if(uploadCopy)uploadCopy.textContent=min===max?`Choose exactly ${min} screenshot${min===1?'':'s'}, preferably in conversation order.`:`Choose at least ${min} and up to ${max} screenshots, preferably in conversation order.`;
     if(autoFiles.length>max)autoFiles=autoFiles.slice(0,max);
@@ -6294,17 +6294,17 @@ ${approvedPatterns}
     wrap.innerHTML=`
       <div class="modal cf-autofill-modal" role="dialog" aria-modal="true" aria-labelledby="cfAutoFillTitle">
         <div class="modal-head">
-          <div><span class="section-eyebrow">First-call auto-fill</span><h2 id="cfAutoFillTitle">Generate all caller information</h2><p id="cfAutoFillIntro">Upload ${autoFillRangeLabel()}. Add a few facts about the caller first so CallFocus can identify them correctly throughout the conversation.</p></div>
+          <div><span class="section-eyebrow">First-call auto-fill</span><h2 id="cfAutoFillTitle">Generate information about both people</h2><p id="cfAutoFillIntro">Upload ${autoFillRangeLabel()}. The details entered below belong to the CallFocus user placing the call. Details of the other person come from the screenshots.</p></div>
           <button class="modal-close" type="button" id="cfAutoFillClose" aria-label="Close">×</button>
         </div>
         <div class="cf-autofill-personal">
-          <div class="field-heading"><strong>About Caller</strong><small>Required before generation</small></div>
+          <div class="field-heading"><strong>About caller (CallFocus user)</strong><small>Person placing the call — required</small></div>
           <div class="form-grid cf-autofill-meta-grid">
-            <label>Callers name<input id="cfAutoCallerName" autocomplete="name" placeholder="e.g. David" /></label>
-            <label>Callers age<input id="cfAutoCallerAge" type="number" inputmode="numeric" min="1" max="120" placeholder="e.g. 38" /></label>
-            <label>Callers Job or work type<input id="cfAutoCallerJob" placeholder="e.g. Construction worker" /></label>
+            <label>CallFocus user’s name<input id="cfAutoCallerName" autocomplete="off" placeholder="Name of the person placing the call" /></label>
+            <label>CallFocus user’s age<input id="cfAutoCallerAge" type="number" inputmode="numeric" min="1" max="120" placeholder="e.g. 38" /></label>
+            <label>CallFocus user’s job or work type<input id="cfAutoCallerJob" placeholder="e.g. Construction worker" /></label>
           </div>
-          <p class="cf-autofill-note">These caller details anchor the analysis. CallFocus will not invent missing personal information about either person.</p>
+          <p class="cf-autofill-note">These details describe the person using CallFocus to place the call. Do not enter the person being called here. Their name and background will be read from the screenshots if identifiable.</p>
         </div>
         <div class="cf-autofill-upload-stage" id="cfAutoFillUploadStage">
           <label class="dynamics-upload-zone cf-autofill-upload" id="cfAutoFillUploadPrompt" for="cfAutoFillFiles">
@@ -6329,7 +6329,8 @@ ${approvedPatterns}
         <div class="cf-autofill-results hidden" id="cfAutoFillResults">
           <div class="cf-autofill-result-head"><div><span class="section-eyebrow">Generated information</span><strong>Review before adding to your call</strong></div><small>You can edit any result below.</small></div>
           <label>About you<textarea id="cfAutoAboutSelfResult" rows="7"></textarea></label>
-          <label>About the caller<textarea id="cfAutoAboutCallerResult" rows="7"></textarea></label>
+          <label>About the person you’re calling<textarea id="cfAutoAboutCallerResult" rows="7"></textarea></label>
+          <label>Name of the person being called (from screenshots, if identifiable)<input id="cfAutoRecipientNameResult" autocomplete="off" placeholder="Not identified — enter manually if needed" /></label>
           <label>Conversation dynamics<textarea id="cfAutoDynamicsResult" rows="12"></textarea></label>
         </div>
         <div class="dynamics-modal-actions cf-autofill-actions">
@@ -6426,7 +6427,7 @@ ${approvedPatterns}
     if(!token()){try{showAuth('signin',null,'Sign in to generate and save caller information.');}catch{notify('Sign in first.');}return;}
     installAutoFillModal();
     const profile=(typeof data!=='undefined'&&data?.profile)||{};
-    byId('cfAutoCallerName').value=safeText(byId('newCallPersonName')?.value||'');
+    byId('cfAutoCallerName').value=''; // The person being called must never prefill the CallFocus user's identity.
     byId('cfAutoCallerAge').value='';
     byId('cfAutoCallerJob').value='';
     resetAutoFiles(true);
@@ -6535,7 +6536,7 @@ ${approvedPatterns}
     const max=maxImages();
     if(autoFiles.length>max)return notify(`This CallFocus setup currently allows up to ${max} screenshots for automatic first-call information.`);
     const callerMeta={name:safeText(byId('cfAutoCallerName')?.value),age:safeText(byId('cfAutoCallerAge')?.value),job:safeText(byId('cfAutoCallerJob')?.value)};
-    if(!callerMeta.name||!callerMeta.age||!callerMeta.job)return notify('Enter the callers name, age and job/work type first.');
+    if(!callerMeta.name||!callerMeta.age||!callerMeta.job)return notify('Enter the CallFocus user’s name, age and job/work type (not the person being called).');
     const age=Number(callerMeta.age);if(!Number.isFinite(age)||age<1||age>120)return notify('Enter a valid callers age.');
     autoBusy=true;setAutoGeneratedState(false);renderAutoSelection();byId('cfAutoGenerateBtn').textContent='Generating…';byId('cfAutoClearBtn').disabled=true;
     const batchSize=smallerBatches()?MOBILE_BATCH_SIZE:DESKTOP_BATCH_SIZE,totalBatches=Math.ceil(autoFiles.length/batchSize),summaries=[],analysisId=(crypto.randomUUID?.()||`cfctx_${Date.now()}_${Math.random().toString(36).slice(2,10)}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,96),callerHint=safeText(byId('newCallPersonName')?.value);
@@ -6550,8 +6551,8 @@ ${approvedPatterns}
       setAutoProgress(finalizeProgress,'Building About you, About the caller and conversation dynamics…');
       const final=await finalizeAutoFill({kind:'finalize',summaries,imageCount:autoFiles.length,analysisId,callerMeta,callerHint},finalizeProgress);
       if(!final?.aboutSelf||!final?.aboutCaller||!final?.dynamics)throw new Error('CallFocus could not create all three information sections.');
-      byId('cfAutoAboutSelfResult').value=final.aboutSelf.trim();byId('cfAutoAboutCallerResult').value=final.aboutCaller.trim();byId('cfAutoDynamicsResult').value=final.dynamics.trim();
-      byId('cfAutoFillResults').dataset.callerName=safeText(final.callerName||'');setAutoGeneratedState(true);setAutoProgress(100,`Finished using ${autoFiles.length} screenshots.`);byId('cfAutoFillResults').scrollIntoView({behavior:'smooth',block:'nearest'});
+      byId('cfAutoAboutSelfResult').value=final.aboutSelf.trim();byId('cfAutoAboutCallerResult').value=final.aboutCaller.trim();byId('cfAutoRecipientNameResult').value=safeText(final.callerName||'');byId('cfAutoDynamicsResult').value=final.dynamics.trim();
+      setAutoGeneratedState(true);setAutoProgress(100,`Finished using ${autoFiles.length} screenshots.`);byId('cfAutoFillResults').scrollIntoView({behavior:'smooth',block:'nearest'});
     }catch(e){setAutoProgress(Math.max(5,autoProgressValue),e?.message||'Generation failed. Please try again.',true);notify(e?.message||'Generation failed. Please try again.');}
     finally{autoBusy=false;byId('cfAutoGenerateBtn').textContent='Generate information';byId('cfAutoClearBtn').disabled=false;renderAutoSelection();}
   }
@@ -6559,7 +6560,7 @@ ${approvedPatterns}
   function applyGeneratedInfo(){
     const self=safeText(byId('cfAutoAboutSelfResult')?.value),caller=safeText(byId('cfAutoAboutCallerResult')?.value),dyn=safeText(byId('cfAutoDynamicsResult')?.value);if(!self||!caller||!dyn)return notify('Keep all three generated sections filled before adding them.');
     byId('newCallAboutSelf').value=self;byId('newCallAboutCaller').value=caller;byId('newCallDynamicsMode').value='custom';byId('newCallDynamics').value=dyn;try{updateDynamicsUI('newCall')}catch{}
-    const inferred=safeText(byId('cfAutoFillResults')?.dataset.callerName);if(inferred&&!safeText(byId('newCallPersonName')?.value))byId('newCallPersonName').value=inferred;
+    const inferred=safeText(byId('cfAutoRecipientNameResult')?.value);const currentRecipient=safeText(byId('newCallPersonName')?.value);if(inferred&&!currentRecipient)byId('newCallPersonName').value=inferred;else if(inferred&&currentRecipient&&inferred.toLocaleLowerCase()!==currentRecipient.toLocaleLowerCase())notify('The screenshot name differs from the name already entered for the person being called. Please check that field before calling.');
     closeAutoFill();byId('newCallAboutSelf')?.closest('.field-section')?.scrollIntoView({behavior:'smooth',block:'center'});notify('Generated information added to the correct first-call fields.');
   }
 

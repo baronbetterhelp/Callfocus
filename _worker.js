@@ -4408,12 +4408,12 @@ async function handleCallContextAnalyze(request, env) {
   const analysisId = /^[A-Za-z0-9_-]{8,96}$/.test(suppliedAnalysisId) ? suppliedAnalysisId : crypto.randomUUID();
   const callerMeta = body?.callerMeta && typeof body.callerMeta === 'object' ? body.callerMeta : {};
   const legacyMeta = body?.userMeta && typeof body.userMeta === 'object' ? body.userMeta : {};
-  const callerNameConfirmed = String(callerMeta?.name || legacyMeta?.name || '').trim().slice(0, 120);
-  const callerAgeConfirmed = String(callerMeta?.age || legacyMeta?.age || '').trim().slice(0, 12);
-  const callerJobConfirmed = String(callerMeta?.job || legacyMeta?.job || '').trim().slice(0, 180);
-  const callerHint = String(body?.callerHint || callerNameConfirmed || '').trim().slice(0, 120);
-  if (!callerNameConfirmed || !callerAgeConfirmed || !callerJobConfirmed) return json({ error: 'Enter the callers name, age and job/work type before generating.' }, 400);
-  const callerAgeNumber = Number(callerAgeConfirmed);
+  const callFocusUserName = String(callerMeta?.name || legacyMeta?.name || '').trim().slice(0, 120);
+  const callFocusUserAge = String(callerMeta?.age || legacyMeta?.age || '').trim().slice(0, 12);
+  const callFocusUserJob = String(callerMeta?.job || legacyMeta?.job || '').trim().slice(0, 180);
+  const recipientNameHint = String(body?.callerHint || '').trim().slice(0, 120);
+  if (!callFocusUserName || !callFocusUserAge || !callFocusUserJob) return json({ error: 'Enter the CallFocus user’s name, age and job/work type before generating.' }, 400);
+  const callerAgeNumber = Number(callFocusUserAge);
   if (!Number.isFinite(callerAgeNumber) || callerAgeNumber < 1 || callerAgeNumber > 120) return json({ error: 'Enter a valid callers age.' }, 400);
   const config = await getConfig(env);
   const minScreenshots = Math.max(1, Math.min(50, Math.round(Number(config.analysisScreenshotMin) || DEFAULT_CONFIG.analysisScreenshotMin)));
@@ -4433,8 +4433,17 @@ async function handleCallContextAnalyze(request, env) {
     if (totalChars > 32_000_000) return json({ error: 'This screenshot batch is too large. Please try again.' }, 413);
     const batchNumber = Math.max(1, Math.floor(Number(body?.batchNumber) || 1));
     const totalBatches = Math.max(batchNumber, Math.floor(Number(body?.totalBatches) || batchNumber));
-    const identity = `The person being called is confirmed to be ${callerNameConfirmed}, age ${callerAgeConfirmed}, whose job/work type is ${callerJobConfirmed}. The CallFocus account holder/client is the other participant in the conversation and must be identified from the screenshot layout and message direction.`;
-    const content = [{ type: 'input_text', text: `${identity}\n\nYou are reading batch ${batchNumber} of ${totalBatches} ordered screenshots from the same private conversation. Build detailed analyst notes that will later be used to create three separate CallFocus fields: About the account holder/client, About the caller, and Dynamics of Your Conversations.\n\nUse visible chat layout, names, message direction and wording carefully to distinguish the account holder/client from the caller. In common messaging layouts outgoing/right-side messages may belong to the account holder/client, but only use that cue when the interface clearly supports it. The supplied caller name, age and caller job/work type are confirmed facts about the person being called and must not be reassigned to the account holder/client.\n\nCapture explicit facts about each person: names, work, family, location, routines, responsibilities, preferences, plans, interests, relevant life context and anything else actually stated. Separately capture communication behavior: who initiates, response length and timing, warmth, affection, flirtation, humor, reassurance, conflict, boundaries, recurring subjects, future plans, unresolved situations, and changes in closeness. Preserve important concrete context with short paraphrases.\n\nDo not invent demographics, jobs, family relationships, diagnoses, motives or hidden facts. If a fact cannot be assigned confidently, mark it as uncertain in the notes rather than guessing. Treat overlapping screenshots as duplicate context, not additional evidence. Keep this batch summary under 850 words.` }];
+    const identity = `IMPORTANT PERSON MAPPING (do not swap roles):
+PERSON 1 — CALLFOCUS USER / CALLER / PERSON PLACING THE CALL. Their explicitly supplied profile is: name ${callFocusUserName}, age ${callFocusUserAge}, job/work type ${callFocusUserJob}. These three details belong ONLY to PERSON 1 and to the finished "aboutSelf" field, NEVER automatically to the person being called.
+PERSON 2 — RECIPIENT / THE PERSON BEING CALLED. This is the conversation partner visible in the uploaded screenshots. ${recipientNameHint ? `The user already entered the recipient name "${recipientNameHint}" in the call form; treat it as a hint, and check it against the screenshots.` : 'Their name must be discovered from a clearly identifiable screenshot contact header, participant label, or unambiguous conversation reference, otherwise leave it unknown.'}
+Do not confuse a messaging-app contact label, account owner's name, or the supplied caller profile with the other person. The people may share ages or jobs; never transfer a personal fact between roles merely because it sounds plausible.`;
+    const content = [{ type: 'input_text', text: `${identity}
+
+You are reading batch ${batchNumber} of ${totalBatches} ordered screenshots from the same private conversation. Produce detailed analyst notes with separate headings: "PERSON 1 — CALLFOCUS USER", "PERSON 2 — PERSON BEING CALLED", "RELATIONSHIP / DYNAMICS", "RECIPIENT NAME EVIDENCE".
+
+Assign every fact only to its actual speaker/subject. Message direction (outgoing/incoming), contact headers, sender names, direct address and explicit self-descriptions can help, but messaging layouts vary: do not guess the owner solely from bubble color or position. If you cannot confidently attribute a detail, put it under "UNASSIGNED — DO NOT USE AS PERSON FACT" instead of assigning it to either person. In particular, Person 1's confirmed name/age/job must never appear as Person 2's facts without independent explicit evidence.
+
+Capture explicit work, family, location, routines, responsibilities, preferences, plans, interests, communication patterns, and important ongoing context for each participant. Record who says what when meaningful. For recipient name, preserve the exact visible name and evidence (chat header or explicit reference), or write "UNKNOWN" if unverified. Overlapping screenshots are duplicate context. Never invent demographics or personal facts. Keep this batch summary under 850 words.` }];
     for (const image of images) content.push({ type: 'input_image', image_url: image, detail: 'high' });
     try {
       const result = await callOpenAIResponses(env, { model: 'gpt-6-luna', store: false, reasoning: { effort: 'none' }, max_output_tokens: 1600, input: [{ role: 'user', content }] });
@@ -4449,13 +4458,17 @@ async function handleCallContextAnalyze(request, env) {
   if (imageCount < minScreenshots || imageCount > maxScreenshots) return json({ error: `Upload between ${minScreenshots} and ${maxScreenshots} screenshots for automatic first-call information.` }, 400);
   const joined = summaries.map((x,i)=>`BATCH ${i+1}\n${x.slice(0,5200)}`).join('\n\n');
   if (joined.length > 78_000) return json({ error: 'The combined conversation information is too large to finalize.' }, 413);
-  const prompt = `Create three CallFocus first-call context fields from the analyst notes below. They came from ${imageCount} ordered conversation screenshots.
+  const prompt = `Create CallFocus first-call fields from ${imageCount} screenshots using the analyst notes. There are exactly two distinct roles and they MUST NEVER BE INTERCHANGED.
 
-CONFIRMED CALLER FACTS
-Caller name: ${callerNameConfirmed}
-Caller age: ${callerAgeConfirmed}
-Caller job/work type: ${callerJobConfirmed}${callerHint && callerHint !== callerNameConfirmed ? `
-Caller name hint: ${callerHint}` : ''}
+CONFIRMED PERSON 1 — THE CALLFOCUS USER / CALLER / PERSON PLACING THE CALL ("aboutSelf"):
+Name: ${callFocusUserName}
+Age: ${callFocusUserAge}
+Job/work: ${callFocusUserJob}
+Those facts were entered into the "About caller (CallFocus user)" form, and belong to aboutSelf ONLY. They do NOT describe the person being called.
+
+PERSON 2 — RECIPIENT / PERSON BEING CALLED ("aboutCaller" and "callerName"):
+${recipientNameHint ? `Recipient name already entered in the separate call form: ${recipientNameHint}. Preserve that as the recipient hint; do not overwrite it with Person 1's name.` : 'No recipient name was provided. Identify their name only if it is clear from the screenshot contact header/participant label or unambiguous messages.'}
+The client's name, age and job must not be copied to this person's profile. The server field "callerName" means RECIPIENT NAME, not the caller's name.
 
 Return STRICT JSON only with exactly these keys:
 {
@@ -4466,30 +4479,27 @@ Return STRICT JSON only with exactly these keys:
 }
 
 Requirements for aboutSelf:
-- Write roughly 140–260 useful words when enough information exists.
-- Describe the account holder/client using only facts explicitly supported by the notes, plus their observed communication style and relevant ongoing context.
-- Do not invent missing biography, age, job, location or relationships.
+- Start by anchoring the CallFocus user as ${callFocusUserName}, age ${callFocusUserAge}, job/work ${callFocusUserJob}, using natural prose. These are verified form inputs for this field alone.
+- Describe PERSON 1 using only facts explicitly attributed to them in the notes, plus their own communication style. Aim for 140–260 words when sufficient notes exist; shorter is better than guessing.
+- NEVER insert PERSON 2's biographical details, age, job, location, or routine into aboutSelf unless the notes specifically attribute those same facts to Person 1.
 
 Requirements for aboutCaller:
-- Write roughly 140–300 useful words when enough information exists.
-- Start naturally with the confirmed caller name, age and job/work type.
-- Include clearly supported routines, family/life context, preferences, plans, communication style, and anything practically important for future calls.
-- If a detail is unsupported, omit it instead of saying it as fact.
+- Describe PERSON 2 (the person being called), using only facts clearly attributed to this other participant in the notes. Aim for 140–300 words when supported, otherwise keep it shorter.
+- NEVER start with ${callFocusUserName}, ${callFocusUserAge}, or ${callFocusUserJob} as the other person's identity unless the notes INDEPENDENTLY and explicitly identify these same details about PERSON 2.
+- If the person's name is unknown, refer to "the person being called" without inventing a name. Do not use the CallFocus user's metadata to fill missing fields.
 
 Requirements for callerName:
-- Return the confirmed caller name: ${callerNameConfirmed}.
+- This is the NAME OF THE PERSON BEING CALLED, not Person 1.
+- Prefer the explicitly entered recipient name hint if present and consistent; otherwise extract from the screenshot notes only if an unambiguous recipient name is actually evidenced.
+- Return an empty string when the recipient's name is not supported. Do not return ${callFocusUserName} solely because it was entered in the "About caller" form.
 
 Requirements for dynamics:
 - Begin exactly with: Dynamics of Your Conversations
-- Aim for 550–850 words when the evidence supports that depth. Be shorter rather than inventing details.
-- Describe overall relationship dynamic and conversational rhythm, recurring everyday habits/topics, the caller's communication style, the account holder/client's communication style, how both styles interact, emotional support, affection/flirtation, humor, tension/conflict, boundaries, future plans, unresolved complications, important ongoing life context, progression in closeness/distance, and practical guidance for how a future CallFocus voice should behave.
-- Use short * bullets only where helpful for recurring concrete topics or routines.
-- Treat the relationship as established only to the degree supported by the messages.
-- Never invent missing personal information.
-- Do not mention screenshots, batches, AI, models, prompts or analysis.
-- Do not use labels such as Person A/Person B in the finished text. Refer to the account holder/client as "you" in the dynamics.
+- Describe the actual interaction between Person 1 (the CallFocus user, "you") and Person 2 (person receiving the call), accurately attributing actions, interests, communication, tension, affection, recurring topics, schedules and plans.
+- Aim for 550–850 words only when evidence supports that depth; otherwise be concise. Do not invent facts or reverse speaker roles.
+- Never mention screenshots, batches, models or analysis in the finished text. Avoid Person 1/Person 2 labels in the finished writing.
 
-Make all three text fields ready to paste directly into CallFocus. Escape line breaks correctly as JSON strings.
+Write ready-to-use text. Use properly escaped JSON strings. If any detail is ambiguous, OMIT it instead of assigning it to the wrong person.
 
 ANALYST NOTES
 ${joined}`;
@@ -4500,7 +4510,19 @@ ${joined}`;
       const err = new Error('The generated information was incomplete. Please try again.'); err.status = 502; throw err;
     }
     await recordDynamicsUsage(env, { auth, analysisId, kind: 'finalize', imageCount, usage: result.usage });
-    return json({ ok: true, callerName: String(parsed.callerName||'').trim().slice(0,120), aboutSelf: String(parsed.aboutSelf).trim(), aboutCaller: String(parsed.aboutCaller).trim(), dynamics: String(parsed.dynamics).trim(), imageCount, analysisId });
+    const aboutSelfText = String(parsed.aboutSelf).trim();
+    const aboutRecipientText = String(parsed.aboutCaller).trim();
+    const modelRecipientName = String(parsed.callerName||'').trim().slice(0,120);
+    const recipientIsExplicitlySameName = recipientNameHint && recipientNameHint.toLocaleLowerCase() === callFocusUserName.toLocaleLowerCase();
+    // Refuse an obvious reversed-role result rather than writing the CallFocus user's confirmed identity into the recipient's details.
+    const recipientLeadingText = aboutRecipientText.slice(0, 300).toLocaleLowerCase();
+    const recipientHasUserName = recipientLeadingText.startsWith(callFocusUserName.toLocaleLowerCase() + ' ') || recipientLeadingText.startsWith(callFocusUserName.toLocaleLowerCase() + ',');
+    const recipientHasUserJob = recipientLeadingText.includes(callFocusUserJob.toLocaleLowerCase());
+    if (!recipientIsExplicitlySameName && recipientHasUserName && recipientHasUserJob) {
+      const err = new Error('The generator mixed up the CallFocus user and the person being called. Nothing was added to the call. Please try again or enter the two profiles manually.'); err.status = 502; throw err;
+    }
+    const safeRecipientName = modelRecipientName.toLocaleLowerCase() === callFocusUserName.toLocaleLowerCase() && !recipientIsExplicitlySameName ? '' : modelRecipientName;
+    return json({ ok: true, callerName: safeRecipientName, aboutSelf: aboutSelfText, aboutCaller: aboutRecipientText, dynamics: String(parsed.dynamics).trim(), imageCount, analysisId });
   } catch (error) { return json({ error: String(error?.message || 'Could not create the caller information.') }, Number(error?.status || 502)); }
 }
 
@@ -5618,7 +5640,7 @@ export default {
     if (url.pathname === '/manual-payment-review' || url.pathname === '/manual-payment-review/') return handleManualPaymentReview(request, env);
     if (url.pathname === '/email/unsubscribe-preview' && request.method === 'GET') return new Response('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="margin:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#173d37"><div style="max-width:560px;margin:70px auto;padding:20px"><div style="background:#fff;border:1px solid #d8e6e1;border-radius:26px;padding:34px"><h1>Test email only</h1><p>This is the unsubscribe preview from a CallFocus test email. No customer preference was changed.</p></div></div></body>', { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
     if (url.pathname === '/email/unsubscribe' && (request.method === 'GET' || request.method === 'POST')) return handleMarketingUnsubscribe(request, env);
-    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.93-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version' && request.method === 'GET') return json({ version: '15.94-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -5664,10 +5686,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.93-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=15.94-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.93-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.93-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.94-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.94-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -5677,16 +5699,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.93-test');
+      headers.set('X-CallFocus-Admin-Build', '15.94-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.93-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.94-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.93-test');
+      headers.set('X-CallFocus-Admin-Build', '15.94-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {
