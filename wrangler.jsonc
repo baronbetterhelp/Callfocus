@@ -14,10 +14,16 @@
       "PAYSTACK_SECRET_KEY",
       "RESEND_API_KEY",
       "RESEND_USAGE_API_KEY",
-      "TAVUS_API_KEY"
+      "TAVUS_API_KEY",
+      "POCKETFI_SECRET_KEY",
+      "POCKETFI_PUBLIC_API_KEY"
     ]
   },
-  "triggers": { "crons": ["*/5 * * * *"] },
+  "triggers": {
+    "crons": [
+      "*/5 * * * *"
+    ]
+  },
   "observability": {
     "logs": {
       "enabled": true,
