@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='16.05-test';
+  const BUILD='16.06-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -5189,18 +5189,19 @@ ${approvedPatterns}
   let attempts=0;
 
   function paint(state){
-    const paystack=state.paystack===true, manual=state.manual===true, korapay=state.korapay===true, pocketfi=state.pocketfi===true, known=state.known===true;
+    const paystack=state.paystack===true, manual=state.manual===true, korapay=state.korapay===true, pocketfi=state.pocketfi===true, pocketfiBank=state.pocketfiBank===true, known=state.known===true;
     const available=known&&(paystack||manual);
-    window.CallFocusPaymentAvailability={paystack,manual,korapay,pocketfi,available,known,error:state.error||''};
+    window.CallFocusPaymentAvailability={paystack,manual,korapay,pocketfi,pocketfiBank,available,known,error:state.error||''};
     document.documentElement.classList.toggle('korapay-enabled',korapay);
-    document.documentElement.classList.toggle('pocketfi-enabled',pocketfi);
+    document.documentElement.classList.toggle('pocketfi-enabled',pocketfi||pocketfiBank);
+    const bankButton=document.getElementById('pocketfiBankBtn');if(bankButton){bankButton.classList.toggle('hidden',!pocketfiBank);bankButton.disabled=!pocketfiBank||!Number.isFinite(Number(document.getElementById('customCreditAmount')?.value))||Number(document.getElementById('customCreditAmount')?.value)<300;}
     const pocketfiButton=document.getElementById('pocketfiCheckoutBtn');if(pocketfiButton){pocketfiButton.classList.toggle('hidden',!pocketfi);pocketfiButton.disabled=!pocketfi||!Number.isFinite(Number(document.getElementById('customCreditAmount')?.value))||Number(document.getElementById('customCreditAmount')?.value)<300;}
     const koraButton=document.getElementById('korapayCheckoutBtn');
     if(koraButton){koraButton.classList.toggle('hidden',!korapay);koraButton.disabled=!korapay||!Number.isFinite(Number(document.getElementById('customCreditAmount')?.value))||Number(document.getElementById('customCreditAmount')?.value)<300;}
     document.documentElement.classList.toggle('payments-enabled',paystack);
     document.documentElement.classList.toggle('payments-disabled',known&&!paystack);
     document.documentElement.classList.toggle('manual-payments-enabled',manual&&!paystack);
-    document.documentElement.classList.toggle('all-payments-unavailable',known&&!available&&!korapay&&!pocketfi);
+    document.documentElement.classList.toggle('all-payments-unavailable',known&&!available&&!korapay&&!pocketfi&&!pocketfiBank);
     const amount=Number(document.getElementById('customCreditAmount')?.value||300);
     const amountValid=Number.isFinite(amount)&&Math.floor(amount)>=300;
     const checkout=document.getElementById('creditCheckoutBtn');
@@ -5214,12 +5215,12 @@ ${approvedPatterns}
     const label=document.getElementById('creditCheckoutLabel');
     if(label)label.textContent=!known?'Retry payment options':paystack?'Continue to payment':manual?'Request account number':'Payments unavailable';
     const note=document.getElementById('creditPaymentNote');
-    if(note)note.textContent=!known?'CallFocus could not confirm payment availability yet. Tap the button to retry.':paystack?(korapay?'Choose Paystack or KoraPay for secure checkout. Credits are added only after successful server verification.':'Secure checkout is handled by Paystack. Credits are added only after CallFocus verifies a successful payment on the server.'):manual?(korapay?'Choose KoraPay for secure checkout, or use manual transfer and submit your receipt for approval.':'Pay by bank transfer, upload your receipt, and receive credits after manual confirmation.'):korapay?'Use KoraPay secure checkout. Credits are added after CallFocus verifies your successful payment.':pocketfi?'Use PocketFi checkout. Credits are added after CallFocus verifies your successful payment.':'Payments are temporarily unavailable while Paystack activation is pending.';
+    if(note)note.textContent=!known?'CallFocus could not confirm payment availability yet. Tap the button to retry.':paystack?(korapay?'Choose Paystack or KoraPay for secure checkout. Credits are added only after successful server verification.':'Secure checkout is handled by Paystack. Credits are added only after CallFocus verifies a successful payment on the server.'):manual?(korapay?'Choose KoraPay for secure checkout, or use manual transfer and submit your receipt for approval.':'Pay by bank transfer, upload your receipt, and receive credits after manual confirmation.'):korapay?'Use KoraPay secure checkout. Credits are added after CallFocus verifies your successful payment.':pocketfi?'Use PocketFi checkout. Credits are added after CallFocus verifies your successful payment.':pocketfiBank?'Use your assigned PocketFi bank account and transfer the exact selected amount. Credits are added after signed confirmation.':'Payments are temporarily unavailable while Paystack activation is pending.';
     const notice=document.getElementById('paymentPendingNotice');
     if(notice){
       const strong=notice.querySelector('strong'),span=notice.querySelector('span');
       if(!known){if(strong)strong.textContent='Checking payment options';if(span)span.textContent='CallFocus will retry automatically. You can also tap the payment button to retry now.';}
-      else if(!paystack){if(strong)strong.textContent=manual?'Manual bank transfer available':korapay?'KoraPay available':pocketfi?'PocketFi available':'Payments are temporarily unavailable';if(span)span.textContent=manual?'Transfer the exact amount, upload your receipt, and your credits will be added after confirmation.':korapay?'Pay with KoraPay using secure checkout. Credits are added once payment is verified.':pocketfi?'Pay with PocketFi. Credits are added after your payment is verified.':'Payments are temporarily unavailable. Please try again later.';}
+      else if(!paystack){if(strong)strong.textContent=manual?'Manual bank transfer available':korapay?'KoraPay available':pocketfi?'PocketFi available':pocketfiBank?'PocketFi bank transfer available':'Payments are temporarily unavailable';if(span)span.textContent=manual?'Transfer the exact amount, upload your receipt, and your credits will be added after confirmation.':korapay?'Pay with KoraPay using secure checkout. Credits are added once payment is verified.':pocketfi?'Pay with PocketFi. Credits are added after your payment is verified.':pocketfiBank?'Transfer the exact selected amount to your assigned bank account. Credits are added after confirmed receipt.':'Payments are temporarily unavailable. Please try again later.';}
     }
     const dva=document.getElementById('paystackCreateDvaBtn'); if(dva)dva.disabled=!paystack;
     try{window.CallFocusManualPayments?.validateAmount?.();}catch{}
@@ -5238,7 +5239,7 @@ ${approvedPatterns}
         if(!res.ok)throw new Error(`HTTP ${res.status}`);
         const cfg=await res.json();
         attempts=0;clearTimeout(retryTimer);
-        return paint({known:true,paystack:cfg?.paymentsEnabled===true,manual:cfg?.manualPaymentsEnabled===true,korapay:cfg?.korapayEnabled===true,pocketfi:cfg?.pocketfiEnabled===true});
+        return paint({known:true,paystack:cfg?.paymentsEnabled===true,manual:cfg?.manualPaymentsEnabled===true,korapay:cfg?.korapayEnabled===true,pocketfi:cfg?.pocketfiEnabled===true,pocketfiBank:cfg?.pocketfiBankEnabled===true});
       }catch(error){
         const state=paint({known:false,paystack:false,manual:false,korapay:false,pocketfi:false,error:String(error?.message||error||'unavailable')});
         if(retry&&attempts<4){attempts+=1;clearTimeout(retryTimer);retryTimer=setTimeout(()=>syncPaymentAvailability({force:true,retry:true}),Math.min(8000,1000*attempts));}
@@ -7888,3 +7889,6 @@ ${approvedPatterns}
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
+
+/* V16.06 static PocketFi bank-transfer launcher. No checkout redirect. */
+(()=>{const bind=()=>{const btn=document.getElementById('pocketfiBankBtn');if(!btn)return;const update=()=>{const amount=Number(document.getElementById('customCreditAmount')?.value||0);btn.disabled=window.CallFocusPaymentAvailability?.pocketfiBank!==true||!Number.isInteger(amount)||amount<300;};document.getElementById('customCreditAmount')?.addEventListener('input',update);document.querySelectorAll('[data-credit-package]').forEach(el=>el.addEventListener('click',()=>setTimeout(update,0)));btn.addEventListener('click',()=>{const credits=Number(document.getElementById('customCreditAmount')?.value||0);if(!Number.isInteger(credits)||credits<300){window.toast?.('Choose at least 300 credits.');return;}const session=localStorage.getItem('callfocus_server_session_v1')||'';if(!session){window.showAuth?.('signin',null,'Sign in before funding.');return;}if(!window.CallFocusPaymentAvailability?.pocketfiBank){window.toast?.('PocketFi bank transfer is not available yet.');return;}location.href='/pocketfi-bank?credits='+encodeURIComponent(String(credits));});};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else bind();})();
