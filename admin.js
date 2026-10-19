@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='16.03-test';
+const ADMIN_BUILD_VERSION='16.04-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -31,12 +31,14 @@ let unlimitedCreditEmails=[];
 let adminUsers=[];
 let adminUsersCursor='';
 let adminUsersLoading=false;
+let adminUsersVisibleLimit=80;
 let adminAiUsage=null;
 let adminAiUsageLoading=false;
 let customVoices=[];
 let customVoiceAccess=null;
 let adminManualPayments=[];
 let adminManualPaymentsLoading=false;
+let adminManualVisibleLimit=100;
 let quickStartItems=[];
 let marketingSelectedUserIds=new Set();
 let directSelectedUserIds=new Set();
@@ -299,7 +301,7 @@ async function addUnlimitedUser(){
 }
 function fill(config,storageConnected){fillPurchaseOfferControls(config);currentConfig=config;customVoices=Array.isArray(config.customVoices)?config.customVoices:[];populateVoices();renderCustomVoiceLibrary();unlimitedCreditEmails=Array.isArray(config.unlimitedCreditEmails)?[...new Set(config.unlimitedCreditEmails.map(normalizeUnlimitedEmail).filter(validUnlimitedEmail))]:[];renderUnlimitedUsers();$('adminSiteTheme').value=config.siteTheme||'black';document.querySelectorAll('[data-site-theme]').forEach(btn=>{const on=btn.dataset.siteTheme===$('adminSiteTheme').value;btn.classList.toggle('active',on);btn.setAttribute('aria-pressed',String(on));});$('adminServerOnline').checked=config.serverOnline!==false;$('adminServerMessage').value=config.serverMessage||'';$('adminMaleVoice').value=config.maleVoice||'cedar';$('adminFemaleVoice').value=config.femaleVoice||'marin';$('adminModel').value='gpt-live-1';$('adminSpeakingPace').value=config.speakingPace||'relaxed';$('adminSpeechStyle').value=config.speechStyle||'';$('adminInstructions').value=config.instructions||'';$('adminOpening').value=config.opening||'';$('adminSpeakFirst').checked=config.speakFirst!==false;$('adminInterruptions').checked=config.interruptions!==false;if($('adminManualPaymentsEnabled'))$('adminManualPaymentsEnabled').checked=config.manualPaymentsEnabled===true;if($('adminKorapayPaymentsEnabled'))$('adminKorapayPaymentsEnabled').checked=config.korapayPaymentsEnabled!==false;if($('adminPocketfiPaymentsEnabled'))$('adminPocketfiPaymentsEnabled').checked=config.pocketfiPaymentsEnabled===true;if($('adminWebsiteMaintenanceEnabled'))$('adminWebsiteMaintenanceEnabled').checked=config.websiteMaintenanceEnabled===true;if($('adminSignupEmailVerificationRequired'))$('adminSignupEmailVerificationRequired').checked=config.signupEmailVerificationEnabled===true;if($('adminManualBankName'))$('adminManualBankName').value=config.manualPaymentBankName||'';if($('adminManualAccountName'))$('adminManualAccountName').value=config.manualPaymentAccountName||'';if($('adminManualAccountNumber'))$('adminManualAccountNumber').value=config.manualPaymentAccountNumber||'';if($('adminManualPaymentEmail'))$('adminManualPaymentEmail').value=config.manualPaymentNotificationEmail||'support@callfocus.link';if($('adminAnalysisScreenshotMin'))$('adminAnalysisScreenshotMin').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMin)||20)));if($('adminAnalysisScreenshotMax'))$('adminAnalysisScreenshotMax').value=Math.max(1,Math.min(50,Math.round(Number(config.analysisScreenshotMax)||Number(config.autoFillScreenshotLimit)||50)));fillQuickStart(config.quickStart||{});renderScreenshotLimitsSummary();$('adminStorageStatus').textContent=storageConnected?'Global settings storage connected':'Global settings storage is not connected yet';$('adminStorageStatus').classList.toggle('bad',!storageConnected);if($('adminDashStorage'))$('adminDashStorage').textContent=storageConnected?'Global storage connected':'Storage needs attention';renderServerState();renderBackupStatus(storageConnected)}
 async function api(path,options={}){const res=await fetch(path,{credentials:'same-origin',...options,headers:authHeaders(options.headers||{})});const type=res.headers.get('content-type')||'';const data=type.includes('application/json')?await res.json():await res.text();if(!res.ok)throw Object.assign(new Error(data?.error||data||'Request failed'),{status:res.status});return data}
-async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{const auth=await api('/api/admin/login',{method:'POST'});adminKey=auth.adminToken||key;rememberAdminSession(adminKey);$('adminPasscode').value='';const result=await api('/api/admin/config');$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminManualPayments().then(()=>loadAdminUsers(true));loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadMarketingStatus();loadDirectTemplates();loadAdminFundingReport();}catch(err){adminKey='';if(err.status===401||err.status===403)forgetAdminSession();$('adminGateNote').textContent=err.message;toast(err.message)}}
+async function login(){const key=$('adminPasscode').value.trim();if(!key)return toast('Enter your admin passcode');adminKey=key;try{const auth=await api('/api/admin/login',{method:'POST'});adminKey=auth.adminToken||key;rememberAdminSession(adminKey);$('adminPasscode').value='';const result=await api('/api/admin/config');$('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');const backup=readBackup();if(!result.storageConnected&&backup?.config){fill(backup.config,false);toast('KV disconnected — protected settings restored on this device')}else{fill(result.config,result.storageConnected);if(result.storageConnected)saveBackup(result.config)}loadAdminManualPayments();loadAdminUsers(true);loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadMarketingStatus();loadDirectTemplates();loadAdminFundingReport();}catch(err){adminKey='';if(err.status===401||err.status===403)forgetAdminSession();$('adminGateNote').textContent=err.message;toast(err.message)}}
 async function saveConfig(message='Global CallFocus settings saved'){
   const btn=$('saveAdminBtn'),old=btn?.textContent||'Save global settings';
   if(btn){btn.disabled=true;btn.textContent='Saving…'}
@@ -414,7 +416,7 @@ async function restoreRememberedAdmin(){
     $('adminGate').classList.add('hidden');$('adminDashboard').classList.remove('hidden');
     const backup=readBackup();
     if(!r.storageConnected&&backup?.config)fill(backup.config,false);else{fill(r.config,r.storageConnected);if(r.storageConnected)saveBackup(r.config);}
-    loadAdminManualPayments().then(()=>loadAdminUsers(true));loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadMarketingStatus();loadDirectTemplates();loadAdminFundingReport();
+    loadAdminManualPayments();loadAdminUsers(true);loadAdminAiUsage();loadAdminCallUsage();loadAdminBilledCosts();loadMarketingStatus();loadDirectTemplates();loadAdminFundingReport();
   }catch(err){
     if(adminKey!==remembered)return;
     adminKey='';if(err.status===401||err.status===403)forgetAdminSession();else $('adminGateNote').textContent='Your sign-in is remembered. Refresh when the connection is available.';
@@ -437,7 +439,8 @@ function renderAdminUsers(){
   const funded=adminUsers.filter(u=>Number(u?.wallet?.purchaseCount||0)>0).length;
   if(summary)summary.textContent=`${adminUsers.length} loaded · ${funded} funded · ${unlimited} unlimited · ${disabled} disabled`;if($('adminDashUsers'))$('adminDashUsers').textContent=String(adminUsers.length);if($('adminDashFunded'))$('adminDashFunded').textContent=String(funded);if($('adminDashUsersNote'))$('adminDashUsersNote').textContent=`${disabled} disabled · ${unlimited} unlimited`;
   if(!rows.length){root.innerHTML='<div class="admin-users-empty">No matching customer accounts.</div>';return;}
-  root.innerHTML=rows.map(u=>{
+  const shown=rows.slice(0,adminUsersVisibleLimit);
+  root.innerHTML=shown.map(u=>{
     const disabledClass=u.accountDisabled?' is-disabled':'';
     const status=u.accountDisabled?'Disabled':'Active';
     const access=u.unlimited?'Unlimited access':'Standard credit';
@@ -472,43 +475,61 @@ function renderAdminUsers(){
       </div>
     </article>`;
   }).join('');
+  if(rows.length>shown.length)root.insertAdjacentHTML('beforeend',`<button class="btn btn-ghost admin-users-more" type="button" data-admin-users-show-more>Show more customers (${(rows.length-shown.length).toLocaleString()} remaining)</button>`);
 }
 async function loadAdminUsers(reset=false){
-  if(adminUsersLoading)return; adminUsersLoading=true;
-  const refresh=$('adminUsersRefreshBtn'),more=$('adminUsersMoreBtn');
-  if(reset){adminUsers=[];adminUsersCursor='';if(refresh){refresh.disabled=true;refresh.textContent='Refreshing all…';}}
-  if(more){more.disabled=true;more.textContent='Loading…';}
-  let listComplete=false;
-  let pagesLoaded=0;
+  if(adminUsersLoading)return;
+  adminUsersLoading=true;
+  const refresh=$('adminUsersRefreshBtn'),more=$('adminUsersMoreBtn'),summary=$('adminUsersSummary');
+  if(reset){adminUsers=[];adminUsersCursor='';adminUsersVisibleLimit=80;}
+  if(refresh){refresh.disabled=true;refresh.textContent='Refreshing users…';}
+  if(more){more.disabled=true;more.textContent='Loading…';more.classList.add('hidden');}
+  let complete=false;
+  let pages=0;
+  const seenCursors=new Set();
+  const byId=new Map(adminUsers.map(u=>[u.id,u]));
   try{
-    // V15.45: the Customers page is an "All CallFocus users" view. On initial
-    // load and Refresh, walk every available KV page instead of silently
-    // stopping after the first 50. Manual Load more still fetches one page.
+    // Read all KV pages. The former 40 x 50 limit silently capped Admin at 2,000.
     do{
-      const qs=new URLSearchParams({limit:'50'}); if(adminUsersCursor)qs.set('cursor',adminUsersCursor);
+      const cursor=adminUsersCursor;
+      if(cursor){if(seenCursors.has(cursor))throw new Error('Repeated customer page cursor; refresh to retry.');seenCursors.add(cursor);}
+      const qs=new URLSearchParams({limit:'75'});if(cursor)qs.set('cursor',cursor);
       const result=await api(`/api/admin/users?${qs.toString()}`);
-      const incoming=Array.isArray(result.users)?result.users:[];
-      const byId=new Map(adminUsers.map(u=>[u.id,u])); incoming.forEach(u=>byId.set(u.id,u));
-      adminUsers=[...byId.values()].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+      for(const u of (Array.isArray(result.users)?result.users:[]))if(u?.id)byId.set(u.id,u);
       adminUsersCursor=String(result.cursor||'');
-      listComplete=!!result.listComplete || !adminUsersCursor;
-      pagesLoaded+=1;
-      renderAdminUsers();
-      if(!reset || listComplete)break;
-      // Yield briefly so mobile Safari can keep the admin interface responsive.
-      await new Promise(resolve=>setTimeout(resolve,0));
-    }while(adminUsersCursor && pagesLoaded<40);
-    if(more)more.classList.toggle('hidden',!adminUsersCursor);
-    const summary=$('adminUsersSummary');
-    if(summary && listComplete){
+      complete=result.listComplete===true;
+      pages++;
+      if(!complete&&!adminUsersCursor)throw new Error('The customer list stopped before all accounts were loaded.');
+      if(pages>1000)throw new Error('Too many customer pages; retry the refresh.');
+      if(summary)summary.textContent=`Loading customer accounts… ${byId.size.toLocaleString()} read`;
+      if($('adminDashUsers'))$('adminDashUsers').textContent=byId.size.toLocaleString();
+      // Keep iPhone Safari responsive. Do not rebuild thousands of DOM cards
+      // for each received page: draw once on first page and once at completion.
+      if(pages===1){adminUsers=[...byId.values()];renderAdminUsers();}
+      if(pages%5===0)await new Promise(resolve=>setTimeout(resolve,0));
+    }while(!complete);
+    adminUsers=[...byId.values()].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+    renderAdminUsers();
+    if(summary){
+      const funded=adminUsers.filter(u=>Number(u?.wallet?.purchaseCount||0)>0).length;
       const disabled=adminUsers.filter(u=>u.accountDisabled).length;
       const unlimited=adminUsers.filter(u=>u.unlimited).length;
-      const funded=adminUsers.filter(u=>Number(u?.wallet?.purchaseCount||0)>0).length;
-      summary.textContent=`${adminUsers.length} customers · ${funded} funded · ${unlimited} unlimited · ${disabled} disabled`;
+      summary.textContent=`${adminUsers.length.toLocaleString()} customers · ${funded} funded · ${unlimited} unlimited · ${disabled} disabled`;
     }
-  }catch(err){toast(err.message);if(!adminUsers.length&&$('adminUsersList'))$('adminUsersList').innerHTML='<div class="admin-users-empty">Could not load customer accounts.</div>';}
-  finally{adminUsersLoading=false;if(refresh){refresh.disabled=false;refresh.textContent='Refresh users';}if(more){more.disabled=false;more.textContent='Load more users';}renderMarketingRecipients();renderDirectRecipients();}
+  }catch(err){
+    adminUsers=[...byId.values()].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+    renderAdminUsers();
+    if(summary)summary.textContent=`Partial customer list: ${adminUsers.length.toLocaleString()} loaded. ${err.message} Try Refresh users.`;
+    toast('Customer refresh incomplete');
+    if(!adminUsers.length&&$('adminUsersList'))$('adminUsersList').innerHTML='<div class="admin-users-empty">Could not load customer accounts. Try again.</div>';
+  }finally{
+    adminUsersLoading=false;
+    if(refresh){refresh.disabled=false;refresh.textContent='Refresh users';}
+    if(more){more.disabled=false;more.textContent='Load more users';more.classList.toggle('hidden',!adminUsersCursor);}
+    renderMarketingRecipients();renderDirectRecipients();
+  }
 }
+
 function actionPrompt(action,user){
   if(action==='disable_account')return `Disable ${user.email}? They will be signed out and unable to sign in until you enable the account again.`;
   if(action==='enable_account')return `Enable ${user.email} again?`;
@@ -592,8 +613,9 @@ $('adminBulkGiftSubmitBtn')?.addEventListener('click',runAdminGiftAll);
 
 $('adminUsersRefreshBtn')?.addEventListener('click',()=>loadAdminUsers(true));
 $('adminUsersMoreBtn')?.addEventListener('click',()=>loadAdminUsers(false));
-$('adminUsersSearch')?.addEventListener('input',renderAdminUsers);
+$('adminUsersSearch')?.addEventListener('input',()=>{adminUsersVisibleLimit=80;renderAdminUsers();});
 $('adminUsersList')?.addEventListener('click',e=>{
+  if(e.target.closest('[data-admin-users-show-more]')){adminUsersVisibleLimit+=80;renderAdminUsers();return;}
   const creditToggle=e.target.closest('[data-user-credit-toggle]');
   if(creditToggle){toggleAdminCreditPanel(creditToggle.closest('[data-admin-user]'),creditToggle);return;}
   const creditSubmit=e.target.closest('[data-user-credit-submit]');
@@ -609,13 +631,18 @@ function manualStatusLabel(status=''){
 function manualStatusClass(status=''){return status==='approved'?'good':status==='rejected'||status==='cancelled'?'bad':status==='pending_confirmation'?'gold':'';}
 function renderAdminManualPayments(payload={}){
   adminManualPayments=Array.isArray(payload.payments)?payload.payments:adminManualPayments;const counts=payload.counts||{};
-  if($('adminManualPending'))$('adminManualPending').textContent=String(Number(counts.pending)||adminManualPayments.filter(p=>p.status==='pending_confirmation').length);
-  if($('adminManualApproved'))$('adminManualApproved').textContent=String(Number(counts.approved)||adminManualPayments.filter(p=>p.status==='approved').length);
-  if($('adminManualRejected'))$('adminManualRejected').textContent=String(Number(counts.rejected)||adminManualPayments.filter(p=>p.status==='rejected').length);
-  if($('adminDashManualPending'))$('adminDashManualPending').textContent=String(Number(counts.pending)||adminManualPayments.filter(p=>p.status==='pending_confirmation').length);
+  if($('adminManualPending'))$('adminManualPending').textContent=String(counts.pending??adminManualPayments.filter(p=>p.status==='pending_confirmation').length);
+  if($('adminManualApproved'))$('adminManualApproved').textContent=String(counts.approved??adminManualPayments.filter(p=>p.status==='approved').length);
+  if($('adminManualRejected'))$('adminManualRejected').textContent=String(counts.rejected??adminManualPayments.filter(p=>p.status==='rejected').length);
+  if($('adminDashManualPending'))$('adminDashManualPending').textContent=String(counts.pending??adminManualPayments.filter(p=>p.status==='pending_confirmation').length);
   const root=$('adminManualPaymentsList');if(!root)return;
   if(!adminManualPayments.length){root.innerHTML='<div class="admin-users-empty">No manual payment requests yet.</div>';return;}
-  root.innerHTML=adminManualPayments.map(p=>{
+  const sorted=[...adminManualPayments].sort((a,b)=>{
+    const pa=a.status==='pending_confirmation'?1:0,pb=b.status==='pending_confirmation'?1:0;
+    return pb-pa||String(b.submittedAt||b.createdAt||'').localeCompare(String(a.submittedAt||a.createdAt||''));
+  });
+  const shown=sorted.slice(0,adminManualVisibleLimit);
+  root.innerHTML=shown.map(p=>{
     const when=p.submittedAt||p.createdAt;const amount=Number(p.amountNaira||0).toLocaleString();const credits=Number(p.credits||0).toLocaleString();const pending=p.status==='pending_confirmation';
     const creditAlert=p.status==='approved'&&p.walletCreditPresent===false;
     const statusText=creditAlert?'Approved · credit check pending':manualStatusLabel(p.status);
@@ -627,12 +654,46 @@ function renderAdminManualPayments(payload={}){
       <div class="admin-user-actions">${p.receipt?'<button class="btn btn-ghost" type="button" data-manual-receipt>Open receipt</button>':''}${pending?'<button class="btn btn-primary" type="button" data-manual-action="approve">Approve payment</button><button class="btn admin-danger-btn" type="button" data-manual-action="reject">Reject</button>':''}</div>
     </article>`;
   }).join('');
+  if(sorted.length>shown.length)root.insertAdjacentHTML('beforeend',`<button class="btn btn-ghost admin-users-more" type="button" data-manual-show-more>Show more payments (${(sorted.length-shown.length).toLocaleString()} remaining)</button>`);
 }
 async function loadAdminManualPayments(){
-  if(adminManualPaymentsLoading)return;adminManualPaymentsLoading=true;const btn=$('adminManualPaymentsRefreshBtn');const old=btn?.textContent||'Refresh payments';if(btn){btn.disabled=true;btn.textContent='Refreshing…';}
-  try{const result=await api('/api/admin/manual-payments');renderAdminManualPayments(result);}catch(err){toast(err.message);}
-  finally{adminManualPaymentsLoading=false;if(btn){btn.disabled=false;btn.textContent=old;}}
+  if(adminManualPaymentsLoading)return;
+  adminManualPaymentsLoading=true;
+  const btn=$('adminManualPaymentsRefreshBtn'),status=$('adminManualLoadStatus');
+  const old=btn?.textContent||'Refresh payments';
+  if(btn){btn.disabled=true;btn.textContent='Refreshing…';}
+  if(status)status.textContent='Scanning all manual payment requests…';
+  const byId=new Map();
+  const seenCursors=new Set();
+  let cursor='',complete=false,pages=0;
+  try{
+    // New submissions have increasing CFM timestamp keys. A single KV list
+    // page returns the OLDEST keys and can hide the receipts needing approval.
+    do{
+      if(cursor){if(seenCursors.has(cursor))throw new Error('Repeated payment page cursor.');seenCursors.add(cursor);}
+      const qs=new URLSearchParams({limit:'100'});if(cursor)qs.set('cursor',cursor);
+      const result=await api(`/api/admin/manual-payments?${qs}`);
+      for(const item of (Array.isArray(result.payments)?result.payments:[]))if(item?.id)byId.set(item.id,item);
+      pages++;
+      complete=result.listComplete===true;
+      cursor=String(result.cursor||'');
+      if(!complete&&!cursor)throw new Error('The payment list stopped before completion.');
+      if(pages>1000)throw new Error('Too many payment pages; retry the refresh.');
+      if(status)status.textContent=`Checking manual payments… ${byId.size.toLocaleString()} records loaded`;
+      if(pages%3===0)await new Promise(resolve=>setTimeout(resolve,0));
+    }while(!complete);
+    adminManualPayments=[...byId.values()];
+    adminManualVisibleLimit=100;
+    renderAdminManualPayments({payments:adminManualPayments});
+    if(status)status.textContent=`All ${adminManualPayments.length.toLocaleString()} saved manual requests loaded. Awaiting confirmation appears first. Emails are not required to approve here.`;
+  }catch(err){
+    // Never silently call a partial page the complete payment history.
+    if(byId.size){adminManualPayments=[...byId.values()];renderAdminManualPayments({payments:adminManualPayments});}
+    if(status)status.textContent=`Incomplete payment list (${byId.size.toLocaleString()} read): ${err.message}. Tap Refresh payments to retry.`;
+    toast('Manual payments refresh incomplete');
+  }finally{adminManualPaymentsLoading=false;if(btn){btn.disabled=false;btn.textContent=old;}}
 }
+
 async function openManualReceipt(card){
   const id=card?.dataset?.manualPayment;if(!id)return;let tab=null;try{tab=window.open('about:blank','_blank');}catch{}
   try{const res=await fetch(`/api/admin/manual-payment-receipt?id=${encodeURIComponent(id)}`,{headers:authHeaders(),cache:'no-store'});if(!res.ok){let d={};try{d=await res.json()}catch{}throw new Error(d?.error||'Could not open receipt.');}const blob=await res.blob();const url=URL.createObjectURL(blob);if(tab)tab.location.href=url;else{const a=document.createElement('a');a.href=url;a.target='_blank';a.click();}setTimeout(()=>URL.revokeObjectURL(url),120000);}catch(err){if(tab)tab.close();toast(err.message);}
@@ -641,10 +702,10 @@ async function runManualPaymentAction(card,action,button){
   const id=card?.dataset?.manualPayment;const row=adminManualPayments.find(p=>p.id===id);if(!id||!row)return;
   let reason='';if(action==='approve'){if(!confirm(`Approve ₦${Number(row.amountNaira||0).toLocaleString()} from ${row.customerEmail} and add ${Number(row.credits||0).toLocaleString()} credits? Confirm only after the money is visible in your bank account.`))return;}else{const entered=prompt('Optional reason for rejecting this payment:','');if(entered===null)return;reason=entered;if(!confirm(`Reject this payment from ${row.customerEmail}? No credits will be added.`))return;}
   const old=button?.textContent||'';if(button){button.disabled=true;button.textContent=action==='approve'?'Approving…':'Rejecting…';}
-  try{const result=await api('/api/admin/manual-payment-action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paymentId:id,action,reason})});if(result.payment){adminManualPayments=adminManualPayments.map(p=>p.id===id?result.payment:p);renderAdminManualPayments({payments:adminManualPayments});}if(result.user){const i=adminUsers.findIndex(u=>u.id===result.user.id);if(i>=0)adminUsers[i]=result.user;else adminUsers.unshift(result.user);renderAdminUsers();}await loadAdminManualPayments();await loadAdminUsers(true);toast(action==='approve'?(result.repaired?'Approved payment repaired · credits restored':'Payment approved · credits added'):'Payment rejected');}catch(err){toast(err.message);if(button){button.disabled=false;button.textContent=old;}}
+  try{const result=await api('/api/admin/manual-payment-action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paymentId:id,action,reason})});if(result.payment){adminManualPayments=adminManualPayments.map(p=>p.id===id?result.payment:p);renderAdminManualPayments({payments:adminManualPayments});}if(result.user){const i=adminUsers.findIndex(u=>u.id===result.user.id);if(i>=0)adminUsers[i]=result.user;else adminUsers.unshift(result.user);renderAdminUsers();}toast(action==='approve'?(result.repaired?'Approved payment repaired · credits restored':'Payment approved · credits added'):'Payment rejected');loadAdminManualPayments();}catch(err){toast(err.message);if(button){button.disabled=false;button.textContent=old;}}
 }
 $('adminManualPaymentsRefreshBtn')?.addEventListener('click',loadAdminManualPayments);
-$('adminManualPaymentsList')?.addEventListener('click',e=>{const card=e.target.closest('[data-manual-payment]');if(!card)return;const receipt=e.target.closest('[data-manual-receipt]');if(receipt)return openManualReceipt(card);const action=e.target.closest('[data-manual-action]');if(action)runManualPaymentAction(card,action.dataset.manualAction,action);});
+$('adminManualPaymentsList')?.addEventListener('click',e=>{if(e.target.closest('[data-manual-show-more]')){adminManualVisibleLimit+=100;renderAdminManualPayments({payments:adminManualPayments});return;}const card=e.target.closest('[data-manual-payment]');if(!card)return;const receipt=e.target.closest('[data-manual-receipt]');if(receipt)return openManualReceipt(card);const action=e.target.closest('[data-manual-action]');if(action)runManualPaymentAction(card,action.dataset.manualAction,action);});
 ['adminManualPaymentsEnabled','adminManualBankName','adminManualAccountName','adminManualAccountNumber','adminManualPaymentEmail'].forEach(id=>$(id)?.addEventListener('input',scheduleDraftBackup));
 
 async function runDiagnostics(){
@@ -1012,12 +1073,12 @@ document.querySelectorAll('[data-admin-control]').forEach(btn=>btn.addEventListe
     const response=await fetch('/api/app-version',{cache:'no-store'});
     if(!response.ok)throw new Error('Version unavailable');
     const data=await response.json();const running=String(data.version||'unknown');
-    if(stamp)stamp.textContent=`Admin 16.03-test · Worker ${running}`;
+    if(stamp)stamp.textContent=`Admin 16.04-test · Worker ${running}`;
     if(running!==ADMIN_BUILD_VERSION||missing.length){
       if(status){status.textContent='A different or incomplete set of CallFocus files is active. Do not save admin settings until the matching complete build is uploaded and promoted.';status.classList.add('admin-control-warning');}
     }
   }catch{
-    if(stamp)stamp.textContent='Admin 16.03-test · Worker status unavailable';
+    if(stamp)stamp.textContent='Admin 16.04-test · Worker status unavailable';
     if(missing.length&&status){status.textContent='Some required controls were not found. Verify that the complete build was uploaded.';status.classList.add('admin-control-warning');}
   }
 })();

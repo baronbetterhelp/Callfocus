@@ -5594,11 +5594,22 @@ async function handleAdminManualPayments(request, env) {
   if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
   if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.list !== 'function') return json({ error: 'Global storage is not connected.' }, 503);
-  const page = await env.CALLFOCUS_CONFIG.list({ prefix: 'manual:payment:', limit: 250 });
+  // V16.04: KV list() returns lexicographic key pages, NOT the newest receipts.
+  // Return a real cursor so Admin can scan every stored request rather than
+  // silently dropping newly submitted receipts after the first 250 keys.
+  const params = new URL(request.url).searchParams;
+  const limit = Math.max(1, Math.min(125, Number(params.get('limit')) || 100));
+  const cursor = String(params.get('cursor') || '').trim();
+  let page;
+  try {
+    page = await env.CALLFOCUS_CONFIG.list({ prefix: 'manual:payment:', limit, ...(cursor ? { cursor } : {}) });
+  } catch (error) {
+    return json({ error: 'Could not list manual payment requests.', detail: String(error?.message || '').slice(0, 180) }, 503);
+  }
   const rows = await Promise.all((page.keys || []).map(async entry => {
     try { return await env.CALLFOCUS_CONFIG.get(entry.name, { type: 'json' }); } catch { return null; }
   }));
-  const rawPayments = rows.filter(Boolean).sort((a,b) => String(b.submittedAt || b.createdAt || '').localeCompare(String(a.submittedAt || a.createdAt || ''))).slice(0, 200);
+  const rawPayments = rows.filter(Boolean).sort((a,b) => String(b.submittedAt || b.createdAt || '').localeCompare(String(a.submittedAt || a.createdAt || '')));
   const payments = [];
   for (let start = 0; start < rawPayments.length; start += 12) {
     const batch = rawPayments.slice(start, start + 12);
@@ -5613,16 +5624,19 @@ async function handleAdminManualPayments(request, env) {
     }));
     payments.push(...healed);
   }
+  const complete = page.list_complete === true;
   return json({
     ok: true,
     payments,
+    cursor: complete ? '' : String(page.cursor || ''),
+    listComplete: complete,
     counts: {
       pending: payments.filter(p => p.status === 'pending_confirmation').length,
       approved: payments.filter(p => p.status === 'approved').length,
       rejected: payments.filter(p => p.status === 'rejected').length,
       awaitingTransfer: payments.filter(p => p.status === 'awaiting_transfer').length
     }
-  });
+  }, 200, { 'Cache-Control': 'private, no-store' });
 }
 
 async function sendManualPaymentDecisionEmail(env, record, approved) {
@@ -5923,7 +5937,7 @@ export default {
     if (url.pathname === '/api/image-to-video/link' && request.method === 'GET') return safeCustomerRoute('image-video-link',()=>cfVideoFileLink(request,env));
     if (url.pathname.startsWith('/api/image-to-video/file/') && request.method === 'GET') return safeCustomerRoute('image-video-file',()=>cfVideoFile(request,env,decodeURIComponent(url.pathname.slice('/api/image-to-video/file/'.length))));
     if (url.pathname === '/api/admin/image-video') return cfAdminVideo(request,env);
-    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.03-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.04-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -5971,10 +5985,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=16.03-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=16.04-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=16.03-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=16.03-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=16.04-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=16.04-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -5984,16 +5998,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '16.03-test');
+      headers.set('X-CallFocus-Admin-Build', '16.04-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=16.03-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=16.04-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '16.03-test');
+      headers.set('X-CallFocus-Admin-Build', '16.04-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {
