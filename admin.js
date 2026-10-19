@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='16.02-test';
+const ADMIN_BUILD_VERSION='16.03-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -1012,12 +1012,12 @@ document.querySelectorAll('[data-admin-control]').forEach(btn=>btn.addEventListe
     const response=await fetch('/api/app-version',{cache:'no-store'});
     if(!response.ok)throw new Error('Version unavailable');
     const data=await response.json();const running=String(data.version||'unknown');
-    if(stamp)stamp.textContent=`Admin 16.02-test · Worker ${running}`;
+    if(stamp)stamp.textContent=`Admin 16.03-test · Worker ${running}`;
     if(running!==ADMIN_BUILD_VERSION||missing.length){
       if(status){status.textContent='A different or incomplete set of CallFocus files is active. Do not save admin settings until the matching complete build is uploaded and promoted.';status.classList.add('admin-control-warning');}
     }
   }catch{
-    if(stamp)stamp.textContent='Admin 16.02-test · Worker status unavailable';
+    if(stamp)stamp.textContent='Admin 16.03-test · Worker status unavailable';
     if(missing.length&&status){status.textContent='Some required controls were not found. Verify that the complete build was uploaded.';status.classList.add('admin-control-warning');}
   }
 })();

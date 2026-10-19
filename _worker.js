@@ -4126,7 +4126,7 @@ async function handlePocketfiInitialize(request,env){
     response=await pocketfiRequest(env,'/api/v1/checkout/request',{
       first_name:firstName,last_name:lastName,phone,
       business_id:String(env.POCKETFI_BUSINESS_ID).trim(),email:auth.user.email,
-      redirect_link:origin+'/?pocketfi=return',amount:String(offer.amountNaira)
+      redirect_link:origin+'/credits',amount:String(offer.amountNaira)
     });
   }catch(error){
     // A provider authentication problem is not an account-service failure.
@@ -4189,6 +4189,8 @@ async function handlePocketfiVerify(request,env){
   try{
     const result=await creditVerifiedPocketfi(env,id);
     if(['payment_id_mismatch','amount_mismatch','credits_mismatch'].includes(result.reason))return json({error:'PocketFi payment could not be reconciled. Contact support.',code:result.reason},409);
+    if(result.reason==='unknown_payment')return json({error:'This payment was not initiated for your CallFocus account. Please contact support with your PocketFi payment ID.',code:result.reason},404);
+    if(result.reason==='customer_missing'||result.reason==='wallet_not_verified')return json({error:'PocketFi has confirmed the payment, but CallFocus could not complete wallet reconciliation. Contact support with the payment ID.',code:result.reason},502);
     const data=await getCustomerDataForUpdate(env,auth.user.id,auth.user.name);
     return json({ok:true,credited:!!result.credited,duplicate:!!result.duplicate,status:result.status||(result.credited||result.duplicate?'success':'pending'),reason:result.reason||'',wallet:data.wallet,paymentId:id});
   }catch(error){return json({error:error?.message||'PocketFi confirmation temporarily unavailable.'},error?.status||502)}
@@ -5921,7 +5923,7 @@ export default {
     if (url.pathname === '/api/image-to-video/link' && request.method === 'GET') return safeCustomerRoute('image-video-link',()=>cfVideoFileLink(request,env));
     if (url.pathname.startsWith('/api/image-to-video/file/') && request.method === 'GET') return safeCustomerRoute('image-video-file',()=>cfVideoFile(request,env,decodeURIComponent(url.pathname.slice('/api/image-to-video/file/'.length))));
     if (url.pathname === '/api/admin/image-video') return cfAdminVideo(request,env);
-    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.02-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.03-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -5969,10 +5971,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=16.02-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=16.03-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=16.02-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=16.02-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=16.03-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=16.03-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -5982,16 +5984,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '16.02-test');
+      headers.set('X-CallFocus-Admin-Build', '16.03-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=16.02-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=16.03-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '16.02-test');
+      headers.set('X-CallFocus-Admin-Build', '16.03-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {

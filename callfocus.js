@@ -1,7 +1,7 @@
 
 /* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
 (()=>{
-  const BUILD='16.02-test';
+  const BUILD='16.03-test';
   const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
   const atRoot=()=>cleanPath()==='/';
   const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
@@ -7820,10 +7820,22 @@ ${approvedPatterns}
      location.assign(result.checkoutUrl);
    }catch(error){window.toast?.(error?.message||'Could not start PocketFi payment.');working=false;if(button){button.disabled=false;button.textContent=old||'Pay with PocketFi'}}
  }
+ // PocketFi currently appends '?payment_id=' even if the return link already had a query.
+ // Support both legacy malformed returns and the corrected /credits?payment_id=... URL.
+ function callbackPaymentId(url){
+   const direct=url.searchParams.get('payment_id')||'';
+   const legacy=(url.searchParams.get('pocketfi')||'').match(/^return\?payment_id=(PFI\|[A-Za-z0-9_-]{5,100})$/);
+   const id=direct||legacy?.[1]||'';
+   return /^PFI\|[A-Za-z0-9_-]{5,100}$/.test(id)?id:'';
+ }
  async function verifyReturn(){
-   const url=new URL(location.href);if(url.searchParams.get('pocketfi')!=='return')return;
-   // Provider redirect success is NOT sufficient for crediting; always verify server-side.
-   let paymentId=sessionStorage.getItem('callfocus_pocketfi_payment_id')||'';
+   const url=new URL(location.href);
+   const marker=url.searchParams.get('pocketfi')||'';
+   const fromUrl=callbackPaymentId(url);
+   const isReturn=marker==='return'||marker.startsWith('return?payment_id=')||(url.pathname.replace(/\/+$/,'')==='/credits'&&!!fromUrl);
+   if(!isReturn)return;
+   // The return URL is untrusted. Only the authenticated server may confirm payment and issue credits.
+   let paymentId=fromUrl||sessionStorage.getItem('callfocus_pocketfi_payment_id')||'';
    for(let i=0;i<32&&!token();i++)await new Promise(resolve=>setTimeout(resolve,250));
    if(!token()){window.toast?.('Sign in to verify your PocketFi payment.');return}
    window.toast?.('Verifying PocketFi payment…');
@@ -7842,6 +7854,37 @@ ${approvedPatterns}
    url.searchParams.delete('pocketfi');url.searchParams.delete('payment_id');history.replaceState({},'',url.pathname+url.search+url.hash);
    try{window.showView?.('credits',false)}catch{}
  }
- const init=()=>{btn()?.addEventListener('click',checkout);setTimeout(verifyReturn,550)};
+ async function recoverPayment(){
+   if(working)return;
+   if(!token()){window.showAuth?.('signin',null,'Sign in to check your PocketFi payment.');return}
+   const field=document.getElementById('pocketfiRecoveryId');
+   const typed=String(field?.value||'').trim();
+   if(typed&&!/^PFI\|[A-Za-z0-9_-]{5,100}$/.test(typed)){window.toast?.('Enter a valid PocketFi payment ID (PFI|...).');return}
+   const chosen=typed||sessionStorage.getItem('callfocus_pocketfi_payment_id')||'';
+   const button=document.getElementById('pocketfiRecoverBtn'),old=button?.textContent;
+   if(button){button.disabled=true;button.textContent='Checking PocketFi payment…'}
+   try{
+     const route='/api/pocketfi/verify'+(chosen?'?payment_id='+encodeURIComponent(chosen):'');
+     const response=await api(route),result=await data(response);
+     if(!response.ok)throw new Error(result.error||'Could not verify this PocketFi payment.');
+     if(result.credited||result.duplicate){
+       sessionStorage.removeItem('callfocus_pocketfi_payment_id');
+       window.CallFocusPaystack?.refreshWallet?.({quiet:true});
+       window.toast?.(result.credited?'Payment confirmed. Your PocketFi credits and transaction history are updated.':'This payment was already credited to your account.');
+       if(field)field.value='';
+     }else window.toast?.(result.status==='pending'?'PocketFi has not confirmed this payment yet. You have not been charged again.':'Payment could not be reconciled yet. Contact support with the payment ID.');
+   }catch(error){window.toast?.(error?.message||'Could not verify PocketFi payment.');}
+   finally{if(button){button.disabled=false;button.textContent=old||'Check & reconcile payment'}}
+ }
+ const init=()=>{
+   btn()?.addEventListener('click',checkout);
+   document.getElementById('pocketfiRecoveryToggle')?.addEventListener('click',()=>{
+     const fields=document.getElementById('pocketfiRecoveryFields'),toggle=document.getElementById('pocketfiRecoveryToggle');
+     const expanded=fields?.classList.toggle('hidden')===false;
+     toggle?.setAttribute('aria-expanded',String(expanded));
+   });
+   document.getElementById('pocketfiRecoverBtn')?.addEventListener('click',recoverPayment);
+   setTimeout(verifyReturn,550)
+ };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();

@@ -3997,3 +3997,13 @@ html[data-theme="dark"] #page-history .history-close-btn{background:#19302b;bord
 /* V15.99: Keep the credit amount controls usable when PocketFi is the only provider. */
 .pocketfi-enabled .credit-package,.pocketfi-enabled #customCreditAmount{pointer-events:auto!important;opacity:1!important}
 .pocketfi-enabled .credit-payment-note:before{content:""}
+
+/* V16.03 PocketFi checkout recovery (customer-safe manual reconciliation). */
+.pocketfi-recovery{margin:8px 0 4px;}
+.pocketfi-recovery-toggle{width:100%;padding:10px 12px;background:transparent;border:1px solid rgba(20,118,97,.22);border-radius:12px;color:var(--text,#17443c);font-size:.85rem;line-height:1.35;cursor:pointer;text-align:center;}
+.pocketfi-recovery-fields{display:flex;flex-direction:column;gap:8px;margin-top:10px;padding:14px;border:1px solid rgba(20,118,97,.20);border-radius:14px;background:var(--card,rgba(250,252,251,.85));}
+.pocketfi-recovery-fields.hidden{display:none!important;}
+.pocketfi-recovery-fields label{font-size:.82rem;font-weight:650;}
+.pocketfi-recovery-fields input{box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;border:1px solid rgba(20,118,97,.23);border-radius:10px;font-size:16px;background:var(--input-bg,#fff);color:var(--text,#17443c);}
+.pocketfi-recovery-fields .btn{min-height:44px;width:100%;}
+.pocketfi-recovery-fields small{font-size:.76rem;line-height:1.45;opacity:.75;}
