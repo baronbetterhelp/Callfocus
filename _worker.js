@@ -5324,6 +5324,14 @@ const MANUAL_PAYMENT_ALLOWED_TYPES = new Set(['image/jpeg','image/png','image/we
 
 function manualPaymentKey(id) { return `manual:payment:${String(id || '').trim()}`; }
 function manualPaymentReceiptKey(id) { return `manual:receipt:${String(id || '').trim()}`; }
+// V16.05: separate immutable-on-submission newest-first index. Never rewrite
+// a customer payment record merely to store email delivery diagnostics.
+function manualPaymentRecentKey(id, at) {
+  const inverted=String(9999999999999-Math.max(0, Date.parse(String(at||''))||Date.now())).padStart(13,'0');
+  return `manual:recent:${inverted}:${String(id||'').trim()}`;
+}
+function manualPaymentNotificationKey(id) {return `manual:notification:${String(id||'').trim()}`;}
+
 function manualPaymentDecisionKey(nonce) { return `manual:decision:${String(nonce || '').trim()}`; }
 function manualPaymentDecisionSecret(env) {
   return String(env.CALLFOCUS_ADMIN_PASSCODE || env.PAYSTACK_SECRET_KEY || env.RESEND_API_KEY || '').trim();
@@ -5380,7 +5388,10 @@ async function verifyManualPaymentDecisionToken(env, token) {
   return { ok: true, payload, stored };
 }
 async function invalidateManualPaymentDecisionTokens(env, record = {}) {
-  const nonces = record?.decisionNonces || {};
+  let nonces = record?.decisionNonces || {};
+  if (!nonces?.approve && !nonces?.reject) {
+    try { const notification=await env.CALLFOCUS_CONFIG.get(manualPaymentNotificationKey(record.id), { type:'json' }); nonces=notification?.decisionNonces || {}; } catch {}
+  }
   await Promise.all(['approve','reject'].map(async action => {
     const nonce = String(nonces?.[action] || '').trim();
     if (!nonce) return;
@@ -5500,6 +5511,10 @@ async function handleManualPaymentSubmit(request, env) {
   record.notificationSent = false;
   record.notificationError = '';
   await putManualPaymentRecord(env, record);
+  // A separate, reverse-time index allows Admin to find newly submitted
+  // receipts immediately, even while the canonical KV list is paginating.
+  try { await env.CALLFOCUS_CONFIG.put(manualPaymentRecentKey(id, now), JSON.stringify({ id, submittedAt: now }), { expirationTtl: MANUAL_PAYMENT_RECORD_TTL }); }
+  catch (error) { console.warn('Manual payment recent-index write failed:', String(error?.message||error).slice(0,100)); }
 
   const config = await getConfig(env);
   const notifyTo = normalizeCustomerEmail(config.manualPaymentNotificationEmail || DEFAULT_CONFIG.manualPaymentNotificationEmail);
@@ -5537,8 +5552,18 @@ async function handleManualPaymentSubmit(request, env) {
     } catch (error) {
       record.notificationError = String(error?.message || 'Could not send admin notification').slice(0, 240);
     }
-    record.updatedAt = new Date().toISOString();
-    await putManualPaymentRecord(env, record);
+    // The receipt was already saved as pending. Rewriting the same KV key
+    // immediately after Resend can hit KV's per-key write throttle or clobber
+    // an Admin decision made while the email request was in flight.
+    // Store notification metadata under a different key instead.
+    try {
+      await env.CALLFOCUS_CONFIG.put(manualPaymentNotificationKey(id), JSON.stringify({
+        notificationSent: record.notificationSent === true,
+        notificationError: String(record.notificationError||'').slice(0,240),
+        decisionNonces: record.decisionNonces || {},
+        updatedAt: new Date().toISOString()
+      }), { expirationTtl: MANUAL_PAYMENT_DECISION_TTL });
+    } catch (error) { console.warn('Manual notification audit unavailable:', String(error?.message||error).slice(0,100)); }
   }
   return json({ ok: true, payment: manualPaymentPublic(record), notificationSent: record.notificationSent === true });
 }
@@ -5590,6 +5615,37 @@ async function handleManualPaymentStatus(request, env) {
   return json({ ok: true, payment: manualPaymentPublic(record), wallet });
 }
 
+// V16.05: An earlier approval can credit the wallet successfully but lose the
+// final payment-status KV write. The wallet purchase ledger is authoritative
+// evidence of an already-approved reference; never approve based on a receipt
+// or claimed transfer alone and never credit a wallet in this reconciliation.
+async function adminManualPaymentVerifiedState(env, record = {}) {
+  if (!record?.id || record.status !== 'pending_confirmation') return manualPaymentAdmin(record);
+  try {
+    const {user}=await resolveManualPaymentCustomer(env, record);
+    if (!user?.id) return manualPaymentAdmin(record);
+    const data=await env.CALLFOCUS_CONFIG.get(customerDataKey(user.id), {type:'json'});
+    const purchases=Array.isArray(data?.wallet?.purchases) ? data.wallet.purchases : [];
+    const confirmed=purchases.find(row =>
+      String(row?.provider||'').toLowerCase()==='manual_bank_transfer'
+      && String(row?.reference||row?.id||'')===String(record.id)
+      && Math.round(Number(row.amountNaira)*100)===Math.round(Number(record.amountNaira)*100)
+      && Number(row.credits)===Number(record.credits)
+    );
+    if (!confirmed) return manualPaymentAdmin(record);
+    const approved={...record,status:'approved',approvedAt:record.approvedAt||confirmed.approvedAt||confirmed.createdAt||new Date().toISOString(),updatedAt:new Date().toISOString(),creditReconciledAt:record.creditReconciledAt||new Date().toISOString()};
+    // Best-effort repair of the status only. A throttled KV put must never
+    // make a verified payment appear awaiting approval in Admin.
+    try { await putManualPaymentRecord(env, approved); } catch (error) {
+      console.warn('Manual approved-status repair postponed:',String(error?.message||error).slice(0,100));
+    }
+    return {...manualPaymentAdmin(approved),walletCreditPresent:true,statusReconciledFromWallet:true};
+  } catch(error) {
+    console.warn('Manual payment read-only reconciliation unavailable:',String(error?.message||error).slice(0,100));
+    return manualPaymentAdmin(record);
+  }
+}
+
 async function handleAdminManualPayments(request, env) {
   if (!await adminAuthorized(request, env)) return json({ error: 'Incorrect admin passcode.' }, 401);
   if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
@@ -5606,14 +5662,28 @@ async function handleAdminManualPayments(request, env) {
   } catch (error) {
     return json({ error: 'Could not list manual payment requests.', detail: String(error?.message || '').slice(0, 180) }, 503);
   }
-  const rows = await Promise.all((page.keys || []).map(async entry => {
-    try { return await env.CALLFOCUS_CONFIG.get(entry.name, { type: 'json' }); } catch { return null; }
+  const canonicalNames=(page.keys||[]).map(x=>x.name);
+  // Only the initial page includes the newest-first independent index.
+  // Later canonical pages still enumerate the entire legacy history.
+  if (!cursor) {
+    try {
+      const recent=await env.CALLFOCUS_CONFIG.list({prefix:'manual:recent:',limit:100});
+      const indexed=await Promise.all((recent.keys||[]).map(async x=>{
+        try{return await env.CALLFOCUS_CONFIG.get(x.name,{type:'json'});}catch{return null;}
+      }));
+      for (const item of indexed) if(item?.id) canonicalNames.push(manualPaymentKey(item.id));
+    } catch(error) {console.warn('Recent payment index unavailable:',String(error?.message||error).slice(0,100));}
+  }
+  const names=[...new Set(canonicalNames)];
+  const rows=await Promise.all(names.map(async key=>{
+    try{return await env.CALLFOCUS_CONFIG.get(key,{type:'json'});}catch{return null;}
   }));
-  const rawPayments = rows.filter(Boolean).sort((a,b) => String(b.submittedAt || b.createdAt || '').localeCompare(String(a.submittedAt || a.createdAt || '')));
+  const rawPayments=rows.filter(Boolean).sort((a,b)=>String(b.submittedAt||b.createdAt||'').localeCompare(String(a.submittedAt||a.createdAt||'')));
   const payments = [];
   for (let start = 0; start < rawPayments.length; start += 12) {
     const batch = rawPayments.slice(start, start + 12);
     const healed = await Promise.all(batch.map(async record => {
+      if (record?.status === 'pending_confirmation') return adminManualPaymentVerifiedState(env, record);
       if (record?.status !== 'approved') return manualPaymentAdmin(record);
       try {
         const result = await ensureApprovedManualPaymentCredit(env, record);
@@ -5637,6 +5707,16 @@ async function handleAdminManualPayments(request, env) {
       awaitingTransfer: payments.filter(p => p.status === 'awaiting_transfer').length
     }
   }, 200, { 'Cache-Control': 'private, no-store' });
+}
+
+async function handleAdminManualPaymentLookup(request,env){
+  if (!await adminAuthorized(request,env)) return json({error:'Incorrect admin passcode.'},401);
+  if(request.method!=='GET')return new Response('Method not allowed.',{status:405,headers:{Allow:'GET'}});
+  const id=String(new URL(request.url).searchParams.get('id')||'').trim();
+  if(!/^CFM-[0-9]{10,14}-[A-Za-z0-9]{8}$/.test(id))return json({error:'Enter a valid CFM payment reference.'},400);
+  const record=await manualPaymentRecord(env,id);
+  if(!record)return json({error:'Payment reference not found in this Worker KV. Verify the reference or the active KV binding.'},404);
+  return json({ok:true,payment:await adminManualPaymentVerifiedState(env,record)},200,{'Cache-Control':'private, no-store'});
 }
 
 async function sendManualPaymentDecisionEmail(env, record, approved) {
@@ -5937,7 +6017,7 @@ export default {
     if (url.pathname === '/api/image-to-video/link' && request.method === 'GET') return safeCustomerRoute('image-video-link',()=>cfVideoFileLink(request,env));
     if (url.pathname.startsWith('/api/image-to-video/file/') && request.method === 'GET') return safeCustomerRoute('image-video-file',()=>cfVideoFile(request,env,decodeURIComponent(url.pathname.slice('/api/image-to-video/file/'.length))));
     if (url.pathname === '/api/admin/image-video') return cfAdminVideo(request,env);
-    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.04-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.05-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -5962,6 +6042,7 @@ export default {
     if (url.pathname === '/api/admin/user-action') return handleAdminUserAction(request, env);
     if (url.pathname === '/api/admin/gift-all') return handleAdminGiftAll(request, env);
     if (url.pathname === '/api/admin/manual-payments') return handleAdminManualPayments(request, env);
+    if (url.pathname === '/api/admin/manual-payment-lookup') return handleAdminManualPaymentLookup(request, env);
     if (url.pathname === '/api/admin/manual-payment-action') return handleAdminManualPaymentAction(request, env);
     if (url.pathname === '/api/admin/manual-payment-receipt') return handleAdminManualPaymentReceipt(request, env);
     if (url.pathname === '/api/admin/unlimited-user') return handleAdminUnlimitedUser(request, env);
@@ -5985,10 +6066,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=16.04-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=16.05-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=16.04-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=16.04-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=16.05-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=16.05-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -5998,16 +6079,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '16.04-test');
+      headers.set('X-CallFocus-Admin-Build', '16.05-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=16.04-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=16.05-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '16.04-test');
+      headers.set('X-CallFocus-Admin-Build', '16.05-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {

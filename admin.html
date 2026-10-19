@@ -11,13 +11,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=16.04-test" />
+  <link rel="stylesheet" href="/admin.css?v=16.05-test" />
 </head>
 <body class="admin-page">
   <header class="site-header">
     <div class="container header-inner">
       <a class="brand" href="/admin">
-        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=16.04-test" alt="CallFocus" /></span>
+        <span class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="/logo.png?v=16.05-test" alt="CallFocus" /></span>
         <span class="brand-copy"><strong class="brand-wordmark"><span>Call</span><span class="brand-focus">Focus</span></strong><small>Private system control</small></span>
       </a>
       <div class="header-actions"><a class="btn btn-ghost admin-back-link" href="/">Customer site</a></div>
@@ -36,7 +36,7 @@
 
     <section class="admin-dashboard hidden" id="adminDashboard">
       <div class="admin-page-head">
-        <div><span class="kicker">Private administration</span><h1>Admin Portal</h1><p>Operate CallFocus from one organized management workspace.</p><small class="admin-build-stamp" id="adminBuildStamp">CallFocus Admin 16.04-test</small></div>
+        <div><span class="kicker">Private administration</span><h1>Admin Portal</h1><p>Operate CallFocus from one organized management workspace.</p><small class="admin-build-stamp" id="adminBuildStamp">CallFocus Admin 16.05-test</small></div>
         <div class="admin-head-actions"><button class="btn btn-ghost" type="button" id="adminRefreshAllBtn">Refresh data</button><button class="btn btn-ghost" id="adminLockBtn">Sign out</button></div>
       </div>
 
@@ -372,6 +372,7 @@
         <div class="premium-panel admin-manual-payments-panel">
           <div class="admin-users-heading"><div><h3>Manual payment requests</h3><p class="admin-panel-copy">Verify the transfer in your bank before approving. Approval immediately adds the requested credits to that customer’s server wallet.</p></div></div>
           <p class="admin-panel-copy" id="adminManualLoadStatus" role="status" aria-live="polite">Use Refresh payments to load all saved receipt submissions, including those not emailed due to Resend limits.</p>
+          <button class="btn btn-ghost" id="adminManualPaymentFindBtn" type="button">Find reference</button>
           <div class="admin-manual-payments-list" id="adminManualPaymentsList"><div class="admin-users-empty">No manual payment requests yet.</div></div>
         </div>
       </section>
@@ -544,6 +545,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=16.04-test"></script><script src="/admin-video.js?v=16.04-test"></script>
+  <script src="/admin.js?v=16.05-test"></script><script src="/admin-video.js?v=16.05-test"></script>
 </body>
 </html>

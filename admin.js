@@ -1,5 +1,5 @@
 const CORE_VOICES=['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar'];
-const ADMIN_BUILD_VERSION='16.04-test';
+const ADMIN_BUILD_VERSION='16.05-test';
 const EXTRA_MALE_VOICES=[
   ['meridian','Meridian · Masculine · North American · Natural'],
   ['vesper','Vesper · Masculine · British · Natural'],
@@ -38,6 +38,19 @@ let customVoices=[];
 let customVoiceAccess=null;
 let adminManualPayments=[];
 let adminManualPaymentsLoading=false;
+// A successful Admin decision should not visually revert while an older KV
+// edge has not yet observed the status write.
+const adminManualLocalDecisions=new Map();
+function mergeManualDecisionIfNewer(server){
+  if(!server?.id)return server;
+  const local=adminManualLocalDecisions.get(server.id);
+  if(!local)return server;
+  if(server.status===local.status){adminManualLocalDecisions.delete(server.id);return server;}
+  const serverAt=Date.parse(server.updatedAt||'')||0, localAt=Date.parse(local.updatedAt||'')||0;
+  if(serverAt>localAt){adminManualLocalDecisions.delete(server.id);return server;}
+  return local;
+}
+
 let adminManualVisibleLimit=100;
 let quickStartItems=[];
 let marketingSelectedUserIds=new Set();
@@ -672,8 +685,9 @@ async function loadAdminManualPayments(){
     do{
       if(cursor){if(seenCursors.has(cursor))throw new Error('Repeated payment page cursor.');seenCursors.add(cursor);}
       const qs=new URLSearchParams({limit:'100'});if(cursor)qs.set('cursor',cursor);
-      const result=await api(`/api/admin/manual-payments?${qs}`);
-      for(const item of (Array.isArray(result.payments)?result.payments:[]))if(item?.id)byId.set(item.id,item);
+      qs.set('_',String(Date.now())+'-'+pages);
+      const result=await api(`/api/admin/manual-payments?${qs}`,{cache:'no-store'});
+      for(const item of (Array.isArray(result.payments)?result.payments:[]))if(item?.id)byId.set(item.id,mergeManualDecisionIfNewer(item));
       pages++;
       complete=result.listComplete===true;
       cursor=String(result.cursor||'');
@@ -685,7 +699,11 @@ async function loadAdminManualPayments(){
     adminManualPayments=[...byId.values()];
     adminManualVisibleLimit=100;
     renderAdminManualPayments({payments:adminManualPayments});
-    if(status)status.textContent=`All ${adminManualPayments.length.toLocaleString()} saved manual requests loaded. Awaiting confirmation appears first. Emails are not required to approve here.`;
+    if(status){
+      const latest=adminManualPayments.filter(p=>p.submittedAt).sort((a,b)=>String(b.submittedAt).localeCompare(String(a.submittedAt)))[0];
+      const time=latest?.submittedAt?new Date(latest.submittedAt).toLocaleString():'none found';
+      status.textContent=`${adminManualPayments.length.toLocaleString()} manual payment records loaded. Latest submitted: ${time}. If an expected receipt is missing, use Find reference to check its saved record directly.`;
+    }
   }catch(err){
     // Never silently call a partial page the complete payment history.
     if(byId.size){adminManualPayments=[...byId.values()];renderAdminManualPayments({payments:adminManualPayments});}
@@ -702,8 +720,27 @@ async function runManualPaymentAction(card,action,button){
   const id=card?.dataset?.manualPayment;const row=adminManualPayments.find(p=>p.id===id);if(!id||!row)return;
   let reason='';if(action==='approve'){if(!confirm(`Approve ₦${Number(row.amountNaira||0).toLocaleString()} from ${row.customerEmail} and add ${Number(row.credits||0).toLocaleString()} credits? Confirm only after the money is visible in your bank account.`))return;}else{const entered=prompt('Optional reason for rejecting this payment:','');if(entered===null)return;reason=entered;if(!confirm(`Reject this payment from ${row.customerEmail}? No credits will be added.`))return;}
   const old=button?.textContent||'';if(button){button.disabled=true;button.textContent=action==='approve'?'Approving…':'Rejecting…';}
-  try{const result=await api('/api/admin/manual-payment-action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paymentId:id,action,reason})});if(result.payment){adminManualPayments=adminManualPayments.map(p=>p.id===id?result.payment:p);renderAdminManualPayments({payments:adminManualPayments});}if(result.user){const i=adminUsers.findIndex(u=>u.id===result.user.id);if(i>=0)adminUsers[i]=result.user;else adminUsers.unshift(result.user);renderAdminUsers();}toast(action==='approve'?(result.repaired?'Approved payment repaired · credits restored':'Payment approved · credits added'):'Payment rejected');loadAdminManualPayments();}catch(err){toast(err.message);if(button){button.disabled=false;button.textContent=old;}}
+  try{const result=await api('/api/admin/manual-payment-action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({paymentId:id,action,reason})});if(result.payment){adminManualLocalDecisions.set(id,result.payment);adminManualPayments=adminManualPayments.map(p=>p.id===id?result.payment:p);renderAdminManualPayments({payments:adminManualPayments});}if(result.user){const i=adminUsers.findIndex(u=>u.id===result.user.id);if(i>=0)adminUsers[i]=result.user;else adminUsers.unshift(result.user);renderAdminUsers();}toast(action==='approve'?(result.repaired?'Approved payment repaired · credits restored':'Payment approved · credits added'):'Payment rejected');loadAdminManualPayments();}catch(err){toast(err.message);if(button){button.disabled=false;button.textContent=old;}}
 }
+async function lookupAdminManualPayment(){
+  const entered=prompt('Enter the payment reference (CFM-...) to check the saved record:','');
+  if(entered===null)return;
+  const id=entered.trim();if(!id)return;
+  const btn=$('adminManualPaymentFindBtn');if(btn){btn.disabled=true;btn.textContent='Checking…';}
+  try {
+    const result=await api(`/api/admin/manual-payment-lookup?id=${encodeURIComponent(id)}&_=${Date.now()}`,{cache:'no-store'});
+    if(result?.payment){
+      const existing=adminManualPayments.findIndex(p=>p.id===result.payment.id);
+      if(existing>=0)adminManualPayments[existing]=result.payment;else adminManualPayments.unshift(result.payment);
+      adminManualVisibleLimit=Math.max(adminManualVisibleLimit,100);
+      renderAdminManualPayments({payments:adminManualPayments});
+      const status=$('adminManualLoadStatus');if(status)status.textContent=`Reference ${id} found. Status: ${manualStatusLabel(result.payment.status)}. Directly checked against the current Worker KV.`;
+      toast('Payment reference found.');
+    }
+  }catch(err){toast(err.message);const status=$('adminManualLoadStatus');if(status)status.textContent=`Reference ${id}: ${err.message}`;}
+  finally{if(btn){btn.disabled=false;btn.textContent='Find reference';}}
+}
+$('adminManualPaymentFindBtn')?.addEventListener('click',lookupAdminManualPayment);
 $('adminManualPaymentsRefreshBtn')?.addEventListener('click',loadAdminManualPayments);
 $('adminManualPaymentsList')?.addEventListener('click',e=>{if(e.target.closest('[data-manual-show-more]')){adminManualVisibleLimit+=100;renderAdminManualPayments({payments:adminManualPayments});return;}const card=e.target.closest('[data-manual-payment]');if(!card)return;const receipt=e.target.closest('[data-manual-receipt]');if(receipt)return openManualReceipt(card);const action=e.target.closest('[data-manual-action]');if(action)runManualPaymentAction(card,action.dataset.manualAction,action);});
 ['adminManualPaymentsEnabled','adminManualBankName','adminManualAccountName','adminManualAccountNumber','adminManualPaymentEmail'].forEach(id=>$(id)?.addEventListener('input',scheduleDraftBackup));
@@ -1073,12 +1110,12 @@ document.querySelectorAll('[data-admin-control]').forEach(btn=>btn.addEventListe
     const response=await fetch('/api/app-version',{cache:'no-store'});
     if(!response.ok)throw new Error('Version unavailable');
     const data=await response.json();const running=String(data.version||'unknown');
-    if(stamp)stamp.textContent=`Admin 16.04-test · Worker ${running}`;
+    if(stamp)stamp.textContent=`Admin 16.05-test · Worker ${running}`;
     if(running!==ADMIN_BUILD_VERSION||missing.length){
       if(status){status.textContent='A different or incomplete set of CallFocus files is active. Do not save admin settings until the matching complete build is uploaded and promoted.';status.classList.add('admin-control-warning');}
     }
   }catch{
-    if(stamp)stamp.textContent='Admin 16.04-test · Worker status unavailable';
+    if(stamp)stamp.textContent='Admin 16.05-test · Worker status unavailable';
     if(missing.length&&status){status.textContent='Some required controls were not found. Verify that the complete build was uploaded.';status.classList.add('admin-control-warning');}
   }
 })();
