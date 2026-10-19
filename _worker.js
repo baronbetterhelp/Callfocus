@@ -4091,10 +4091,15 @@ function pocketfiLastKey(userId){return 'pocketfi:last:'+String(userId||'')}
 async function pocketfiRequest(env,path,body){
   if(!pocketfiConfigured(env)){const e=new Error('PocketFi is not configured.');e.status=503;throw e}
   let res;
-  try{res=await fetch('https://api.pocketfi.ng'+path,{method:'POST',headers:{Authorization:'Bearer '+String(env.POCKETFI_SECRET_KEY).trim(),'Content-Type':'application/json'},body:JSON.stringify(body)})}
+  try{res=await fetch('https://api.pocketfi.ng'+path,{method:'POST',headers:{Authorization:'Bearer '+String(env.POCKETFI_SECRET_KEY).trim(),'Content-Type':'application/json',Accept:'application/json'},body:JSON.stringify(body)})}
   catch{const e=new Error('Could not reach PocketFi. Please retry.');e.status=502;throw e}
   let data={};try{data=await res.json()}catch{}
-  if(!res.ok){const e=new Error(String(data?.message||data?.error||'PocketFi request failed.').slice(0,220));e.status=res.status<500?res.status:502;throw e}
+  if(!res.ok){
+    // Record only endpoint, status and a short provider code; never log keys, customer details or payment data.
+    const providerCode=String(data?.code||data?.error_code||'').match(/^[A-Za-z0-9_-]{1,32}$/)?.[0]||(String(data?.message||data?.error||'').match(/\b[A-Z]{2,6}\d{3,6}\b/)||[])[0]||'unspecified';
+    console.warn('PocketFi API rejected request',{endpoint:path,httpStatus:res.status,providerCode});
+    const e=new Error(String(data?.message||data?.error||'PocketFi request failed.').slice(0,220));e.status=res.status<500?res.status:502;throw e
+  }
   return data;
 }
 function pocketfiTrustedCheckout(value){
@@ -5903,7 +5908,7 @@ export default {
     if (url.pathname === '/api/image-to-video/link' && request.method === 'GET') return safeCustomerRoute('image-video-link',()=>cfVideoFileLink(request,env));
     if (url.pathname.startsWith('/api/image-to-video/file/') && request.method === 'GET') return safeCustomerRoute('image-video-file',()=>cfVideoFile(request,env,decodeURIComponent(url.pathname.slice('/api/image-to-video/file/'.length))));
     if (url.pathname === '/api/admin/image-video') return cfAdminVideo(request,env);
-    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '15.99-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.00-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -5951,10 +5956,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=15.99-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=16.00-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=15.99-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=15.99-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=16.00-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=16.00-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -5964,16 +5969,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.99-test');
+      headers.set('X-CallFocus-Admin-Build', '16.00-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=15.99-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=16.00-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '15.99-test');
+      headers.set('X-CallFocus-Admin-Build', '16.00-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {
