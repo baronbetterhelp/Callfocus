@@ -8,7 +8,9 @@
 <section class="panel"><div class="eyebrow">Your selected funding amount</div><div id="amountDisplay" class="money">₦3,000</div><div id="creditsDisplay"><strong>300 credits</strong></div><div class="notice"><strong>Transfer the exact amount shown.</strong> A different amount or a late transfer may require review. Do not send money until your account number appears below. Payment confirmation depends on PocketFi's signed notification.</div>
 <form id="bankForm"><div id="legalDetails"><p>Your bank account is created once. Enter your legal name and phone number as registered with your financial institution.</p><div class="row"><div style="flex:1 1 170px"><label for="firstName">Legal first name</label><input id="firstName" autocomplete="given-name" required maxlength="70"></div><div style="flex:1 1 170px"><label for="lastName">Legal last name</label><input id="lastName" autocomplete="family-name" required maxlength="70"></div></div><label for="phone">Phone number</label><input id="phone" autocomplete="tel" inputmode="tel" required maxlength="18"></div><button type="submit" class="primary" id="prepareBtn">Prepare exact-amount transfer</button></form>
 <div id="bankDetails" class="account hidden"><div class="eyebrow">Your assigned account</div><div class="line"><span class="muted">Bank</span><strong id="bankName">—</strong></div><div class="line"><span class="muted">Account name</span><strong id="accountName">—</strong></div><div class="muted" style="padding-top:15px">Account number</div><div id="accountNumber" class="accountNumber">—</div><button id="copyAccount" class="secondary" type="button">Copy account number</button><div class="line" style="margin-top:12px"><span class="muted">Transfer exactly</span><strong id="exactTransferAmount">—</strong></div><p class="muted">This bank account stays associated with your CallFocus account. A newly selected amount requires a new funding request.</p></div>
-<div class="status hidden" id="bankStatus" role="status" aria-live="polite"></div><button class="secondary" style="margin-top:12px;width:100%" id="refreshStatus" type="button">Check payment status</button>
+<div class="status hidden" id="bankStatus" role="status" aria-live="polite"></div>
+<div class="account hidden" id="verifiedPayment" role="status" aria-live="polite" style="background:#e2f5e8;border-color:#98d7b4"><strong style="font-size:20px">Payment confirmed</strong><p id="verifiedDetails" style="margin:9px 0 0;color:#205347"></p><a href="/history" style="display:block;text-align:center;background:#1b7869;color:white;text-decoration:none;padding:16px;border-radius:13px;margin-top:15px;font-weight:800">View credits &amp; transactions</a></div>
+<label for="recheckReference" style="margin-top:18px">Missing an older deposit? PocketFi reference (optional)</label><input id="recheckReference" placeholder="PFI|..." autocomplete="off" maxlength="145"><button class="secondary" style="margin-top:12px;width:100%" id="refreshStatus" type="button">Check payment status</button>
 </section><p class="foot">CallFocus verifies signed PocketFi bank transfer notifications. If your money leaves your bank but credits do not appear, contact support with the bank transfer reference. Do not make the same transfer twice.</p>
 </main>
 <script>
@@ -25,13 +27,50 @@
  $('exactTransferAmount').textContent=money(estimate);
  let activeAmount=estimate;
  const showStatus=(message,error=false)=>{const e=$('bankStatus');e.textContent=message;e.classList.remove('hidden');e.classList.toggle('error',error)};
+ let confirmedReference='';
+ function showConfirmation(item,balance){
+   if(!item?.walletRecorded||!['credited','already_credited'].includes(item.status))return false;
+   $('verifiedPayment').classList.remove('hidden');
+   $('verifiedDetails').textContent='Verified '+money(item.amountNaira)+' transfer ('+item.reference+'). '+
+    Number(item.creditsRecorded||0).toLocaleString('en-NG')+' credits were recorded. Current wallet balance: '+
+    Number(balance||0).toLocaleString('en-NG')+' credits. Balance can decrease when you use CallFocus. If the credited amount is missing, contact support with this reference; do not pay again.';
+   confirmedReference=item.reference;
+   showStatus('Payment confirmed and recorded. Open Credits & Transactions to view your updated wallet.');
+   return true;
+ }
+
  async function fetchApi(path,opts={}){const headers=new Headers(opts.headers||{});if(token())headers.set('Authorization','Bearer '+token());if(opts.body)headers.set('Content-Type','application/json');const r=await fetch(path,{...opts,headers,cache:'no-store'}),d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.error||'Request failed');return d;}
  function displayAccount(a){if(!a)return;$('bankDetails').classList.remove('hidden');$('bankName').textContent=a.bankName||'—';$('accountName').textContent=a.accountName||'—';$('accountNumber').textContent=a.accountNumber||'—';$('legalDetails').classList.add('hidden');for(const id of ['firstName','lastName','phone'])$(id).required=false;}
  function displayIntent(intent){if(!intent)return;activeAmount=intent.amountNaira;$('amountDisplay').textContent=money(activeAmount);$('exactTransferAmount').textContent=money(activeAmount);$('creditsDisplay').textContent=Number(intent.baseCredits).toLocaleString('en-NG')+' credits + '+Number(intent.bonusCredits||0).toLocaleString('en-NG')+' bonus = '+Number(intent.credits).toLocaleString('en-NG')+' total';showStatus('Awaiting signed bank transfer confirmation. Pay exactly '+money(intent.amountNaira)+' while this request is active.');}
- async function status(){if(!token()){showStatus('Sign in to CallFocus and reopen this page to continue.',true);return;}try{const data=await fetchApi('/api/pocketfi/bank/status');if(!data.enabled){$('prepareBtn').disabled=true;showStatus('PocketFi bank transfer is currently disabled. Do not transfer funds.',true);return;}if(data.account)displayAccount(data.account);else if(data.name){const names=data.name.trim().split(/\s+/);$('firstName').value=names.shift()||'';$('lastName').value=names.join(' ')||'';$('phone').value=data.phone||'';}if(data.intent)displayIntent(data.intent);if(data.latest&&(!data.intent||Date.parse(data.latest.updatedAt)>=Date.parse(data.intent.createdAt))){const state=String(data.latest.status||'');if(state==='credited'||state==='already_credited')showStatus('PocketFi transfer '+data.latest.reference+' confirmed. Credits added. See Transactions & Usage.');else if(state.startsWith('review_'))showStatus('Your last transfer needs manual review ('+state.replace(/_/g,' ')+'). Please contact CallFocus support with reference '+data.latest.reference+'.',true);else showStatus('Last transfer: '+state.replace(/_/g,' '));}}catch(err){showStatus(err.message,true)}}
+ async function status(explicit=false){
+   if(!token()){showStatus('Sign in to CallFocus and reopen this page to continue.',true);return;}
+   const button=$('refreshStatus');const lookupReference=explicit?$('recheckReference').value.trim():'';if(explicit){button.disabled=true;button.textContent='Checking signed transfer…';}
+   try{
+     const data=await fetchApi(explicit?'/api/pocketfi/bank/recheck':'/api/pocketfi/bank/status',explicit?{method:'POST',body:JSON.stringify({reference:lookupReference})}:{});
+     $('verifiedPayment').classList.add('hidden');
+     if(data.account)displayAccount(data.account);
+     else if(data.name){const names=data.name.trim().split(/\s+/);$('firstName').value=names.shift()||'';$('lastName').value=names.join(' ')||'';$('phone').value=data.phone||'';}
+     if(data.intent)displayIntent(data.intent);
+     const item=data.latest;
+     if(item&&(lookupReference||!data.intent||Date.parse(item.updatedAt)>=Date.parse(data.intent.createdAt))){
+       if(showConfirmation(item,data.balanceCredits))return;
+       if(item.needsReview){
+         showStatus('PocketFi reports an earlier credited transfer ('+item.reference+'), but its wallet entry is missing. Contact CallFocus support for a balance review. Do not transfer again.',true);
+       }else if(String(item.status||'').startsWith('review_')){
+         showStatus('A signed transfer was received, but requires review ('+String(item.status).replace(/_/g,' ')+'). Reference: '+item.reference+'. Do not pay again.',true);
+       }else if(item.status==='received'||item.status==='review_wallet_verification'){
+         showStatus('Your transfer notification was received, but wallet confirmation is still processing. Please check again shortly. Reference: '+item.reference);
+       }else{showStatus('Last transfer status: '+String(item.status||'pending').replace(/_/g,' '));}
+     }else if(explicit){
+       showStatus('No confirmed PocketFi bank transfer notification has been received for this funding request yet. If you have paid, do not pay again. Please wait briefly or contact support with your bank transfer receipt.');
+     }else if(!data.intent){showStatus('Select an amount and prepare your bank transfer to continue.');}
+     if(data.enabled===false){$('prepareBtn').disabled=true;showStatus('PocketFi bank transfer is currently disabled. If you already transferred money, contact support with your receipt.',true);}
+   }catch(err){showStatus('Status check could not complete: '+(err.message||'please retry.'),true)}
+   finally{if(explicit){button.disabled=false;button.textContent='Check payment status'}}
+ }
  $('bankForm').addEventListener('submit',async e=>{e.preventDefault();if(!token()){showStatus('Sign in first.',true);return}const b=$('prepareBtn');b.disabled=true;b.textContent='Preparing your account…';try{const data=await fetchApi('/api/pocketfi/bank/prepare',{method:'POST',body:JSON.stringify({credits:selected,firstName:$('firstName').value.trim(),lastName:$('lastName').value.trim(),phone:$('phone').value.trim()})});displayAccount(data.account);displayIntent(data.intent)}catch(err){showStatus(err.message||'Could not prepare account.',true)}finally{b.disabled=false;b.textContent='Prepare new exact-amount transfer'}});
  $('copyAccount').onclick=async()=>{const n=$('accountNumber').textContent;try{await navigator.clipboard.writeText(n);$('copyAccount').textContent='Copied';setTimeout(()=>$('copyAccount').textContent='Copy account number',1900)}catch{showStatus('Long press the account number to copy it.')}};
- $('refreshStatus').onclick=status;
- status();setInterval(()=>{if(!document.hidden)status()},15000);
+ $('refreshStatus').onclick=()=>status(true);
+ status(false);setInterval(()=>{if(!document.hidden)status(false)},15000);
 })();
 </script></body></html>

@@ -4099,17 +4099,73 @@ function pfiVaReference(value){const valueStr=String(value||'').trim();return /^
 function pfiVaPreparedPrice(p){return {amountNaira:p.amountNaira,baseCredits:p.baseCredits,bonusCredits:p.bonusCredits,bonusPercent:p.bonusPercent,credits:p.credits}}
 function pfiVaPublicAccount(a){return a?{bankName:a.bankName,accountName:a.accountName,accountNumber:a.accountNumber}:null}
 async function pfiVaAvailable(env){const c=await getConfig(env);return c.pocketfiVirtualAccountsEnabled===true&&pocketfiConfigured(env)&&!!String(env.POCKETFI_SECRET_KEY||'').trim()}
+// V16.07: expose the authoritative wallet proof alongside PocketFi's signed event.
+// Reading status must never create a credit or treat a checkout URL as proof of payment.
+async function pfiVaCustomerSnapshot(env,user,requestedReference=""){
+ const [account,intent,latest,enabled,data]=await Promise.all([
+  env.CALLFOCUS_CONFIG.get(pfiVaUserKey(user.id),{type:'json'}),
+  env.CALLFOCUS_CONFIG.get(pfiVaIntentKey(user.id),{type:'json'}),
+  env.CALLFOCUS_CONFIG.get(pfiVaLatestKey(user.id),{type:'json'}),
+  pfiVaAvailable(env),getCustomerDataForUpdate(env,user.id,user.name)
+ ]);
+ const wallet=normalizeServerWallet(data.wallet);
+ let last=null;
+ const effectiveRef=requestedReference||latest?.reference;
+ if(effectiveRef&&pfiVaReference(effectiveRef)){
+   const event=await env.CALLFOCUS_CONFIG.get(pfiVaEventKey(effectiveRef),{type:'json'});
+   if(event?.signatureValid===true&&String(event.userId||'')===String(user.id)){
+     const purchase=wallet.purchases.find(p=>String(p?.reference||p?.id||'')===String(latest.reference));
+     const creditedState=event.status==='credited'||event.status==='already_credited';
+     last={reference:event.reference,amountNaira:event.amountNaira,status:event.status,updatedAt:event.updatedAt,
+       walletRecorded:!!purchase,creditsRecorded:purchase?Number(purchase.credits||0):null,
+       needsReview:creditedState&&!purchase,
+       // This is the current balance, not an assertion about historic spend.
+       creditedAt:event.receivedAt||null};
+   }
+ }
+ return {ok:true,enabled,account:pfiVaPublicAccount(account),
+  intent:intent&&intent.expiresAt>Date.now()?{...pfiVaPreparedPrice(intent),createdAt:intent.createdAt,expiresAt:intent.expiresAt,reference:intent.id}:null,
+  latest:last,balanceCredits:Math.round(wallet.balanceSeconds/CALLFOCUS_SECONDS_PER_CREDIT*10)/10,
+  walletRevision:wallet.revision,name:user.name||'',phone:user.phone||''};
+}
 async function pfiVaStatus(request,env){
  if(request.method!=='GET')return json({error:'Method not allowed'},405);
  const auth=await authenticatedCustomer(request,env);if(!auth)return json({error:'Please sign in.'},401);
- const [account,intent,latest,enabled]=await Promise.all([
- env.CALLFOCUS_CONFIG.get(pfiVaUserKey(auth.user.id),{type:'json'}),
- env.CALLFOCUS_CONFIG.get(pfiVaIntentKey(auth.user.id),{type:'json'}),
- env.CALLFOCUS_CONFIG.get(pfiVaLatestKey(auth.user.id),{type:'json'}),pfiVaAvailable(env)]);
- return json({ok:true,enabled,account:pfiVaPublicAccount(account),
- intent:intent&&intent.expiresAt>Date.now()?{...pfiVaPreparedPrice(intent),createdAt:intent.createdAt,expiresAt:intent.expiresAt,reference:intent.id}:null,
- latest:latest?{reference:latest.reference,amountNaira:latest.amountNaira,status:latest.status,updatedAt:latest.updatedAt}:null,
- name:auth.user.name||'',phone:auth.user.phone||''},200,{'Cache-Control':'private, no-store'});
+ return json(await pfiVaCustomerSnapshot(env,auth.user),200,{'Cache-Control':'private, no-store'});
+}
+// Explicit authenticated POST: retries ONLY a previously signed and saved event
+// belonging to the customer's assigned account. Never guesses a bank transfer or
+// recredits an event already marked completed if its wallet ledger went missing.
+async function pfiVaCustomerRecheck(request,env){
+ if(request.method!=='POST')return json({error:'Method not allowed'},405);
+ const auth=await authenticatedCustomer(request,env);if(!auth)return json({error:'Please sign in.'},401);
+ let body={};try{const raw=await request.text();if(raw.trim())body=JSON.parse(raw)}catch{return json({error:'Invalid request.'},400)}
+ const requested=String(body?.reference||'').trim();
+ if(requested&&!pfiVaReference(requested))return json({error:'Enter a valid PocketFi transfer reference.'},400);
+ const latest=requested?{reference:requested}:await env.CALLFOCUS_CONFIG.get(pfiVaLatestKey(auth.user.id),{type:'json'});
+ const account=await env.CALLFOCUS_CONFIG.get(pfiVaUserKey(auth.user.id),{type:'json'});
+ let checked=false;
+ if(latest?.reference&&account?.accountNumber){
+   const reference=pfiVaReference(latest.reference);
+   const event=reference&&await env.CALLFOCUS_CONFIG.get(pfiVaEventKey(reference),{type:'json'});
+   const mapping=await env.CALLFOCUS_CONFIG.get(pfiVaAccountKey(account.accountNumber),{type:'json'});
+   if(event?.signatureValid===true&&String(event.userId||'')===String(auth.user.id)&&
+      pfiVaDigits(event.accountNumber)===pfiVaDigits(account.accountNumber)&&
+      String(mapping?.userId||'')===String(auth.user.id)){
+     // No automatic replay of previously credited items: a missing history entry
+     // requires Admin accounting review, never a speculative second deposit.
+     if(event.status!=='credited'&&event.status!=='already_credited'){
+       const outcome=await pfiVaProcessEvent(env,reference);
+       event.status=outcome.status;event.userId=outcome.userId||event.userId;
+       event.updatedAt=new Date().toISOString();
+       await env.CALLFOCUS_CONFIG.put(pfiVaEventKey(reference),JSON.stringify(event));
+       if(!requested)await env.CALLFOCUS_CONFIG.put(pfiVaLatestKey(auth.user.id),JSON.stringify({reference,amountNaira:event.amountNaira,status:event.status,updatedAt:event.updatedAt}));
+     }
+     checked=true;
+   }
+ }
+ const response=await pfiVaCustomerSnapshot(env,auth.user,requested);
+ return json({...response,checkedSignedEvent:checked,notificationReceived:checked||!!response.latest},200,{'Cache-Control':'private, no-store'});
 }
 async function pfiVaPrepare(request,env){
  if(request.method!=='POST')return json({error:'Method not allowed'},405);
@@ -4225,8 +4281,16 @@ async function pfiVaWebhook(request,env){
  // Store authenticated event before touching a wallet. No email dependency.
  await env.CALLFOCUS_CONFIG.put(pfiVaEventKey(reference),JSON.stringify(event));
  await env.CALLFOCUS_CONFIG.put(event.indexKey,reference);
+ // Publish the signed event to its owner BEFORE settlement processing. Otherwise
+ // a failed wallet write leaves no reference for Check payment status to retry.
+ const receivingMap=await env.CALLFOCUS_CONFIG.get(pfiVaAccountKey(pfiVaDigits(event.accountNumber)),{type:'json'});
+ if(receivingMap?.userId){
+   event.userId=receivingMap.userId;
+   await env.CALLFOCUS_CONFIG.put(pfiVaEventKey(reference),JSON.stringify(event));
+   await env.CALLFOCUS_CONFIG.put(pfiVaLatestKey(event.userId),JSON.stringify({reference,amountNaira:amount,status:'received',updatedAt:event.updatedAt}));
+ }
  let processing;try{processing=await pfiVaProcessEvent(env,reference)}catch(error){console.error('PocketFi bank reconciliation postponed',String(error?.message||error).slice(0,120));return json({error:'Reconciliation postponed'},500)}
- event.status=processing.status;event.userId=processing.userId||null;event.updatedAt=new Date().toISOString();
+ event.status=processing.status;event.userId=processing.userId||event.userId||null;event.updatedAt=new Date().toISOString();
  await env.CALLFOCUS_CONFIG.put(pfiVaEventKey(reference),JSON.stringify(event));
  if(event.userId)await env.CALLFOCUS_CONFIG.put(pfiVaLatestKey(event.userId),JSON.stringify({reference,amountNaira:amount,status:event.status,updatedAt:event.updatedAt}));
  return json({message:'success'},200);
@@ -6177,6 +6241,7 @@ export default {
     if (url.pathname === '/api/korapay/webhook') return handleKorapayWebhook(request, env);
     if (url.pathname === '/api/pocketfi/bank/webhook') return pfiVaWebhook(request,env);
     if (url.pathname === '/api/pocketfi/bank/status') return safeCustomerRoute('pocketfi-bank-status',()=>pfiVaStatus(request,env));
+    if (url.pathname === '/api/pocketfi/bank/recheck') { const limited=await callFocusRateLimit(request,env,'pocketfi-bank-recheck',15,900);if(limited)return limited;return safeCustomerRoute('pocketfi-bank-recheck',()=>pfiVaCustomerRecheck(request,env)); }
     if (url.pathname === '/api/pocketfi/bank/prepare') { const limited=await callFocusRateLimit(request,env,'pocketfi-bank-prepare',6,900);if(limited)return limited;return safeCustomerRoute('pocketfi-bank-prepare',()=>pfiVaPrepare(request,env)); }
     if (url.pathname === '/api/admin/pocketfi-bank-events') return pfiVaAdminEvents(request,env);
     if (url.pathname === '/api/admin/pocketfi-bank-recheck') return pfiVaAdminRecheck(request,env);
@@ -6197,7 +6262,7 @@ export default {
     if (url.pathname === '/api/image-to-video/link' && request.method === 'GET') return safeCustomerRoute('image-video-link',()=>cfVideoFileLink(request,env));
     if (url.pathname.startsWith('/api/image-to-video/file/') && request.method === 'GET') return safeCustomerRoute('image-video-file',()=>cfVideoFile(request,env,decodeURIComponent(url.pathname.slice('/api/image-to-video/file/'.length))));
     if (url.pathname === '/api/admin/image-video') return cfAdminVideo(request,env);
-    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.06-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.07-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -6246,10 +6311,10 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=16.06-test', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=16.07-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=16.06-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=16.06-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=16.07-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=16.07-test');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -6259,16 +6324,16 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '16.06-test');
+      headers.set('X-CallFocus-Admin-Build', '16.07-test');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=16.06-test', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=16.07-test', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '16.06-test');
+      headers.set('X-CallFocus-Admin-Build', '16.07-test');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {
