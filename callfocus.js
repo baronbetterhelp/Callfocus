@@ -7805,6 +7805,7 @@ ${approvedPatterns}
  const api=(path,options={})=>{const headers=new Headers(options.headers||{});if(token())headers.set('Authorization','Bearer '+token());if(options.body)headers.set('Content-Type','application/json');return fetch(path,{...options,headers,cache:'no-store'})};
  const data=async res=>{try{return await res.json()}catch{return {}}};
  let working=false;
+ let verifying=false;
  async function checkout(){
    if(working)return;
    const credits=Math.floor(Number(document.getElementById('customCreditAmount')?.value||0));
@@ -7830,13 +7831,31 @@ ${approvedPatterns}
    return /^PFI\|[A-Za-z0-9_-]{5,100}$/.test(id)?id:'';
  }
  async function verifyReturn(){
+   if(verifying)return;
+   verifying=true;
+   try{
    const url=new URL(location.href);
    const marker=url.searchParams.get('pocketfi')||'';
    const fromUrl=callbackPaymentId(url);
-   const isReturn=marker==='return'||marker.startsWith('return?payment_id=')||(url.pathname.replace(/\/+$/,'')==='/credits'&&!!fromUrl);
+   const isCredits=url.pathname.replace(/\/+$/,'')==='/credits';
+   // Some hosted checkouts return without an ID. A previously started checkout also
+   // needs verification when the customer manually revisits Credits after paying.
+   const savedId=sessionStorage.getItem('callfocus_pocketfi_payment_id')||'';
+   let serverPendingId='';
+   // Returning from a different browser view can lose sessionStorage. Ask the
+   // authenticated Worker whether THIS customer has a previously initiated,
+   // uncredited checkout. The read-only check never posts credits.
+   if(isCredits&&!fromUrl&&!savedId&&token()){
+     try{
+       const pendingResponse=await api('/api/pocketfi/pending');
+       if(pendingResponse.ok){const pending=await data(pendingResponse);if(pending.pending)serverPendingId=pending.paymentId||'';}
+     }catch{}
+   }
+   const isReturn=marker==='return'||marker.startsWith('return?payment_id=')||(isCredits&&!!(fromUrl||savedId||serverPendingId));
    if(!isReturn)return;
-   // The return URL is untrusted. Only the authenticated server may confirm payment and issue credits.
-   let paymentId=fromUrl||sessionStorage.getItem('callfocus_pocketfi_payment_id')||'';
+   // URL/session references are untrusted. Only the authenticated server confirms
+   // PocketFi status, matches the signed-in owner/order, and awards credits.
+   let paymentId=fromUrl||savedId||serverPendingId;
    for(let i=0;i<32&&!token();i++)await new Promise(resolve=>setTimeout(resolve,250));
    if(!token()){window.toast?.('Sign in to verify your PocketFi payment.');return}
    window.toast?.('Verifying PocketFi payment…');
@@ -7846,14 +7865,23 @@ ${approvedPatterns}
         const route='/api/pocketfi/verify'+(paymentId?'?payment_id='+encodeURIComponent(paymentId):'');
         const response=await api(route),result=await data(response);
         if(!response.ok)throw new Error(result.error||'Could not verify PocketFi payment.');
-        if(result.credited||result.duplicate){completed=true;sessionStorage.removeItem('callfocus_pocketfi_payment_id');try{window.CallFocusPaystack?.refreshWallet?.({quiet:true})}catch{}window.toast?.(result.credited?'PocketFi confirmed. Your credits are ready.':'PocketFi payment already credited.');break}
+        if(result.credited||result.duplicate){completed=true;sessionStorage.removeItem('callfocus_pocketfi_payment_id');try{if(result.wallet)window.CallFocusCredits?.applyAuthoritativeWallet?.(result.wallet);await window.CallFocusPaystack?.refreshWallet?.({quiet:true})}catch{}window.toast?.(result.credited?'PocketFi payment confirmed. Your credits have been added.':'PocketFi payment already credited. Your balance is updated.');break}
         if(['failed','cancelled','canceled'].includes(String(result.status||'').toLowerCase()))break;
         if(attempt<14)await new Promise(resolve=>setTimeout(resolve,4000));
       }catch(error){window.toast?.(error?.message||'Could not confirm payment yet.');break}
    }
-   if(!completed)window.toast?.('Payment is still pending. Your credits will appear after verification.');
+   if(!completed){
+     // Retain the payment reference for a later return instead of losing recovery state.
+     const fields=document.getElementById('pocketfiRecoveryFields');
+     const field=document.getElementById('pocketfiRecoveryId');
+     const toggle=document.getElementById('pocketfiRecoveryToggle');
+     if(field&&paymentId)field.value=paymentId;
+     fields?.classList.remove('hidden');toggle?.setAttribute('aria-expanded','true');
+     window.toast?.('PocketFi has not confirmed payment yet. Your reference is saved. Use Check & reconcile payment if needed.');
+   }
    url.searchParams.delete('pocketfi');url.searchParams.delete('payment_id');history.replaceState({},'',url.pathname+url.search+url.hash);
    try{window.showView?.('credits',false)}catch{}
+   }finally{verifying=false}
  }
  async function recoverPayment(){
    if(working)return;
@@ -7870,6 +7898,7 @@ ${approvedPatterns}
      if(!response.ok)throw new Error(result.error||'Could not verify this PocketFi payment.');
      if(result.credited||result.duplicate){
        sessionStorage.removeItem('callfocus_pocketfi_payment_id');
+       if(result.wallet)window.CallFocusCredits?.applyAuthoritativeWallet?.(result.wallet);
        window.CallFocusPaystack?.refreshWallet?.({quiet:true});
        window.toast?.(result.credited?'Payment confirmed. Your PocketFi credits and transaction history are updated.':'This payment was already credited to your account.');
        if(field)field.value='';
@@ -7885,8 +7914,14 @@ ${approvedPatterns}
      toggle?.setAttribute('aria-expanded',String(expanded));
    });
    document.getElementById('pocketfiRecoverBtn')?.addEventListener('click',recoverPayment);
-   setTimeout(verifyReturn,550)
+   setTimeout(verifyReturn,550);
+   // If PocketFi did not automatically redirect, returning to the same browser
+   // tab or reopening Credits will resume server-side confirmation.
+   window.addEventListener('pageshow',verifyReturn);
+   window.addEventListener('focus',verifyReturn);
+   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')verifyReturn();});
  };
+
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
 

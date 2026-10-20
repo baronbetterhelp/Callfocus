@@ -2055,7 +2055,7 @@ async function handlePublicConfig(env) {
     paymentsEnabled: callFocusPaymentsEnabled(env),
     korapayEnabled: korapayConfigured(env) && c.korapayPaymentsEnabled !== false,
     pocketfiEnabled: pocketfiConfigured(env) && c.pocketfiPaymentsEnabled === true,
-    pocketfiBankEnabled: pocketfiConfigured(env) && !!String(env.POCKETFI_SECRET_KEY||'').trim() && c.pocketfiVirtualAccountsEnabled === true,
+    pocketfiBankEnabled: false, // Hosted checkout only; legacy static transfers remain reconcilable.
     paymentStatus: callFocusPaymentsEnabled(env) ? 'available' : 'awaiting_paystack_activation',
     manualPaymentsEnabled: manualPaymentReady(c),
     manualPaymentStatus: manualPaymentReady(c) ? 'available' : 'not_configured',
@@ -4098,7 +4098,7 @@ function pfiVaDigits(value){return String(value||'').replace(/\D/g,'')}
 function pfiVaReference(value){const valueStr=String(value||'').trim();return /^PFI\|[A-Za-z0-9|_-]{6,140}$/.test(valueStr)?valueStr:''}
 function pfiVaPreparedPrice(p){return {amountNaira:p.amountNaira,baseCredits:p.baseCredits,bonusCredits:p.bonusCredits,bonusPercent:p.bonusPercent,credits:p.credits}}
 function pfiVaPublicAccount(a){return a?{bankName:a.bankName,accountName:a.accountName,accountNumber:a.accountNumber}:null}
-async function pfiVaAvailable(env){const c=await getConfig(env);return c.pocketfiVirtualAccountsEnabled===true&&pocketfiConfigured(env)&&!!String(env.POCKETFI_SECRET_KEY||'').trim()}
+async function pfiVaAvailable(env){return false} // Stop issuing new fixed bank accounts; keep old signed deposit handling.
 // V16.07: expose the authoritative wallet proof alongside PocketFi's signed event.
 // Reading status must never create a credit or treat a checkout URL as proof of payment.
 async function pfiVaCustomerSnapshot(env,user,requestedReference=""){
@@ -4365,7 +4365,7 @@ async function handlePocketfiInitialize(request,env){
     response=await pocketfiRequest(env,'/api/v1/checkout/request',{
       first_name:firstName,last_name:lastName,phone,
       business_id:String(env.POCKETFI_BUSINESS_ID).trim(),email:auth.user.email,
-      redirect_link:origin+'/credits',amount:String(offer.amountNaira)
+      redirect_link:origin+'/credits?pocketfi=return',amount:String(offer.amountNaira)
     });
   }catch(error){
     // A provider authentication problem is not an account-service failure.
@@ -4416,6 +4416,15 @@ async function creditVerifiedPocketfi(env,paymentId){
   }
   return {credited:!commit.duplicate,duplicate:!!commit.duplicate,record};
 }
+async function handlePocketfiPending(request,env){
+  if(request.method!=='GET')return new Response('Method not allowed.',{status:405,headers:{Allow:'GET'}});
+  const auth=await authenticatedCustomer(request,env);
+  if(!auth)return json({error:'Sign in to check your PocketFi payment.'},401);
+  const id=pocketfiPaymentId(await env.CALLFOCUS_CONFIG.get(pocketfiLastKey(auth.user.id)));
+  const record=id?await env.CALLFOCUS_CONFIG.get(pocketfiPendingKey(id),{type:'json'}):null;
+  const pending=!!(record && String(record.userId)===String(auth.user.id));
+  return json({ok:true,pending,paymentId:pending?id:''},200,{'Cache-Control':'no-store'});
+}
 async function handlePocketfiVerify(request,env){
   if(request.method!=='GET')return new Response('Method not allowed.',{status:405,headers:{Allow:'GET'}});
   const auth=await authenticatedCustomer(request,env);if(!auth)return json({error:'Sign in to verify PocketFi payment.'},401);
@@ -4427,7 +4436,7 @@ async function handlePocketfiVerify(request,env){
   if(String(expected.userId)!==String(auth.user.id))return json({error:'This payment belongs to another account.'},403);
   try{
     const result=await creditVerifiedPocketfi(env,id);
-    if(['payment_id_mismatch','amount_mismatch','credits_mismatch'].includes(result.reason))return json({error:'PocketFi payment could not be reconciled. Contact support.',code:result.reason},409);
+    if(['payment_id_mismatch','amount_mismatch','credits_mismatch','ledger_pruned'].includes(result.reason))return json({error:'PocketFi payment is confirmed but requires an account review. Contact support with your payment ID.',code:result.reason},409);
     if(result.reason==='unknown_payment')return json({error:'This payment was not initiated for your CallFocus account. Please contact support with your PocketFi payment ID.',code:result.reason},404);
     if(result.reason==='customer_missing'||result.reason==='wallet_not_verified')return json({error:'PocketFi has confirmed the payment, but CallFocus could not complete wallet reconciliation. Contact support with the payment ID.',code:result.reason},502);
     const data=await getCustomerDataForUpdate(env,auth.user.id,auth.user.name);
@@ -6422,6 +6431,7 @@ export default {
     if (url.pathname === '/api/admin/pocketfi-bank-events') return pfiVaAdminEvents(request,env);
     if (url.pathname === '/api/admin/pocketfi-bank-recheck') return pfiVaAdminRecheck(request,env);
     if (url.pathname === '/api/pocketfi/initialize') { const limited=await callFocusRateLimit(request,env,'pocketfi-initialize',12,900); if(limited)return limited; return safeCustomerRoute('pocketfi-initialize',()=>handlePocketfiInitialize(request,env)); }
+    if (url.pathname === '/api/pocketfi/pending') { const limited=await callFocusRateLimit(request,env,'pocketfi-pending',30,900); if(limited)return limited; return safeCustomerRoute('pocketfi-pending',()=>handlePocketfiPending(request,env)); }
     if (url.pathname === '/api/pocketfi/verify') { const limited=await callFocusRateLimit(request,env,'pocketfi-verify',60,900); if(limited)return limited; return safeCustomerRoute('pocketfi-verify',()=>handlePocketfiVerify(request,env)); }
     if (url.pathname === '/api/manual-payment/request') { const limited = await callFocusRateLimit(request, env, 'manual-payment-request', 12, 900); if (limited) return limited; return safeCustomerRoute('manual-payment-request', () => handleManualPaymentRequest(request, env)); }
     if (url.pathname === '/api/manual-payment/submit') { const limited = await callFocusRateLimit(request, env, 'manual-payment-submit', 10, 900); if (limited) return limited; return safeCustomerRoute('manual-payment-submit', () => handleManualPaymentSubmit(request, env)); }
@@ -6438,7 +6448,7 @@ export default {
     if (url.pathname === '/api/image-to-video/link' && request.method === 'GET') return safeCustomerRoute('image-video-link',()=>cfVideoFileLink(request,env));
     if (url.pathname.startsWith('/api/image-to-video/file/') && request.method === 'GET') return safeCustomerRoute('image-video-file',()=>cfVideoFile(request,env,decodeURIComponent(url.pathname.slice('/api/image-to-video/file/'.length))));
     if (url.pathname === '/api/admin/image-video') return cfAdminVideo(request,env);
-    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.09-backup-audit-staging' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.11-pocketfi-checkout-resume-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);

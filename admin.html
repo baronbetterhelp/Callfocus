@@ -36,7 +36,7 @@
 
     <section class="admin-dashboard hidden" id="adminDashboard">
       <div class="admin-page-head">
-        <div><span class="kicker">Private administration</span><h1>Admin Portal</h1><p>Operate CallFocus from one organized management workspace.</p><small class="admin-build-stamp" id="adminBuildStamp">CallFocus Admin 16.07-test</small></div>
+        <div><span class="kicker">Private administration</span><h1>Admin Portal</h1><p>Operate CallFocus from one organized management workspace.</p><small class="admin-build-stamp" id="adminBuildStamp">CallFocus Admin 16.11</small></div>
         <div class="admin-head-actions"><button class="btn btn-ghost" type="button" id="adminRefreshAllBtn">Refresh data</button><button class="btn btn-ghost" id="adminLockBtn">Sign out</button></div>
       </div>
 
@@ -350,7 +350,7 @@
         <div class="premium-panel form-panel manual-payment-settings-panel" id="adminPaymentMethodsPanel">
           <label class="toggle-row admin-availability-toggle"><span>Manual Bank Transfer</span><input id="adminManualPaymentsEnabled" type="checkbox" /></label>
           <label class="toggle-row admin-availability-toggle"><span>KoraPay checkout</span><input id="adminKorapayPaymentsEnabled" type="checkbox" checked /></label>
-          <label class="toggle-row admin-availability-toggle"><span>PocketFi fixed bank account (beta)</span><input id="adminPocketfiBankEnabled" type="checkbox" /><small>Off by default. Requires valid PocketFi Public and Secret keys. Customers receive dedicated Kuda accounts. Only signed, exact-amount deposits are eligible for credits.</small></label>
+          <label class="toggle-row admin-availability-toggle" style="display:none"><span>PocketFi fixed bank account (legacy disabled)</span><input id="adminPocketfiBankEnabled" type="checkbox" /><small>Off by default. Requires valid PocketFi Public and Secret keys. Customers receive dedicated Kuda accounts. Only signed, exact-amount deposits are eligible for credits.</small></label>
           <label class="toggle-row admin-availability-toggle"><span>PocketFi checkout</span><input id="adminPocketfiPaymentsEnabled" type="checkbox" /><small>Requires POCKETFI_SECRET_KEY and POCKETFI_BUSINESS_ID in Cloudflare. Starts off.</small></label>
           <p class="admin-availability-note">Each switch controls visibility and new checkout requests. Previously received payment confirmations and pending transfers can still be processed. Paystack is not changed.</p>
           <button type="button" class="btn btn-primary admin-availability-save" id="savePaymentAvailabilityBtn">Apply payment availability</button>
@@ -546,6 +546,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=16.07-test"></script><script src="/admin-video.js?v=16.07-test"></script>
+  <script src="/admin.js?v=16.11-pocketfi"></script><script src="/admin-video.js?v=16.07-test"></script>
 </body>
 </html>
