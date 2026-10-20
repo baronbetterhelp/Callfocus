@@ -2694,7 +2694,7 @@ function maintenanceAllowedPath(path) {
   // Keep admin access and payment settlement/confirmation available. Do not break
   // webhook delivery or manual approvals that began before maintenance.
   return path === '/admin' || path === '/admin/' || path === '/admin.html' || path === '/admin.css' || path === '/admin.js'
-    || path.startsWith('/api/admin/') || path === '/api/korapay/webhook' || path === '/api/paystack/webhook' || path === '/api/pocketfi/bank/webhook'
+    || path.startsWith('/api/admin/') || path === '/api/korapay/webhook' || path === '/api/paystack/webhook' || path === '/api/pocketfi/bank/webhook' || path === '/api/pocketfi/checkout/webhook'
     || path === '/api/korapay/verify' || path === '/api/paystack/verify' || path === '/api/paystack/recover'
     || path === '/api/manual-payment/submit' || path === '/api/manual-payment/status' || path === '/api/manual-payment/cancel'
     || path === '/manual-payment-review' || path === '/manual-payment-review/'
@@ -4324,6 +4324,10 @@ async function pfiVaAdminRecheck(request,env){
 // Store it as the POCKETFI_PUBLIC_API_KEY Worker secret; never expose it to browsers.
 const POCKETFI_PENDING_TTL=60*60*24*30;
 const POCKETFI_PROCESSED_TTL=60*60*24*365;
+// Hosted-checkout-only verification watch; never scans legacy virtual-account payments.
+const POCKETFI_CHECKOUT_WATCH_TTL=60*60*2;
+const POCKETFI_CHECKOUT_WATCH_PREFIX='pocketfi:checkout-watch:';
+const pocketfiCheckoutWatchKey=id=>POCKETFI_CHECKOUT_WATCH_PREFIX+id;
 function pocketfiConfigured(env){return !!String(env.POCKETFI_PUBLIC_API_KEY||'').trim()&&!!String(env.POCKETFI_BUSINESS_ID||'').trim()}
 function pocketfiPaymentId(value){const id=String(value||'').trim();return /^PFI\|[A-Za-z0-9_-]{5,100}$/.test(id)?id:''}
 function pocketfiPendingKey(id){return 'pocketfi:pending:'+id}
@@ -4379,10 +4383,19 @@ async function handlePocketfiInitialize(request,env){
   const paymentId=pocketfiPaymentId(response?.payment_id||response?.data?.payment_id);
   const checkoutUrl=pocketfiTrustedCheckout(response?.payment_link||response?.data?.payment_link);
   if(!paymentId||!checkoutUrl)return json({error:'PocketFi did not return a verified checkout session. No credits were charged.'},502);
-  const record={userId:auth.user.id,paymentId,...offer,createdAt:new Date().toISOString()};
+  const createdAt=new Date().toISOString();
+  const merchantId=String(env.POCKETFI_BUSINESS_ID).trim();
+  const record={userId:auth.user.id,paymentId,merchantId,...offer,createdAt};
   // Persist both records before redirecting, so a failed KV write cannot cause an orphaned payment.
   await env.CALLFOCUS_CONFIG.put(pocketfiPendingKey(paymentId),JSON.stringify(record),{expirationTtl:POCKETFI_PENDING_TTL});
   await env.CALLFOCUS_CONFIG.put(pocketfiLastKey(auth.user.id),paymentId,{expirationTtl:POCKETFI_PENDING_TTL});
+  // Best-effort 2-hour server-side follow-up while the customer is on PocketFi.
+  // No new wallet or provider integration is needed; the normal verified credit path is reused.
+  try{
+    await env.CALLFOCUS_CONFIG.put(pocketfiCheckoutWatchKey(paymentId),JSON.stringify({
+      paymentId,merchantId,createdAt,nextCheckAt:Date.now()+30000,attempts:0
+    }),{expirationTtl:POCKETFI_CHECKOUT_WATCH_TTL});
+  }catch(e){console.warn('PocketFi checkout watch unavailable',String(e?.message||'unknown').slice(0,90));}
   return json({ok:true,paymentId,checkoutUrl,credits,amountNaira:offer.amountNaira});
 }
 async function creditVerifiedPocketfi(env,paymentId){
@@ -4410,6 +4423,8 @@ async function creditVerifiedPocketfi(env,paymentId){
   const record={userId:user.id,paymentId:id,reference:id,credits,baseCredits,bonusCredits,bonusPercent,secondsAdded:seconds,amountNaira:Number(expected.amountNaira),at:new Date().toISOString()};
   await env.CALLFOCUS_CONFIG.put(pocketfiProcessedKey(id),JSON.stringify(record),{expirationTtl:POCKETFI_PROCESSED_TTL});
   await env.CALLFOCUS_CONFIG.delete(pocketfiPendingKey(id));
+  // Stop scheduled verification once an authenticated provider confirmation was credited.
+  try{await env.CALLFOCUS_CONFIG.delete(pocketfiCheckoutWatchKey(id))}catch{}
   if(!commit.duplicate){
     try{await safeAwardReferralAfterDeposit(env,user.id,{provider:'pocketfi',reference:id,at:record.at})}catch(e){console.error('PocketFi referral reward failed',e?.message||e)}
     try{await notifyPurchaseBonus(env,user.id,'pocketfi',id,breakdown)}catch(e){console.error('PocketFi bonus notification failed',e?.message||e)}
@@ -4442,6 +4457,88 @@ async function handlePocketfiVerify(request,env){
     const data=await getCustomerDataForUpdate(env,auth.user.id,auth.user.name);
     return json({ok:true,credited:!!result.credited,duplicate:!!result.duplicate,status:result.status||(result.credited||result.duplicate?'success':'pending'),reason:result.reason||'',wallet:data.wallet,paymentId:id});
   }catch(error){return json({error:error?.message||'PocketFi confirmation temporarily unavailable.'},error?.status||502)}
+}
+
+// V16.13 — hosted PocketFi checkout confirmation, independent of the customer's browser.
+// The public webhook is never trusted for payment success: signed events merely trigger
+// the existing authenticated server-to-PocketFi checkout confirmation.
+async function pocketfiCheckoutWebhook(request,env){
+  if(request.method!=='POST')return new Response('Method not allowed.',{status:405,headers:{Allow:'POST'}});
+  const secret=String(env.POCKETFI_SECRET_KEY||'').trim();
+  if(!secret)return json({error:'Webhook not configured.'},503);
+  const size=Number(request.headers.get('content-length')||0);
+  if(size>64000)return json({error:'Payload too large.'},413);
+  let raw='';try{raw=await request.text()}catch{return json({error:'Invalid payload.'},400)}
+  if(raw.length>64000)return json({error:'Payload too large.'},413);
+  const signature=request.headers.get('HTTP_POCKETFI_SIGNATURE')||request.headers.get('http-pocketfi-signature')||'';
+  if(!await pfiVaValidSignature(raw,signature,secret))return json({error:'Invalid signature.'},401);
+  let event;try{event=JSON.parse(raw)}catch{return json({error:'Invalid JSON.'},400)}
+  const id=pocketfiPaymentId(event?.transaction?.reference);
+  if(!id)return json({error:'Invalid checkout reference.'},400);
+  const existing=await env.CALLFOCUS_CONFIG.get(pocketfiPendingKey(id),{type:'json'});
+  if(!existing){
+    // Provider retries after processing are harmless; unrelated merchant events
+    // must never be credited under the hosted checkout ledger.
+    return json({ok:true,accepted:false,reason:'not_a_pending_checkout'});
+  }
+  if(String(existing.merchantId||'')!==String(env.POCKETFI_BUSINESS_ID||'').trim()){
+    return json({ok:true,accepted:false,reason:'merchant_mismatch'});
+  }
+  const reportedAmount=event?.order?.amount;
+  if(reportedAmount!==undefined && (!Number.isFinite(Number(reportedAmount)) || Math.abs(Number(reportedAmount)-Number(existing.amountNaira))>0.01)){
+    return json({error:'Checkout amount mismatch.'},400);
+  }
+  try{
+    const outcome=await creditVerifiedPocketfi(env,id);
+    if(['payment_id_mismatch','amount_mismatch','credits_mismatch','customer_missing','wallet_not_verified','ledger_pruned'].includes(outcome.reason)){
+      console.warn('PocketFi checkout needs reconciliation',outcome.reason);
+      return json({error:'Payment reconciliation requires review.'},409);
+    }
+    // If PocketFi has not confirmed settlement yet, the scheduled follow-up
+    // will retry automatically; acknowledging the signed delivery is safe.
+    return json({ok:true,accepted:true,credited:!!outcome.credited,duplicate:!!outcome.duplicate,pending:outcome.reason==='not_successful'});
+  }catch(e){
+    console.warn('PocketFi checkout confirmation deferred',String(e?.message||'unavailable').slice(0,100));
+    return json({error:'Verification temporarily unavailable.'},503);
+  }
+}
+
+// Cloudflare runs this independently of Safari/TikTok/PocketFi's checkout tab.
+// Only new checkouts for the currently configured merchant are watched, for 2 hours.
+async function pocketfiCheckoutCron(env){
+  if(!pocketfiConfigured(env)||!env.CALLFOCUS_CONFIG)return;
+  const now=Date.now(),merchantId=String(env.POCKETFI_BUSINESS_ID).trim();
+  let page;
+  try{page=await env.CALLFOCUS_CONFIG.list({prefix:POCKETFI_CHECKOUT_WATCH_PREFIX,limit:1000})}
+  catch(e){console.warn('PocketFi checkout watch list failed',String(e?.message||'unknown').slice(0,90));return}
+  let examined=0;
+  for(const row of page.keys||[]){
+    if(examined>=30)break;
+    const key=row.name;
+    let watch;
+    try{watch=await env.CALLFOCUS_CONFIG.get(key,{type:'json'})}catch{continue}
+    if(!watch)continue;
+    if(String(watch.merchantId||'')!==merchantId)continue;
+    const paymentId=pocketfiPaymentId(watch.paymentId);
+    if(!paymentId||key!==pocketfiCheckoutWatchKey(paymentId))continue;
+    if(Date.parse(watch.createdAt)<now-POCKETFI_CHECKOUT_WATCH_TTL*1000){try{await env.CALLFOCUS_CONFIG.delete(key)}catch{};continue}
+    if(Number(watch.nextCheckAt||0)>now)continue;
+    examined++;
+    try{
+      const pending=await env.CALLFOCUS_CONFIG.get(pocketfiPendingKey(paymentId),{type:'json'});
+      if(!pending || String(pending.merchantId||'')!==merchantId){await env.CALLFOCUS_CONFIG.delete(key);continue}
+      const outcome=await creditVerifiedPocketfi(env,paymentId);
+      if(outcome.credited||outcome.duplicate){await env.CALLFOCUS_CONFIG.delete(key);continue}
+      // Do not repeat unsafe/mismatched payments automatically.
+      if(outcome.reason && outcome.reason!=='not_successful'){
+        console.warn('PocketFi checkout requires review',outcome.reason);
+        await env.CALLFOCUS_CONFIG.delete(key);continue;
+      }
+    }catch(e){console.warn('PocketFi checkout verification retry',String(e?.message||'unknown').slice(0,90))}
+    const attempts=Math.max(0,Number(watch.attempts)||0)+1;
+    const interval=attempts<10?60000:attempts<20?120000:300000;
+    try{await env.CALLFOCUS_CONFIG.put(key,JSON.stringify({...watch,attempts,nextCheckAt:now+interval}),{expirationTtl:POCKETFI_CHECKOUT_WATCH_TTL})}catch{}
+  }
 }
 
 // V15.84 KoraPay: additional, optional hosted NGN checkout alongside existing providers.
@@ -6425,6 +6522,7 @@ export default {
     if (url.pathname === '/api/korapay/verify') return safeCustomerRoute('korapay-verify', () => handleKorapayVerify(request, env));
     if (url.pathname === '/api/korapay/webhook') return handleKorapayWebhook(request, env);
     if (url.pathname === '/api/pocketfi/bank/webhook') return pfiVaWebhook(request,env);
+    if (url.pathname === '/api/pocketfi/checkout/webhook') return pocketfiCheckoutWebhook(request,env);
     if (url.pathname === '/api/pocketfi/bank/status') return safeCustomerRoute('pocketfi-bank-status',()=>pfiVaStatus(request,env));
     if (url.pathname === '/api/pocketfi/bank/recheck') { const limited=await callFocusRateLimit(request,env,'pocketfi-bank-recheck',15,900);if(limited)return limited;return safeCustomerRoute('pocketfi-bank-recheck',()=>pfiVaCustomerRecheck(request,env)); }
     if (url.pathname === '/api/pocketfi/bank/prepare') { const limited=await callFocusRateLimit(request,env,'pocketfi-bank-prepare',6,900);if(limited)return limited;return safeCustomerRoute('pocketfi-bank-prepare',()=>pfiVaPrepare(request,env)); }
@@ -6562,7 +6660,12 @@ export default {
       return new Response('CallFocus is temporarily unavailable. Please try again.', { status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } });
     }
   },
-  async scheduled(event, env, ctx) { ctx.waitUntil(cfVideoCron(env)); }
+  async scheduled(event, env, ctx) {
+    // Preserve the existing Image-to-Video five-minute polling schedule.
+    if(event.cron==='*/5 * * * *')ctx.waitUntil(cfVideoCron(env));
+    // Verify new PocketFi hosted checkouts even while customers are off-site.
+    if(event.cron==='* * * * *')ctx.waitUntil(pocketfiCheckoutCron(env));
+  }
 };
 
 
