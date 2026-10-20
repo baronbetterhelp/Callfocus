@@ -7811,16 +7811,29 @@ ${approvedPatterns}
    const credits=Math.floor(Number(document.getElementById('customCreditAmount')?.value||0));
    if(!Number.isInteger(credits)||credits<300){window.toast?.('Minimum purchase is 300 credits.');return}
    if(!token()){window.showAuth?.('signin',null,'Sign in before purchasing credits.');return}
-   if(window.CallFocusPaymentAvailability?.pocketfi!==true){window.toast?.('PocketFi is not available yet.');return}
+   // The availability check can still be loading (or stale) on first tap,
+   // especially after Safari restores a tab. Refresh it before rejecting checkout.
+   // Do not bypass server-side PocketFi enablement or initialize twice.
    working=true;const button=btn(),old=button?.textContent;
-   if(button){button.disabled=true;button.textContent='Opening PocketFi…'}
+   if(button){button.disabled=true;button.textContent='Checking PocketFi…'}
    try{
+     let availability=window.CallFocusPaymentAvailability;
+     if(availability?.pocketfi!==true){
+       const refresh=window.CallFocusSyncPaymentAvailability;
+       if(typeof refresh==='function')availability=await refresh({force:false,retry:false});
+     }
+     if(availability?.pocketfi!==true){
+       window.toast?.(availability?.known===true?'PocketFi checkout is currently unavailable.':'Could not check PocketFi availability. Please try again.');
+       return;
+     }
+     if(button)button.textContent='Opening PocketFi…';
      const response=await api('/api/pocketfi/initialize',{method:'POST',body:JSON.stringify({credits})});const result=await data(response);
      if(!response.ok)throw new Error(result.error||'Could not start PocketFi payment.');
      if(!result.checkoutUrl||!result.paymentId)throw new Error('PocketFi did not return a checkout link.');
      sessionStorage.setItem('callfocus_pocketfi_payment_id',result.paymentId);
      location.assign(result.checkoutUrl);
-   }catch(error){window.toast?.(error?.message||'Could not start PocketFi payment.');working=false;if(button){button.disabled=false;button.textContent=old||'Pay with PocketFi'}}
+   }catch(error){window.toast?.(error?.message||'Could not start PocketFi payment.');}
+   finally{working=false;if(button){button.disabled=false;button.textContent=old||'Pay with PocketFi'}}
  }
  // PocketFi currently appends '?payment_id=' even if the return link already had a query.
  // Support both legacy malformed returns and the corrected /credits?payment_id=... URL.
