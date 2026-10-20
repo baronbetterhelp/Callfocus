@@ -6208,6 +6208,182 @@ async function cfVideoCron(env){if(!env.CALLFOCUS_CONFIG||!env.XAI_API_KEY)retur
 
 async function cfVideoFileLink(request,env){const auth=await authenticatedCustomer(request,env);if(!auth)return json({error:'Sign in required'},401);const id=new URL(request.url).searchParams.get('id')||'';const job=await cfLoadVideoJob(env,auth.user.id,id);if(!job||job.status!=='completed')return json({error:'Video is not ready.'},404);const token=crypto.randomUUID();await env.CALLFOCUS_CONFIG.put('image_video:access:'+token,JSON.stringify({id,userId:auth.user.id}),{expirationTtl:300});return json({ok:true,url:'/api/image-to-video/file/'+id+'?access='+token});}
 
+// === BEGIN V16.08 PHASE 2 D1 WALLET ENGINE (STAGING, NOT CONNECTED TO CUSTOMER ROUTES) ===
+// All production deposits, debits, referrals, refunds, gifts and video/call operations remain on KV.
+// Do not turn on this write guard without a completed per-user migration and audited cutover.
+const CF_D1_WALLET_KINDS = Object.freeze([
+  'purchase', 'manual_purchase', 'referral_reward', 'admin_grant', 'admin_reset',
+  'live_call', 'voice_note', 'video_charge', 'video_refund', 'wallet_adjustment'
+]);
+function cfD1WalletDatabase(env) {
+  const db = env?.CALLFOCUS_WALLET_DB;
+  if (!db || typeof db.prepare !== 'function' || typeof db.batch !== 'function') {
+    throw new Error('The CallFocus wallet D1 database binding is unavailable.');
+  }
+  return db;
+}
+function cfD1WalletWriteGuard(env) {
+  // Explicit non-default guard, and no production route invokes either write helper.
+  if (env?.CALLFOCUS_D1_WALLET_WRITES_ENABLED !== 'enabled-after-audited-cutover') {
+    throw new Error('D1 wallet writes are disabled pending account migration and cutover.');
+  }
+  return cfD1WalletDatabase(env);
+}
+function cfD1WalletIdentifier(value, label, max = 160) {
+  const text = String(value ?? '').trim();
+  if (!text || text.length > max || /[\u0000-\u001f]/.test(text)) throw new Error('Invalid D1 wallet ' + label + '.');
+  return text;
+}
+function cfD1WalletInteger(value, label) {
+  if (!Number.isSafeInteger(value)) throw new Error('D1 wallet ' + label + ' must be a safe integer.');
+  return value;
+}
+function cfD1WalletDetails(raw) {
+  const details = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const json = JSON.stringify(details);
+  if (json.length > 2400) throw new Error('D1 wallet journal details exceed the staging limit.');
+  return json;
+}
+function cfD1WalletNormalizePosting(input = {}) {
+  const userId = cfD1WalletIdentifier(input.userId, 'user ID', 120);
+  const entryId = cfD1WalletIdentifier(input.entryId, 'entry ID');
+  const kind = cfD1WalletIdentifier(input.kind, 'kind', 40);
+  if (!CF_D1_WALLET_KINDS.includes(kind)) throw new Error('Unrecognized D1 wallet posting kind.');
+  const delta = cfD1WalletInteger(input.deltaSeconds, 'delta seconds');
+  if (delta === 0) throw new Error('Use the set-balance operation for zeroing balances.');
+  const provider = String(input.provider || '').trim().toLowerCase().slice(0, 50);
+  const providerReference = input.providerReference == null ? null : cfD1WalletIdentifier(input.providerReference, 'provider reference');
+  if (['purchase', 'manual_purchase'].includes(kind) && (!provider || !providerReference || delta <= 0)) {
+    throw new Error('A purchase requires a named provider, unique reference and positive seconds.');
+  }
+  const amountKobo = input.amountKobo == null ? null : cfD1WalletInteger(input.amountKobo, 'amount kobo');
+  if (amountKobo !== null && amountKobo < 0) throw new Error('Payment amount cannot be negative.');
+  const recordedAt = new Date().toISOString();
+  const happenedAt = input.happenedAt ? cfD1WalletIdentifier(input.happenedAt, 'event time', 40) : recordedAt;
+  if (!Number.isFinite(Date.parse(happenedAt))) throw new Error('Invalid D1 journal timestamp.');
+  return {userId, entryId, kind, provider, providerReference, amountKobo, delta, happenedAt, recordedAt, details: cfD1WalletDetails(input.details)};
+}
+// D1 batch statements are executed sequentially in a single SQL transaction.
+// Step 1 inserts a unique posting only if its *verified* migrated account has sufficient funds.
+// Step 2 uses SQLite changes() to update the balance only if step 1 actually inserted a row.
+// Thus an identical provider reference, double webhook, or insufficient debit cannot change balance.
+async function cfD1WalletPost(env, input = {}) {
+  const db = cfD1WalletWriteGuard(env);
+  const p = cfD1WalletNormalizePosting(input);
+  const results = await db.batch([
+    db.prepare(`INSERT OR IGNORE INTO wallet_journal
+      (entry_id,user_id,entry_kind,provider,provider_reference,amount_kobo,
+       delta_seconds,balance_after_seconds,happened_at,recorded_at,details_json)
+      SELECT ?,a.user_id,?,?,?,?,?,a.balance_seconds+?,?,?,?
+      FROM wallet_accounts AS a
+      INNER JOIN wallet_migration_audit AS audit ON audit.user_id=a.user_id AND audit.import_state='verified'
+      WHERE a.user_id=? AND a.balance_seconds+? >= 0`)
+      .bind(p.entryId,p.kind,p.provider,p.providerReference,p.amountKobo,p.delta,p.delta,
+            p.happenedAt,p.recordedAt,p.details,p.userId,p.delta),
+    db.prepare(`UPDATE wallet_accounts
+      SET balance_seconds=balance_seconds+?, revision=revision+1, updated_at=?
+      WHERE user_id=? AND changes()=1`).bind(p.delta,p.recordedAt,p.userId),
+    db.prepare('SELECT user_id,balance_seconds,revision FROM wallet_accounts WHERE user_id=?').bind(p.userId)
+  ]);
+  if (!Array.isArray(results) || results.length !== 3 || results.some(r => r.success === false)) {
+    throw new Error('D1 wallet transaction did not return a verified result.');
+  }
+  const changed = results[0]?.meta?.changes;
+  const walletChanged = results[1]?.meta?.changes;
+  if (!Number.isInteger(changed) || !Number.isInteger(walletChanged) || changed !== walletChanged || changed > 1 || changed < 0) {
+    throw new Error('D1 wallet mutation result is inconsistent; reconcile before retrying.');
+  }
+  const wallet = results[2]?.results?.[0];
+  if (!wallet) throw new Error('D1 wallet account is not seeded. No posting was accepted.');
+  if (changed === 1) return {applied:true,duplicate:false,balanceSeconds:wallet.balance_seconds,revision:wallet.revision,entryId:p.entryId};
+  const prior = await db.prepare(`SELECT entry_id,user_id,entry_kind,provider,provider_reference,amount_kobo,delta_seconds
+    FROM wallet_journal WHERE entry_id=? OR (provider=? AND provider_reference=?) LIMIT 1`)
+    .bind(p.entryId,p.provider,p.providerReference).first();
+  if (prior) {
+    if (prior.user_id!==p.userId || prior.entry_kind!==p.kind || prior.provider!==p.provider ||
+        prior.provider_reference!==p.providerReference || prior.amount_kobo!==p.amountKobo || prior.delta_seconds!==p.delta) {
+      throw new Error('Conflicting D1 wallet posting with an existing idempotency reference.');
+    }
+    return {applied:false,duplicate:true,balanceSeconds:wallet.balance_seconds,revision:wallet.revision,entryId:prior.entry_id};
+  }
+  return {applied:false,duplicate:false,insufficientOrUnverified:true,balanceSeconds:wallet.balance_seconds,revision:wallet.revision};
+}
+// Set the account to an exact balance for future audited Admin reset operations.
+// Its journal delta is computed INSIDE the database transaction, not from a stale JS read.
+async function cfD1WalletSetBalance(env, {userId,entryId,balanceSeconds,reason='Admin balance adjustment'} = {}) {
+  const db = cfD1WalletWriteGuard(env);
+  userId = cfD1WalletIdentifier(userId,'user ID',120);
+  entryId = cfD1WalletIdentifier(entryId,'entry ID');
+  balanceSeconds = cfD1WalletInteger(balanceSeconds,'target balance seconds');
+  if (balanceSeconds < 0) throw new Error('D1 wallet target balance must not be negative.');
+  const now = new Date().toISOString();
+  const details = cfD1WalletDetails({reason:String(reason).slice(0,180)});
+  const results = await db.batch([
+    db.prepare(`INSERT OR IGNORE INTO wallet_journal
+      (entry_id,user_id,entry_kind,provider,provider_reference,amount_kobo,
+       delta_seconds,balance_after_seconds,happened_at,recorded_at,details_json)
+      SELECT ?,a.user_id,'admin_reset','admin',NULL,NULL,? - a.balance_seconds,?,?,?,?
+      FROM wallet_accounts AS a
+      INNER JOIN wallet_migration_audit AS audit ON audit.user_id=a.user_id AND audit.import_state='verified'
+      WHERE a.user_id=?`).bind(entryId,balanceSeconds,balanceSeconds,now,now,details,userId),
+    db.prepare(`UPDATE wallet_accounts SET balance_seconds=?,revision=revision+1,updated_at=?
+      WHERE user_id=? AND changes()=1`).bind(balanceSeconds,now,userId),
+    db.prepare('SELECT user_id,balance_seconds,revision FROM wallet_accounts WHERE user_id=?').bind(userId)
+  ]);
+  if (!Array.isArray(results) || results.length!==3 || results.some(r=>r.success===false) ||
+      !Number.isInteger(results[0]?.meta?.changes) || results[0].meta.changes!==results[1]?.meta?.changes) {
+    throw new Error('D1 wallet reset transaction needs reconciliation.');
+  }
+  const row=results[2]?.results?.[0];
+  if (!row) throw new Error('D1 wallet account is not seeded.');
+  if (results[0].meta.changes===0) {
+    const prior=await db.prepare('SELECT user_id,entry_kind,balance_after_seconds FROM wallet_journal WHERE entry_id=?').bind(entryId).first();
+    if (prior && (prior.user_id!==userId || prior.entry_kind!=='admin_reset' || prior.balance_after_seconds!==balanceSeconds)) {
+      throw new Error('Conflicting D1 Admin reset with an existing idempotency reference.');
+    }
+    if (!prior) throw new Error('D1 wallet account has not passed migration verification.');
+  }
+  return {applied:results[0].meta.changes===1,balanceSeconds:row.balance_seconds,revision:row.revision};
+}
+// The ONLY exposed phase-2 route is GET and read-only. It requires the existing Admin session.
+async function handleAdminD1WalletPreflight(request,env) {
+  if (!await adminAuthorized(request,env)) return json({error:'Admin sign-in required.'},401);
+  if (request.method!=='GET') return json({error:'Method not allowed.'},405);
+  const db=env?.CALLFOCUS_WALLET_DB;
+  if (!db || typeof db.prepare!=='function') return json({ok:true,phase:'16.08-phase2-staging',bindingConnected:false,writeCutover:false,schemaReady:false});
+  const required=['wallet_accounts','wallet_journal','wallet_migration_audit','pocketfi_account_mappings','pocketfi_funding_intents','pocketfi_webhook_inbox'];
+  try {
+    const tableRows=await db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('wallet_accounts','wallet_journal','wallet_migration_audit','pocketfi_account_mappings','pocketfi_funding_intents','pocketfi_webhook_inbox')").all();
+    const present=(tableRows?.results||[]).map(x=>x.name);
+    const missing=required.filter(x=>!present.includes(x));
+    let counts=null;
+    if (missing.length===0) {
+      const row=await db.prepare(`SELECT (SELECT count(*) FROM wallet_accounts) AS stagedAccounts,
+         (SELECT count(*) FROM wallet_journal) AS stagedJournalEntries,
+         (SELECT count(*) FROM wallet_migration_audit WHERE import_state='verified') AS verifiedSnapshots`).first();
+      counts={stagedAccounts:row?.stagedAccounts||0,stagedJournalEntries:row?.stagedJournalEntries||0,verifiedSnapshots:row?.verifiedSnapshots||0};
+    }
+    const userId=new URL(request.url).searchParams.get('userId')?.trim()||'';
+    let snapshot=null;
+    if (userId && missing.length===0 && userId.length<=120 && !/[\u0000-\u001f]/.test(userId)) {
+      const row=await db.prepare(`SELECT a.balance_seconds,a.revision,m.import_state,m.kv_balance_seconds,m.kv_revision
+        FROM wallet_accounts a LEFT JOIN wallet_migration_audit m ON m.user_id=a.user_id WHERE a.user_id=?`).bind(userId).first();
+      const kv=env?.CALLFOCUS_CONFIG ? await env.CALLFOCUS_CONFIG.get(customerDataKey(userId),{type:'json'}) : null;
+      const kvWallet=kv?.wallet ? normalizeServerWallet(kv.wallet) : null;
+      snapshot={foundInD1:!!row,foundInKV:!!kvWallet,kvBalanceSeconds:kvWallet?.balanceSeconds??null,
+        d1BalanceSeconds:row?.balance_seconds??null,kvRevision:kvWallet?.revision??null,
+        d1Revision:row?.revision??null,importState:row?.import_state||null,
+        balancesMatch:!!row&&!!kvWallet&&kvWallet.balanceSeconds===row.balance_seconds,
+        revisionsMatch:!!row&&!!kvWallet&&kvWallet.revision===row.revision};
+    }
+    return json({ok:true,phase:'16.08-phase2-staging',bindingConnected:true,schemaReady:missing.length===0,
+      missingTables:missing,counts,writeCutover:false,kvRemainsAuthoritative:true,snapshot},200,{'Cache-Control':'no-store'});
+  } catch (error) {
+    return json({ok:false,bindingConnected:true,writeCutover:false,error:'Could not inspect the wallet schema.',detail:String(error?.message||'').slice(0,160)},503);
+  }
+}
+// === END V16.08 PHASE 2 D1 WALLET ENGINE ===
+
 export default {
   async fetch(request, env) {
     try {
@@ -6262,7 +6438,7 @@ export default {
     if (url.pathname === '/api/image-to-video/link' && request.method === 'GET') return safeCustomerRoute('image-video-link',()=>cfVideoFileLink(request,env));
     if (url.pathname.startsWith('/api/image-to-video/file/') && request.method === 'GET') return safeCustomerRoute('image-video-file',()=>cfVideoFile(request,env,decodeURIComponent(url.pathname.slice('/api/image-to-video/file/'.length))));
     if (url.pathname === '/api/admin/image-video') return cfAdminVideo(request,env);
-    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.07-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.08-phase2-staging' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -6275,6 +6451,7 @@ export default {
     if (url.pathname === '/api/admin/screenshot-limits') return handleAdminScreenshotLimits(request, env);
     if (url.pathname === '/api/admin/quick-start') return handleAdminQuickStart(request, env);
     if (url.pathname === '/api/admin/funding-report') return handleAdminFundingReport(request, env);
+    if (url.pathname === '/api/admin/d1-wallet/preflight') return handleAdminD1WalletPreflight(request,env);
     if (url.pathname === '/api/admin/users') return handleAdminUsers(request, env);
     if (url.pathname === '/api/admin/direct-email') return handleAdminDirectEmail(request, env);
     if (url.pathname === '/api/admin/direct-email-templates') return handleAdminDirectEmailTemplates(request, env);
