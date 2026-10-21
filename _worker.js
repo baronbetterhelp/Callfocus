@@ -991,6 +991,10 @@ async function customerEmailIndexKey(email) {
 
 function customerUserKey(userId) { return `customer:user:${userId}`; }
 function customerDataKey(userId) { return `customer:data:${userId}`; }
+// Separate, append-only receipts survive old whole-account KV writes. A confirmed
+// receipt can repair an admin credit whose wallet ledger was overwritten.
+function adminCreditReceiptKey(userId, grantId) { return `wallet:grant:${String(userId)}:${String(grantId)}`; }
+function adminCreditReceiptPrefix(userId) { return `wallet:grant:${String(userId)}:`; }
 function customerNotificationKey(userId) { return `customer:notifications:${String(userId || '').trim()}`; }
 function customerPhoneIndexKey(phone) { return `customer:phone:${customerPhoneKey(phone)}`; }
 async function customerSessionKey(token) { return `customer:session:${await sha256Hex(token)}`; }
@@ -1048,8 +1052,9 @@ async function handleCustomerNotifications(request, env) {
   if (request.method === 'GET') {
     const rows = normalizeCustomerNoticeList(await env.CALLFOCUS_CONFIG.get(key, { type: 'json' }));
     const unread = rows.filter(row => !row.readAt).slice(0, 10);
-    const data = (await env.CALLFOCUS_CONFIG.get(customerDataKey(auth.user.id), { type: 'json' })) || defaultCustomerData(auth.user.name);
-    return json({ ok: true, notifications: unread, wallet: normalizeServerWallet(data.wallet || {}) }, 200, { 'Cache-Control': 'no-store' });
+    const data = await env.CALLFOCUS_CONFIG.get(customerDataKey(auth.user.id), { type: 'json' });
+    if (!validCustomerDataShape(data) || !data.wallet) return json({ error: 'Saved wallet is unavailable. Please retry.', code: 'wallet_unavailable' }, 503);
+    return json({ ok: true, notifications: unread, wallet: normalizeServerWallet(data.wallet) }, 200, { 'Cache-Control': 'no-store' });
   }
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET, POST' } });
   let body = {};
@@ -1608,7 +1613,8 @@ async function handlePasswordResetVerify(request, env) {
   await env.CALLFOCUS_CONFIG.put(customerUserKey(user.id), JSON.stringify(user));
   await env.CALLFOCUS_CONFIG.delete(key);
   const token = await createCustomerSession(env, user);
-  const data = (await env.CALLFOCUS_CONFIG.get(customerDataKey(user.id), { type: 'json' })) || defaultCustomerData(user.name);
+  const data = await env.CALLFOCUS_CONFIG.get(customerDataKey(user.id), { type: 'json' });
+  if (!validCustomerDataShape(data) || !data.wallet) return json({ error: 'The saved wallet is temporarily unavailable. Please sign in again after storage recovers.', code: 'wallet_unavailable' }, 503);
   return json({ ok: true, token, user: publicCustomerUser(user), data });
 }
 
@@ -1630,7 +1636,8 @@ async function handleCustomerSignin(request, env) {
   }
   if (!(await verifyCustomerPassword(user, password))) return json({ error: 'Incorrect password.', code: 'incorrect_password' }, 401);
   const token = await createCustomerSession(env, user);
-  const data = (await env.CALLFOCUS_CONFIG.get(customerDataKey(user.id), { type: 'json' })) || defaultCustomerData(user.name);
+  const data = await env.CALLFOCUS_CONFIG.get(customerDataKey(user.id), { type: 'json' });
+  if (!validCustomerDataShape(data) || !data.wallet) return json({ error: 'The saved wallet is temporarily unavailable. Please sign in again after storage recovers.', code: 'wallet_unavailable' }, 503);
   return json({ ok: true, token, user: publicCustomerUser(user), data });
 }
 
@@ -1638,7 +1645,8 @@ async function handleCustomerSession(request, env) {
   if (request.method !== 'GET') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET' } });
   const auth = await authenticatedCustomer(request, env);
   if (!auth) return json({ error: 'Session expired.', code: 'session_expired' }, 401);
-  const data = (await env.CALLFOCUS_CONFIG.get(customerDataKey(auth.user.id), { type: 'json' })) || defaultCustomerData(auth.user.name);
+  const data = await env.CALLFOCUS_CONFIG.get(customerDataKey(auth.user.id), { type: 'json' });
+  if (!validCustomerDataShape(data) || !data.wallet) return json({ error: 'The saved wallet is temporarily unavailable. Your balance has not been reset.', code: 'wallet_unavailable' }, 503);
   return json({ ok: true, user: publicCustomerUser(auth.user), data });
 }
 
@@ -1656,8 +1664,27 @@ async function handleCustomerData(request, env) {
   const auth = await authenticatedCustomer(request, env);
   if (!auth) return json({ error: 'Session expired.', code: 'session_expired' }, 401);
   if (request.method === 'GET') {
-    const data = (await env.CALLFOCUS_CONFIG.get(customerDataKey(auth.user.id), { type: 'json' })) || defaultCustomerData(auth.user.name);
-    return json({ ok: true, data });
+    const stored = await env.CALLFOCUS_CONFIG.get(customerDataKey(auth.user.id), { type: 'json' });
+    if (!validCustomerDataShape(stored) || !stored.wallet) return json({ error: 'Your wallet is temporarily unavailable. No balance was reset; please refresh or contact support.', code: 'wallet_unavailable' }, 503, { 'Cache-Control': 'no-store' });
+    let data = await recoverConfirmedAdminCredits(env, auth.user, stored);
+    // If a recent, settled KoraPay payment survived in a separate processed
+    // receipt but its purchase ledger was overwritten, repair on account load.
+    // No payment is credited without another trusted provider verification.
+    try {
+      const lastRef = korapayReference(await env.CALLFOCUS_CONFIG.get(korapayLastKey(auth.user.id)));
+      const wallet = normalizeServerWallet(data.wallet);
+      if (lastRef && wallet.purchases.length < 250 && !wallet.purchases.some(p => String(p.reference || p.id || '') === lastRef)) {
+        const receipt = await env.CALLFOCUS_CONFIG.get(korapayProcessedKey(lastRef), { type: 'json' });
+        if (receipt?.userId === auth.user.id) {
+          const outcome = await creditVerifiedKorapayTransaction(env, lastRef);
+          if (outcome.credited) {
+            data = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
+            console.warn('Recovered missing settled KoraPay wallet entry', auth.user.id, lastRef);
+          }
+        }
+      }
+    } catch (e) { console.warn('Deferred KoraPay account-read reconciliation', String(e?.message || e)); }
+    return json({ ok: true, data }, 200, { 'Cache-Control': 'no-store' });
   }
   if (request.method !== 'PUT' && request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'GET, PUT, POST' } });
   let body;
@@ -1670,15 +1697,19 @@ async function handleCustomerData(request, env) {
   // closes the cross-device/KV race where an older customer tab could overwrite
   // a manual payment, admin gift, Paystack credit or server-side call charge.
   const currentServerData = (await env.CALLFOCUS_CONFIG.get(customerDataKey(auth.user.id), { type: 'json' })) || null;
-  if (validCustomerDataShape(currentServerData) && currentServerData.wallet) {
-    incoming.wallet = normalizeServerWallet(currentServerData.wallet);
-  } else if (incoming.wallet) {
-    // Recovery-only fallback for an old account whose server data was missing.
-    incoming.wallet = normalizeServerWallet(incoming.wallet);
-  } else {
-    incoming.wallet = normalizeServerWallet(defaultCustomerData(auth.user.name).wallet);
+  if (!validCustomerDataShape(currentServerData) || !currentServerData.wallet) {
+    // Missing KV data is NEVER authorization to recreate the wallet from a
+    // stale browser snapshot. Do not turn a temporary read miss into lost funds.
+    return json({ error: 'Account storage is temporarily unavailable. Your saved wallet has not been replaced.', code: 'wallet_unavailable' }, 503);
   }
+  incoming.wallet = normalizeServerWallet(currentServerData.wallet);
 
+  // Reduce the ordinary account-sync versus payment/admin-write race window.
+  // KV is not a CAS store; only a future atomic D1 cutover removes this race.
+  const checkData = await env.CALLFOCUS_CONFIG.get(customerDataKey(auth.user.id), { type: 'json' });
+  if (!validCustomerDataShape(checkData) || !checkData.wallet) return json({ error: 'Wallet changed while saving. Please retry.', code: 'wallet_unavailable' }, 503);
+  if (normalizeServerWallet(checkData.wallet).revision !== incoming.wallet.revision) return json({ error: 'Wallet changed while saving. Please retry your account update.', code: 'wallet_write_conflict' }, 409);
+  incoming.wallet = normalizeServerWallet(checkData.wallet);
   const encoded = JSON.stringify(incoming);
   if (new TextEncoder().encode(encoded).byteLength > CUSTOMER_DATA_MAX_BYTES) return json({ error: 'Account data is too large.' }, 413);
   await env.CALLFOCUS_CONFIG.put(customerDataKey(auth.user.id), encoded);
@@ -1698,10 +1729,19 @@ async function handleCustomerDelete(request, env) {
   const emailKey = await customerEmailIndexKey(auth.user.email);
   const phoneKey = customerPhoneIndexKey(auth.user.phone);
   const ownReferralCode = normalizeReferralCode(auth.user.referralCode || '');
+  // Erase any customer-owned cloned voices from ElevenLabs before removing the
+  // CallFocus account mapping. Failure is explicit, never silently orphaned.
+  const ownedClones = await cfCloneGetVoices(env, auth.user.id);
+  for (const clone of ownedClones) {
+    if (!env.ELEVENLABS_API_KEY) return json({error:'Voice-clone provider access is unavailable. Contact support to delete your saved cloned voices before closing your account.'},503);
+    const removed = await cfCloneProvider(env,`/voices/${encodeURIComponent(clone.id)}`,{method:'DELETE'}).catch(()=>null);
+    if (!removed || (!removed.ok && removed.status!==404)) return json({error:'Could not delete your cloned voices from the provider. Please contact support before closing the account.'},503);
+  }
   await Promise.all([
     env.CALLFOCUS_CONFIG.delete(customerUserKey(auth.user.id)),
     env.CALLFOCUS_CONFIG.delete(customerDataKey(auth.user.id)),
     env.CALLFOCUS_CONFIG.delete(customerNotificationKey(auth.user.id)),
+    env.CALLFOCUS_CONFIG.delete(cfCloneUserKey(auth.user.id)),
     env.CALLFOCUS_CONFIG.delete(emailKey),
     phoneKey.endsWith(':') ? Promise.resolve() : env.CALLFOCUS_CONFIG.delete(phoneKey),
     ownReferralCode ? env.CALLFOCUS_CONFIG.delete(referralCodeKey(ownReferralCode)) : Promise.resolve(),
@@ -2334,6 +2374,41 @@ async function handleAdminUsers(request, env) {
 }
 
 
+// Read-repair ONLY previously confirmed, independent admin grant receipts.
+// Never infer credits from a browser or notification. Do not repair if the
+// 250-row usage ledger might have naturally pruned the original grant.
+async function recoverConfirmedAdminCredits(env, user, currentData) {
+  if (!user?.id || !validCustomerDataShape(currentData) || !currentData.wallet) return currentData;
+  const prefix = adminCreditReceiptPrefix(user.id);
+  let page;
+  try { page = await env.CALLFOCUS_CONFIG.list({ prefix, limit: 1000 }); }
+  catch (e) { console.warn('Admin credit receipt list unavailable', String(e?.message || e)); return currentData; }
+  if (!page?.list_complete) { console.warn('Admin credit receipt list requires review (too many entries)', user.id); return currentData; }
+  let data = currentData;
+  let wallet = normalizeServerWallet(data.wallet);
+  if (wallet.usage.length >= 250) return data;
+  for (const item of page.keys || []) {
+    if (!item.name.startsWith(prefix)) continue;
+    const receipt = await env.CALLFOCUS_CONFIG.get(item.name, { type: 'json' });
+    if (!receipt || receipt.state !== 'confirmed' || receipt.userId !== user.id || !/^admin-credit-[0-9a-f-]{36}$/.test(String(receipt.id || ''))) continue;
+    if (wallet.usage.some(entry => entry.id === receipt.id)) continue;
+    if (wallet.usage.length >= 250) break;
+    const seconds = Number(receipt.seconds);
+    if (!Number.isSafeInteger(seconds) || seconds <= 0) continue;
+    // The matching grant was previously committed and acknowledged. The missing
+    // entry can occur when an overlapping KV write wins after confirmation.
+    const fixed = await commitWalletUsageCredit(env, user, {
+      ledgerId: receipt.id, type: 'admin_credit_grant', credits: Number(receipt.credits), seconds,
+      createdAt: receipt.createdAt, note: 'Restored verified CallFocus admin credit grant'
+    });
+    if (!fixed.verified) throw new Error('Wallet grant recovery could not be verified.');
+    data = fixed.data;
+    wallet = normalizeServerWallet(fixed.wallet);
+    console.warn('Recovered overwritten admin grant', user.id, receipt.id);
+  }
+  return data;
+}
+
 async function commitWalletUsageCredit(env, user, { ledgerId, type, credits, seconds, note, createdAt }) {
   const id = String(ledgerId || '').trim();
   if (!user?.id || !id) throw new Error('Credit grant is missing its account or ledger identifier.');
@@ -2454,7 +2529,16 @@ async function handleAdminUserAction(request, env) {
     credits = Math.round(credits * 10) / 10;
     const secondsAdded = callFocusSecondsForCredits(credits);
     if (!Number.isFinite(secondsAdded) || !Number.isSafeInteger(secondsAdded) || secondsAdded <= 0) return json({ error: 'That credit amount cannot be safely added.' }, 400);
-    const ledgerId = `admin-credit-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
+    const requestId = String(body?.requestId || '').trim().toLowerCase();
+    if (requestId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(requestId)) return json({ error: 'Invalid credit grant request ID.' }, 400);
+    const ledgerId = `admin-credit-${requestId || crypto.randomUUID()}`;
+    const priorReceipt = await env.CALLFOCUS_CONFIG.get(adminCreditReceiptKey(user.id, ledgerId), { type: 'json' });
+    if (priorReceipt && (Number(priorReceipt.seconds) !== secondsAdded || priorReceipt.userId !== user.id)) return json({ error: 'Credit grant request ID already belongs to a different amount.' }, 409);
+    if (priorReceipt?.state === 'confirmed') {
+      const snapshot = await getCustomerDataForUpdate(env, user.id, user.name);
+      const sw = normalizeServerWallet(snapshot.wallet);
+      if (sw.usage.length >= 250 && !sw.usage.some(row => row.id === ledgerId)) return json({ error: 'This prior grant is older than the stored usage history and requires manual review.', code: 'grant_history_pruned' }, 409);
+    }
     const committed = await commitWalletUsageCredit(env, user, {
       ledgerId,
       type: 'admin_credit_grant',
@@ -2463,7 +2547,11 @@ async function handleAdminUserAction(request, env) {
       createdAt: now,
       note: 'Credits added by CallFocus admin'
     });
-    if (!committed.verified) return json({ error: 'The credit update could not be verified. No confirmation was sent. Please retry.' }, 503);
+    if (!committed.verified) return json({ error: 'The credit update could not be verified. Retry using the same request ID, not a new grant.', code: 'wallet_write_unverified' }, 503);
+    // The receipt is stored outside customer:data; later reads can repair a KV
+    // last-writer-wins overwrite without ever accepting an unverified payment.
+    const receipt = { state: 'confirmed', userId: user.id, id: ledgerId, seconds: secondsAdded, credits, createdAt: now };
+    await env.CALLFOCUS_CONFIG.put(adminCreditReceiptKey(user.id, ledgerId), JSON.stringify(receipt), { expirationTtl: 60 * 60 * 24 * 365 });
     const committedData = committed.data;
 
     const amountText = credits.toLocaleString(undefined, { maximumFractionDigits: 1 });
@@ -3039,6 +3127,9 @@ async function handleVoiceNote(request, env) {
   const selectedVoice = gender === 'female' ? config.femaleVoice : config.maleVoice;
   const customVoice = customVoiceById(config, selectedVoice);
   const voice = customVoice ? customVoice.id : (TTS_VOICES.includes(selectedVoice) ? selectedVoice : (gender === 'female' ? 'marin' : 'cedar'));
+  const cloneRequested = String(body.voiceCloneId||'').trim();
+  const cloneVoice = cloneRequested ? await cfCloneOwnedVoice(env, auth.user, cloneRequested) : null;
+  if(cloneRequested && (!cfCloneAllowed(env,auth.user)||!cloneVoice))return json({error:'Your saved voice is unavailable. Select a verified voice from your account.'},403);
   const userVoiceStyle = userAiVoiceInstructions(userVoiceProfile);
 
   const writerInstructions = `You write the exact spoken words for one private voice note.
@@ -3162,7 +3253,10 @@ Return only the final spoken voice-note text.`;
 
   let speech;
   try {
-    speech = await fetch('https://api.openai.com/v1/audio/speech', {
+    speech = cloneVoice ? await cfCloneProvider(env,`/text-to-speech/${encodeURIComponent(cloneVoice.id)}?output_format=mp3_44100_128`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:script,model_id:'eleven_multilingual_v2'})
+    }) : await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${env.OPENAI_API_KEY}`,
@@ -3545,8 +3639,10 @@ function constantTimeHexEqual(a = '', b = '') {
 }
 
 async function getCustomerDataForUpdate(env, userId, fallbackName = '') {
-  const existing = await env.CALLFOCUS_CONFIG.get(customerDataKey(userId), { type: 'json' });
-  const data = validCustomerDataShape(existing) ? existing : defaultCustomerData(fallbackName);
+  const data = await env.CALLFOCUS_CONFIG.get(customerDataKey(userId), { type: 'json' });
+  // Existing accounts must never be silently recreated with a zero balance
+  // because an eventual-consistency KV read temporarily returned nothing.
+  if (!validCustomerDataShape(data) || !data.wallet) throw new Error('Authoritative wallet unavailable. Refusing to overwrite the customer balance.');
   data.wallet = normalizeServerWallet(data.wallet);
   return data;
 }
@@ -4435,7 +4531,9 @@ async function creditVerifiedPocketfi(env,paymentId){
   const breakdown=paymentPurchaseBreakdown(expected,amount);if(!breakdown)return {credited:false,reason:'credits_mismatch'};
   const user=await env.CALLFOCUS_CONFIG.get(customerUserKey(expected.userId),{type:'json'});
   if(!user?.id)return {credited:false,reason:'customer_missing'};
-  if(prior?.userId)return {credited:false,duplicate:true,reason:'already_processed',record:prior};
+  if(prior?.userId)return recoverProcessedProviderCredit(env,user,id,prior,{
+    provider:'pocketfi',channel:'pocketfi',amountNaira:Number(expected.amountNaira),...breakdown
+  });
   const {credits,baseCredits,bonusCredits,bonusPercent}=breakdown;
   const seconds=purchaseSecondsForCredits(credits);
   const commit=await commitWalletPurchaseCredit(env,user,{reference:id,provider:'pocketfi',channel:'pocketfi',amountNaira:Number(expected.amountNaira),credits,baseCredits,bonusCredits,bonusPercent,seconds,createdAt:new Date().toISOString()});
@@ -4511,7 +4609,7 @@ async function pocketfiCheckoutWebhook(request,env){
   }
   try{
     const outcome=await creditVerifiedPocketfi(env,id);
-    if(['payment_id_mismatch','amount_mismatch','credits_mismatch','customer_missing','wallet_not_verified','ledger_pruned'].includes(outcome.reason)){
+    if(['payment_id_mismatch','amount_mismatch','credits_mismatch','customer_missing','wallet_not_verified','ledger_pruned','ledger_pruned_review','receipt_invalid','receipt_mismatch'].includes(outcome.reason)){
       console.warn('PocketFi checkout needs reconciliation',outcome.reason);
       return json({error:'Payment reconciliation requires review.'},409);
     }
@@ -4570,6 +4668,7 @@ const KORAPAY_PROCESSED_TTL = 60 * 60 * 24 * 365;
 function korapayConfigured(env) { return String(env.KORAPAY_SECRET_KEY || '').trim().startsWith('sk_live_'); }
 function korapayPendingKey(reference) { return `korapay:pending:${reference}`; }
 function korapayProcessedKey(reference) { return `korapay:processed:${reference}`; }
+function korapayLastKey(userId) { return `korapay:last:${String(userId || '')}`; }
 function korapayReference(value) { const v=String(value||'').trim(); return /^CFK-[A-Za-z0-9-]{12,80}$/.test(v)?v:''; }
 
 async function korapayRequest(env, endpoint, {method='GET', body=null}={}) {
@@ -4589,6 +4688,26 @@ async function korapayRequest(env, endpoint, {method='GET', body=null}={}) {
     throw error;
   }
   return result;
+}
+
+async function recoverProcessedProviderCredit(env, user, reference, prior, payment) {
+  const data = await getCustomerDataForUpdate(env, user.id, user.name);
+  const wallet = normalizeServerWallet(data.wallet);
+  if (wallet.purchases.some(row => String(row.reference || row.id || '') === reference)) return { credited: false, duplicate: true, record: prior, wallet };
+  if (wallet.purchases.length >= 250) return { credited: false, duplicate: false, reason: 'ledger_pruned_review', record: prior, wallet };
+  const seconds = Number(prior?.secondsAdded);
+  if (!Number.isSafeInteger(seconds) || seconds <= 0) return { credited: false, reason: 'receipt_invalid', record: prior, wallet };
+  const expectedSeconds = purchaseSecondsForCredits(payment.credits);
+  if (seconds !== expectedSeconds || Math.abs(Number(prior?.amountNaira) - Number(payment.amountNaira)) > .01) return { credited: false, reason: 'receipt_mismatch', record: prior, wallet };
+  const commit = await commitWalletPurchaseCredit(env, user, {
+    reference, provider: payment.provider, channel: payment.channel || payment.provider,
+    amountNaira: payment.amountNaira, credits: payment.credits,
+    baseCredits: payment.baseCredits, bonusCredits: payment.bonusCredits,
+    bonusPercent: payment.bonusPercent, seconds, createdAt: prior.at || new Date().toISOString()
+  });
+  if (!commit.verified) return { credited: false, reason: 'wallet_not_verified' };
+  if (commit.ledgerPruned) return { credited: false, reason: 'ledger_pruned_review' };
+  return { credited: !commit.duplicate, duplicate: !!commit.duplicate, reconciled: !commit.duplicate, record: prior, wallet: commit.wallet };
 }
 
 async function handleKorapayInitialize(request,env){
@@ -4618,6 +4737,9 @@ async function handleKorapayInitialize(request,env){
     let checkout;
     try{checkout=new URL(checkoutUrl)}catch{}
     if(!checkout||checkout.protocol!=='https:'||checkout.hostname!=='checkout.korapay.com')throw new Error('KoraPay did not return a trusted checkout link.');
+    // Recoverable across browser changes or a lost sessionStorage tab.
+    try{await env.CALLFOCUS_CONFIG.put(korapayLastKey(auth.user.id), reference, { expirationTtl: KORAPAY_PENDING_TTL });}
+    catch(e){console.warn('KoraPay optional return reference unavailable',String(e?.message||e));}
     return json({ok:true,reference,credits,amountNaira,checkoutUrl});
   }catch(error){
     // Do not discard a reference if the provider may have initialized it before a network timeout.
@@ -4651,8 +4773,10 @@ async function creditVerifiedKorapayTransaction(env,reference){
   if(!user?.id)return {credited:false,reason:'customer_missing'};
   // The processed marker survives purchase-list pruning and protects against replays.
   if(prior?.userId){
-    const data=await getCustomerDataForUpdate(env,user.id,user.name);
-    return {credited:false,duplicate:true,reason:'already_processed',wallet:data.wallet,record:prior};
+    return recoverProcessedProviderCredit(env, user, ref, prior, {
+      provider: 'korapay', channel: String(payment.payment_method || payment.channel || 'korapay'),
+      amountNaira: Number(expected.amountNaira), credits, baseCredits, bonusCredits, bonusPercent
+    });
   }
   const seconds=purchaseSecondsForCredits(credits);
   const committed=await commitWalletPurchaseCredit(env,user,{
@@ -4673,14 +4797,15 @@ async function handleKorapayVerify(request,env){
   if(request.method!=='GET')return new Response('Method not allowed.',{status:405,headers:{Allow:'GET'}});
   const auth=await authenticatedCustomer(request,env);
   if(!auth)return json({error:'Sign in to verify your KoraPay payment.'},401);
-  const ref=korapayReference(new URL(request.url).searchParams.get('reference'));
-  if(!ref)return json({error:'Invalid payment reference.'},400);
+  const submitted = new URL(request.url).searchParams.get('reference');
+  const ref = korapayReference(submitted || (await env.CALLFOCUS_CONFIG.get(korapayLastKey(auth.user.id))));
+  if(!ref) return submitted ? json({error:'Invalid payment reference.'},400) : json({ok:true,credited:false,reason:'no_pending'},200,{'Cache-Control':'no-store'});
   const expected=await env.CALLFOCUS_CONFIG.get(korapayPendingKey(ref),{type:'json'})||await env.CALLFOCUS_CONFIG.get(korapayProcessedKey(ref),{type:'json'});
   if(!expected)return json({error:'Payment reference not found. Contact support if you have been charged.'},404);
   if(String(expected.userId)!==String(auth.user.id))return json({error:'This payment belongs to another account.'},403);
   try{
     const result=await creditVerifiedKorapayTransaction(env,ref);
-    if(result.reason==='reference_mismatch'||result.reason==='amount_mismatch'||result.reason==='credits_mismatch')return json({error:'This payment could not be reconciled automatically. Contact support.',code:result.reason},409);
+    if(['reference_mismatch','amount_mismatch','credits_mismatch','ledger_pruned_review','receipt_invalid','receipt_mismatch','wallet_not_verified'].includes(result.reason)) return json({error:'This payment requires credit reconciliation. Please contact CallFocus support with your KoraPay reference.',code:result.reason},409);
     const updated=await getCustomerDataForUpdate(env,auth.user.id,auth.user.name);
     return json({ok:true,credited:!!result.credited,duplicate:!!result.duplicate,transactionStatus:result.status||(result.credited||result.duplicate?'success':'pending'),reason:result.reason||'',wallet:updated.wallet,record:result.record||null});
   }catch(error){return json({error:error?.message||'KoraPay verification is temporarily unavailable.'},error?.status||502);}
@@ -4708,7 +4833,8 @@ async function handleKorapayWebhook(request,env){
     let ref='';for(const candidate of candidates){if(await env.CALLFOCUS_CONFIG.get(korapayPendingKey(candidate))||await env.CALLFOCUS_CONFIG.get(korapayProcessedKey(candidate))){ref=candidate;break}}
     if(!ref)return new Response('OK',{status:200});
     const result=await creditVerifiedKorapayTransaction(env,ref);
-    if(result.reason==='wallet_not_verified'||(result.reason==='not_successful'&&String(result.status||'').toLowerCase()!=='failed'))return new Response('Retry later.',{status:503});
+    if (result.reason && !result.credited && !result.duplicate && !['not_successful'].includes(result.reason)) return new Response('Retry or reconcile payment.', { status: 503 });
+    if (result.reason === 'not_successful' && !['failed', 'cancelled'].includes(String(result.status || '').toLowerCase())) return new Response('Retry later.', { status: 503 });
   }catch(error){console.error('KoraPay webhook verification failed:',error?.message||error);return new Response('Retry later.',{status:503});}
   return new Response('OK',{status:200,headers:{'Cache-Control':'no-store'}});
 }
@@ -4787,7 +4913,9 @@ async function creditVerifiedFlutterwave(env,reference){
   const user=await env.CALLFOCUS_CONFIG.get(customerUserKey(expected.userId),{type:'json'});
   if(!user?.id)return {reason:'customer_missing'};
   // Server-side wallet journal also deduplicates the provider/reference combination.
-  if(prior?.userId)return {credited:false,duplicate:true,reason:'already_processed',record:prior};
+  if(prior?.userId)return recoverProcessedProviderCredit(env,user,ref,prior,{
+    provider:'flutterwave',channel:String(result.payment_type||'flutterwave'),amountNaira:Number(expected.amountNaira),...breakdown
+  });
   const seconds=purchaseSecondsForCredits(breakdown.credits);
   const commit=await commitWalletPurchaseCredit(env,user,{reference:ref,provider:'flutterwave',channel:String(result.payment_type||'flutterwave'),amountNaira:Number(expected.amountNaira),...breakdown,seconds,createdAt:new Date().toISOString()});
   if(!commit.verified)return {reason:'wallet_not_verified'};
@@ -6647,12 +6775,183 @@ async function handleAdminD1WalletPreflight(request,env) {
 }
 // === END V16.08 PHASE 2 D1 WALLET ENGINE ===
 
+// V16.19 — Isolated personal voice pilot restored on the V16.18 credit-integrity base.
+// Feature is gated OFF unless explicitly enabled by the owner after an approved provider setup.
+const CF_CLONE_PREFIX = 'voice_clone:v1:';
+const CF_CLONE_LIVE_TTL = 60 * 60;
+function cfCloneReady(env){return String(env.CALLFOCUS_VOICE_CLONE_ENABLED||'').trim().toLowerCase()==='true' && !!String(env.ELEVENLABS_API_KEY||'').trim();}
+function cfCloneLiveReady(env){return cfCloneReady(env) && /^agent_[a-zA-Z0-9_-]{8,}$/.test(String(env.ELEVENLABS_AGENT_ID||'').trim());}
+function cfCloneAllowed(env,user){
+ if(!cfCloneReady(env))return false;
+ const list=String(env.CALLFOCUS_VOICE_CLONE_PILOT_EMAILS||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+ return !list.length||list.includes(normalizeCustomerEmail(user?.email));
+}
+function cfCloneUserKey(id){return `${CF_CLONE_PREFIX}user:${id}`;}
+function cfCloneSessionKey(id){return `${CF_CLONE_PREFIX}live:${id}`;}
+function cfCloneVoiceId(id){return /^[a-zA-Z0-9]{16,40}$/.test(String(id||''))?String(id):'';}
+async function cfCloneGetVoices(env,id){const v=await env.CALLFOCUS_CONFIG.get(cfCloneUserKey(id),{type:'json'});return Array.isArray(v)?v.filter(x=>cfCloneVoiceId(x.id)&&x.ownerId===id).slice(0,5):[];}
+async function cfCloneOwnedVoice(env,user,id){return (await cfCloneGetVoices(env,user.id)).find(v=>v.id===cfCloneVoiceId(id)&&!v.verificationRequired)||null;}
+async function cfCloneProvider(env,path,opt={}){
+  const h=new Headers(opt.headers||{});h.set('xi-api-key',String(env.ELEVENLABS_API_KEY||'').trim());
+  let r;try{r=await fetch(`https://api.elevenlabs.io/v1${path}`,{...opt,headers:h,signal:AbortSignal.timeout(30000)});}catch{throw Object.assign(new Error('Voice provider could not be reached.'),{status:502});}
+  return r;
+}
+async function cfCloneUserRoute(request,env){
+  if(!env.CALLFOCUS_CONFIG)return json({error:'CallFocus account storage unavailable.'},503);
+  const auth=await authenticatedCustomer(request,env);
+  if(!auth)return json({error:'Sign in on CallFocus first.'},401);
+  const user=auth.user;
+  if(request.method==='GET')return json({ok:true,enabled:cfCloneAllowed(env,user),liveReady:cfCloneLiveReady(env)&&cfCloneAllowed(env,user),voices:await cfCloneGetVoices(env,user.id),maxVoices:3});
+  if(request.method==='POST'){
+    if(!cfCloneAllowed(env,user))return json({error:'Voice cloning is not enabled for your account yet.'},503);
+    const existing=await cfCloneGetVoices(env,user.id);
+    if(existing.length>=3)return json({error:'Maximum of three saved cloned voices per customer.'},409);
+    if(Number(request.headers.get('content-length')||'0')>9_000_000)return json({error:'Voice sample too large (max 8 MB).'},413);
+    let form;try{form=await request.formData();}catch{return json({error:'Invalid voice sample upload.'},400)}
+    const sample=form.get('sample');const name=String(form.get('name')||'').trim().slice(0,60);
+    const affirmative=String(form.get('ownVoiceConfirmed')||'')==='true';
+    if(!affirmative)return json({error:'Only the account holder’s own voice may be cloned. Explicit consent is required.'},403);
+    if(!name||!(/^[\p{L}\p{N} ._-]+$/u.test(name)))return json({error:'Enter a valid voice name.'},400);
+    if(!(sample instanceof File)||sample.size<20_000||sample.size>8*1024*1024)return json({error:'Record or upload 30–120 seconds of your own clear speech (under 8 MB).'},400);
+    if(!['audio/webm','audio/mp4','audio/mpeg','audio/wav','audio/x-wav','audio/ogg','audio/aac','audio/flac'].includes(String(sample.type).toLowerCase()))return json({error:'Supported audio: MP3, WAV, WEBM, MP4, OGG, AAC, FLAC.'},400);
+    const data=new FormData();data.set('name',`CallFocus_${name}_${user.id.slice(0,8)}`);
+    data.append('files',sample,sample.name||'voice-sample.webm');
+    data.set('description','Verified by account-holder declaration: owned voice for CallFocus AI content');
+    const result=await cfCloneProvider(env,'/voices/add',{method:'POST',body:data});
+    const payload=await result.json().catch(()=>({}));
+    if(!result.ok)return json({error:'Could not create your saved voice. Please try again or contact support.'},result.status===429?429:502);
+    const id=cfCloneVoiceId(payload.voice_id);
+    if(!id)return json({error:'Provider did not return a valid voice ID.'},502);
+    const record={id,name,ownerId:user.id,createdAt:new Date().toISOString(),verificationRequired:payload.requires_verification===true,consentMethod:'own_voice_attestation'};
+    await env.CALLFOCUS_CONFIG.put(cfCloneUserKey(user.id),JSON.stringify([...existing,record]));
+    return json({ok:true,voice:record});
+  }
+  if(request.method==='DELETE'){
+    let body;try{body=await request.json();}catch{return json({error:'Invalid request.'},400)}
+    const existing=await cfCloneGetVoices(env,user.id), item=existing.find(v=>v.id===cfCloneVoiceId(body?.voiceId));
+    if(!item)return json({error:'Voice not found in your account.'},404);
+    const result=await cfCloneProvider(env,`/voices/${encodeURIComponent(item.id)}`,{method:'DELETE'});
+    if(!result.ok&&result.status!==404)return json({error:'Provider could not delete this voice. Please retry.'},502);
+    await env.CALLFOCUS_CONFIG.put(cfCloneUserKey(user.id),JSON.stringify(existing.filter(v=>v.id!==item.id)));
+    return json({ok:true});
+  }
+  return json({error:'Method not allowed.'},405);
+}
+const CF_CLONE_BUILD = '16.19-voice-clone-preview';
+function cfCloneLiveDiagnosticText(value,apiKey,maxLength=300){
+  if(typeof value!=='string'&&typeof value!=='number')return '';
+  let text=String(value);
+  for(const secret of [String(apiKey||''),String(apiKey||'').trim()].filter(Boolean))text=text.split(secret).join('[redacted]');
+  return text.replace(/\bsk_[A-Za-z0-9_-]+/gi,'[redacted]')
+    .replace(/(?:https?|wss?):\/\/[^\s<>"']+/gi,'[redacted URL]')
+    .replace(/\bBearer\s+[^\s,;"']+/gi,'Bearer [redacted]')
+    .replace(/\b(xi-api-key|authorization|api[_-]?key|conversation_signature)\s*["']?\s*[:=]\s*["']?[^\s,;"']+/gi,'$1=[redacted]')
+    .replace(/\b(?:[a-f0-9]{32,}|[A-Za-z0-9_-]{48,})\b/gi,'[redacted token]')
+    .replace(/[\u0000-\u001f\u007f]/g,' ').slice(0,maxLength);
+}
+async function cfCloneSignedUrl(env){
+  let response;
+  try{
+    response=await cfCloneProvider(env,`/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(String(env.ELEVENLABS_AGENT_ID||'').trim())}`);
+  }catch{
+    return {ok:false,status:0,code:'provider_network_error',message:'The voice service could not be reached.'};
+  }
+  let raw;
+  try{raw=await response.text();}catch{return {ok:false,status:response.status,code:'provider_response_unreadable',message:'The signing response could not be read. Please retry the connection check.'};}
+  let payload;try{payload=JSON.parse(raw);}catch{payload={};}
+  if(!response.ok){
+    return {
+      ok:false,status:response.status,
+      code:cfCloneLiveDiagnosticText(payload?.detail?.status||payload?.detail?.code||payload?.error?.code||payload?.error?.type||payload?.code,env.ELEVENLABS_API_KEY,80),
+      message:cfCloneLiveDiagnosticText(payload?.detail?.message||(typeof payload?.detail==='string'?payload.detail:'')||payload?.error?.message||payload?.message||raw,env.ELEVENLABS_API_KEY)
+    };
+  }
+  const signedUrl=typeof payload?.signed_url==='string'?payload.signed_url:'';
+  try{
+    const u=new URL(signedUrl);
+    if(u.protocol==='wss:'&&u.hostname==='api.elevenlabs.io'&&!u.username&&!u.password&&(!u.port||u.port==='443')&&u.pathname==='/v1/convai/conversation')return {ok:true,status:response.status,signedUrl};
+  }catch{}
+  return {ok:false,status:response.status,code:'invalid_signed_url',message:'The voice service response did not contain a valid conversation URL.'};
+}
+function cfCloneLogSigningFailure(result){
+  console.error('CallFocus cloned live signing rejected',{build:CF_CLONE_BUILD,httpStatus:result.status,providerCode:result.code||'',providerMessage:result.message||''});
+}
+async function cfCloneAdminDiagnostics(request,env){
+  if(!await adminAuthorized(request,env))return json({error:'Incorrect admin passcode.'},401);
+  if(request.method!=='POST')return json({error:'Method not allowed.'},405);
+  const agentId=String(env.ELEVENLABS_AGENT_ID||'').trim();
+  const configured={featureEnabled:String(env.CALLFOCUS_VOICE_CLONE_ENABLED||'').trim().toLowerCase()==='true',apiKeyConfigured:!!String(env.ELEVENLABS_API_KEY||'').trim(),agentId:/^agent_[a-zA-Z0-9_-]{8,}$/.test(agentId)?agentId:'',pilotRestricted:!!String(env.CALLFOCUS_VOICE_CLONE_PILOT_EMAILS||'').trim()};
+  const report={build:CF_CLONE_BUILD,testedOrigin:new URL(request.url).origin,checkedAt:new Date().toISOString(),...configured};
+  if(!configured.featureEnabled||!configured.apiKeyConfigured||!configured.agentId)return json({...report,ok:false,providerStatus:null,providerCode:'configuration_incomplete',providerMessage:'Enable the cloned-voice pilot and configure ELEVENLABS_API_KEY and a valid ELEVENLABS_AGENT_ID on this exact Worker version.',signedUrlObtained:false});
+  const result=await cfCloneSignedUrl(env);
+  if(!result.ok)cfCloneLogSigningFailure(result);
+  // This check never opens a conversation, returns a signed URL, or reads/writes a customer wallet.
+  return json({...report,ok:result.ok,providerStatus:result.status,providerCode:result.code||'',providerMessage:result.ok?'Signed URL obtained successfully. No call was started and no customer credits were used.':result.message||'The voice service rejected the signing request.',signedUrlObtained:result.ok});
+}
+
+// This is an isolated, metered 60-second live-call pilot. Default GPT-Live calling remains untouched.
+async function cfCloneStartLive(request,env){
+  if(request.method!=='POST')return json({error:'Method not allowed.'},405);
+  const auth=await authenticatedCustomer(request,env);
+  if(!auth)return json({error:'Sign in first.'},401);
+  if(!cfCloneLiveReady(env)||!cfCloneAllowed(env,auth.user))return json({error:'Cloned live calls are not enabled/configured for your account yet.'},503);
+  let body;try{body=await request.json();}catch{return json({error:'Invalid request.'},400)}
+  const voice=await cfCloneOwnedVoice(env,auth.user,body.voiceId);
+  if(!voice)return json({error:'Select a verified clone belonging to your account.'},403);
+  const wallet=normalizeServerWallet((await getCustomerDataForUpdate(env,auth.user.id,auth.user.name)).wallet);
+  const config=await getConfig(env);
+  const unlimited=(config.unlimitedCreditEmails||[]).map(normalizeCustomerEmail).includes(normalizeCustomerEmail(auth.user.email));
+  const available=unlimited?60:Math.floor(Number(wallet.balanceSeconds)||0);
+  if(available<15)return json({error:'At least 15 seconds of credit are required for a cloned live call.'},402);
+  const maxSeconds=Math.min(60,available); // Pilot hard cap, also enforce in provider Agent max duration.
+  const signing=await cfCloneSignedUrl(env);
+  if(!signing.ok){
+    cfCloneLogSigningFailure(signing);
+    return json({error:'Could not connect your live voice. Please try again or contact support.',code:'cloned_live_unavailable'},502);
+  }
+  const signed=signing.signedUrl;
+  const id='clone_'+crypto.randomUUID().replace(/-/g,'');
+  const record={id,userId:auth.user.id,createdAt:Date.now(),startedAt:null,maxSeconds,voiceId:voice.id,closed:false};
+  await env.CALLFOCUS_CONFIG.put(cfCloneSessionKey(id),JSON.stringify(record),{expirationTtl:CF_CLONE_LIVE_TTL});
+  return json({ok:true,signedUrl:signed,sessionId:id,maxSeconds,voiceId:voice.id,context:String(body.context||'').trim().slice(0,2400)});
+}
+async function cfCloneMeterLive(request,env){
+  if(request.method!=='POST')return json({error:'Method not allowed.'},405);
+  const auth=await authenticatedCustomer(request,env);
+  if(!auth)return json({error:'Sign in first.'},401);
+  let b;try{b=await request.json();}catch{return json({error:'Invalid request.'},400)}
+  const id=String(b.sessionId||'');if(!/^clone_[a-f0-9]{32}$/.test(id))return json({error:'Invalid session.'},400);
+  const key=cfCloneSessionKey(id),s=await env.CALLFOCUS_CONFIG.get(key,{type:'json'});
+  if(!s||s.userId!==auth.user.id)return json({error:'Session expired or unavailable.'},404);
+  if(s.closed)return json({ok:true,closed:true});
+  if(b.start===true&&!s.startedAt){
+    s.startedAt=Date.now();
+    await env.CALLFOCUS_CONFIG.put(key,JSON.stringify(s),{expirationTtl:CF_CLONE_LIVE_TTL});
+    return json({ok:true,elapsed:0,chargedSeconds:0,creditsUsed:0,closed:false,maxSeconds:s.maxSeconds});
+  }
+  // Failed or cancelled handshakes never enter the existing wallet-charge function.
+  if(!s.startedAt){
+    if(b.end){s.closed=true;s.closedAt=Date.now();await env.CALLFOCUS_CONFIG.put(key,JSON.stringify(s),{expirationTtl:3600});}
+    return json({ok:true,elapsed:0,chargedSeconds:0,creditsUsed:0,closed:!!b.end,maxSeconds:s.maxSeconds});
+  }
+  const elapsed=Math.min(s.maxSeconds,Math.max(0,Math.floor((Date.now()-s.startedAt)/1000)));
+  const result=await applyLiveCallWalletCharge(env,auth,{id,started:true,durationSeconds:elapsed,createdAt:new Date(s.startedAt).toISOString()});
+  const exhausted=result.creditExhausted===true || elapsed>=s.maxSeconds;
+  const closed=Boolean(b.end)||exhausted;
+  if(closed){s.closed=true;s.closedAt=Date.now();await env.CALLFOCUS_CONFIG.put(key,JSON.stringify(s),{expirationTtl:3600});}
+  return json({ok:true,elapsed,chargedSeconds:result.chargedSeconds,creditsUsed:Math.round((result.chargedSeconds||0)/CALLFOCUS_SECONDS_PER_CREDIT*10)/10,closed,creditExhausted:result.creditExhausted===true,maxSeconds:s.maxSeconds});
+}
+
 export default {
   async fetch(request, env) {
     try {
     const url = new URL(request.url);
     const maintenance = await maybeMaintenanceResponse(request, env, url);
     if (maintenance) return maintenance;
+    if (url.pathname === '/api/admin/voice-clones/diagnostics') return cfCloneAdminDiagnostics(request,env);
+    if (url.pathname === '/api/voice-clones') { const limited=await callFocusRateLimit(request,env,request.method==='POST'?'voice-clones-create':request.method==='DELETE'?'voice-clones-delete':'voice-clones-list',request.method==='POST'?5:60,3600);if(limited)return limited;return safeCustomerRoute('voice-clones',()=>cfCloneUserRoute(request,env)); }
+    if (url.pathname === '/api/voice-clones/live/start') { const limited=await callFocusRateLimit(request,env,'voice-clone-live-start',8,3600);if(limited)return limited;return safeCustomerRoute('voice-clone-live-start',()=>cfCloneStartLive(request,env)); }
+    if (url.pathname === '/api/voice-clones/live/meter') return safeCustomerRoute('voice-clone-live-meter',()=>cfCloneMeterLive(request,env));
     if (url.pathname === '/api/auth/health' && request.method === 'GET') {
       return json({ ok: true, storageConnected: !!env.CALLFOCUS_CONFIG, passwordHashVersion: 3, passwordIterations: CUSTOMER_PASSWORD_ITERATIONS });
     }
@@ -6707,7 +7006,7 @@ export default {
     if (url.pathname === '/api/image-to-video/link' && request.method === 'GET') return safeCustomerRoute('image-video-link',()=>cfVideoFileLink(request,env));
     if (url.pathname.startsWith('/api/image-to-video/file/') && request.method === 'GET') return safeCustomerRoute('image-video-file',()=>cfVideoFile(request,env,decodeURIComponent(url.pathname.slice('/api/image-to-video/file/'.length))));
     if (url.pathname === '/api/admin/image-video') return cfAdminVideo(request,env);
-    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.11-pocketfi-checkout-resume-test' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.19-voice-clone-preview' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
@@ -6760,7 +7059,7 @@ export default {
       const adminAssetUrl = new URL('/admin.html?cf_build=16.07-test', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
-      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=16.07-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=16.07-test');
+      html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=16.07-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=16.19-voice-clone-preview');
       if (!html.includes('id="adminScreenshotLimitsPanel"')) {
         const limitsMarkup = `<div class="premium-panel form-panel admin-screenshot-limits-panel" id="adminScreenshotLimitsPanel"><div class="admin-users-heading"><div><span class="kicker">Generation controls · V15.6</span><h3>Screenshot upload limits</h3><p class="admin-panel-copy">Set the shared minimum and maximum number of conversation screenshots for both <strong>Fill in all information automatically</strong> and <strong>Generate conversation dynamics</strong>.</p></div></div><div class="form-grid two admin-screenshot-limit-grid"><label>Minimum screenshots<input id="adminAnalysisScreenshotMin" type="number" inputmode="numeric" min="1" max="50" step="1" value="20" /></label><label>Maximum screenshots<input id="adminAnalysisScreenshotMax" type="number" inputmode="numeric" min="1" max="50" step="1" value="50" /></label></div><div class="admin-recommendation" id="adminScreenshotLimitsSummary">Customers must upload between <strong>20 and 50 screenshots</strong> before either generator can run. Allowed admin range: 1–50.</div><button class="btn btn-primary admin-inline-save" type="button" id="saveScreenshotLimitsBtn">Save screenshot limits</button></div>`;
         html = html.replace('<div class="admin-overview-grid ai-usage-grid">', limitsMarkup + '<div class="admin-overview-grid ai-usage-grid">');
@@ -6787,6 +7086,7 @@ export default {
       '/avatar': '/avatar.html',
       '/image-to-video': '/image-video.html',
       '/voice-notes': '/voice-notes.html',
+      '/voice-clone': '/voice-clone.html',
       '/credits': '/credits.html',
       '/pocketfi-bank': '/pocketfi-bank.html',
       '/history': '/index.html',

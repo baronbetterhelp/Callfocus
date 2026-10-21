@@ -2072,7 +2072,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       await refreshPublicConfig(); syncVoiceLabels();
       const res=await fetch('/api/voice-note',{
         method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('callfocus_server_session_v1')||''}`},
-        body:JSON.stringify({prompt,voiceGender:vnGender,voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,userId:account.id,maxSeconds:window.CallFocusCredits?.currentBalanceSeconds?.()||0})
+        body:JSON.stringify({prompt,voiceGender:vnGender,voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,voiceCloneId:document.getElementById("cfVoiceNoteClone")?.value||"",userId:account.id,maxSeconds:window.CallFocusCredits?.currentBalanceSeconds?.()||0})
       });
       if(!res.ok){
         let msg='Could not generate the voice note right now. Please try again.';
@@ -2891,7 +2891,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
           mode:voiceNoteMode,
           language:$('voiceNoteLanguage')?.value||'English',
           voiceGender:gender,
-          voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,
+          voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,voiceCloneId:document.getElementById("cfVoiceNoteClone")?.value||"",
           userId:account.id,
           maxSeconds:window.CallFocusCredits?.currentBalanceSeconds?.() || 0
         })
@@ -7666,25 +7666,36 @@ ${approvedPatterns}
       const json=await readJson(res);if(!res.ok)throw new Error(json?.error||'Could not start KoraPay checkout.');
       if(!json?.checkoutUrl||!json?.reference)throw new Error('KoraPay checkout did not initialize.');
       sessionStorage.setItem('callfocus_korapay_reference',json.reference);
+      try{localStorage.setItem('callfocus_korapay_reference',json.reference)}catch{}
       location.href=json.checkoutUrl;
     }catch(error){window.toast?.(error?.message||'Could not open KoraPay checkout.');busy=false;if(button){button.disabled=false;button.textContent=old||'Pay with KoraPay'}}
   }
   async function verifyReturn(){
     const url=new URL(location.href);
-    if(url.searchParams.get('korapay')!=='return')return;
-    const reference=url.searchParams.get('reference')||sessionStorage.getItem('callfocus_korapay_reference')||'';
-    if(!reference)return;
+    const returned=url.searchParams.get('korapay')==='return';
+    // The server also retains the last pending KoraPay reference for this user.
+    // This runs after login even when Safari loses the checkout tab's storage.
+    let storedReference='';
+    try{storedReference=sessionStorage.getItem('callfocus_korapay_reference')||localStorage.getItem('callfocus_korapay_reference')||''}catch{}
+    const reference=url.searchParams.get('reference')||storedReference;
+    if(!returned&&!reference)return;
     for(let i=0;i<24&&!token();i++)await new Promise(resolve=>setTimeout(resolve,250));
     if(!token()){window.toast?.('Sign in to check your KoraPay payment.');return}
     window.toast?.('Checking KoraPay payment…');
     try{
-      const res=await cfFetch(`/api/korapay/verify?reference=${encodeURIComponent(reference)}`),payload=await readJson(res);
+      const res=await cfFetch(`/api/korapay/verify${reference?'?reference='+encodeURIComponent(reference):''}`),payload=await readJson(res);
       if(!res.ok)throw new Error(payload.error||'Could not verify this KoraPay payment.');
+      if(payload.reason==='no_pending')return;
       if(payload?.wallet)try{window.CallFocusPaystack?.refreshWallet?.({quiet:true})}catch{}
       if(payload.credited)window.toast?.('KoraPay payment verified. Your credits have been added.');
       else if(payload.duplicate)window.toast?.('KoraPay payment already credited. Your balance is up to date.');
       else window.toast?.('KoraPay has not confirmed this payment yet. Your credits will arrive after verification.');
-      if(payload.credited||payload.duplicate)sessionStorage.removeItem('callfocus_korapay_reference');
+      if(payload.credited||payload.duplicate){
+        sessionStorage.removeItem('callfocus_korapay_reference');
+        try{localStorage.removeItem('callfocus_korapay_reference')}catch{}
+      }
+      // Do not throw away the reference if payment has not yet settled.
+      if(!payload.credited&&!payload.duplicate)return;
       url.searchParams.delete('korapay');url.searchParams.delete('reference');
       history.replaceState({},'',url.pathname+url.search+url.hash);
       try{window.showView?.('credits',false)}catch{}
@@ -8005,4 +8016,30 @@ ${approvedPatterns}
     else if(token())api('/api/flutterwave/pending').then(r=>{if(r.pending){document.getElementById('flutterwaveRecoveryPanel')?.classList.remove('hidden');verify(r.reference,true);}}).catch(()=>{});
   };
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+})();
+
+/* V16.19: optional saved personal voice for the existing voice-note flow. */
+(()=>{
+  const sel=document.getElementById('cfVoiceNoteClone');if(!sel)return;
+  const token=()=>{try{return localStorage.getItem('callfocus_server_session_v1')||''}catch{return''}};
+  let stamp=0,lastToken='';
+  async function refresh(){
+    const current=token();
+    if(!current||current!==lastToken){
+      sel.replaceChildren();const opt=document.createElement('option');opt.value='';opt.textContent='Use normal male / female voice';sel.append(opt);
+      for(const id of ['cfVoiceNoteCloneSection','voiceCloneAccountLink','voiceCloneMobileLink'])document.getElementById(id)?.classList.add('hidden');
+      stamp=0;lastToken=current;
+    }
+    if(!current||Date.now()-stamp<12000)return;stamp=Date.now();
+    try{
+      const r=await fetch('/api/voice-clones',{headers:{Authorization:'Bearer '+current},cache:'no-store'});if(!r.ok)return;
+      const data=await r.json();if(token()!==current)return;
+      const prior=sel.value;sel.replaceChildren();const opt=document.createElement('option');opt.value='';opt.textContent='Use normal male / female voice';sel.append(opt);
+      if(data.enabled)for(const v of data.voices||[]){if(v.verificationRequired)continue;const o=document.createElement('option');o.value=v.id;o.textContent=v.name+' · My saved voice';sel.append(o);}
+      if([...sel.options].some(o=>o.value===prior))sel.value=prior;
+      for(const id of ['cfVoiceNoteCloneSection','voiceCloneAccountLink','voiceCloneMobileLink'])document.getElementById(id)?.classList.toggle('hidden',!data.enabled);
+    }catch{}
+  }
+  refresh();sel.addEventListener('focus',refresh);window.addEventListener('focus',refresh);
+  document.addEventListener('click',e=>{if(e.target?.closest?.('#heroCreateVoiceBtn, #headerAccountTrigger, #mobileMenuBtn, [data-mobile-route="voice-notes"], [data-account-route="voice-notes"]'))refresh()});
 })();

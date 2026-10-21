@@ -589,7 +589,15 @@ async function runAdminAddBalance(card,button){
   if(!confirm(`Add ${credits.toLocaleString(undefined,{maximumFractionDigits:1})} credits to ${user.email}?\n\nThe customer will receive the CallFocus notification shown in the message field.`))return;
   const old=button.textContent;button.disabled=true;button.textContent='Adding…';
   try{
-    const result=await api('/api/admin/user-action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,action:'add_balance',credits,message})});
+    // Reuse the same request ID on retry to prevent a timed-out grant from
+    // being credited twice. New amount/user = new grant intent.
+    const intentKey=`callfocus_admin_credit_intent:${userId}`;
+    let priorIntent=null;
+    try{priorIntent=JSON.parse(sessionStorage.getItem(intentKey)||'null')}catch{}
+    const requestId=(priorIntent?.credits===credits&&priorIntent?.requestId)?priorIntent.requestId:crypto.randomUUID();
+    try{sessionStorage.setItem(intentKey,JSON.stringify({credits,requestId}))}catch{}
+    const result=await api('/api/admin/user-action',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId,action:'add_balance',credits,message,requestId})});
+    try{sessionStorage.removeItem(intentKey)}catch{}
     if(result.user){adminUsers=adminUsers.map(u=>u.id===result.user.id?result.user:u);renderAdminUsers();}
     toast(`${Number(result.creditsAdded||credits).toLocaleString(undefined,{maximumFractionDigits:1})} credits added · notification queued`);
   }catch(err){toast(err.message);button.disabled=false;button.textContent=old;}
@@ -1305,3 +1313,29 @@ $('saveSignupEmailVerificationBtn')?.addEventListener('click', async () => {
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+// V16.19: private, read-only-in-KV cloned-voice signing check.
+async function runClonedVoiceDiagnostics(){
+  const btn=$('runClonedVoiceDiagnosticsBtn'),box=$('clonedVoiceDiagnostics');
+  if(!btn||!box)return;
+  const old=btn.textContent;btn.disabled=true;btn.textContent='Testing connection…';
+  box.classList.remove('hidden');box.replaceChildren();
+  const row=(label,value)=>{
+    const wrap=document.createElement('div');wrap.className='admin-diagnostics-row';
+    const name=document.createElement('span'),text=document.createElement('strong');
+    name.textContent=label;text.textContent=String(value);wrap.append(name,text);box.append(wrap);
+  };
+  const note=value=>{const p=document.createElement('div');p.className='admin-diagnostics-note';p.textContent=String(value||'');box.append(p);};
+  try{
+    const d=await api('/api/admin/voice-clones/diagnostics',{method:'POST'});
+    row('Cloned voice connection',d.ok?'Signing successful':'Check failed');
+    row('Test build',d.build||'Unknown');row('Tested website',d.testedOrigin||'Unknown');
+    row('Pilot enabled',d.featureEnabled?'Yes':'No');row('API key configured',d.apiKeyConfigured?'Yes':'No');
+    row('Agent ID',d.agentId||'Missing or invalid');row('Provider HTTP status',d.providerStatus??'Not requested');
+    if(d.providerCode)row('Provider error code',d.providerCode);
+    note(d.providerMessage);note('This test does not start a call or spend customer credits.');
+    if(d.checkedAt)note('Checked: '+new Date(d.checkedAt).toLocaleString());
+  }catch(err){note(err.message||'Could not run the connection check.');}
+  finally{btn.disabled=false;btn.textContent=old;}
+}
+$('runClonedVoiceDiagnosticsBtn')?.addEventListener('click',runClonedVoiceDiagnostics);
