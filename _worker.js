@@ -6837,7 +6837,7 @@ async function cfCloneUserRoute(request,env){
   }
   return json({error:'Method not allowed.'},405);
 }
-const CF_CLONE_BUILD = '16.19-voice-clone-preview';
+const CF_CLONE_BUILD = '16.20-natural-voice-preview';
 function cfCloneLiveDiagnosticText(value,apiKey,maxLength=300){
   if(typeof value!=='string'&&typeof value!=='number')return '';
   let text=String(value);
@@ -7006,7 +7006,7 @@ export default {
     if (url.pathname === '/api/image-to-video/link' && request.method === 'GET') return safeCustomerRoute('image-video-link',()=>cfVideoFileLink(request,env));
     if (url.pathname.startsWith('/api/image-to-video/file/') && request.method === 'GET') return safeCustomerRoute('image-video-file',()=>cfVideoFile(request,env,decodeURIComponent(url.pathname.slice('/api/image-to-video/file/'.length))));
     if (url.pathname === '/api/admin/image-video') return cfAdminVideo(request,env);
-    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.19-voice-clone-preview' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.20-natural-voice-preview' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
