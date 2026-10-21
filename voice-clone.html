@@ -31,12 +31,46 @@
 <section><h2>Live cloned-voice conversation</h2>
 <p class="small">Use your saved personal voice for a live AI conversation. Test sessions are limited to 60 seconds and use your existing CallFocus credits.</p>
 <label for="liveVoice">Voice</label><select id="liveVoice"><option value="">Choose my voice</option></select>
-<label for="liveContext">Conversation context</label><textarea id="liveContext" maxlength="2400" placeholder="The conversational setting and topics. Never imitate a real person or misrepresent who is speaking."></textarea>
+<label for="cloneLanguage">Call language</label><select id="cloneLanguage">
+          <option value="English" selected>English</option>
+          <option value="Spanish">Spanish / Español</option>
+          <option value="French">French / Français</option>
+          <option value="Italian">Italian / Italiano</option>
+          <option value="German">German / Deutsch</option>
+          <option value="Portuguese">Portuguese / Português</option>
+          <option value="Dutch">Dutch / Nederlands</option>
+          <option value="Arabic">Arabic / العربية</option>
+          <option value="Hindi">Hindi / हिन्दी</option>
+          <option value="Mandarin Chinese">Mandarin Chinese / 中文</option>
+          <option value="Cantonese">Cantonese / 粵語</option>
+          <option value="Japanese">Japanese / 日本語</option>
+          <option value="Korean">Korean / 한국어</option>
+          <option value="Russian">Russian / Русский</option>
+          <option value="Turkish">Turkish / Türkçe</option>
+          <option value="Vietnamese">Vietnamese / Tiếng Việt</option>
+          <option value="Polish">Polish / Polski</option>
+          <option value="Ukrainian">Ukrainian / Українська</option>
+          <option value="Greek">Greek / Ελληνικά</option>
+          <option value="Hebrew">Hebrew / עברית</option>
+          <option value="Indonesian">Indonesian / Bahasa Indonesia</option>
+          <option value="Malay">Malay / Bahasa Melayu</option>
+          <option value="Thai">Thai / ไทย</option>
+          <option value="Swahili">Swahili / Kiswahili</option>
+          <option value="Filipino">Filipino / Tagalog</option>
+          <option value="Romanian">Romanian / Română</option>
+          <option value="Czech">Czech / Čeština</option>
+          <option value="Hungarian">Hungarian / Magyar</option>
+          <option value="Swedish">Swedish / Svenska</option>
+          <option value="Norwegian">Norwegian / Norsk</option>
+          <option value="Danish">Danish / Dansk</option>
+          <option value="Finnish">Finnish / Suomi</option>
+        </select>
+<label for="liveContext">Conversation context</label><textarea id="liveContext" maxlength="22000" placeholder="The conversational setting and topics. Never imitate a real person or misrepresent who is speaking."></textarea>
 <p class="small" role="note"><strong>AI call notice:</strong> This conversation uses an AI voice. Audio and transcripts are recorded and may be shared with ElevenLabs and its third-party AI providers to provide this service.</p>
 <div class="row" style="margin-top:16px"><button id="startLive" type="button" disabled>Start live voice</button><button id="endLive" class="danger" type="button" disabled>End call</button><span id="liveClock" class="pill">00:00</span></div>
 <div style="margin-top:15px" class="meter"><i id="liveMeter"></i></div><p class="small" id="liveStatus">Waiting to start. Please allow microphone access when prompted.</p>
 <div id="liveTranscript" role="log" aria-live="polite">Call transcript appears here when provided by the agent.</div>
 </section>
 <section><h2>Cloned-voice notes</h2><p>Select one of your saved voices on the existing Voice Notes page. Your normal CallFocus note history and credit usage remain in place.</p><a class="btn" href="/voice-notes">Open Voice Notes</a></section>
-</main><script src="/voice-clone.js?v=16.20-natural-voice-preview"></script></body></html>
+</main><script src="/voice-clone.js?v=16.21-admin-voice-preview"></script></body></html>
 
