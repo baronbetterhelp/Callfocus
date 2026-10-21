@@ -191,6 +191,7 @@ const DEFAULT_CONFIG = {
   manualPaymentsEnabled: false,
   korapayPaymentsEnabled: true,
   pocketfiPaymentsEnabled: false,
+  flutterwavePaymentsEnabled: false,
   pocketfiVirtualAccountsEnabled: false,
   websiteMaintenanceEnabled: false,
   // Emergency V15.96: OFF until Resend quota resets. Accounts remain unverified.
@@ -1852,6 +1853,7 @@ function sanitizeConfig(input = {}) {
     manualPaymentsEnabled: input.manualPaymentsEnabled === true,
     korapayPaymentsEnabled: input.korapayPaymentsEnabled !== false,
     pocketfiPaymentsEnabled: input.pocketfiPaymentsEnabled === true,
+    flutterwavePaymentsEnabled: input.flutterwavePaymentsEnabled === true,
     pocketfiVirtualAccountsEnabled: input.pocketfiVirtualAccountsEnabled === true,
     websiteMaintenanceEnabled: input.websiteMaintenanceEnabled === true,
     signupEmailVerificationEnabled: input.signupEmailVerificationEnabled === true,
@@ -2055,6 +2057,7 @@ async function handlePublicConfig(env) {
     paymentsEnabled: callFocusPaymentsEnabled(env),
     korapayEnabled: korapayConfigured(env) && c.korapayPaymentsEnabled !== false,
     pocketfiEnabled: pocketfiConfigured(env) && c.pocketfiPaymentsEnabled === true,
+    flutterwaveEnabled: flutterwaveConfigured(env) && c.flutterwavePaymentsEnabled === true,
     pocketfiBankEnabled: false, // Hosted checkout only; legacy static transfers remain reconcilable.
     paymentStatus: callFocusPaymentsEnabled(env) ? 'available' : 'awaiting_paystack_activation',
     manualPaymentsEnabled: manualPaymentReady(c),
@@ -2656,6 +2659,7 @@ async function handleAdminAvailability(request, env) {
     return json({ manualPaymentsEnabled: c.manualPaymentsEnabled === true,
       korapayPaymentsEnabled: c.korapayPaymentsEnabled !== false,
       pocketfiPaymentsEnabled: c.pocketfiPaymentsEnabled === true,
+      flutterwavePaymentsEnabled: c.flutterwavePaymentsEnabled === true,
       pocketfiVirtualAccountsEnabled: c.pocketfiVirtualAccountsEnabled === true,
       websiteMaintenanceEnabled: c.websiteMaintenanceEnabled === true });
   }
@@ -2663,7 +2667,7 @@ async function handleAdminAvailability(request, env) {
   if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.put !== 'function') return json({ error: 'Global settings storage is not connected.' }, 503);
   let body;
   try { body = await request.json(); } catch { return json({ error: 'Invalid request.' }, 400); }
-  const allowed = ['manualPaymentsEnabled', 'korapayPaymentsEnabled', 'pocketfiPaymentsEnabled', 'pocketfiVirtualAccountsEnabled', 'websiteMaintenanceEnabled'];
+  const allowed = ['manualPaymentsEnabled', 'korapayPaymentsEnabled', 'pocketfiPaymentsEnabled', 'flutterwavePaymentsEnabled', 'pocketfiVirtualAccountsEnabled', 'websiteMaintenanceEnabled'];
   const changes = {};
   for (const key of allowed) if (Object.prototype.hasOwnProperty.call(body || {}, key)) {
     if (typeof body[key] !== 'boolean') return json({ error: 'Invalid switch value.' }, 400);
@@ -2676,6 +2680,7 @@ async function handleAdminAvailability(request, env) {
   return json({ ok: true, config, manualPaymentsEnabled: config.manualPaymentsEnabled,
     korapayPaymentsEnabled: config.korapayPaymentsEnabled,
     pocketfiPaymentsEnabled: config.pocketfiPaymentsEnabled,
+    flutterwavePaymentsEnabled: config.flutterwavePaymentsEnabled,
     pocketfiVirtualAccountsEnabled: config.pocketfiVirtualAccountsEnabled,
     websiteMaintenanceEnabled: config.websiteMaintenanceEnabled });
 }
@@ -2694,7 +2699,7 @@ function maintenanceAllowedPath(path) {
   // Keep admin access and payment settlement/confirmation available. Do not break
   // webhook delivery or manual approvals that began before maintenance.
   return path === '/admin' || path === '/admin/' || path === '/admin.html' || path === '/admin.css' || path === '/admin.js'
-    || path.startsWith('/api/admin/') || path === '/api/korapay/webhook' || path === '/api/paystack/webhook' || path === '/api/pocketfi/bank/webhook' || path === '/api/pocketfi/checkout/webhook'
+    || path.startsWith('/api/admin/') || path === '/api/korapay/webhook' || path === '/api/paystack/webhook' || path === '/api/pocketfi/bank/webhook' || path === '/api/pocketfi/checkout/webhook' || path === '/api/flutterwave/webhook'
     || path === '/api/korapay/verify' || path === '/api/paystack/verify' || path === '/api/paystack/recover'
     || path === '/api/manual-payment/submit' || path === '/api/manual-payment/status' || path === '/api/manual-payment/cancel'
     || path === '/manual-payment-review' || path === '/manual-payment-review/'
@@ -4692,6 +4697,142 @@ async function handleKorapayWebhook(request,env){
   return new Response('OK',{status:200,headers:{'Cache-Control':'no-store'}});
 }
 
+
+// V16.14 — Flutterwave V3 hosted NGN checkout. Independently disabled until Admin enables.
+// Server-side only: credentials, transaction verification, wallet crediting and webhook.
+const FLW_PENDING_TTL=60*60*24*30, FLW_PROCESSED_TTL=60*60*24*365;
+function flutterwaveConfigured(env){return /^FLWSECK(?:_TEST)?-/.test(String(env.FLUTTERWAVE_SECRET_KEY||'').trim())}
+function flutterwaveReference(value){const r=String(value||'').trim();return /^CFF-\d{13}-[a-f0-9]{14}$/.test(r)?r:''}
+function flwPending(ref){return 'flutterwave:pending:'+ref}
+function flwProcessed(ref){return 'flutterwave:processed:'+ref}
+function flwLast(userId){return 'flutterwave:last:'+String(userId||'')}
+async function flutterwaveApi(env,path,{method='GET',body=null}={}){
+  if(!flutterwaveConfigured(env)){const e=new Error('Flutterwave is not configured.');e.status=503;throw e}
+  let response;
+  try{response=await fetch('https://api.flutterwave.com/v3'+path,{method,headers:{Authorization:'Bearer '+String(env.FLUTTERWAVE_SECRET_KEY).trim(),'Content-Type':'application/json',Accept:'application/json'},body:body===null?undefined:JSON.stringify(body)})}
+  catch{const e=new Error('Could not reach Flutterwave.');e.status=502;throw e}
+  let result={};try{result=await response.json()}catch{}
+  if(!response.ok||result?.status!=='success'){
+    const code=response.status;
+    console.warn('Flutterwave API failed',{status:code,route:path.split('?')[0]});
+    const e=new Error(code===401||code===403?'Flutterwave credentials were rejected. Contact support.':'Flutterwave has not confirmed this payment yet.');
+    e.status=code>=400&&code<500?code:502;throw e
+  }
+  return result;
+}
+async function handleFlutterwaveInitialize(request,env){
+  if(request.method!=='POST')return json({error:'Method not allowed'},405);
+  const auth=await authenticatedCustomer(request,env);
+  if(!auth)return json({error:'Sign in to purchase credits.'},401);
+  if(!flutterwaveConfigured(env)||(await getConfig(env)).flutterwavePaymentsEnabled!==true)return json({error:'Flutterwave checkout is unavailable.'},503);
+  let body={};try{body=await request.json()}catch{return json({error:'Invalid request.'},400)}
+  const credits=Number(body.credits);
+  if(!Number.isInteger(credits)||credits<PAYSTACK_MIN_CREDITS||credits>1000000)return json({error:'Invalid credit quantity.'},400);
+  const offer=quotePurchase(await getConfig(env),credits);
+  if(!offer)return json({error:'Invalid credit package.'},400);
+  const reference='CFF-'+Date.now()+'-'+crypto.randomUUID().replace(/-/g,'').slice(0,14);
+  const pending={userId:auth.user.id,reference,...offer,createdAt:new Date().toISOString()};
+  // A pending record exists BEFORE calling the provider, so no paid checkout is orphaned.
+  await env.CALLFOCUS_CONFIG.put(flwPending(reference),JSON.stringify(pending),{expirationTtl:FLW_PENDING_TTL});
+  let result;
+  try{
+    result=await flutterwaveApi(env,'/payments',{method:'POST',body:{
+      tx_ref:reference,amount:offer.amountNaira,currency:'NGN',
+      redirect_url:new URL(request.url).origin+'/credits?flutterwave=return',
+      customer:{email:auth.user.email,name:auth.user.name||'CallFocus customer'},
+      customizations:{title:'CallFocus',description:'CallFocus call and voice credits'},
+      meta:{product:'callfocus_credits'}
+    }});
+  }catch(e){return json({error:e.message||'Unable to initialize Flutterwave.',code:'flutterwave_initialize_failed'},e.status||502)}
+  let checkout;
+  try{checkout=new URL(String(result?.data?.link||''))}catch{}
+  if(!checkout||checkout.protocol!=='https:'||checkout.hostname!=='checkout.flutterwave.com')return json({error:'Flutterwave returned an unexpected checkout link.'},502);
+  await env.CALLFOCUS_CONFIG.put(flwLast(auth.user.id),reference,{expirationTtl:FLW_PENDING_TTL});
+  return json({ok:true,checkoutUrl:checkout.href,reference,amountNaira:offer.amountNaira});
+}
+async function creditVerifiedFlutterwave(env,reference){
+  const ref=flutterwaveReference(reference);
+  if(!ref)return {reason:'invalid_reference'};
+  const prior=await env.CALLFOCUS_CONFIG.get(flwProcessed(ref),{type:'json'});
+  const pending=await env.CALLFOCUS_CONFIG.get(flwPending(ref),{type:'json'});
+  const expected=pending||prior;
+  if(!expected?.userId)return {reason:'unknown_payment'};
+  let response;
+  try{response=await flutterwaveApi(env,'/transactions/verify_by_reference?tx_ref='+encodeURIComponent(ref))}
+  catch(e){if(e.status===400||e.status===404)return {reason:'pending',status:'pending'};throw e}
+  const result=response?.data||{};
+  if(String(result.tx_ref||'')!==ref)return {reason:'reference_mismatch'};
+  if(String(result.status||'').toLowerCase()!=='successful')return {reason:'pending',status:result.status||'pending'};
+  if(String(result.currency||'').toUpperCase()!=='NGN')return {reason:'currency_mismatch'};
+  const amount=Number(result.amount);
+  if(!Number.isFinite(amount)||Math.abs(amount-Number(expected.amountNaira))>0.01)return {reason:'amount_mismatch'};
+  const breakdown=paymentPurchaseBreakdown(expected,amount);
+  if(!breakdown)return {reason:'credits_mismatch'};
+  const user=await env.CALLFOCUS_CONFIG.get(customerUserKey(expected.userId),{type:'json'});
+  if(!user?.id)return {reason:'customer_missing'};
+  // Server-side wallet journal also deduplicates the provider/reference combination.
+  if(prior?.userId)return {credited:false,duplicate:true,reason:'already_processed',record:prior};
+  const seconds=purchaseSecondsForCredits(breakdown.credits);
+  const commit=await commitWalletPurchaseCredit(env,user,{reference:ref,provider:'flutterwave',channel:String(result.payment_type||'flutterwave'),amountNaira:Number(expected.amountNaira),...breakdown,seconds,createdAt:new Date().toISOString()});
+  if(!commit.verified)return {reason:'wallet_not_verified'};
+  if(commit.ledgerPruned)return {reason:'ledger_pruned',duplicate:true};
+  const record={userId:user.id,reference:ref,transactionId:String(result.id||''),amountNaira:Number(expected.amountNaira),credits:breakdown.credits,secondsAdded:seconds,at:new Date().toISOString()};
+  await env.CALLFOCUS_CONFIG.put(flwProcessed(ref),JSON.stringify(record),{expirationTtl:FLW_PROCESSED_TTL});
+  await env.CALLFOCUS_CONFIG.delete(flwPending(ref));
+  if(!commit.duplicate){
+    try{await safeAwardReferralAfterDeposit(env,user.id,{provider:'flutterwave',reference:ref,at:record.at})}catch{}
+    try{await notifyPurchaseBonus(env,user.id,'flutterwave',ref,breakdown)}catch{}
+  }
+  return {credited:!commit.duplicate,duplicate:!!commit.duplicate,record};
+}
+async function handleFlutterwaveVerify(request,env){
+  if(request.method!=='GET')return json({error:'Method not allowed'},405);
+  const auth=await authenticatedCustomer(request,env);
+  if(!auth)return json({error:'Sign in to check your Flutterwave payment.'},401);
+  const ref=flutterwaveReference(new URL(request.url).searchParams.get('reference'))||flutterwaveReference(await env.CALLFOCUS_CONFIG.get(flwLast(auth.user.id)));
+  if(!ref)return json({error:'No Flutterwave payment reference found.'},404);
+  const expected=await env.CALLFOCUS_CONFIG.get(flwPending(ref),{type:'json'})||await env.CALLFOCUS_CONFIG.get(flwProcessed(ref),{type:'json'});
+  if(!expected)return json({error:'Payment reference expired. Contact support if you paid.'},404);
+  if(String(expected.userId)!==String(auth.user.id))return json({error:'Payment belongs to another account.'},403);
+  try{
+    const outcome=await creditVerifiedFlutterwave(env,ref);
+    const fatal=['reference_mismatch','currency_mismatch','amount_mismatch','credits_mismatch','customer_missing','wallet_not_verified','ledger_pruned'];
+    if(fatal.includes(outcome.reason))return json({error:'Flutterwave payment requires an account review. Contact support with your reference.',code:outcome.reason},409);
+    const userData=await getCustomerDataForUpdate(env,auth.user.id,auth.user.name);
+    return json({ok:true,credited:!!outcome.credited,duplicate:!!outcome.duplicate,status:outcome.status||(outcome.credited||outcome.duplicate?'successful':'pending'),wallet:userData.wallet,reference:ref});
+  }catch(e){return json({error:e.message||'Flutterwave confirmation is temporarily unavailable.'},e.status||502)}
+}
+async function handleFlutterwavePending(request,env){
+  if(request.method!=='GET')return json({error:'Method not allowed'},405);
+  const auth=await authenticatedCustomer(request,env);
+  if(!auth)return json({error:'Sign in to check Flutterwave payments.'},401);
+  const ref=flutterwaveReference(await env.CALLFOCUS_CONFIG.get(flwLast(auth.user.id)));
+  const pending=ref?await env.CALLFOCUS_CONFIG.get(flwPending(ref),{type:'json'}):null;
+  return json({ok:true,pending:!!pending&&String(pending.userId)===String(auth.user.id),reference:pending?ref:''});
+}
+// Flutterwave V3 webhooks authenticate using the independent Secret Hash under
+// Flutterwave Dashboard > Settings > Webhooks; never reuse the API Secret Key.
+async function handleFlutterwaveWebhook(request,env){
+  if(request.method!=='POST')return new Response('Method not allowed',{status:405});
+  const secret=String(env.FLUTTERWAVE_WEBHOOK_HASH||'');
+  if(secret.length<20)return new Response('Not configured',{status:503});
+  const sig=String(request.headers.get('verif-hash')||'');
+  const expected=new TextEncoder().encode(secret),provided=new TextEncoder().encode(sig);
+  if(provided.length!==expected.length)return new Response('Invalid signature',{status:401});
+  let mismatch=0;for(let i=0;i<expected.length;i++)mismatch|=expected[i]^provided[i];
+  if(mismatch)return new Response('Invalid signature',{status:401});
+  const raw=await request.text();if(raw.length>100000)return new Response('Payload too large',{status:413});
+  let event={};try{event=JSON.parse(raw)}catch{return new Response('Invalid JSON',{status:400})}
+  const ref=flutterwaveReference(event?.data?.tx_ref);
+  if(!ref||!['charge.completed','charge.success'].includes(String(event?.event||'')))return new Response('OK',{status:200});
+  try{
+    const result=await creditVerifiedFlutterwave(env,ref);
+    if(result.reason==='wallet_not_verified')return new Response('Retry',{status:503});
+    if(result.reason==='pending')return new Response('Retry',{status:503});
+  }catch(e){console.error('Flutterwave webhook verification failed:',e?.message||e);return new Response('Retry',{status:503})}
+  return new Response('OK',{status:200,headers:{'Cache-Control':'no-store'}});
+}
+
 // -----------------------------------------------------------------------------
 // V11.32 conversation screenshot dynamics generator
 // Accepts small browser-prepared batches so customers can select up to 50
@@ -6520,6 +6661,10 @@ export default {
     if (url.pathname === '/api/paystack/webhook') return handlePaystackWebhook(request, env);
     if (url.pathname === '/api/korapay/initialize') return safeCustomerRoute('korapay-initialize', () => handleKorapayInitialize(request, env));
     if (url.pathname === '/api/korapay/verify') return safeCustomerRoute('korapay-verify', () => handleKorapayVerify(request, env));
+    if (url.pathname === '/api/flutterwave/webhook') return handleFlutterwaveWebhook(request,env);
+    if (url.pathname === '/api/flutterwave/initialize') { const limited=await callFocusRateLimit(request,env,'flutterwave-initialize',12,900); if(limited)return limited; return safeCustomerRoute('flutterwave-initialize',()=>handleFlutterwaveInitialize(request,env)); }
+    if (url.pathname === '/api/flutterwave/verify') { const limited=await callFocusRateLimit(request,env,'flutterwave-verify',30,900); if(limited)return limited; return safeCustomerRoute('flutterwave-verify',()=>handleFlutterwaveVerify(request,env)); }
+    if (url.pathname === '/api/flutterwave/pending') return safeCustomerRoute('flutterwave-pending',()=>handleFlutterwavePending(request,env));
     if (url.pathname === '/api/korapay/webhook') return handleKorapayWebhook(request, env);
     if (url.pathname === '/api/pocketfi/bank/webhook') return pfiVaWebhook(request,env);
     if (url.pathname === '/api/pocketfi/checkout/webhook') return pocketfiCheckoutWebhook(request,env);

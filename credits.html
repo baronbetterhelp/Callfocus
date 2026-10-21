@@ -611,9 +611,11 @@
               <div class="credit-custom-summary"><span id="customCreditMinutes">3 minutes</span><strong id="customCreditNaira">₦3,000</strong></div>
             </div>
             <button class="credit-checkout-btn" id="creditCheckoutBtn" type="button" disabled aria-disabled="true"><span id="creditCheckoutLabel">Continue to payment</span><small id="creditCheckoutSummary">300 credits · ₦3,000</small></button>
+            <button class="korapay-checkout-btn hidden" id="flutterwaveCheckoutBtn" type="button" disabled>Pay with Flutterwave</button>
             <button class="korapay-checkout-btn hidden" id="korapayCheckoutBtn" type="button" disabled>Pay with KoraPay</button>
             <button class="korapay-checkout-btn hidden" id="pocketfiBankBtn" type="button" disabled>Fund with PocketFi Bank Transfer</button>
             <button class="korapay-checkout-btn hidden" id="pocketfiCheckoutBtn" type="button" disabled>Pay with PocketFi</button>
+            <div class="pocketfi-recovery hidden" id="flutterwaveRecoveryPanel"><button class="pocketfi-recovery-toggle" id="flutterwaveRecoverBtn" type="button">Paid with Flutterwave but missing credits? Check payment</button></div>
             <div class="pocketfi-recovery" id="pocketfiRecoveryPanel">
               <button class="pocketfi-recovery-toggle" id="pocketfiRecoveryToggle" type="button" aria-expanded="false" aria-controls="pocketfiRecoveryFields">Paid with PocketFi but missing credits? Check payment</button>
               <div class="pocketfi-recovery-fields hidden" id="pocketfiRecoveryFields">
@@ -963,6 +965,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=16.11-pocketfi"></script>
+  <script src="/callfocus.js?v=16.14-flutterwave"></script>
 </body>
 </html>

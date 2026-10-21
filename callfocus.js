@@ -5189,10 +5189,11 @@ ${approvedPatterns}
   let attempts=0;
 
   function paint(state){
-    const paystack=state.paystack===true, manual=state.manual===true, korapay=state.korapay===true, pocketfi=state.pocketfi===true, pocketfiBank=state.pocketfiBank===true, known=state.known===true;
+    const paystack=state.paystack===true, manual=state.manual===true, flutterwave=state.flutterwave===true, korapay=state.korapay===true, pocketfi=state.pocketfi===true, pocketfiBank=state.pocketfiBank===true, known=state.known===true;
     const available=known&&(paystack||manual);
-    window.CallFocusPaymentAvailability={paystack,manual,korapay,pocketfi,pocketfiBank,available,known,error:state.error||''};
+    window.CallFocusPaymentAvailability={paystack,manual,flutterwave,korapay,pocketfi,pocketfiBank,available,known,error:state.error||''};
     document.documentElement.classList.toggle('korapay-enabled',korapay);
+    const flwButton=document.getElementById('flutterwaveCheckoutBtn');if(flwButton){flwButton.classList.toggle('hidden',!flutterwave);flwButton.disabled=!flutterwave||Number(document.getElementById('customCreditAmount')?.value)<300;}
     document.documentElement.classList.toggle('pocketfi-enabled',pocketfi||pocketfiBank);
     const bankButton=document.getElementById('pocketfiBankBtn');if(bankButton){bankButton.classList.toggle('hidden',!pocketfiBank);bankButton.disabled=!pocketfiBank||!Number.isFinite(Number(document.getElementById('customCreditAmount')?.value))||Number(document.getElementById('customCreditAmount')?.value)<300;}
     const pocketfiButton=document.getElementById('pocketfiCheckoutBtn');if(pocketfiButton){pocketfiButton.classList.toggle('hidden',!pocketfi);pocketfiButton.disabled=!pocketfi||!Number.isFinite(Number(document.getElementById('customCreditAmount')?.value))||Number(document.getElementById('customCreditAmount')?.value)<300;}
@@ -5201,7 +5202,7 @@ ${approvedPatterns}
     document.documentElement.classList.toggle('payments-enabled',paystack);
     document.documentElement.classList.toggle('payments-disabled',known&&!paystack);
     document.documentElement.classList.toggle('manual-payments-enabled',manual&&!paystack);
-    document.documentElement.classList.toggle('all-payments-unavailable',known&&!available&&!korapay&&!pocketfi&&!pocketfiBank);
+    document.documentElement.classList.toggle('all-payments-unavailable',known&&!available&&!flutterwave&&!korapay&&!pocketfi&&!pocketfiBank);
     const amount=Number(document.getElementById('customCreditAmount')?.value||300);
     const amountValid=Number.isFinite(amount)&&Math.floor(amount)>=300;
     const checkout=document.getElementById('creditCheckoutBtn');
@@ -5215,12 +5216,12 @@ ${approvedPatterns}
     const label=document.getElementById('creditCheckoutLabel');
     if(label)label.textContent=!known?'Retry payment options':paystack?'Continue to payment':manual?'Request account number':'Payments unavailable';
     const note=document.getElementById('creditPaymentNote');
-    if(note)note.textContent=!known?'CallFocus could not confirm payment availability yet. Tap the button to retry.':paystack?(korapay?'Choose Paystack or KoraPay for secure checkout. Credits are added only after successful server verification.':'Secure checkout is handled by Paystack. Credits are added only after CallFocus verifies a successful payment on the server.'):manual?(korapay?'Choose KoraPay for secure checkout, or use manual transfer and submit your receipt for approval.':'Pay by bank transfer, upload your receipt, and receive credits after manual confirmation.'):korapay?'Use KoraPay secure checkout. Credits are added after CallFocus verifies your successful payment.':pocketfi?'Use PocketFi checkout. Credits are added after CallFocus verifies your successful payment.':pocketfiBank?'Use your assigned PocketFi bank account and transfer the exact selected amount. Credits are added after signed confirmation.':'Payments are temporarily unavailable while Paystack activation is pending.';
+    if(note)note.textContent=!known?'CallFocus could not confirm payment availability yet. Tap the button to retry.':paystack?(korapay?'Choose Paystack or KoraPay for secure checkout. Credits are added only after successful server verification.':'Secure checkout is handled by Paystack. Credits are added only after CallFocus verifies a successful payment on the server.'):manual?(korapay?'Choose KoraPay for secure checkout, or use manual transfer and submit your receipt for approval.':'Pay by bank transfer, upload your receipt, and receive credits after manual confirmation.'):flutterwave?'Use Flutterwave checkout. Credits are added after verification.':korapay?'Use KoraPay secure checkout. Credits are added after CallFocus verifies your successful payment.':pocketfi?'Use PocketFi checkout. Credits are added after CallFocus verifies your successful payment.':pocketfiBank?'Use your assigned PocketFi bank account and transfer the exact selected amount. Credits are added after signed confirmation.':'Payments are temporarily unavailable while Paystack activation is pending.';
     const notice=document.getElementById('paymentPendingNotice');
     if(notice){
       const strong=notice.querySelector('strong'),span=notice.querySelector('span');
       if(!known){if(strong)strong.textContent='Checking payment options';if(span)span.textContent='CallFocus will retry automatically. You can also tap the payment button to retry now.';}
-      else if(!paystack){if(strong)strong.textContent=manual?'Manual bank transfer available':korapay?'KoraPay available':pocketfi?'PocketFi available':pocketfiBank?'PocketFi bank transfer available':'Payments are temporarily unavailable';if(span)span.textContent=manual?'Transfer the exact amount, upload your receipt, and your credits will be added after confirmation.':korapay?'Pay with KoraPay using secure checkout. Credits are added once payment is verified.':pocketfi?'Pay with PocketFi. Credits are added after your payment is verified.':pocketfiBank?'Transfer the exact selected amount to your assigned bank account. Credits are added after confirmed receipt.':'Payments are temporarily unavailable. Please try again later.';}
+      else if(!paystack){if(strong)strong.textContent=manual?'Manual bank transfer available':flutterwave?'Flutterwave available':korapay?'KoraPay available':pocketfi?'PocketFi available':pocketfiBank?'PocketFi bank transfer available':'Payments are temporarily unavailable';if(span)span.textContent=manual?'Transfer the exact amount, upload your receipt, and your credits will be added after confirmation.':flutterwave?'Pay with Flutterwave. Credits are added after successful verification.':korapay?'Pay with KoraPay using secure checkout. Credits are added once payment is verified.':pocketfi?'Pay with PocketFi. Credits are added after your payment is verified.':pocketfiBank?'Transfer the exact selected amount to your assigned bank account. Credits are added after confirmed receipt.':'Payments are temporarily unavailable. Please try again later.';}
     }
     const dva=document.getElementById('paystackCreateDvaBtn'); if(dva)dva.disabled=!paystack;
     try{window.CallFocusManualPayments?.validateAmount?.();}catch{}
@@ -5239,9 +5240,9 @@ ${approvedPatterns}
         if(!res.ok)throw new Error(`HTTP ${res.status}`);
         const cfg=await res.json();
         attempts=0;clearTimeout(retryTimer);
-        return paint({known:true,paystack:cfg?.paymentsEnabled===true,manual:cfg?.manualPaymentsEnabled===true,korapay:cfg?.korapayEnabled===true,pocketfi:cfg?.pocketfiEnabled===true,pocketfiBank:cfg?.pocketfiBankEnabled===true});
+        return paint({known:true,paystack:cfg?.paymentsEnabled===true,manual:cfg?.manualPaymentsEnabled===true,korapay:cfg?.korapayEnabled===true,flutterwave:cfg?.flutterwaveEnabled===true,pocketfi:cfg?.pocketfiEnabled===true,pocketfiBank:cfg?.pocketfiBankEnabled===true});
       }catch(error){
-        const state=paint({known:false,paystack:false,manual:false,korapay:false,pocketfi:false,error:String(error?.message||error||'unavailable')});
+        const state=paint({known:false,paystack:false,manual:false,korapay:false,flutterwave:false,pocketfi:false,error:String(error?.message||error||'unavailable')});
         if(retry&&attempts<4){attempts+=1;clearTimeout(retryTimer);retryTimer=setTimeout(()=>syncPaymentAvailability({force:true,retry:true}),Math.min(8000,1000*attempts));}
         return state;
       }finally{syncPromise=null;}
@@ -5682,6 +5683,7 @@ ${approvedPatterns}
     const available=availability.available===true;
     if(btn){btn.disabled=!valid||(known&&!available);btn.setAttribute('aria-disabled',String(btn.disabled));}
     const koraBtn=$('korapayCheckoutBtn');if(koraBtn)koraBtn.disabled=!valid||availability.korapay!==true;
+    const flwBtn=$('flutterwaveCheckoutBtn');if(flwBtn)flwBtn.disabled=!valid||availability.flutterwave!==true;
     return valid;
   }
   function saveActive(id){try{id?localStorage.setItem(ACTIVE_KEY,id):localStorage.removeItem(ACTIVE_KEY)}catch{}}
@@ -7811,16 +7813,29 @@ ${approvedPatterns}
    const credits=Math.floor(Number(document.getElementById('customCreditAmount')?.value||0));
    if(!Number.isInteger(credits)||credits<300){window.toast?.('Minimum purchase is 300 credits.');return}
    if(!token()){window.showAuth?.('signin',null,'Sign in before purchasing credits.');return}
-   if(window.CallFocusPaymentAvailability?.pocketfi!==true){window.toast?.('PocketFi is not available yet.');return}
+   // The availability check can still be loading (or stale) on first tap,
+   // especially after Safari restores a tab. Refresh it before rejecting checkout.
+   // Do not bypass server-side PocketFi enablement or initialize twice.
    working=true;const button=btn(),old=button?.textContent;
-   if(button){button.disabled=true;button.textContent='Opening PocketFi…'}
+   if(button){button.disabled=true;button.textContent='Checking PocketFi…'}
    try{
+     let availability=window.CallFocusPaymentAvailability;
+     if(availability?.pocketfi!==true){
+       const refresh=window.CallFocusSyncPaymentAvailability;
+       if(typeof refresh==='function')availability=await refresh({force:false,retry:false});
+     }
+     if(availability?.pocketfi!==true){
+       window.toast?.(availability?.known===true?'PocketFi checkout is currently unavailable.':'Could not check PocketFi availability. Please try again.');
+       return;
+     }
+     if(button)button.textContent='Opening PocketFi…';
      const response=await api('/api/pocketfi/initialize',{method:'POST',body:JSON.stringify({credits})});const result=await data(response);
      if(!response.ok)throw new Error(result.error||'Could not start PocketFi payment.');
      if(!result.checkoutUrl||!result.paymentId)throw new Error('PocketFi did not return a checkout link.');
      sessionStorage.setItem('callfocus_pocketfi_payment_id',result.paymentId);
      location.assign(result.checkoutUrl);
-   }catch(error){window.toast?.(error?.message||'Could not start PocketFi payment.');working=false;if(button){button.disabled=false;button.textContent=old||'Pay with PocketFi'}}
+   }catch(error){window.toast?.(error?.message||'Could not start PocketFi payment.');}
+   finally{working=false;if(button){button.disabled=false;button.textContent=old||'Pay with PocketFi'}}
  }
  // PocketFi currently appends '?payment_id=' even if the return link already had a query.
  // Support both legacy malformed returns and the corrected /credits?payment_id=... URL.
@@ -7927,3 +7942,58 @@ ${approvedPatterns}
 
 /* V16.06 static PocketFi bank-transfer launcher. No checkout redirect. */
 (()=>{const bind=()=>{const btn=document.getElementById('pocketfiBankBtn');if(!btn)return;const update=()=>{const amount=Number(document.getElementById('customCreditAmount')?.value||0);btn.disabled=window.CallFocusPaymentAvailability?.pocketfiBank!==true||!Number.isInteger(amount)||amount<300;};document.getElementById('customCreditAmount')?.addEventListener('input',update);document.querySelectorAll('[data-credit-package]').forEach(el=>el.addEventListener('click',()=>setTimeout(update,0)));btn.addEventListener('click',()=>{const credits=Number(document.getElementById('customCreditAmount')?.value||0);if(!Number.isInteger(credits)||credits<300){window.toast?.('Choose at least 300 credits.');return;}const session=localStorage.getItem('callfocus_server_session_v1')||'';if(!session){window.showAuth?.('signin',null,'Sign in before funding.');return;}if(!window.CallFocusPaymentAvailability?.pocketfiBank){window.toast?.('PocketFi bank transfer is not available yet.');return;}location.href='/pocketfi-bank?credits='+encodeURIComponent(String(credits));});};if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind,{once:true});else bind();})();
+
+
+/* V16.14 — Flutterwave Standard hosted checkout and authenticated credit recovery. */
+(()=>{
+  const id='flutterwaveCheckoutBtn';let opening=false,verifying=false;
+  const token=()=>{try{return localStorage.getItem('callfocus_server_session_v1')||''}catch{return ''}};
+  const api=async(path,options={})=>{const h=new Headers(options.headers||{});if(token())h.set('Authorization','Bearer '+token());if(options.body)h.set('Content-Type','application/json');const r=await fetch(path,{...options,headers:h,cache:'no-store'});let j={};try{j=await r.json()}catch{}if(!r.ok)throw new Error(j?.error||'Payment request failed.');return j};
+  async function verify(ref='',quiet=false){
+    if(verifying||!token())return;
+    verifying=true;
+    try{
+      const p=await api('/api/flutterwave/verify'+(ref?'?reference='+encodeURIComponent(ref):''));
+      if(p.credited||p.duplicate){sessionStorage.removeItem('callfocus_flw_ref');window.CallFocusPaystack?.refreshWallet?.({quiet:true});if(!quiet)window.toast?.(p.credited?'Flutterwave payment verified. Credits added.':'Flutterwave payment already credited.');}
+      else if(!quiet)window.toast?.('Flutterwave has not confirmed this payment yet. You can check again later.');
+    }catch(e){if(!quiet)window.toast?.(e.message||'Could not verify Flutterwave payment.');}
+    finally{verifying=false}
+  }
+  async function checkout(){
+    if(opening)return;
+    const b=document.getElementById(id),credits=Number(document.getElementById('customCreditAmount')?.value||0);
+    if(!Number.isInteger(credits)||credits<300){window.toast?.('Minimum purchase is 300 credits.');return}
+    if(!token()){window.showAuth?.('signin',null,'Sign in before purchasing credits.');return}
+    opening=true;const old=b?.textContent;if(b){b.disabled=true;b.textContent='Opening Flutterwave…'}
+    try{
+      let availability=window.CallFocusPaymentAvailability;
+      if(availability?.flutterwave!==true&&typeof window.CallFocusSyncPaymentAvailability==='function')availability=await window.CallFocusSyncPaymentAvailability({retry:false});
+      if(availability?.flutterwave!==true)throw new Error('Flutterwave checkout is not enabled yet.');
+      const result=await api('/api/flutterwave/initialize',{method:'POST',body:JSON.stringify({credits})});
+      if(!result.checkoutUrl||!result.reference)throw new Error('Flutterwave did not return a checkout link.');
+      sessionStorage.setItem('callfocus_flw_ref',result.reference);
+      location.assign(result.checkoutUrl);
+    }catch(e){window.toast?.(e.message||'Flutterwave checkout could not start.');}
+    finally{opening=false;if(b){b.disabled=false;b.textContent=old||'Pay with Flutterwave'}}
+  }
+  async function restore(){
+    if(!token())return;
+    const u=new URL(location.href),returned=u.searchParams.has('flutterwave');
+    if(returned){
+      const ref=String(u.searchParams.get('tx_ref')||'');
+      const hasRef=/^CFF-\d{13}-[a-f0-9]{14}$/.test(ref);
+      await verify(hasRef?ref:'');
+      u.searchParams.delete('flutterwave');u.searchParams.delete('tx_ref');u.searchParams.delete('transaction_id');u.searchParams.delete('status');
+      history.replaceState({},'',u.pathname+u.search+u.hash);
+      try{window.showView?.('credits',false)}catch{}
+    }
+  }
+  const boot=()=>{
+    document.getElementById(id)?.addEventListener('click',checkout);
+    document.getElementById('flutterwaveRecoverBtn')?.addEventListener('click',()=>verify(''));
+    if(location.search.includes('flutterwave=return')){
+      let tries=0;const wait=setInterval(()=>{if(token()||++tries>=30){clearInterval(wait);restore()}},200)}
+    else if(token())api('/api/flutterwave/pending').then(r=>{if(r.pending){document.getElementById('flutterwaveRecoveryPanel')?.classList.remove('hidden');verify(r.reference,true);}}).catch(()=>{});
+  };
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+})();
