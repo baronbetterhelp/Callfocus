@@ -512,11 +512,6 @@
             </div>
 
             <div class="voice-note-composer">
-              <div style="margin:0 0 16px;padding:14px;background:#eef7f2;border:1px solid #d2e8db;border-radius:14px">
-                <label for="cfVoiceNoteClone" style="display:block;font-weight:750;color:#176355;margin-bottom:8px">Custom cloned voice</label>
-                <select id="cfVoiceNoteClone" style="width:100%;padding:10px;border:1px solid #c4dccd;border-radius:10px;background:white;color:#173f36"><option value="">Use normal male / female voice</option></select>
-                <small id="cfVoiceNoteCloneHint" style="display:block;margin-top:7px;color:#5a796c">Only your own saved, verified voice may be selected. <a href="/voice-clone" style="color:#116c5d">Create or manage a cloned voice</a></small>
-              </div>
               <div class="voice-note-gender-row">
                 <span>Voice</span>
                 <div class="voice-note-gender-switch" role="group" aria-label="Voice gender">
@@ -524,6 +519,42 @@
                   <button type="button" class="voice-note-gender" data-vn-gender="female"><strong>Female</strong><small id="voiceNoteFemaleLabel">marin</small></button>
                 </div>
               </div>
+              <label class="voice-note-prompt-label" for="voiceNoteLanguage">Voice-note language</label>
+              <select id="voiceNoteLanguage" aria-label="Voice-note language" style="display:block;width:100%;min-height:46px;padding:10px 12px;margin:6px 0 4px;border:1px solid #cdded7;border-radius:12px;background:#fff;color:#193c35;font:inherit">
+          <option value="English" selected>English</option>
+          <option value="Spanish">Spanish / Español</option>
+          <option value="French">French / Français</option>
+          <option value="Italian">Italian / Italiano</option>
+          <option value="German">German / Deutsch</option>
+          <option value="Portuguese">Portuguese / Português</option>
+          <option value="Dutch">Dutch / Nederlands</option>
+          <option value="Arabic">Arabic / العربية</option>
+          <option value="Hindi">Hindi / हिन्दी</option>
+          <option value="Mandarin Chinese">Mandarin Chinese / 中文</option>
+          <option value="Cantonese">Cantonese / 粵語</option>
+          <option value="Japanese">Japanese / 日本語</option>
+          <option value="Korean">Korean / 한국어</option>
+          <option value="Russian">Russian / Русский</option>
+          <option value="Turkish">Turkish / Türkçe</option>
+          <option value="Vietnamese">Vietnamese / Tiếng Việt</option>
+          <option value="Polish">Polish / Polski</option>
+          <option value="Ukrainian">Ukrainian / Українська</option>
+          <option value="Greek">Greek / Ελληνικά</option>
+          <option value="Hebrew">Hebrew / עברית</option>
+          <option value="Indonesian">Indonesian / Bahasa Indonesia</option>
+          <option value="Malay">Malay / Bahasa Melayu</option>
+          <option value="Thai">Thai / ไทย</option>
+          <option value="Swahili">Swahili / Kiswahili</option>
+          <option value="Filipino">Filipino / Tagalog</option>
+          <option value="Romanian">Romanian / Română</option>
+          <option value="Czech">Czech / Čeština</option>
+          <option value="Hungarian">Hungarian / Magyar</option>
+          <option value="Swedish">Swedish / Svenska</option>
+          <option value="Norwegian">Norwegian / Norsk</option>
+          <option value="Danish">Danish / Dansk</option>
+          <option value="Finnish">Finnish / Suomi</option>
+        </select>
+              <small style="display:block;margin:0 0 12px;color:#56736b">Reply mode drafts in your chosen language. Create mode speaks the script you write, so type your script in that language.</small>
               <label class="voice-note-prompt-label" for="voiceNotePrompt" id="voiceNotePromptLabel">Script</label>
               <div class="voice-note-prompt-hint" id="voiceNotePromptHint">Type the exact words you want the voice note to say.</div>
               <div class="voice-note-input-wrap">
@@ -967,6 +998,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=16.15-voice-clone"></script>
+  <script src="/callfocus.js?v=16.17-stable-test"></script>
 </body>
 </html>

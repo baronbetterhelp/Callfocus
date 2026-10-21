@@ -189,7 +189,6 @@
                   <button class="btn btn-ghost voice-note-launch voice-note-launch-main" id="heroCreateVoiceBtn"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Create a voice note</span></button>
                   <button class="btn btn-ghost voice-note-launch avatar-launch" id="heroAvatarBtn" data-route="avatar"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Live AI Avatar</span><small>New</small></button>
                 </div>
-                <a href="/voice-clone" style="display:inline-flex;margin-top:12px;align-items:center;gap:8px;color:#1a6f60;font-weight:750;text-decoration:underline;text-underline-offset:4px">Try the new voice cloning studio (pilot)</a>
               </div>
               <div class="hero-proof hero-enter hero-enter-4 hero-proof-spaced">
                 <div class="avatar-stack"><span>C</span><span>F</span><span>+</span></div>
@@ -591,11 +590,6 @@
             </div>
 
             <div class="voice-note-composer">
-              <div style="margin:0 0 16px;padding:14px;background:#eef7f2;border:1px solid #d2e8db;border-radius:14px">
-                <label for="cfVoiceNoteClone" style="display:block;font-weight:750;color:#176355;margin-bottom:8px">Custom cloned voice</label>
-                <select id="cfVoiceNoteClone" style="width:100%;padding:10px;border:1px solid #c4dccd;border-radius:10px;background:white;color:#173f36"><option value="">Use normal male / female voice</option></select>
-                <small id="cfVoiceNoteCloneHint" style="display:block;margin-top:7px;color:#5a796c">Only your own saved, verified voice may be selected. <a href="/voice-clone" style="color:#116c5d">Create or manage a cloned voice</a></small>
-              </div>
               <div class="voice-note-gender-row">
                 <span>Voice</span>
                 <div class="voice-note-gender-switch" role="group" aria-label="Voice gender">
@@ -939,10 +933,6 @@
           <option value="Finnish">Finnish / Suomi</option>
         </select></label><div class="opening-preview">CallFocus will keep the entire call in the language you select here. An accent, isolated foreign words, or the other person changing languages will not make the voice switch languages.</div></div></div>
         <div class="field-section"><span class="field-number">08</span><div class="field-content"><div class="field-heading"><strong>Voice selection</strong><small>Use the standard Male/Female voice or select one of your own saved AI voice profiles below.</small></div><div class="voice-choice"><button type="button" class="voice-option active" data-voice="male"><span>Male</span><small id="maleVoiceLabel">Default male voice</small></button><button type="button" class="voice-option" data-voice="female"><span>Female</span><small id="femaleVoiceLabel">Default female voice</small></button></div><input type="hidden" id="newCallVoiceGender" value="male" />
-          <label style="display:block;padding:12px;border:1px solid #d5e6de;border-radius:13px;background:#f2faf5;margin-top:12px">Optional recorded voice clone
-            <select id="newCallVoiceClone" style="width:100%;padding:10px;margin-top:7px;border:1px solid #c6ded3;border-radius:10px"><option value="">Use default GPT-Live voice (recommended)</option></select>
-            <small style="display:block;margin-top:5px">A cloned voice uses a separate ElevenLabs real-time call mode. <a href="/voice-clone">Create your own voice</a></small>
-          </label>
           <div class="call-opening-box">
             <div class="field-heading"><strong>Call opening <span class="optional-label">Optional</span></strong><small>Choose how the first few seconds should sound. This is saved with the call thread.</small></div>
             <label>Opening style<select id="newCallOpeningMode">
@@ -1050,6 +1040,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=16.15-voice-clone"></script>
+  <script src="/callfocus.js?v=16.17-stable-test"></script>
 </body>
 </html>

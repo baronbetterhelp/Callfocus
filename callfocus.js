@@ -1588,7 +1588,13 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       const raw=String(err?.message||err||'').toLowerCase(); const reason=err?.callFocusReason||'';
       const lowCredit=reason==='insufficient_call_credit'||err?.httpStatus===402||raw.includes('not enough call credit');
       const inactive=raw.includes('server not active')||raw.includes('quota')||reason.includes('quota');
-      failCall(call,lowCredit?'Not enough call credit to start. Buy credits first.':(inactive?'Server not active right now. Please try again soon.':'Server unavailable. Try again soon.'),reason);
+      const expired=err?.httpStatus===401||reason==='customer_session_expired';
+      const mismatch=reason==='customer_account_mismatch';
+      const micBlocked=err?.name==='NotAllowedError'||err?.name==='PermissionDeniedError';
+      const micMissing=err?.name==='NotFoundError';
+      const safeCode=String(reason|| (err?.httpStatus?`http_${err.httpStatus}`:'connection_error')).replace(/[^a-zA-Z0-9_-]/g,'').slice(0,48);
+      const message=lowCredit?'Not enough call credit to start. Buy credits first.':expired?'Your sign-in expired. Please sign in again before calling.':mismatch?'Your account session changed. Refresh CallFocus and sign in again.':micBlocked?'Microphone permission is blocked. Allow microphone access in your browser settings.':micMissing?'No working microphone was found on this device.':inactive?'Live voice is temporarily unavailable. Please try again shortly.':`Could not connect this call. Try again or contact support with code ${safeCode}.`;
+      failCall(call,message,reason);
     }
   };
 
@@ -2066,7 +2072,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       await refreshPublicConfig(); syncVoiceLabels();
       const res=await fetch('/api/voice-note',{
         method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('callfocus_server_session_v1')||''}`},
-        body:JSON.stringify({prompt,voiceGender:vnGender,voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,voiceCloneId:document.getElementById("cfVoiceNoteClone")?.value||"",userId:account.id,maxSeconds:window.CallFocusCredits?.currentBalanceSeconds?.()||0})
+        body:JSON.stringify({prompt,voiceGender:vnGender,voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,userId:account.id,maxSeconds:window.CallFocusCredits?.currentBalanceSeconds?.()||0})
       });
       if(!res.ok){
         let msg='Could not generate the voice note right now. Please try again.';
@@ -2812,7 +2818,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     $('voiceNoteEmptyState')?.classList.add('hidden');
     box.classList.remove('hidden');
     $('voiceNoteResultScript').textContent = note.script || '';
-    $('voiceNoteResultMeta').textContent = `${note.voiceGender==='female'?'Female':'Male'} · ${note.voiceName || ''} · ${formatDurationSeconds(note.duration)}${note.unlimitedCredit ? ' · Unlimited access' : (Number.isFinite(Number(note.creditsUsed)) ? ' · ' + note.creditsUsed + ' credits' : '')}`;
+    $('voiceNoteResultMeta').textContent = `${note.voiceGender==='female'?'Female':'Male'} · ${note.voiceName || ''} · ${note.language||'English'} · ${formatDurationSeconds(note.duration)}${note.unlimitedCredit ? ' · Unlimited access' : (Number.isFinite(Number(note.creditsUsed)) ? ' · ' + note.creditsUsed + ' credits' : '')}`;
     if($('voiceNoteResultMode')) $('voiceNoteResultMode').textContent = resultModeText(note);
     const play = $('voiceNoteResultPlay');
     play.disabled = false;
@@ -2883,8 +2889,9 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
         body:JSON.stringify({
           prompt,
           mode:voiceNoteMode,
+          language:$('voiceNoteLanguage')?.value||'English',
           voiceGender:gender,
-          voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,voiceCloneId:document.getElementById("cfVoiceNoteClone")?.value||"",
+          voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,
           userId:account.id,
           maxSeconds:window.CallFocusCredits?.currentBalanceSeconds?.() || 0
         })
@@ -2897,6 +2904,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       const blob = await res.blob();
       const script = decodeURIComponent(res.headers.get('X-CallFocus-Script') || '');
       const voiceName = res.headers.get('X-CallFocus-Voice') || (gender === 'female' ? loadAdmin().femaleVoice : loadAdmin().maleVoice);
+      const voiceNoteLanguage = res.headers.get('X-CallFocus-Language') || $('voiceNoteLanguage')?.value || 'English';
       const duration = await audioDuration(blob);
       const billableSeconds = Math.max(1, Math.ceil(Number(duration) || 1));
       const noteId = uuid();
@@ -2917,6 +2925,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
         script,
         voiceGender:gender,
         voiceName,
+        language:voiceNoteLanguage,
         duration,
         creditsUsed,
         unlimitedCredit,
@@ -7996,64 +8005,4 @@ ${approvedPatterns}
     else if(token())api('/api/flutterwave/pending').then(r=>{if(r.pending){document.getElementById('flutterwaveRecoveryPanel')?.classList.remove('hidden');verify(r.reference,true);}}).catch(()=>{});
   };
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
-})();
-
-/* V16.15 optional customer cloned-voice choice for existing voice notes. */
-(()=>{
-  const sel=document.getElementById('cfVoiceNoteClone');if(!sel)return;
-  const token=()=>{try{return localStorage.getItem('callfocus_server_session_v1')||''}catch{return''}};
-  let stamp='';
-  async function refresh(){
-    if(!token())return;
-    const now=Date.now();if(now-Number(stamp)<12000)return;stamp=String(now);
-    try{
-      const r=await fetch('/api/voice-clones',{headers:{Authorization:'Bearer '+token()},cache:'no-store'});
-      if(!r.ok)return;
-      const data=await r.json();const was=sel.value;
-      sel.replaceChildren();const d=document.createElement('option');d.value='';d.textContent='Use normal male / female voice';sel.append(d);
-      for(const v of (data.voices||[])){
-        if(v.verificationRequired)continue;
-        const opt=document.createElement('option');opt.value=v.id;opt.textContent=v.name+' · My cloned voice';sel.append(opt);
-      }
-      if([...sel.options].some(o=>o.value===was))sel.value=was;
-      const hint=document.getElementById('cfVoiceNoteCloneHint');
-      if(hint&&!data.enabled)hint.firstChild.textContent='Cloned voices are not enabled yet. ';
-    }catch{}
-  }
-  refresh();
-  sel.addEventListener('focus',refresh);
-  document.addEventListener('click',e=>{if(e.target?.closest?.('[data-mobile-route="voice-notes"], [data-account-route="voice-notes"]'))refresh()});
-})();
-
-/* V16.15 — explicitly selected cloned voice starts isolated live agent with saved call context.
-   No impact on the current GPT-Live path unless the customer selects a personal clone. */
-(()=>{
- const sel=document.getElementById('newCallVoiceClone');if(!sel)return;
- const token=()=>{try{return localStorage.getItem('callfocus_server_session_v1')||''}catch{return''}};
- async function loadClones(){
-  if(!token())return;
-  try{
-   const res=await fetch('/api/voice-clones',{headers:{Authorization:'Bearer '+token()},cache:'no-store'});
-   if(!res.ok)return;const obj=await res.json();if(!obj.enabled||!obj.liveReady)return;
-   const prior=sel.value;
-   sel.replaceChildren();const empty=document.createElement('option');empty.value='';empty.textContent='Use default GPT-Live voice (recommended)';sel.append(empty);
-   for(const voice of obj.voices||[]){if(voice.verificationRequired)continue;
-     const o=document.createElement('option');o.value=voice.id;o.textContent=voice.name+' · ElevenLabs cloned live voice';sel.append(o);
-   }
-   if([...sel.options].some(o=>o.value===prior))sel.value=prior;
-  }catch{}
- }
- const oldStartCall=startCall;
- startCall=async function(call){
-   const modal=document.getElementById('newCallModal');
-   const useClone=modal&&!modal.classList.contains('hidden')?sel.value:'';
-   if(!useClone)return oldStartCall(call);
-   try{
-     const context=String(buildInstructions(call)||'').slice(0,2300);
-     sessionStorage.setItem('callfocus_clone_call_prefill_v1',JSON.stringify({voiceId:useClone,context}));
-     location.href='/voice-clone?mode=live';
-   }catch{toast('Could not open cloned-voice call. Please retry.');}
- };
- document.addEventListener('click',e=>{if(e.target?.closest?.('#heroNewCallBtn, [data-caller-call]'))loadClones()});
- loadClones();
 })();
