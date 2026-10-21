@@ -1698,10 +1698,19 @@ async function handleCustomerDelete(request, env) {
   const emailKey = await customerEmailIndexKey(auth.user.email);
   const phoneKey = customerPhoneIndexKey(auth.user.phone);
   const ownReferralCode = normalizeReferralCode(auth.user.referralCode || '');
+  // Erase any customer-owned cloned voices from ElevenLabs before removing the
+  // CallFocus account mapping. Failure is explicit, never silently orphaned.
+  const ownedClones = await cfCloneGetVoices(env, auth.user.id);
+  for (const clone of ownedClones) {
+    if (!env.ELEVENLABS_API_KEY) return json({error:'Voice-clone provider access is unavailable. Contact support to delete your saved cloned voices before closing your account.'},503);
+    const removed = await cfCloneProvider(env,`/voices/${encodeURIComponent(clone.id)}`,{method:'DELETE'}).catch(()=>null);
+    if (!removed || (!removed.ok && removed.status!==404)) return json({error:'Could not delete your cloned voices from the provider. Please contact support before closing the account.'},503);
+  }
   await Promise.all([
     env.CALLFOCUS_CONFIG.delete(customerUserKey(auth.user.id)),
     env.CALLFOCUS_CONFIG.delete(customerDataKey(auth.user.id)),
     env.CALLFOCUS_CONFIG.delete(customerNotificationKey(auth.user.id)),
+    env.CALLFOCUS_CONFIG.delete(cfCloneUserKey(auth.user.id)),
     env.CALLFOCUS_CONFIG.delete(emailKey),
     phoneKey.endsWith(':') ? Promise.resolve() : env.CALLFOCUS_CONFIG.delete(phoneKey),
     ownReferralCode ? env.CALLFOCUS_CONFIG.delete(referralCodeKey(ownReferralCode)) : Promise.resolve(),
@@ -3038,6 +3047,9 @@ async function handleVoiceNote(request, env) {
   const selectedVoice = gender === 'female' ? config.femaleVoice : config.maleVoice;
   const customVoice = customVoiceById(config, selectedVoice);
   const voice = customVoice ? customVoice.id : (TTS_VOICES.includes(selectedVoice) ? selectedVoice : (gender === 'female' ? 'marin' : 'cedar'));
+  const cloneRequested = String(body.voiceCloneId||'').trim();
+  const cloneVoice = cloneRequested ? await cfCloneOwnedVoice(env, auth.user, cloneRequested) : null;
+  if(cloneRequested && (!cfCloneAllowed(env,auth.user)||!cloneVoice))return json({error:'Your cloned voice is unavailable. Select a verified voice from your account.'},403);
   const userVoiceStyle = userAiVoiceInstructions(userVoiceProfile);
 
   const writerInstructions = `You write the exact spoken words for one private voice note.
@@ -3155,7 +3167,10 @@ Return only the final spoken voice-note text.`;
 
   let speech;
   try {
-    speech = await fetch('https://api.openai.com/v1/audio/speech', {
+    speech = cloneVoice ? await cfCloneProvider(env,`/text-to-speech/${encodeURIComponent(cloneVoice.id)}?output_format=mp3_44100_128`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:script,model_id:'eleven_multilingual_v2'})
+    }) : await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${env.OPENAI_API_KEY}`,
@@ -3188,8 +3203,8 @@ Return only the final spoken voice-note text.`;
     'Content-Type': 'audio/mpeg',
     'Cache-Control': 'no-store',
     'X-CallFocus-Voice-Gender': gender,
-    'X-CallFocus-Voice': userVoiceProfile?.name || voice,
-    'X-CallFocus-Base-Voice': voice,
+    'X-CallFocus-Voice': cloneVoice?.name || userVoiceProfile?.name || voice,
+    'X-CallFocus-Base-Voice': cloneVoice?.id || voice,
     'X-CallFocus-AI-Voice': userVoiceProfile ? '1' : '0',
     'X-CallFocus-Script': encodeURIComponent(script)
   });
@@ -6631,12 +6646,119 @@ async function handleAdminD1WalletPreflight(request,env) {
 }
 // === END V16.08 PHASE 2 D1 WALLET ENGINE ===
 
+// V16.15 — Optional customer-owned voice cloning; isolated ElevenLabs integration.
+// Feature is gated OFF unless explicitly enabled by the owner after an approved provider setup.
+const CF_CLONE_PREFIX = 'voice_clone:v1:';
+const CF_CLONE_LIVE_TTL = 60 * 60;
+function cfCloneReady(env){return String(env.CALLFOCUS_VOICE_CLONE_ENABLED||'').toLowerCase()==='true' && !!String(env.ELEVENLABS_API_KEY||'').trim();}
+function cfCloneLiveReady(env){return cfCloneReady(env) && /^agent_[a-zA-Z0-9_-]{8,}$/.test(String(env.ELEVENLABS_AGENT_ID||''));}
+function cfCloneAllowed(env,user){
+ if(!cfCloneReady(env))return false;
+ const list=String(env.CALLFOCUS_VOICE_CLONE_PILOT_EMAILS||'').split(',').map(s=>s.trim().toLowerCase()).filter(Boolean);
+ return !list.length||list.includes(normalizeCustomerEmail(user?.email));
+}
+function cfCloneUserKey(id){return `${CF_CLONE_PREFIX}user:${id}`;}
+function cfCloneSessionKey(id){return `${CF_CLONE_PREFIX}live:${id}`;}
+function cfCloneVoiceId(id){return /^[a-zA-Z0-9]{16,40}$/.test(String(id||''))?String(id):'';}
+async function cfCloneGetVoices(env,id){const v=await env.CALLFOCUS_CONFIG.get(cfCloneUserKey(id),{type:'json'});return Array.isArray(v)?v.filter(x=>cfCloneVoiceId(x.id)&&x.ownerId===id).slice(0,5):[];}
+async function cfCloneOwnedVoice(env,user,id){return (await cfCloneGetVoices(env,user.id)).find(v=>v.id===cfCloneVoiceId(id)&&!v.verificationRequired)||null;}
+async function cfCloneProvider(env,path,opt={}){
+  const h=new Headers(opt.headers||{});h.set('xi-api-key',String(env.ELEVENLABS_API_KEY));
+  let r;try{r=await fetch(`https://api.elevenlabs.io/v1${path}`,{...opt,headers:h,signal:AbortSignal.timeout(30000)});}catch{throw Object.assign(new Error('Voice provider could not be reached.'),{status:502});}
+  return r;
+}
+async function cfCloneUserRoute(request,env){
+  if(!env.CALLFOCUS_CONFIG)return json({error:'CallFocus account storage unavailable.'},503);
+  const auth=await authenticatedCustomer(request,env);
+  if(!auth)return json({error:'Sign in on CallFocus first.'},401);
+  const user=auth.user;
+  if(request.method==='GET')return json({ok:true,enabled:cfCloneAllowed(env,user),liveReady:cfCloneLiveReady(env)&&cfCloneAllowed(env,user),voices:await cfCloneGetVoices(env,user.id),maxVoices:3});
+  if(request.method==='POST'){
+    if(!cfCloneAllowed(env,user))return json({error:'Voice cloning is not enabled for your account yet.'},503);
+    const existing=await cfCloneGetVoices(env,user.id);
+    if(existing.length>=3)return json({error:'Maximum of three saved cloned voices per customer.'},409);
+    if(Number(request.headers.get('content-length')||'0')>9_000_000)return json({error:'Voice sample too large (max 8 MB).'},413);
+    let form;try{form=await request.formData();}catch{return json({error:'Invalid voice sample upload.'},400)}
+    const sample=form.get('sample');const name=String(form.get('name')||'').trim().slice(0,60);
+    const affirmative=String(form.get('ownVoiceConfirmed')||'')==='true';
+    if(!affirmative)return json({error:'Only the account holder’s own voice may be cloned. Explicit consent is required.'},403);
+    if(!name||!(/^[\p{L}\p{N} ._-]+$/u.test(name)))return json({error:'Enter a valid voice name.'},400);
+    if(!(sample instanceof File)||sample.size<20_000||sample.size>8*1024*1024)return json({error:'Record or upload 30–120 seconds of your own clear speech (under 8 MB).'},400);
+    if(!['audio/webm','audio/mp4','audio/mpeg','audio/wav','audio/x-wav','audio/ogg','audio/aac','audio/flac'].includes(String(sample.type).toLowerCase()))return json({error:'Supported audio: MP3, WAV, WEBM, MP4, OGG, AAC, FLAC.'},400);
+    const data=new FormData();data.set('name',`CallFocus_${name}_${user.id.slice(0,8)}`);
+    data.append('files',sample,sample.name||'voice-sample.webm');
+    data.set('description','Verified by account-holder declaration: owned voice for CallFocus AI content');
+    const result=await cfCloneProvider(env,'/voices/add',{method:'POST',body:data});
+    const payload=await result.json().catch(()=>({}));
+    if(!result.ok)return json({error:String(payload?.detail?.message||payload?.detail?.status||payload?.message||'Provider could not clone that audio.').slice(0,240)},result.status===429?429:502);
+    const id=cfCloneVoiceId(payload.voice_id);
+    if(!id)return json({error:'Provider did not return a valid voice ID.'},502);
+    const record={id,name,ownerId:user.id,createdAt:new Date().toISOString(),verificationRequired:payload.requires_verification===true,consentMethod:'own_voice_attestation'};
+    await env.CALLFOCUS_CONFIG.put(cfCloneUserKey(user.id),JSON.stringify([...existing,record]));
+    return json({ok:true,voice:record});
+  }
+  if(request.method==='DELETE'){
+    let body;try{body=await request.json();}catch{return json({error:'Invalid request.'},400)}
+    const existing=await cfCloneGetVoices(env,user.id), item=existing.find(v=>v.id===cfCloneVoiceId(body?.voiceId));
+    if(!item)return json({error:'Voice not found in your account.'},404);
+    const result=await cfCloneProvider(env,`/voices/${encodeURIComponent(item.id)}`,{method:'DELETE'});
+    if(!result.ok&&result.status!==404)return json({error:'Provider could not delete this voice. Please retry.'},502);
+    await env.CALLFOCUS_CONFIG.put(cfCloneUserKey(user.id),JSON.stringify(existing.filter(v=>v.id!==item.id)));
+    return json({ok:true});
+  }
+  return json({error:'Method not allowed.'},405);
+}
+// This is an isolated, metered 60-second live-call pilot. Default GPT-Live calling remains untouched.
+async function cfCloneStartLive(request,env){
+  if(request.method!=='POST')return json({error:'Method not allowed.'},405);
+  const auth=await authenticatedCustomer(request,env);
+  if(!auth)return json({error:'Sign in first.'},401);
+  if(!cfCloneLiveReady(env)||!cfCloneAllowed(env,auth.user))return json({error:'Cloned live calls are not enabled/configured for your account yet.'},503);
+  let body;try{body=await request.json();}catch{return json({error:'Invalid request.'},400)}
+  const voice=await cfCloneOwnedVoice(env,auth.user,body.voiceId);
+  if(!voice)return json({error:'Select a verified clone belonging to your account.'},403);
+  const wallet=normalizeServerWallet((await getCustomerDataForUpdate(env,auth.user.id,auth.user.name)).wallet);
+  const config=await getConfig(env);
+  const unlimited=(config.unlimitedCreditEmails||[]).map(normalizeCustomerEmail).includes(normalizeCustomerEmail(auth.user.email));
+  const available=unlimited?60:Math.floor(Number(wallet.balanceSeconds)||0);
+  if(available<15)return json({error:'At least 15 seconds of credit are required for a cloned live call.'},402);
+  const maxSeconds=Math.min(60,available); // Pilot hard cap, also enforce in provider Agent max duration.
+  const r=await cfCloneProvider(env,`/convai/conversation/get-signed-url?agent_id=${encodeURIComponent(String(env.ELEVENLABS_AGENT_ID))}`);
+  const p=await r.json().catch(()=>({}));
+  if(!r.ok)return json({error:'Could not start ElevenLabs Agent; check the private Agent configuration.'},502);
+  const signed=String(p.signed_url||'');
+  if(!/^wss:\/\/api\.elevenlabs\.io\//.test(signed))return json({error:'Provider returned an invalid signed URL.'},502);
+  const id='clone_'+crypto.randomUUID().replace(/-/g,'');
+  const record={id,userId:auth.user.id,createdAt:Date.now(),maxSeconds,voiceId:voice.id,closed:false};
+  await env.CALLFOCUS_CONFIG.put(cfCloneSessionKey(id),JSON.stringify(record),{expirationTtl:CF_CLONE_LIVE_TTL});
+  return json({ok:true,signedUrl:signed,sessionId:id,maxSeconds,voiceId:voice.id,context:String(body.context||'').trim().slice(0,2400)});
+}
+async function cfCloneMeterLive(request,env){
+  if(request.method!=='POST')return json({error:'Method not allowed.'},405);
+  const auth=await authenticatedCustomer(request,env);
+  if(!auth)return json({error:'Sign in first.'},401);
+  let b;try{b=await request.json();}catch{return json({error:'Invalid request.'},400)}
+  const id=String(b.sessionId||'');if(!/^clone_[a-f0-9]{32}$/.test(id))return json({error:'Invalid session.'},400);
+  const key=cfCloneSessionKey(id),s=await env.CALLFOCUS_CONFIG.get(key,{type:'json'});
+  if(!s||s.userId!==auth.user.id)return json({error:'Session expired or unavailable.'},404);
+  if(s.closed)return json({ok:true,closed:true});
+  const elapsed=Math.min(s.maxSeconds,Math.max(0,Math.floor((Date.now()-s.createdAt)/1000)));
+  const result=await applyLiveCallWalletCharge(env,auth,{id,started:true,durationSeconds:elapsed,createdAt:new Date(s.createdAt).toISOString()});
+  const exhausted=result.creditExhausted===true || elapsed>=s.maxSeconds;
+  const closed=Boolean(b.end)||exhausted;
+  if(closed){s.closed=true;s.closedAt=Date.now();await env.CALLFOCUS_CONFIG.put(key,JSON.stringify(s),{expirationTtl:3600});}
+  return json({ok:true,elapsed,chargedSeconds:result.chargedSeconds,creditsUsed:Math.round((result.chargedSeconds||0)/CALLFOCUS_SECONDS_PER_CREDIT*10)/10,closed,creditExhausted:result.creditExhausted===true,maxSeconds:s.maxSeconds});
+}
+
 export default {
   async fetch(request, env) {
     try {
     const url = new URL(request.url);
     const maintenance = await maybeMaintenanceResponse(request, env, url);
     if (maintenance) return maintenance;
+    if (url.pathname === '/api/voice-clones') { const limited=await callFocusRateLimit(request,env,request.method==='POST'?'voice-clones-create':request.method==='DELETE'?'voice-clones-delete':'voice-clones-list',request.method==='POST'?5:60,3600);if(limited)return limited;return safeCustomerRoute('voice-clones',()=>cfCloneUserRoute(request,env)); }
+    if (url.pathname === '/api/voice-clones/live/start') { const limited=await callFocusRateLimit(request,env,'voice-clone-live-start',8,3600);if(limited)return limited;return safeCustomerRoute('voice-clone-live-start',()=>cfCloneStartLive(request,env)); }
+    if (url.pathname === '/api/voice-clones/live/meter') return safeCustomerRoute('voice-clone-live-meter',()=>cfCloneMeterLive(request,env));
     if (url.pathname === '/api/auth/health' && request.method === 'GET') {
       return json({ ok: true, storageConnected: !!env.CALLFOCUS_CONFIG, passwordHashVersion: 3, passwordIterations: CUSTOMER_PASSWORD_ITERATIONS });
     }
@@ -6771,6 +6893,7 @@ export default {
       '/avatar': '/avatar.html',
       '/image-to-video': '/image-video.html',
       '/voice-notes': '/voice-notes.html',
+      '/voice-clone': '/voice-clone.html',
       '/credits': '/credits.html',
       '/pocketfi-bank': '/pocketfi-bank.html',
       '/history': '/index.html',

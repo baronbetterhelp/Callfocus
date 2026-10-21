@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en" data-theme="pearl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f6f8f6"><meta name="robots" content="noindex,nofollow">
+<title>My cloned voices | CallFocus</title><link rel="icon" href="/favicon.png">
+<style>
+:root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#163e37;background:#f3f7f5}*{box-sizing:border-box}body{margin:0}header{display:flex;align-items:center;justify-content:space-between;padding:20px clamp(18px,4vw,36px);background:#fff;border-bottom:1px solid #d9e5df}header a{color:#14685c;text-decoration:none;font-weight:750}main{max-width:850px;margin:0 auto;padding:26px 17px 74px}.intro{margin:10px 0 28px}h1{font-size:clamp(27px,5vw,39px);margin:0 0 12px;line-height:1.15}h2{font-size:20px;margin:0 0 10px}p{color:#516964;line-height:1.65}section{padding:23px;border:1px solid #d8e6e1;border-radius:25px;background:white;box-shadow:0 14px 36px #1a53420c;margin:18px 0}label{display:block;color:#244d43;font-weight:650;margin:14px 0 7px}input[type=text],textarea,select,input[type=file]{width:100%;padding:14px;border:1px solid #cbded6;border-radius:14px;background:#f9fbfa;color:#193d36;font:inherit}textarea{resize:vertical;min-height:95px}input[type=checkbox]{accent-color:#167a65}button,.btn{border:0;border-radius:16px;padding:13px 18px;background:#137a66;color:#fff;font:700 15px system-ui;cursor:pointer;text-decoration:none;display:inline-block}button:disabled{opacity:.5;cursor:not-allowed}.secondary{color:#176b5d;background:#eef6f2;border:1px solid #d6e9e0}.danger{color:#9a3333;background:#fff0ed;border:1px solid #f3cdc8}button+button{margin-left:8px}.hint,.small{font-size:13px;color:#657f77}.pill{font-size:12px;background:#e7f5ed;color:#146e4f;padding:5px 9px;border-radius:8px}.row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.row strong{overflow-wrap:anywhere}.voice-item{display:flex;align-items:center;justify-content:space-between;gap:15px;border-top:1px solid #e5efeb;padding:14px 0}.voice-item:first-child{border-top:0}.status{display:block;background:#eaf3ef;padding:13px 15px;border-radius:12px;color:#215b4b;margin:14px 0}.status.error{background:#ffedea;color:#9b3d2c}.disabled-note{background:#fff7e1;color:#73581a;padding:14px;border-radius:12px}.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}.audio{width:100%;margin:8px 0}.meter{height:9px;background:#e2eee9;border-radius:50px;overflow:hidden}.meter i{display:block;background:#147965;width:0;height:100%;transition:width .2s}a{color:#147965}#liveTranscript{min-height:80px;white-space:pre-wrap;word-break:break-word;background:#f4f7f5;border-radius:14px;padding:15px;color:#496057}
+@media(max-width:580px){section{padding:18px}.two{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header><a href="/">← CallFocus</a><strong>Voice Clone Studio</strong><a href="/voice-notes">Voice notes</a></header>
+<main>
+<div class="intro"><h1>Make your own voice usable across CallFocus</h1><p>Record your own voice, create a secure personal clone, then use it for voice notes or live AI conversations. Voices are synthetic; they must not be used to impersonate another person or mislead a listener.</p></div>
+<div id="status" class="status" role="status">Checking your CallFocus account and feature access…</div>
+<section>
+<div class="row"><h2>My saved voices</h2><span id="voiceLimit" class="pill">0 / 3</span></div>
+<div id="voices">Sign in to see your voices.</div>
+</section>
+<section><h2>Create a voice from your own recording</h2>
+<p class="small">Use 30–120 seconds of clear speech in a quiet room. The clone may need provider verification. Your audio sample is sent privately to the speech provider for cloning.</p>
+<form id="cloneForm">
+<label for="cloneName">Voice name</label><input id="cloneName" name="name" type="text" maxlength="60" placeholder="My own voice" required>
+<div class="row" style="margin-top:14px"><button id="recordBtn" class="secondary" type="button">Record sample</button><small id="recTimer">Not recording</small></div>
+<label for="sample">Or select your own voice recording</label><input name="sample" id="sample" type="file" accept="audio/mpeg,audio/mp4,audio/wav,audio/webm,audio/ogg,audio/aac,audio/flac,.mp3,.m4a,.wav,.webm,.ogg,.flac" required>
+<label style="font-weight:450"><input type="checkbox" id="ownVoice" required> This is <strong>my own adult voice</strong>. I consent to its AI cloning and understand that AI-generated speech must not be presented as a real recording of me.</label>
+<button id="createBtn" type="submit">Create my cloned voice</button>
+</form>
+</section>
+<section><h2>Live cloned-voice conversation</h2>
+<p class="small">This is a separate, experimental real-time calling mode using an ElevenLabs Agent. Your original GPT-Live call screen and voices stay unchanged. A session is limited to 60 seconds during initial testing and uses existing CallFocus credits.</p>
+<label for="liveVoice">Voice</label><select id="liveVoice"><option value="">Choose my voice</option></select>
+<label for="liveContext">Conversation context</label><textarea id="liveContext" maxlength="2400" placeholder="The conversational setting and topics. Never imitate a real person or misrepresent who is speaking."></textarea>
+<div class="row" style="margin-top:16px"><button id="startLive" type="button" disabled>Start live voice</button><button id="endLive" class="danger" type="button" disabled>End call</button><span id="liveClock" class="pill">00:00</span></div>
+<div style="margin-top:15px" class="meter"><i id="liveMeter"></i></div><p class="small" id="liveStatus">Waiting to start. Please allow microphone access when prompted.</p>
+<div id="liveTranscript" role="log" aria-live="polite">Call transcript appears here when provided by the agent.</div>
+</section>
+<section><h2>Cloned-voice notes</h2><p>Select one of your saved voices on the existing Voice Notes page. Your normal CallFocus note history and credit usage remain in place.</p><a class="btn" href="/voice-notes">Open Voice Notes</a></section>
+</main><script src="/voice-clone.js?v=16.15"></script></body></html>

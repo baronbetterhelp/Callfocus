@@ -512,6 +512,11 @@
             </div>
 
             <div class="voice-note-composer">
+              <div style="margin:0 0 16px;padding:14px;background:#eef7f2;border:1px solid #d2e8db;border-radius:14px">
+                <label for="cfVoiceNoteClone" style="display:block;font-weight:750;color:#176355;margin-bottom:8px">Custom cloned voice</label>
+                <select id="cfVoiceNoteClone" style="width:100%;padding:10px;border:1px solid #c4dccd;border-radius:10px;background:white;color:#173f36"><option value="">Use normal male / female voice</option></select>
+                <small id="cfVoiceNoteCloneHint" style="display:block;margin-top:7px;color:#5a796c">Only your own saved, verified voice may be selected. <a href="/voice-clone" style="color:#116c5d">Create or manage a cloned voice</a></small>
+              </div>
               <div class="voice-note-gender-row">
                 <span>Voice</span>
                 <div class="voice-note-gender-switch" role="group" aria-label="Voice gender">
@@ -962,6 +967,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=16.07-test"></script>
+  <script src="/callfocus.js?v=16.15-voice-clone"></script>
 </body>
 </html>

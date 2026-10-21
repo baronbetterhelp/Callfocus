@@ -2066,7 +2066,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       await refreshPublicConfig(); syncVoiceLabels();
       const res=await fetch('/api/voice-note',{
         method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('callfocus_server_session_v1')||''}`},
-        body:JSON.stringify({prompt,voiceGender:vnGender,voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,userId:account.id,maxSeconds:window.CallFocusCredits?.currentBalanceSeconds?.()||0})
+        body:JSON.stringify({prompt,voiceGender:vnGender,voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,voiceCloneId:document.getElementById("cfVoiceNoteClone")?.value||"",userId:account.id,maxSeconds:window.CallFocusCredits?.currentBalanceSeconds?.()||0})
       });
       if(!res.ok){
         let msg='Could not generate the voice note right now. Please try again.';
@@ -2884,7 +2884,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
           prompt,
           mode:voiceNoteMode,
           voiceGender:gender,
-          voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,
+          voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,voiceCloneId:document.getElementById("cfVoiceNoteClone")?.value||"",
           userId:account.id,
           maxSeconds:window.CallFocusCredits?.currentBalanceSeconds?.() || 0
         })
@@ -7996,4 +7996,64 @@ ${approvedPatterns}
     else if(token())api('/api/flutterwave/pending').then(r=>{if(r.pending){document.getElementById('flutterwaveRecoveryPanel')?.classList.remove('hidden');verify(r.reference,true);}}).catch(()=>{});
   };
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+})();
+
+/* V16.15 optional customer cloned-voice choice for existing voice notes. */
+(()=>{
+  const sel=document.getElementById('cfVoiceNoteClone');if(!sel)return;
+  const token=()=>{try{return localStorage.getItem('callfocus_server_session_v1')||''}catch{return''}};
+  let stamp='';
+  async function refresh(){
+    if(!token())return;
+    const now=Date.now();if(now-Number(stamp)<12000)return;stamp=String(now);
+    try{
+      const r=await fetch('/api/voice-clones',{headers:{Authorization:'Bearer '+token()},cache:'no-store'});
+      if(!r.ok)return;
+      const data=await r.json();const was=sel.value;
+      sel.replaceChildren();const d=document.createElement('option');d.value='';d.textContent='Use normal male / female voice';sel.append(d);
+      for(const v of (data.voices||[])){
+        if(v.verificationRequired)continue;
+        const opt=document.createElement('option');opt.value=v.id;opt.textContent=v.name+' · My cloned voice';sel.append(opt);
+      }
+      if([...sel.options].some(o=>o.value===was))sel.value=was;
+      const hint=document.getElementById('cfVoiceNoteCloneHint');
+      if(hint&&!data.enabled)hint.firstChild.textContent='Cloned voices are not enabled yet. ';
+    }catch{}
+  }
+  refresh();
+  sel.addEventListener('focus',refresh);
+  document.addEventListener('click',e=>{if(e.target?.closest?.('[data-mobile-route="voice-notes"], [data-account-route="voice-notes"]'))refresh()});
+})();
+
+/* V16.15 — explicitly selected cloned voice starts isolated live agent with saved call context.
+   No impact on the current GPT-Live path unless the customer selects a personal clone. */
+(()=>{
+ const sel=document.getElementById('newCallVoiceClone');if(!sel)return;
+ const token=()=>{try{return localStorage.getItem('callfocus_server_session_v1')||''}catch{return''}};
+ async function loadClones(){
+  if(!token())return;
+  try{
+   const res=await fetch('/api/voice-clones',{headers:{Authorization:'Bearer '+token()},cache:'no-store'});
+   if(!res.ok)return;const obj=await res.json();if(!obj.enabled||!obj.liveReady)return;
+   const prior=sel.value;
+   sel.replaceChildren();const empty=document.createElement('option');empty.value='';empty.textContent='Use default GPT-Live voice (recommended)';sel.append(empty);
+   for(const voice of obj.voices||[]){if(voice.verificationRequired)continue;
+     const o=document.createElement('option');o.value=voice.id;o.textContent=voice.name+' · ElevenLabs cloned live voice';sel.append(o);
+   }
+   if([...sel.options].some(o=>o.value===prior))sel.value=prior;
+  }catch{}
+ }
+ const oldStartCall=startCall;
+ startCall=async function(call){
+   const modal=document.getElementById('newCallModal');
+   const useClone=modal&&!modal.classList.contains('hidden')?sel.value:'';
+   if(!useClone)return oldStartCall(call);
+   try{
+     const context=String(buildInstructions(call)||'').slice(0,2300);
+     sessionStorage.setItem('callfocus_clone_call_prefill_v1',JSON.stringify({voiceId:useClone,context}));
+     location.href='/voice-clone?mode=live';
+   }catch{toast('Could not open cloned-voice call. Please retry.');}
+ };
+ document.addEventListener('click',e=>{if(e.target?.closest?.('#heroNewCallBtn, [data-caller-call]'))loadClones()});
+ loadClones();
 })();
