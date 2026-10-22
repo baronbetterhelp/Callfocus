@@ -30,7 +30,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/callfocus.css?v=16.07-test" />
-  <link rel="stylesheet" href="/voice-clone-integration.css?v=16.20-clone-caller-controls" />
 </head>
 <body data-cf-document-view="voice-notes">
   <div class="app-root home-page" id="pageRoot">
@@ -130,7 +129,6 @@
                   <button class="btn btn-ghost voice-note-launch" type="button" id="heroImageVideoBtn" onclick="location.href='/image-to-video'"><span class="voice-note-launch-icon" aria-hidden="true">✦</span><span>Image to Video</span><small>New</small></button>
                   <button class="btn btn-ghost voice-note-launch avatar-launch" id="heroAvatarBtn" data-route="avatar"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Live AI Avatar</span><small>New</small></button>
                 </div>
-                <button id="heroCloneVoiceBtn" type="button" hidden><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor"/><circle cx="12" cy="12" r="5" fill="currentColor"/></svg><span>Clone your voice</span></button>
               </div>
               <div class="hero-proof hero-enter hero-enter-4 hero-proof-spaced">
                 <div class="avatar-stack"><span>C</span><span>F</span><span>+</span></div>
@@ -1000,9 +998,6 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=16.20-clone-caller-controls"></script>
-  <script src="/voice-clone-integration.js?v=16.20-clone-caller-controls"></script>
-  <script src="/voice-clone-call-screen.js?v=16.20-clone-caller-controls"></script>
-  <script src="/voice-clone.js?v=16.20-clone-caller-controls"></script>
+  <script src="/callfocus.js?v=16.17-stable-test"></script>
 </body>
 </html>

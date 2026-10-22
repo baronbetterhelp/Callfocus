@@ -42,9 +42,6 @@
     "binding": "ASSETS",
     "run_worker_first": [
       "/api/*",
-      "/voice-clone",
-      "/voice-clone/",
-      "/voice-clone.html",
       "/manual-payment-review",
       "/manual-payment-review/",
       "/admin",

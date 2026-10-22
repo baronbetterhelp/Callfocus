@@ -2072,7 +2072,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       await refreshPublicConfig(); syncVoiceLabels();
       const res=await fetch('/api/voice-note',{
         method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('callfocus_server_session_v1')||''}`},
-        body:JSON.stringify({prompt,voiceGender:vnGender,voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,...(document.getElementById("cfVoiceNoteClone")?.value?{voiceCloneId:document.getElementById("cfVoiceNoteClone").value}:{}),userId:account.id,maxSeconds:window.CallFocusCredits?.currentBalanceSeconds?.()||0})
+        body:JSON.stringify({prompt,voiceGender:vnGender,voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,userId:account.id,maxSeconds:window.CallFocusCredits?.currentBalanceSeconds?.()||0})
       });
       if(!res.ok){
         let msg='Could not generate the voice note right now. Please try again.';
@@ -2891,7 +2891,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
           mode:voiceNoteMode,
           language:$('voiceNoteLanguage')?.value||'English',
           voiceGender:gender,
-          voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,...(document.getElementById("cfVoiceNoteClone")?.value?{voiceCloneId:document.getElementById("cfVoiceNoteClone").value}:{}),
+          voiceProfile:window.CallFocusAiVoice?.currentVoiceNoteProfile?.()||null,
           userId:account.id,
           maxSeconds:window.CallFocusCredits?.currentBalanceSeconds?.() || 0
         })
