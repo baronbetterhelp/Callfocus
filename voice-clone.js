@@ -1,4 +1,4 @@
-/* CallFocus V16.21: isolated cloned-voice engine. Normal calling is unchanged. */
+/* CallFocus V16.19: isolated cloned-voice engine. Normal calling is unchanged. */
 (()=>{'use strict';
 const portal=document.getElementById('cfClonePortal');
 const $=id=>portal?portal.querySelector('[data-clone-id="'+id+'"]'):document.getElementById(id);
@@ -110,7 +110,7 @@ function openMic(session){
  const src=ctx.createMediaStreamSource(stream),proc=ctx.createScriptProcessor(2048,1,1),mute=ctx.createGain();mute.gain.value=0;
  src.connect(proc);proc.connect(mute);mute.connect(ctx.destination);
  proc.onaudioprocess=e=>{
-  if(session.ws?.readyState!==WebSocket.OPEN||session.ending||(!session.interruptions&&session.nextPlay>ctx.currentTime))return;
+  if(session.ws?.readyState!==WebSocket.OPEN||session.ending)return;
   const chunk=encodePcm(e.inputBuffer.getChannelData(0),ctx.sampleRate);
   try{session.ws.send(JSON.stringify({user_audio_chunk:chunk}))}catch{}
  };
@@ -160,6 +160,7 @@ async function startConnectedSession(session,metadata){
   endLive('This voice connection needs an audio-setting adjustment. Please contact support.');return;
  }
  session.outputRate=rate;session.busy=true;
+ if(session.context&&!session.contextSent){session.contextSent=true;session.ws.send(JSON.stringify({type:'contextual_update',text:session.context}));}
  try{
   const result=await api('/api/voice-clones/live/meter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:session.id,start:true})});
   if(session.ending)return;
@@ -167,7 +168,6 @@ async function startConnectedSession(session,metadata){
   session.ready=true;clearTimeout(session.connectTimeout);
   openMic(session);$('liveStatus').textContent='Connected';$('endLive').disabled=false;
   for(const payload of session.pendingAudio)outputAudio(session,payload);session.pendingAudio=[];
-  if(session.speakFirst&&!session.openingSent){session.openingSent=true;session.ws.send(JSON.stringify({type:'user_message',text:session.openingCue}));}
   emit('started',{sessionId:session.id,voiceId:session.voiceId});
   session.heartbeat=setInterval(()=>meter(session),5000);
   session.timeout=setTimeout(()=>endLive('Test call time limit reached.'),session.maxSeconds*1000);
@@ -192,23 +192,24 @@ async function startLiveCall(payload={}){
   const Ctx=window.AudioContext||window.webkitAudioContext;ctx=new Ctx();await ctx.resume();
   if(cancelStart)throw new Error('Call cancelled.');
   const info=await api('/api/voice-clones/live/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({voiceId,context:$('liveContext').value,callLanguage:$('cloneLanguage')?.value||'English',...payload})});
-  if(cancelStart||!info.instructions||!info.languageCode){
+  if(cancelStart||!info.sessionId||!info.signedUrl){
    await api('/api/voice-clones/live/meter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:info.sessionId,end:true})}).catch(()=>{});
    throw new Error(cancelStart?'Call cancelled.':'Live voice is temporarily unavailable. Please try again or contact support.');
   }
-  session={id:info.sessionId,voiceId,maxSeconds:info.maxSeconds,ws:new WebSocket(info.signedUrl),stream,audioCtx:ctx,outputRate:16000,nextPlay:ctx.currentTime,audioSources:new Set(),pendingAudio:[],heartbeat:null,timeout:null,connectTimeout:null,ending:false,busy:false,ready:false,initializing:false,interruptions:info.interruptions!==false,speakFirst:!!info.speakFirst,openingCue:info.openingCue,transcript:'',elapsed:0,creditsUsed:0};
+  session={id:info.sessionId,voiceId,maxSeconds:info.maxSeconds,ws:new WebSocket(info.signedUrl),stream,audioCtx:ctx,outputRate:16000,nextPlay:ctx.currentTime,audioSources:new Set(),pendingAudio:[],heartbeat:null,timeout:null,connectTimeout:null,ending:false,busy:false,ready:false,initializing:false,context:info.context||'',transcript:'',elapsed:0,creditsUsed:0};
   session.finishPromise=new Promise(resolve=>{session.resolveEnd=resolve;});live=session;
   session.connectTimeout=setTimeout(()=>endLive('The voice connection timed out. Please try again.'),20000);
   $('endLive').disabled=false;$('liveClock').textContent='00:00';$('liveMeter').style.width='0%';$('liveTranscript').textContent='';
   session.ws.addEventListener('open',()=>{
    if(session.ending)return;
-   session.ws.send(JSON.stringify({type:'conversation_initiation_client_data',conversation_config_override:{agent:{prompt:{prompt:info.instructions},first_message:'',language:info.languageCode},tts:{voice_id:voiceId}}}));
+   const override={tts:{voice_id:voiceId}};if(info.languageCode)override.agent={language:info.languageCode};
+   session.ws.send(JSON.stringify({type:'conversation_initiation_client_data',conversation_config_override:override,dynamic_variables:{call_context:session.context}}));
   });
   session.ws.addEventListener('message',ev=>{
    if(session.ending)return;let p;try{p=JSON.parse(ev.data)}catch{return}
    if(p.type==='conversation_initiation_metadata'){startConnectedSession(session,p.conversation_initiation_metadata_event);return;}
    if(p.type==='audio'){if(session.ready)outputAudio(session,p);else if(session.pendingAudio.length<12)session.pendingAudio.push(p);}
-   if(p.type==='interruption'&&session.interruptions)interruptPlayback(session);
+   if(p.type==='interruption')interruptPlayback(session);
    if(p.type==='user_transcript'){const t=String(p.user_transcription_event?.user_transcript||'');session.transcript+=`\nYou: ${t}`;$('liveTranscript').textContent=session.transcript;}
    if(p.type==='agent_response'){const t=String(p.agent_response_event?.agent_response||'');session.transcript+=`\nVoice: ${t}`;$('liveTranscript').textContent=session.transcript;}
    if(p.type==='ping'){try{session.ws.send(JSON.stringify({type:'pong',event_id:p.ping_event?.event_id}))}catch{}}

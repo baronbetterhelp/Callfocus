@@ -1,4 +1,4 @@
-/* CallFocus V16.21: opt-in clone UI. No normal call functions are replaced. */
+/* CallFocus V16.19: opt-in clone UI. No normal call functions are replaced. */
 (()=>{'use strict';
 const byId=id=>document.getElementById(id);
 if(!byId('newCallForm')||byId('cfClonePortal'))return;
@@ -89,7 +89,8 @@ function ensureUI(){
   if(!root.isConnected)repeatButton.insertAdjacentElement('beforebegin',root);
   updatePanel(root,repeatChoices.get(id));
  }
- const note=byId('cfVoiceNoteCloneSection'),row=document.querySelector('.voice-note-gender-row');
+ let note=byId('cfVoiceNoteCloneSection');const row=document.querySelector('.voice-note-gender-row');
+ if(!note&&row){note=document.createElement('section');note.id='cfVoiceNoteCloneSection';note.innerHTML='<label for="cfVoiceNoteClone">My saved cloned voice</label><select id="cfVoiceNoteClone"><option value="">Use normal male / female voice</option></select>';row.insertAdjacentElement('afterend',note);}
  if(note&&row){
   if(!note.dataset.cloneIntegrated){
    note.dataset.cloneIntegrated='1';note.classList.add('cf-clone-picker');note.dataset.cloneScope='note';
@@ -121,6 +122,10 @@ function openCreate(scope='new',threadId=''){
  if(studio()?.getState().active||studio()?.getState().starting)return alertUser('End your current call before creating a voice.');
  createScope=scope;createThread=threadId;setDialog('create');
 }
+function callFacts(call){
+ const t=thread(call.threadId);
+ return JSON.stringify({title:call.title,personBeingCalled:call.callerName,aboutCallerA:call.aboutSelf,aboutCallerB:call.aboutCaller,relationship:call.dynamicsMode,relationshipDetails:call.rawDynamics,topic:call.topic,callerA:call.callerA,callerB:call.callerB,callLanguage:call.callLanguage,previousCalls:(t?.calls||[]).slice(-8).map(c=>({topic:c.topic,createdAt:c.createdAt,spokenOutput:c.assistantTranscript||''}))}).slice(0,22000);
+}
 function normalCallActive(){return typeof live!=='undefined'&&!!live?.current&&!byId('callScreen')?.classList.contains('hidden');}
 async function beginClonedCall(prepare,selectedId){
  if(startingCall||studio()?.getState().active)return;
@@ -136,7 +141,7 @@ async function beginClonedCall(prepare,selectedId){
   activeCall={call,ownerId:typeof account!=='undefined'?account?.id:'',saved:false};
   byId('cfCloneLiveName').textContent=[call.callerName,call.voiceCloneName].filter(Boolean).join(' · ');
   setDialog('live');
-  const payload={voiceId:selectedId,contextInstructions:buildInstructions(call),callLanguage:call.callLanguage||'English',openingMode:call.openingMode||'auto',openingCustom:call.openingCustom||''};
+  const payload={voiceId:selectedId,context:callFacts(call),callLanguage:call.callLanguage||'English'};
   const started=await studio().startCall(payload);
   if(!started)activeCall=null;
  }catch{activeCall=null;alertUser('Could not start this call. Please try again.');}
