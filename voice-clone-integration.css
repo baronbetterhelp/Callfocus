@@ -28,3 +28,8 @@
 #cfClonePortal .cf-clone-transcript{max-height:230px;min-height:80px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#f0f6f1;border-radius:13px;padding:13px;font-size:14px;line-height:1.6;color:#476557}
 #cfClonePortal :focus-visible,.cf-clone-picker :focus-visible,#heroCloneVoiceBtn:focus-visible{outline:3px solid #8fc9b7;outline-offset:3px}
 @media(max-width:560px){.cf-clone-picker{padding:17px}.cf-clone-picker-head{display:block}.cf-clone-picker-head .cf-clone-secondary{width:100%;margin:10px 0 0}#cfClonePortal .cf-clone-overlay{padding:12px}#cfClonePortal .cf-clone-dialog{padding:20px;max-height:calc(100dvh - 24px);border-radius:23px}#cfClonePortal h2{font-size:23px}}
+
+/* Reuse the existing caller layout for cloned sessions. */
+#callScreen[data-clone-call] #liveTranscript.error-visible{display:block}
+#callScreen[data-clone-call] .call-control:disabled{opacity:.5;cursor:wait}
+#callScreen[data-clone-call] #cfLiveTranslationList{overflow-wrap:anywhere}

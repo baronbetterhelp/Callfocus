@@ -6768,7 +6768,7 @@ async function handleAdminD1WalletPreflight(request,env) {
 // V16.19 — Isolated personal voice pilot restored on the V16.18 credit-integrity base.
 // Feature is gated OFF unless explicitly enabled by the owner after an approved provider setup.
 const CF_CLONE_PREFIX = 'voice_clone:v1:';
-const CF_CLONE_LIVE_TTL = 60 * 60;
+const CF_CLONE_LIVE_TTL = 60 * 60; // Renewed while a call remains active; not a call-duration cap.
 function cfCloneReady(env){return String(env.CALLFOCUS_VOICE_CLONE_ENABLED||'').trim().toLowerCase()==='true' && !!String(env.ELEVENLABS_API_KEY||'').trim();}
 function cfCloneLiveReady(env){return cfCloneReady(env) && /^agent_[a-zA-Z0-9_-]{8,}$/.test(String(env.ELEVENLABS_AGENT_ID||'').trim());}
 function cfCloneAllowed(env,user){
@@ -6786,12 +6786,23 @@ async function cfCloneProvider(env,path,opt={}){
   let r;try{r=await fetch(`https://api.elevenlabs.io/v1${path}`,{...opt,headers:h,signal:AbortSignal.timeout(30000)});}catch{throw Object.assign(new Error('Voice provider could not be reached.'),{status:502});}
   return r;
 }
+// Short per-customer burst protection. There is no hourly call allowance.
+const CF_CLONE_BURSTS = new Map();
+function cfCloneBurstLimit(user,bucket,limit=12,seconds=60){
+ const now=Date.now(),windowId=Math.floor(now/(seconds*1000));
+ if(CF_CLONE_BURSTS.size>2000)for(const [key,row] of CF_CLONE_BURSTS)if(row.expiresAt<=now)CF_CLONE_BURSTS.delete(key);
+ const key=`${bucket}:${String(user.id).slice(0,160)}`,row=CF_CLONE_BURSTS.get(key);
+ const current=row?.windowId===windowId?row.count:0;
+ const retryAfter=Math.max(1,Math.ceil(((windowId+1)*seconds*1000-now)/1000));
+ if(current>=limit)return json({error:`Please wait ${retryAfter} seconds before starting another connection.`,code:'clone_connection_burst',retryAfter},429,{'Retry-After':String(retryAfter),'Cache-Control':'no-store'});
+ CF_CLONE_BURSTS.set(key,{windowId,count:current+1,expiresAt:(windowId+1)*seconds*1000});return null;
+}
 async function cfCloneUserRoute(request,env){
   if(!env.CALLFOCUS_CONFIG)return json({error:'CallFocus account storage unavailable.'},503);
   const auth=await authenticatedCustomer(request,env);
   if(!auth)return json({error:'Sign in on CallFocus first.'},401);
   const user=auth.user;
-  if(request.method==='GET')return json({ok:true,enabled:cfCloneAllowed(env,user),liveReady:cfCloneLiveReady(env)&&cfCloneAllowed(env,user),voices:await cfCloneGetVoices(env,user.id),maxVoices:3});
+  if(request.method==='GET'){const limited=cfCloneBurstLimit(user,'list',120);if(limited)return limited;return json({ok:true,enabled:cfCloneAllowed(env,user),liveReady:cfCloneLiveReady(env)&&cfCloneAllowed(env,user),voices:await cfCloneGetVoices(env,user.id),maxVoices:3});}
   if(request.method==='POST'){
     if(!cfCloneAllowed(env,user))return json({error:'Voice cloning is not enabled for your account yet.'},503);
     const existing=await cfCloneGetVoices(env,user.id);
@@ -6827,7 +6838,7 @@ async function cfCloneUserRoute(request,env){
   }
   return json({error:'Method not allowed.'},405);
 }
-const CF_CLONE_BUILD = '16.19-functional-cloning';
+const CF_CLONE_BUILD = '16.20-clone-caller-controls';
 function cfCloneLiveDiagnosticText(value,apiKey,maxLength=300){
   if(typeof value!=='string'&&typeof value!=='number')return '';
   let text=String(value);
@@ -6884,7 +6895,7 @@ function cfCloneLanguageCode(language){
   return codes[normalizeCallLanguage(language)];
 }
 
-// This is an isolated, metered 60-second live-call pilot. Default GPT-Live calling remains untouched.
+// Cloned calls have no CallFocus duration cap. Existing wallet charging remains authoritative.
 async function cfCloneStartLive(request,env){
   if(request.method!=='POST')return json({error:'Method not allowed.'},405);
   const auth=await authenticatedCustomer(request,env);
@@ -6898,9 +6909,9 @@ async function cfCloneStartLive(request,env){
   if(config.serverOnline===false)return json({error:config.serverMessage||'Calls are unavailable right now. Please try again soon.'},503);
 
   const unlimited=(config.unlimitedCreditEmails||[]).map(normalizeCustomerEmail).includes(normalizeCustomerEmail(auth.user.email));
-  const available=unlimited?60:Math.floor(Number(wallet.balanceSeconds)||0);
-  if(available<15)return json({error:'At least 15 seconds of credit are required for a cloned live call.'},402);
-  const maxSeconds=Math.min(60,available); // Pilot hard cap, also enforce in provider Agent max duration.
+  const available=Math.floor(Number(wallet.balanceSeconds)||0);
+  if(!unlimited&&available<15)return json({error:'At least 15 seconds of credit are required for a cloned live call.'},402);
+  const limited=cfCloneBurstLimit(auth.user,'start');if(limited)return limited;
   const signing=await cfCloneSignedUrl(env);
   if(!signing.ok){
     cfCloneLogSigningFailure(signing);
@@ -6908,9 +6919,9 @@ async function cfCloneStartLive(request,env){
   }
   const signed=signing.signedUrl;
   const id='clone_'+crypto.randomUUID().replace(/-/g,'');
-  const record={id,userId:auth.user.id,createdAt:Date.now(),startedAt:null,maxSeconds,voiceId:voice.id,closed:false};
+  const record={id,userId:auth.user.id,createdAt:Date.now(),startedAt:null,voiceId:voice.id,closed:false};
   await env.CALLFOCUS_CONFIG.put(cfCloneSessionKey(id),JSON.stringify(record),{expirationTtl:CF_CLONE_LIVE_TTL});
-  return json({ok:true,signedUrl:signed,sessionId:id,maxSeconds,voiceId:voice.id,context:String(body.context||'').trim().slice(0,22000),languageCode:body.callLanguage?cfCloneLanguageCode(body.callLanguage):''});
+  return json({ok:true,signedUrl:signed,sessionId:id,maxSeconds:null,remainingSeconds:unlimited?null:available,unlimited,voiceId:voice.id,context:String(body.context||'').trim().slice(0,22000),languageCode:body.callLanguage?cfCloneLanguageCode(body.callLanguage):''});
 }
 async function cfCloneMeterLive(request,env){
   if(request.method!=='POST')return json({error:'Method not allowed.'},405);
@@ -6920,23 +6931,28 @@ async function cfCloneMeterLive(request,env){
   const id=String(b.sessionId||'');if(!/^clone_[a-f0-9]{32}$/.test(id))return json({error:'Invalid session.'},400);
   const key=cfCloneSessionKey(id),s=await env.CALLFOCUS_CONFIG.get(key,{type:'json'});
   if(!s||s.userId!==auth.user.id)return json({error:'Session expired or unavailable.'},404);
-  if(s.closed)return json({ok:true,closed:true});
+  if(s.closed)return json({ok:true,closed:true,elapsed:s.elapsed||0,chargedSeconds:s.chargedSeconds||0,creditsUsed:s.creditsUsed||0,maxSeconds:null});
   if(b.start===true&&!s.startedAt){
-    s.startedAt=Date.now();
+    s.startedAt=Date.now();s.refreshedAt=Date.now();
     await env.CALLFOCUS_CONFIG.put(key,JSON.stringify(s),{expirationTtl:CF_CLONE_LIVE_TTL});
-    return json({ok:true,elapsed:0,chargedSeconds:0,creditsUsed:0,closed:false,maxSeconds:s.maxSeconds});
+    return json({ok:true,elapsed:0,chargedSeconds:0,creditsUsed:0,closed:false,maxSeconds:null});
   }
-  // Failed or cancelled handshakes never enter the existing wallet-charge function.
   if(!s.startedAt){
-    if(b.end){s.closed=true;s.closedAt=Date.now();await env.CALLFOCUS_CONFIG.put(key,JSON.stringify(s),{expirationTtl:3600});}
-    return json({ok:true,elapsed:0,chargedSeconds:0,creditsUsed:0,closed:!!b.end,maxSeconds:s.maxSeconds});
+    if(b.end){s.closed=true;s.closedAt=Date.now();await env.CALLFOCUS_CONFIG.put(key,JSON.stringify(s),{expirationTtl:CF_CLONE_LIVE_TTL});}
+    return json({ok:true,elapsed:0,chargedSeconds:0,creditsUsed:0,closed:!!b.end,maxSeconds:null});
   }
-  const elapsed=Math.min(s.maxSeconds,Math.max(0,Math.floor((Date.now()-s.startedAt)/1000)));
+  const elapsed=Math.max(0,Math.floor((Date.now()-s.startedAt)/1000));
   const result=await applyLiveCallWalletCharge(env,auth,{id,started:true,durationSeconds:elapsed,createdAt:new Date(s.startedAt).toISOString()});
-  const exhausted=result.creditExhausted===true || elapsed>=s.maxSeconds;
+  const remainingSeconds=Math.max(0,Math.floor(Number(result.wallet?.balanceSeconds)||0));
+  const exhausted=result.creditExhausted===true||(!result.unlimited&&remainingSeconds===0);
   const closed=Boolean(b.end)||exhausted;
-  if(closed){s.closed=true;s.closedAt=Date.now();await env.CALLFOCUS_CONFIG.put(key,JSON.stringify(s),{expirationTtl:3600});}
-  return json({ok:true,elapsed,chargedSeconds:result.chargedSeconds,creditsUsed:Math.round((result.chargedSeconds||0)/CALLFOCUS_SECONDS_PER_CREDIT*10)/10,closed,creditExhausted:result.creditExhausted===true,maxSeconds:s.maxSeconds});
+  const creditsUsed=Math.round((result.chargedSeconds||0)/CALLFOCUS_SECONDS_PER_CREDIT*10)/10;
+  if(closed||Date.now()-Number(s.refreshedAt||s.startedAt)>=30000){
+    Object.assign(s,{elapsed,chargedSeconds:result.chargedSeconds,creditsUsed,refreshedAt:Date.now()});
+    if(closed){s.closed=true;s.closedAt=Date.now();}
+    await env.CALLFOCUS_CONFIG.put(key,JSON.stringify(s),{expirationTtl:CF_CLONE_LIVE_TTL});
+  }
+  return json({ok:true,elapsed,chargedSeconds:result.chargedSeconds,creditsUsed,closed,creditExhausted:exhausted,maxSeconds:null,remainingSeconds:result.unlimited?null:remainingSeconds,unlimited:result.unlimited,wallet:result.wallet});
 }
 
 export default {
@@ -6946,8 +6962,8 @@ export default {
     const maintenance = await maybeMaintenanceResponse(request, env, url);
     if (maintenance) return maintenance;
     if (url.pathname === '/api/admin/voice-clones/diagnostics') return cfCloneAdminDiagnostics(request,env);
-    if (url.pathname === '/api/voice-clones') { const limited=await callFocusRateLimit(request,env,request.method==='POST'?'voice-clones-create':request.method==='DELETE'?'voice-clones-delete':'voice-clones-list',request.method==='POST'?5:60,3600);if(limited)return limited;return safeCustomerRoute('voice-clones',()=>cfCloneUserRoute(request,env)); }
-    if (url.pathname === '/api/voice-clones/live/start') { const limited=await callFocusRateLimit(request,env,'voice-clone-live-start',8,3600);if(limited)return limited;return safeCustomerRoute('voice-clone-live-start',()=>cfCloneStartLive(request,env)); }
+    if (url.pathname === '/api/voice-clones') { if(request.method!=='GET'){const limited=await callFocusRateLimit(request,env,request.method==='POST'?'voice-clones-create':'voice-clones-delete',request.method==='POST'?5:60,3600);if(limited)return limited;}return safeCustomerRoute('voice-clones',()=>cfCloneUserRoute(request,env)); }
+    if (url.pathname === '/api/voice-clones/live/start') return safeCustomerRoute('voice-clone-live-start',()=>cfCloneStartLive(request,env));
     if (url.pathname === '/api/voice-clones/live/meter') return safeCustomerRoute('voice-clone-live-meter',()=>cfCloneMeterLive(request,env));
     if (url.pathname === '/api/auth/health' && request.method === 'GET') {
       return json({ ok: true, storageConnected: !!env.CALLFOCUS_CONFIG, passwordHashVersion: 3, passwordIterations: CUSTOMER_PASSWORD_ITERATIONS });
@@ -7003,7 +7019,7 @@ export default {
     if (url.pathname === '/api/image-to-video/link' && request.method === 'GET') return safeCustomerRoute('image-video-link',()=>cfVideoFileLink(request,env));
     if (url.pathname.startsWith('/api/image-to-video/file/') && request.method === 'GET') return safeCustomerRoute('image-video-file',()=>cfVideoFile(request,env,decodeURIComponent(url.pathname.slice('/api/image-to-video/file/'.length))));
     if (url.pathname === '/api/admin/image-video') return cfAdminVideo(request,env);
-    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.19-functional-cloning' }, 200, { 'Cache-Control': 'no-store' });
+    if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.20-clone-caller-controls' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);

@@ -1,4 +1,4 @@
-/* CallFocus V16.19: opt-in clone UI. No normal call functions are replaced. */
+/* CallFocus V16.20: opt-in clone UI. No normal call functions are replaced. */
 (()=>{'use strict';
 const byId=id=>document.getElementById(id);
 if(!byId('newCallForm')||byId('cfClonePortal'))return;
@@ -22,18 +22,9 @@ portal.innerHTML=`
    <details class="cf-clone-saved"><summary>My saved voices <span data-clone-id="voiceLimit">0 / 3</span></summary><div data-clone-id="voices"></div></details>
   </section>
  </div>
- <div class="cf-clone-overlay" data-clone-dialog="live" hidden>
-  <section class="cf-clone-dialog cf-clone-live" role="dialog" aria-modal="true" aria-labelledby="cfCloneLiveTitle" tabindex="-1">
-   <div class="cf-clone-head"><div><small>LIVE CONVERSATION</small><h2 id="cfCloneLiveTitle">Your live call</h2><p id="cfCloneLiveName"></p></div><button type="button" class="cf-clone-close" data-clone-close aria-label="End and close call">×</button></div>
-   <p class="cf-clone-small">${notice}</p>
-   <div hidden><select data-clone-id="liveVoice"></select><textarea data-clone-id="liveContext"></textarea><button type="button" data-clone-id="startLive">Start live voice</button></div>
-   <div class="cf-clone-live-clock" data-clone-id="liveClock">00:00</div>
-   <div class="cf-clone-meter"><i data-clone-id="liveMeter"></i></div>
-   <p data-clone-id="liveStatus" class="cf-clone-status" role="status">Preparing your call…</p>
-   <div data-clone-id="liveTranscript" class="cf-clone-transcript" role="log" aria-live="polite"></div>
-   <button type="button" data-clone-id="endLive" class="cf-clone-end" disabled>End call</button>
-   <p class="cf-clone-small">Cloned-voice test calls are limited to 60 seconds and use your existing CallFocus credits.</p>
-  </section>
+ <div data-clone-engine hidden>
+  <select data-clone-id="liveVoice"></select><textarea data-clone-id="liveContext"></textarea><button type="button" data-clone-id="startLive">Start live voice</button>
+  <span data-clone-id="liveClock">00:00</span><i data-clone-id="liveMeter"></i><p data-clone-id="liveStatus">Preparing call…</p><div data-clone-id="liveTranscript"></div><button type="button" data-clone-id="endLive" disabled>End call</button>
  </div>`;
 document.body.append(portal);
 let access={enabled:false,liveReady:false,voices:[]},newVoice='',createScope='new',createThread='',activeCall=null,startingCall=false;
@@ -51,8 +42,7 @@ function setDialog(name){
  portal.querySelector(`[data-clone-dialog="${name}"] .cf-clone-dialog`).focus();
 }
 async function closeDialog(){
- if(openDialog==='live'){studio()?.endCall('Call ended.');}
- else studio()?.stopRecording();
+ studio()?.stopRecording();
  for(const el of portal.querySelectorAll('[data-clone-dialog]'))el.hidden=true;
  openDialog=null;document.body.style.overflow=previousOverflow;returnFocus?.focus?.();
 }
@@ -126,7 +116,7 @@ function callFacts(call){
  const t=thread(call.threadId);
  return JSON.stringify({title:call.title,personBeingCalled:call.callerName,aboutCallerA:call.aboutSelf,aboutCallerB:call.aboutCaller,relationship:call.dynamicsMode,relationshipDetails:call.rawDynamics,topic:call.topic,callerA:call.callerA,callerB:call.callerB,callLanguage:call.callLanguage,previousCalls:(t?.calls||[]).slice(-8).map(c=>({topic:c.topic,createdAt:c.createdAt,spokenOutput:c.assistantTranscript||''}))}).slice(0,22000);
 }
-function normalCallActive(){return typeof live!=='undefined'&&!!live?.current&&!byId('callScreen')?.classList.contains('hidden');}
+function normalCallActive(){return typeof live!=='undefined'&&!!live?.current&&(!!live.started||!!live.connected||!byId('callScreen')?.classList.contains('hidden'));}
 async function beginClonedCall(prepare,selectedId){
  if(startingCall||studio()?.getState().active)return;
  if(normalCallActive())return alertUser('End your current call before starting another.');
@@ -139,24 +129,26 @@ async function beginClonedCall(prepare,selectedId){
   call.voiceProfile=null;call.voiceProfileId='';
   const t=thread(call.threadId);if(t){t.voiceCloneId=selectedId;t.voiceCloneName=call.voiceCloneName;saveData();}
   activeCall={call,ownerId:typeof account!=='undefined'?account?.id:'',saved:false};
-  byId('cfCloneLiveName').textContent=[call.callerName,call.voiceCloneName].filter(Boolean).join(' · ');
-  setDialog('live');
-  const payload={voiceId:selectedId,context:callFacts(call),callLanguage:call.callLanguage||'English'};
+  call.cloneContext=callFacts(call);call.cloneOwnerId=typeof account!=='undefined'?account?.id:'';
+  window.CallFocusCloneCaller.show(call);
+  const payload={voiceId:selectedId,context:call.cloneContext,callLanguage:call.callLanguage||'English'};
   const started=await studio().startCall(payload);
-  if(!started)activeCall=null;
+  if(!started){activeCall=null;window.CallFocusCloneCaller.failed(studio().getState().status);}
  }catch{activeCall=null;alertUser('Could not start this call. Please try again.');}
  finally{startingCall=false;}
 }
 document.addEventListener('reset',e=>{if(e.target===byId('newCallForm')){newVoice='';scheduleUI();}},true);
 // Capture only explicit clone selections. Every other submit/click reaches the existing handlers.
 document.addEventListener('submit',e=>{
- if(e.target!==byId('newCallForm')||!newVoice||!access.enabled)return;
+ if(e.target!==byId('newCallForm'))return;
+ if(startingCall||studio()?.getState().active||studio()?.getState().starting){e.preventDefault();e.stopImmediatePropagation();return alertUser('End your current call before starting another.');}
+ if(!newVoice||!access.enabled)return;
  e.preventDefault();e.stopImmediatePropagation();beginClonedCall(()=>prepareNewCall(),newVoice);
 },true);
 document.addEventListener('click',e=>{
  const target=e.target.closest?.('button,a');if(!target)return;
  const repeat=target.closest('[data-repeat-call]');
- if(repeat){const id=repeat.dataset.repeatCall;const selected=repeatChoices.has(id)?repeatChoices.get(id):thread(id)?.voiceCloneId;
+ if(repeat){if(startingCall||studio()?.getState().active||studio()?.getState().starting){e.preventDefault();e.stopImmediatePropagation();return alertUser('End your current call before starting another.');}const id=repeat.dataset.repeatCall;const selected=repeatChoices.has(id)?repeatChoices.get(id):thread(id)?.voiceCloneId;
   if(selected&&access.enabled){e.preventDefault();e.stopImmediatePropagation();beginClonedCall(()=>prepareRepeatCall(id),selected);}return;
  }
  if(['heroNewCallBtn','customerNewCallBtn','bottomNewCallBtn'].includes(target.id)){newVoice='';scheduleUI();}
@@ -197,6 +189,8 @@ window.addEventListener('callfocus:clone-saved',async e=>{
  else selectClone(scope,v.id,id);
  alertUser('Voice saved. You can select it again next time.');
 });
+window.addEventListener('callfocus:clone-retry',e=>{activeCall={call:e.detail.call,ownerId:typeof account!=='undefined'?account?.id:'',saved:false};});
+window.addEventListener('callfocus:clone-start-failed',()=>{activeCall=null;});
 window.addEventListener('callfocus:clone-ended',e=>{
  const report=e.detail,current=activeCall;activeCall=null;
  if(current&&!current.saved&&report.connected&&typeof account!=='undefined'&&account?.id===current.ownerId){
