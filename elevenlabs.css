@@ -79,3 +79,12 @@
 .cf-el-modal.cf-el-full .cf-el-intro{margin-bottom:12px}
 .cf-el-modal.cf-el-full .cf-el-capacity{margin-bottom:10px}
 .cf-el-modal.cf-el-full .cf-el-saved{margin-top:10px}
+
+/* V16.33 — local audio conversion, scoped to the cloning upload field. */
+.cf-el-convert-tools:not([hidden]){display:flex;flex-wrap:wrap;align-items:center;column-gap:9px;row-gap:5px;margin:7px 0 0;color:#4a7061;font-size:11px;line-height:1.35}
+.cf-el-convert-btn{border:1px solid #91c4af;border-radius:10px;background:#e5f5eb;color:#136b53;font-weight:800;font-size:12px;padding:8px 12px;min-height:34px;cursor:pointer;white-space:nowrap}
+.cf-el-convert-btn:disabled{opacity:.55;cursor:wait}
+.cf-el-convert-hint{flex:1;min-width:100px;overflow-wrap:anywhere}
+#cf-el-convert-progress:not([hidden]){display:block;flex-basis:100%;width:100%;height:5px;accent-color:#128266;margin-top:2px}
+.cf-el-modal:has(.cf-el-convert-tools:not([hidden])){overflow-y:auto;overscroll-behavior:contain}
+@media(max-height:730px){.cf-el-convert-btn{padding:5px 10px;min-height:29px}.cf-el-convert-tools:not([hidden]){margin-top:5px}}
