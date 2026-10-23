@@ -83,6 +83,51 @@ export async function affiliateCustomerApi(request,env,auth,notify){
  const user=await auth(request,env);if(!user?.user?.id)return bad('Please sign in first.',401);
  const id=user.user.id,path=new URL(request.url).pathname;
  if(path==='/api/affiliate/status' && request.method==='GET')return json(await publicStatus(db,id));
+ if(path==='/api/affiliate/history' && request.method==='GET'){
+  const partner=await memberFor(db,id);
+  if(partner?.status!=='approved')return bad('Partner approval is required to view earnings history.',403);
+  const params=new URL(request.url).searchParams;
+  const type=safe(params.get('type'));
+  const rawOffset=Number(params.get('offset')||0);
+  if(!Number.isSafeInteger(rawOffset)||rawOffset<0||rawOffset>1000000)return bad('Invalid history page.');
+  const limit=25;
+  let query,results;
+  if(type==='referrals'){
+   query=`SELECT s.invited_user_id,s.created_at,
+      COUNT(c.id) AS deposits_count,
+      COALESCE(SUM(c.gross_kobo),0) AS total_deposits_kobo,
+      COALESCE(SUM(c.commission_kobo),0) AS commission_kobo,
+      MAX(c.created_at) AS last_deposit_at
+     FROM affiliate_signups s
+     LEFT JOIN affiliate_commissions c ON c.affiliate_id=s.affiliate_id
+       AND c.invited_user_id=s.invited_user_id AND c.status='earned'
+     WHERE s.affiliate_id=?
+     GROUP BY s.invited_user_id,s.created_at
+     ORDER BY s.created_at DESC,s.invited_user_id DESC LIMIT ? OFFSET ?`;
+   results=await db.prepare(query).bind(id,limit+1,rawOffset).all();
+  }else if(type==='withdrawals'){
+   query=`SELECT id,amount_kobo,status,requested_at,updated_at,transfer_reference,decision_note
+     FROM affiliate_withdrawals WHERE affiliate_id=?
+     ORDER BY requested_at DESC,id DESC LIMIT ? OFFSET ?`;
+   results=await db.prepare(query).bind(id,limit+1,rawOffset).all();
+  }else if(type==='transactions'){
+   query=`SELECT * FROM (
+      SELECT 'commission' AS kind,id,created_at AS occurred_at,
+       CASE WHEN status='earned' THEN commission_kobo ELSE 0 END AS amount_kobo,
+       gross_kobo,provider,status,invited_user_id AS related_user
+      FROM affiliate_commissions WHERE affiliate_id=?
+      UNION ALL
+      SELECT 'withdrawal' AS kind,id,requested_at AS occurred_at,
+       CASE WHEN status IN ('requested','approved','paid') THEN -amount_kobo ELSE 0 END AS amount_kobo,
+       0 AS gross_kobo,'manual transfer' AS provider,status,'' AS related_user
+      FROM affiliate_withdrawals WHERE affiliate_id=?
+     ) ORDER BY occurred_at DESC,id DESC LIMIT ? OFFSET ?`;
+   results=await db.prepare(query).bind(id,id,limit+1,rawOffset).all();
+  }else return bad('Unknown history view.');
+  const rows=results.results||[];
+  return json({ok:true,type,items:rows.slice(0,limit),nextOffset:rawOffset+Math.min(rows.length,limit),hasMore:rows.length>limit});
+ }
+
  if(path==='/api/affiliate/apply' && request.method==='POST'){
   const setup=await config(db);if(!setup?.enabled)return bad('Applications are currently closed.',403);
   const previous=await memberFor(db,id);if(previous)return bad(previous.status==='pending'?'Your application is already awaiting approval.':'Your application is already recorded.',409);

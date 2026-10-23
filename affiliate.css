@@ -40,3 +40,141 @@
 .ea-list-grid .ea-card h2{font-size:28px}.ea-list{max-height:420px;padding-right:4px}.ea-table-row{padding:16px 0}.ea-table-row strong{font-size:15px}.ea-table-row span{font-size:13px;color:#6f857b}
 @media(max-width:860px){.ea-hero-shell,.ea-primary-grid,.ea-list-grid{grid-template-columns:1fr}.ea-grid.ea-dashboard-top{grid-template-columns:1fr 1fr}.ea-copy-actions .ea-btn{flex:1 1 0}}
 @media(max-width:660px){.ea-header{padding:14px 18px}.ea-container{padding-top:18px;padding-bottom:64px}.ea-hero-copy,.ea-hero-note,.ea-card,.ea-pending-card{padding:22px 20px;border-radius:22px}.ea-title{font-size:clamp(34px,11vw,46px)}.ea-lede{font-size:14px}.ea-grid.ea-dashboard-top{grid-template-columns:1fr}.ea-stat-card{padding:20px}.ea-card h2{font-size:clamp(26px,7vw,34px)}.ea-copy-stack code{font-size:clamp(24px,8vw,36px);padding:16px 16px}.ea-copy-actions{display:grid;grid-template-columns:1fr}.ea-copy-actions .ea-btn{width:100%}.ea-list-grid .ea-card h2{font-size:24px}}
+
+/* ========================================================================
+   V16.39 — Real partner dashboard with horizontal SaaS navigation
+   Scoped to customer dashboard; admin and referral-landing styles preserved.
+   ======================================================================== */
+.ea-partner-dashboard{background:linear-gradient(158deg,#e9f7f1 0%,#f6faf7 46%,#f4f8f6 100%)}
+.ea-partner-dashboard [hidden]{display:none!important}
+.ea-partner-dashboard .ea-header{padding:11px clamp(15px,3.5vw,46px);min-height:70px;box-sizing:border-box;box-shadow:0 1px 0 rgba(24,96,75,.055)}
+.ea-partner-dashboard .ea-brand img{width:39px;height:39px}
+.ea-partner-dashboard .ea-brand b{font-size:19px;letter-spacing:-.035em}
+.ea-partner-dashboard .ea-brand small{font-size:11px}
+.ea-partner-dashboard .ea-back-link{min-height:40px;border-radius:13px;padding:10px 17px;font-size:12px;white-space:nowrap}
+.ea-partner-dashboard .ea-container{max-width:1180px;padding:23px 18px 75px}
+.ea-page-intro{padding:0 2px 20px}
+.ea-partner-dashboard .ea-title{font-size:clamp(29px,4.5vw,42px);line-height:1.07;letter-spacing:-.045em;margin:6px 0 6px}
+.ea-partner-dashboard .ea-lede{font-size:13px;line-height:1.5;margin:0;color:#647d73}
+.ea-partner-dashboard .ea-eyebrow{font-size:10px;letter-spacing:.16em}
+.ea-tab-shell{position:sticky;top:70px;z-index:9;border:1px solid #dce8e2;background:#fff;border-radius:21px;box-shadow:0 11px 28px rgba(18,80,65,.065);padding:6px;margin:0 0 16px}
+.ea-tabs{display:flex;align-items:center;gap:4px;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity}
+.ea-tabs::-webkit-scrollbar{display:none}
+.ea-tab{flex:1 0 auto;display:inline-flex;justify-content:center;align-items:center;gap:9px;white-space:nowrap;padding:13px 17px;min-height:47px;box-sizing:border-box;border:1px solid transparent;border-radius:15px;background:transparent;color:#60766e;font:800 13px/1.2 Manrope,system-ui,sans-serif;cursor:pointer;scroll-snap-align:start;transition:color .15s ease,background .15s ease,border-color .15s ease}
+.ea-tab svg{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ea-tab.active{color:#126a59;background:linear-gradient(145deg,#e5f4ec,#f4faf6);border-color:#c4e0d2;box-shadow:inset 0 0 0 1px rgba(24,125,101,.06)}
+.ea-tab:focus-visible,.ea-partner-dashboard button:focus-visible,.ea-partner-dashboard a:focus-visible{outline:2px solid #218a70;outline-offset:2px}
+.ea-partner-dashboard .ea-card{margin:0;padding:20px 22px;border-radius:22px;border:1px solid #deebe4;box-shadow:0 11px 27px rgba(19,79,63,.04)}
+.ea-partner-dashboard .ea-pending-card{padding:25px}
+.ea-partner-dashboard .ea-pending-card h2{font-size:25px}
+.ea-partner-dashboard .ea-pending-card p{margin:6px 0 18px;color:#698076}
+.ea-dashboard-top{display:grid;grid-template-columns:minmax(250px,.92fr) minmax(0,1.6fr);gap:12px;margin:0 0 14px}
+.ea-partner-dashboard .ea-tile{min-width:0;border-radius:20px;border-color:#dbe9e1;box-shadow:0 8px 22px rgba(17,70,60,.035)}
+.ea-balance-card{display:flex;flex-direction:column;align-items:flex-start;gap:5px;padding:22px 24px;background:linear-gradient(135deg,#146d5d,#115344)!important;color:#fff;border-color:#146859!important}
+.ea-balance-card>span,.ea-balance-card>small{color:#c9e8df!important}
+.ea-balance-card>span{font-size:12px;font-weight:850;letter-spacing:.055em}
+.ea-balance-card strong{margin:10px 0 0!important;color:#fff;font-size:clamp(29px,4.4vw,41px)!important;line-height:1.12;white-space:nowrap;letter-spacing:-.055em;max-width:100%;overflow-x:auto;scrollbar-width:none;font-variant-numeric:tabular-nums}
+.ea-balance-action{margin-top:auto;width:100%;min-height:40px!important;border-radius:12px!important;color:#13594c!important;border-color:rgba(255,255,255,.6)!important;background:#fff!important;justify-content:space-between!important;padding:9px 13px!important;font-size:12px!important}
+.ea-balance-action>span{font-size:17px;color:#11705f}
+.ea-summary-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.ea-partner-dashboard .ea-stat-card{display:flex;flex-direction:column;gap:6px;padding:17px 18px;border-radius:18px;background:linear-gradient(140deg,#fff,#f4faf6)}
+.ea-partner-dashboard .ea-stat-card span{font-size:11px;color:#72877d;letter-spacing:0}
+.ea-partner-dashboard .ea-stat-card strong{font-size:clamp(19px,2.6vw,29px);font-weight:850;line-height:1.15;margin:2px 0 0;white-space:nowrap;overflow-x:auto;scrollbar-width:none;letter-spacing:-.05em;font-variant-numeric:tabular-nums}
+.ea-partner-dashboard .ea-stat-card small{font-size:11px;line-height:1.35;color:#87968e}
+.ea-partner-dashboard .ea-code-card{padding:18px 22px;margin:0 0 13px}
+.ea-code-header{display:flex;justify-content:space-between;align-items:center;gap:15px}
+.ea-code-header h2{margin:0;font-size:clamp(19px,3vw,26px);line-height:1.2;letter-spacing:-.035em}
+.ea-partner-dashboard .ea-section-kicker{font-size:10px;margin-bottom:6px;letter-spacing:.15em}
+.ea-code-header .ea-tag{flex:none;font-size:10px;padding:8px 11px}
+.ea-code-action-row{display:grid;grid-template-columns:minmax(170px,1fr) auto auto;align-items:center;gap:10px;margin:15px 0 9px}
+.ea-code-action-row code{display:block;min-width:0;background:linear-gradient(145deg,#edf7f0,#f6faf8);color:#135f4f;letter-spacing:.09em;border:1px solid #d8e9e0;border-radius:13px;padding:13px 15px;font-weight:850;font-size:clamp(18px,2.9vw,26px);overflow-wrap:anywhere}
+.ea-code-action-row .ea-btn{min-height:48px;white-space:nowrap;font-size:12px;padding:11px 14px}
+.ea-partner-dashboard .ea-muted{font-size:11px;line-height:1.6;color:#758c80}
+.ea-partner-dashboard .ea-code-card .ea-muted{margin:5px 0 0}
+.ea-overview-foot{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:6px 3px;font-size:12px;color:#688376}
+.ea-overview-foot .ea-btn{padding:9px 14px;min-height:40px;font-size:11px;white-space:nowrap}
+.ea-tab-panel{min-height:130px}
+.ea-section-heading{display:flex;align-items:end;justify-content:space-between;gap:12px;margin:6px 3px 14px}
+.ea-section-heading h2{font-size:clamp(24px,3.4vw,32px);line-height:1.1;letter-spacing:-.04em;margin:0 0 6px}
+.ea-section-heading p{margin:0;color:#698278;font-size:12px;line-height:1.6}
+.ea-count-tag{border:1px solid #cfe5db;border-radius:999px;padding:9px 13px;background:#e8f5ef;font-size:11px;color:#23765f;font-weight:850;white-space:nowrap}
+.ea-history-card .ea-data-head{display:flex;justify-content:space-between;gap:8px;align-items:center;border-bottom:1px solid #e5eee9;padding:0 0 12px;margin-bottom:3px}
+.ea-data-head>strong{font-size:13px}
+.ea-data-head>span{font-size:11px;color:#81968d}
+.ea-data-head h3{font-size:22px;letter-spacing:-.035em;margin:0}
+.ea-activity-list{display:grid}
+.ea-entry{display:flex;align-items:center;justify-content:space-between;gap:15px;border-bottom:1px solid #edf1ef;padding:14px 0}
+.ea-entry:last-child{border-bottom:0}
+.ea-entry-main{min-width:0;display:grid;gap:5px}
+.ea-entry-title{font-size:13px;font-weight:800;color:#174b3f;overflow-wrap:anywhere}
+.ea-entry-sub{font-size:11px;color:#69847a;line-height:1.5;overflow-wrap:anywhere}
+.ea-entry-side{display:grid;gap:5px;justify-items:end;min-width:0;text-align:right}
+.ea-entry-amount{font-size:14px;font-weight:850;color:#125b4c;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ea-status{display:inline-block;border-radius:999px;padding:4px 8px;background:#e6f5ee;color:#17745f;font-size:10px;font-weight:850;text-transform:capitalize}
+.ea-status.paid,.ea-status.earned{color:#107a57;background:#dff6e8}
+.ea-status.rejected,.ea-status.reversed{color:#a24b4b;background:#ffefee}
+.ea-status.requested,.ea-status.approved{color:#946b25;background:#fff3d8}
+.ea-entry-meta{font-size:10px;color:#87988f;overflow-wrap:anywhere}
+.ea-empty{padding:24px 5px;text-align:center;color:#779187;font-size:12px;line-height:1.6;margin:0}
+.ea-partner-dashboard .ea-more{display:block;max-width:290px;margin:15px auto 0;width:100%;min-height:41px;font-size:12px}
+.ea-withdraw-layout{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);gap:14px;align-items:start}
+.ea-partner-dashboard .ea-withdraw-card h3{font-size:22px;margin:0 0 12px;letter-spacing:-.04em}
+.ea-partner-dashboard .ea-rule-pill{font-size:12px;line-height:1.6;padding:11px 12px;margin-bottom:16px}
+.ea-partner-dashboard .ea-control{font-size:12px;gap:6px;margin:0 0 12px}
+.ea-partner-dashboard .ea-formgrid{gap:0 11px}
+.ea-partner-dashboard .ea-control input{min-height:44px;padding:11px 12px}
+.ea-partner-dashboard .ea-consent-row{margin-top:0;gap:9px;font-size:11px;line-height:1.5;padding:11px}
+.ea-partner-dashboard .ea-consent-row input{width:18px;min-height:18px;flex:0 0 18px}
+.ea-partner-dashboard .ea-submit{width:100%;margin-top:12px;min-height:45px;font-size:12px}
+@media(max-width:920px){
+ .ea-dashboard-top{grid-template-columns:1fr}
+ .ea-balance-card{min-height:170px}
+ .ea-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .ea-withdraw-layout{grid-template-columns:1fr}
+}
+@media(max-width:660px){
+ .ea-partner-dashboard .ea-header{min-height:66px;padding:10px 15px}
+ .ea-partner-dashboard .ea-container{padding:15px 13px 62px}
+ .ea-page-intro{padding-bottom:13px}
+ .ea-partner-dashboard .ea-title{font-size:29px}
+ .ea-partner-dashboard .ea-lede{font-size:12px}
+ .ea-tab-shell{top:66px;border-radius:17px;padding:5px;margin-bottom:12px}
+ .ea-tabs{gap:3px}
+ .ea-tab{flex:0 0 auto;min-height:42px;padding:11px 13px;gap:7px;font-size:12px;border-radius:12px}
+ .ea-tab svg{width:16px;height:16px}
+ .ea-dashboard-top,.ea-summary-grid{gap:9px}
+ .ea-balance-card{min-height:146px;padding:17px 18px;border-radius:18px}
+ .ea-balance-card strong{font-size:35px!important}
+ .ea-partner-dashboard .ea-stat-card{min-width:0;padding:13px 13px;gap:4px;border-radius:17px}
+ .ea-partner-dashboard .ea-stat-card span{font-size:10px}
+ .ea-partner-dashboard .ea-stat-card strong{font-size:clamp(17px,4.75vw,24px)}
+ .ea-partner-dashboard .ea-stat-card small{font-size:10px}
+ .ea-partner-dashboard .ea-card{padding:17px;border-radius:20px}
+ .ea-code-header{align-items:flex-start;gap:8px;flex-wrap:wrap}
+ .ea-code-header .ea-tag{font-size:9px}
+ .ea-code-header h2{font-size:19px}
+ .ea-code-action-row{grid-template-columns:1fr 1fr;gap:8px;margin-top:13px}
+ .ea-code-action-row code{grid-column:1/-1;text-align:center;font-size:23px}
+ .ea-code-action-row .ea-btn{padding:10px 8px;min-height:42px;font-size:11px}
+ .ea-overview-foot{align-items:flex-start;flex-direction:column;gap:8px}
+ .ea-section-heading{align-items:flex-start;gap:7px;flex-wrap:wrap}
+ .ea-section-heading h2{font-size:25px}
+ .ea-entry{gap:10px;padding:12px 0}
+ .ea-entry-title{font-size:12px}
+ .ea-entry-sub{font-size:10px}
+ .ea-entry-amount{font-size:12px}
+ .ea-entry-meta,.ea-status{font-size:9px}
+ .ea-partner-dashboard .ea-formgrid{grid-template-columns:1fr}
+}
+@media(max-width:360px){
+ .ea-partner-dashboard .ea-brand img{width:34px;height:34px}
+ .ea-partner-dashboard .ea-brand b{font-size:16px}
+ .ea-partner-dashboard .ea-back-link{font-size:10px;padding:8px 11px}
+ .ea-code-action-row{grid-template-columns:1fr}
+ .ea-code-action-row code{grid-column:1}
+}
+@media(prefers-reduced-motion:reduce){.ea-tab{transition:none}}
+/* Keep all four Overview metrics in an equal two-column grid on mobile. */
+.ea-partner-dashboard .ea-summary-grid > .ea-tile:last-child{grid-column:auto}
+/* Never truncate the pending/paid amounts on narrow phones. */
+.ea-partner-dashboard #eaReserved{white-space:normal;overflow:visible;overflow-wrap:anywhere;font-size:clamp(14px,3.95vw,22px)}
