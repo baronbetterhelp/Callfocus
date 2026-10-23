@@ -1,4 +1,5 @@
 import { elRequest, elCleanup, elAdminPurge } from './elevenlabs-worker.js';
+import {resolveEarnReferral,affiliateLinkSignup,affiliateRecordPurchase,affiliateCustomerApi,affiliateAdminApi,affiliateEmailReview} from './affiliate-worker.js';
 const LIVE_VOICES = ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar','ripple','vesper','stone','meridian','beacon','cinder','tempo','quartz','willow','gleam','bossa','delta'];
 const TTS_VOICES = ['alloy','ash','ballad','coral','echo','fable','nova','onyx','sage','shimmer','verse','marin','cedar'];
 
@@ -1253,11 +1254,20 @@ async function awardReferralRewardAfterDeposit(env, inviteeUserId, payment = {})
 }
 
 async function safeAwardReferralAfterDeposit(env, inviteeUserId, payment = {}) {
-  try { return await awardReferralRewardAfterDeposit(env, inviteeUserId, payment); }
+  let legacy;
+  try { legacy = await awardReferralRewardAfterDeposit(env, inviteeUserId, payment); }
   catch (error) {
     console.error('CallFocus referral reward failed', error?.stack || error?.message || error);
-    return { awarded: false, reason: 'reward_update_failed' };
+    legacy = { awarded: false, reason: 'reward_update_failed' };
   }
+  // Read the already-verified wallet purchase. Never award commission from an
+  // unconfirmed redirect, checkout initialization, or merely reported payment.
+  if(env.AFFILIATE_DB && payment?.reference)try {
+    const data=await getCustomerDataForUpdate(env,inviteeUserId,'');
+    const purchase=(data?.wallet?.purchases||[]).find(p=>String(p?.reference||p?.id||'')===String(payment.reference) && String(p?.provider||'').toLowerCase()===String(payment.provider||'').toLowerCase());
+    if(purchase && Number(purchase.amountNaira)>0)await affiliateRecordPurchase(env,inviteeUserId,purchase);
+  } catch(error){console.error('Earn referral commission needs reconciliation:',error?.message||error)}
+  return legacy;
 }
 
 async function listReferralRecords(env, referrerUserId) {
@@ -1409,10 +1419,12 @@ async function ensureCustomerIdentityAvailable(env, email, phone) {
 async function createCustomerAccount(env, { name, email, phone, passwordRecord, emailVerified = false, referralCode = '' }) {
   const available = await ensureCustomerIdentityAvailable(env, email, phone);
   if (available.error) return { error: available.error, status: available.status };
-  let referral = null;
+  let referral = null, earnReferrer = null;
   if (referralCode) {
-    referral = await resolveReferralCode(env, referralCode);
-    if (!referral) return { error: 'That referral code is not valid. Check the code and try again.', status: 400 };
+    // The two referral programs are independent. Earn codes never award legacy signup credits.
+    earnReferrer = referralCode.startsWith('EARN') ? await resolveEarnReferral(env,referralCode) : null;
+    if (!earnReferrer) referral = await resolveReferralCode(env, referralCode);
+    if (!earnReferrer && !referral) return { error: 'That referral code is not valid. Check the code and try again.', status: 400 };
   }
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -1437,6 +1449,7 @@ async function createCustomerAccount(env, { name, email, phone, passwordRecord, 
   ]);
   await ensureCustomerReferralCode(env, user);
   if (referral) await writeReferralLink(env, { referrer: referral.user, invitee: user, code: referral.code, starterCredits: CALLFOCUS_CREDIT_POLICY.starterCredits });
+  if (earnReferrer) await affiliateLinkSignup(env,id,earnReferrer,referralCode);
   const token = await createCustomerSession(env, user);
   return { ok: true, token, user, data, referred: !!referral };
 }
@@ -1481,7 +1494,7 @@ async function handleCustomerSignupRequest(request, env) {
 
   const available = await ensureCustomerIdentityAvailable(env, fields.email, fields.phone);
   if (available.error) return json({ error: available.error }, available.status || 400);
-  if (fields.referralCode && !(await resolveReferralCode(env, fields.referralCode))) {
+  if (fields.referralCode && !(await resolveReferralCode(env, fields.referralCode)) && !(await resolveEarnReferral(env,fields.referralCode))) {
     return json({ error: 'That referral code is not valid. Check the code and try again.', code: 'referral_code_invalid' }, 400);
   }
 
@@ -6841,6 +6854,13 @@ export default {
     if (url.pathname === '/api/auth/migrate') return handleCustomerMigration(request, env);
     if (url.pathname === '/api/account/data') return handleCustomerData(request, env);
     if (url.pathname === '/api/account/notifications') return safeCustomerRoute('account-notifications', () => handleCustomerNotifications(request, env));
+    if (url.pathname.startsWith('/api/affiliate/')) {
+      const limited = request.method==='POST' ? await callFocusRateLimit(request,env,'affiliate-request',15,900) : null;
+      if(limited)return limited;
+      if(url.pathname==='/api/affiliate/email-review')return affiliateEmailReview(request,env);
+      return safeCustomerRoute('earn-referrals',()=>affiliateCustomerApi(request,env,authenticatedCustomer,sendCallFocusEmail));
+    }
+    if (url.pathname.startsWith('/api/admin/affiliate')) return affiliateAdminApi(request,env,adminAuthorized);
     if (url.pathname === '/api/referrals') return safeCustomerRoute('referrals', () => handleCustomerReferrals(request, env));
     if (url.pathname === '/api/account' && request.method === 'DELETE') return handleCustomerDelete(request, env);
     if (url.pathname === '/api/paystack/initialize') return safeCustomerRoute('paystack-initialize', () => handlePaystackInitialize(request, env));
@@ -6967,6 +6987,8 @@ export default {
       '/pocketfi-bank': '/pocketfi-bank.html',
       '/history': '/index.html',
       '/referrals': '/referrals.html',
+      '/earn-referrals': '/earn-referrals.html',
+      '/affiliate-payout-review': '/affiliate-payout-review.html',
       '/callers': '/callers.html',
       '/recent-calls': '/recent-calls.html',
       '/profile': '/profile.html',
