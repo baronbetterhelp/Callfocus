@@ -1,16 +1,20 @@
 /* CallFocus V16.24 — scoped announcements, rate details, clone selection */
-.cf-ann-overlay{position:fixed;inset:0;z-index:2147483200;display:flex;align-items:center;justify-content:center;padding:calc(12px + env(safe-area-inset-top)) 16px calc(12px + env(safe-area-inset-bottom));background:rgba(7,33,29,.7);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
-.cf-ann-panel{background:#fffdfa;border-radius:27px;border:1px solid rgba(182,217,201,.85);color:#173e35;width:min(100%,490px);max-height:min(810px,calc(100dvh - 45px));overflow:auto;box-shadow:0 27px 100px rgba(6,46,37,.35);font-family:Manrope,system-ui,sans-serif}
-.cf-ann-head{display:flex;align-items:center;gap:13px;padding:22px 23px 18px;background:linear-gradient(125deg,#e1f5ed,#f8fbf7 70%);border-bottom:1px solid #cee7da}
-.cf-ann-brand-logo{width:49px;height:49px;object-fit:contain;flex-shrink:0;background:white;border-radius:16px;padding:7px;box-shadow:0 3px 14px #165e4020}
-.cf-ann-brand-copy{display:grid;gap:4px;min-width:0}.cf-ann-brand-copy small{font-size:15px;font-weight:900;letter-spacing:.015em;color:#163f35}.cf-ann-brand-copy span{font-size:9px;letter-spacing:.18em;color:#568879;font-weight:800}
-.cf-ann-x{margin-left:auto;flex:0 0 39px;height:39px;border:1px solid #bdd9ca;border-radius:50%;background:#f4faf6;color:#1d5e4b;font-size:27px;cursor:pointer}
-.cf-ann-title-area{padding:25px 24px 24px;border-bottom:1px solid #e2ebe5;background:#fff}.cf-ann-title-tag{display:inline-block;border-radius:30px;padding:7px 13px;background:#eef8f2;color:#227c65;font-size:10px;text-transform:uppercase;letter-spacing:.12em;font-weight:850}
-.cf-ann-title-area h2{margin:13px 0 0;font-size:clamp(24px,5vw,32px);font-weight:850;line-height:1.2;letter-spacing:-.04em;overflow-wrap:anywhere}
-.cf-ann-content{margin:22px 23px 21px;padding:23px 20px;border:1px solid #dbe9e0;border-left:4px solid #248c70;border-radius:17px;background:linear-gradient(130deg,#f3faf6,#ffffff);box-shadow:0 5px 25px #113d3110}.cf-ann-content p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.76;color:#426459;font-size:15px}
-.cf-ann-footer{padding:0 23px 24px}.cf-ann-button{display:block;width:100%;min-height:52px;border:0;border-radius:14px;background:linear-gradient(100deg,#167f69,#146a5c);color:#fff;font:800 16px Manrope,system-ui,sans-serif;cursor:pointer;box-shadow:0 9px 23px #16846926}
+.cf-ann-overlay{z-index:2147483200}
+.cf-ann-promo-card{width:min(100%,452px);max-height:calc(100dvh - 30px);padding:30px 24px 22px;border-radius:28px;text-align:center;gap:14px}
+.cf-ann-promo-close{top:14px;right:14px}
+.cf-ann-promo-logo-wrap{display:grid;place-items:center;width:68px;height:68px;border-radius:20px;background:linear-gradient(145deg,#e6f7f0,#ffffff);box-shadow:0 10px 22px rgba(18,96,78,.14);border:1px solid #d6ebe2}
+.cf-ann-promo-logo{width:48px;height:48px;object-fit:contain}
+.cf-ann-promo-label{margin-top:-2px}
+.cf-ann-promo-title{margin:0;max-width:360px;color:#103d32;font:850 clamp(28px,6.3vw,36px)/1.12 'Manrope',system-ui,sans-serif;letter-spacing:-.04em;overflow-wrap:anywhere}
+.cf-ann-promo-message{display:flex;flex-direction:column;align-items:flex-start;gap:12px;width:100%;padding:19px 18px;border-radius:20px;background:linear-gradient(180deg,rgba(239,248,243,.95) 0%,rgba(255,255,255,.98) 100%);border:1px solid #d4e9e0;box-shadow:0 8px 24px rgba(10,73,58,.06);text-align:left}
+.cf-ann-promo-tag{display:inline-flex;align-items:center;justify-content:center;padding:8px 14px;border-radius:999px;background:#e7f5ed;color:#167864;font-size:10px;font-weight:850;letter-spacing:.14em;text-transform:uppercase}
+.cf-ann-promo-message p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.72;color:#486c60;font-size:15px}
+.cf-ann-promo-info{margin-top:-2px}
+.cf-ann-promo-info span{font-style:normal;text-transform:lowercase}
+.cf-ann-promo-button{min-height:56px}
+.cf-ann-promo-note{display:block;color:#71847c;font-size:11px;line-height:1.5}
 .credit-package.cf-package-too-small{opacity:.44;filter:grayscale(.5)}.cf-rate-overview{min-width:0;text-align:left}.cf-rate-overview-grid{display:grid;gap:7px;margin-top:11px}.cf-rate-row{display:flex;align-items:flex-start;justify-content:space-between;gap:9px;border-bottom:1px solid #e7eeec;padding:8px 0;font-size:12px}.cf-rate-row:last-child{border:0}.cf-rate-row>span{color:#496b61}.cf-rate-row>b{color:#173f36;font-size:12px;text-align:right;white-space:nowrap;font-weight:850}.cf-rates-legend{font-size:11px;color:#718b82;line-height:1.45;margin:12px 0 2px}.cf-clone-rate-display{background:#edf8f2;color:#216d58;border:1px solid #d3e9dd;border-radius:10px;padding:9px 11px;margin:9px 0 0;font-weight:750;font-size:12px;line-height:1.5}.credit-rate-card.cf-rate-overview{height:auto;align-self:stretch}
-@media (max-width:385px){.cf-ann-head{padding:16px}.cf-ann-title-area{padding:18px}.cf-ann-content{margin:14px;padding:17px}.cf-ann-footer{padding:0 16px 16px}.cf-rate-row{flex-wrap:wrap}.cf-rate-row>b{text-align:left}}
+@media (max-width:390px){.cf-ann-promo-card{padding:28px 17px 20px;gap:12px}.cf-ann-promo-message{padding:16px 15px}.cf-rate-row{flex-wrap:wrap}.cf-rate-row>b{text-align:left}}
 
 /* Override legacy rate-card typography only inside the added rows. */
 .credit-rate-card.cf-rate-overview .cf-rate-row>span{font-size:12px;letter-spacing:0;text-transform:none;margin:0;font-weight:650;color:#496b61;line-height:1.4}.credit-rate-card.cf-rate-overview .cf-rate-row>b{font-size:12px;line-height:1.4}.credit-rate-card.cf-rate-overview>span{font-size:11px;letter-spacing:.08em}
