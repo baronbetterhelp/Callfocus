@@ -9,6 +9,32 @@ const badResponse=async(res,what)=>{let body={};try{body=await res.json()}catch{
 const withKey=env=>({'xi-api-key':getKey(env)});
 async function readVoices(env,user){let list=await env.CALLFOCUS_CONFIG.get(voicesKey(user),{type:'json'});return Array.isArray(list)?list.filter(x=>x&&typeof x.voiceId==='string'&&typeof x.name==='string').slice(0,3):[];}
 const idValid=id=>/^[a-zA-Z0-9_-]{8,120}$/.test(String(id||''));
+// These slots belong to the shared voice-service workspace, not an individual CallFocus user.
+// Never expose the provider subscription, tier, or credentials to customers.
+const capacityText={
+  full:'New voice creation is temporarily unavailable. Your existing saved voices can still be used. Please contact CallFocus support.',
+  operations:'New voice creation is temporarily unavailable. Please contact CallFocus support.',
+  plan:'New voice creation is temporarily unavailable. Please contact CallFocus support.'
+};
+async function voiceCapacity(env){
+  try{
+    const response=await fetch(`${EL_API}/v1/user/subscription`,{headers:withKey(env),signal:AbortSignal.timeout(9000)});
+    if(!response.ok)return {available:null,reason:'unavailable'};
+    const data=await response.json();
+    const used=Number(data.voice_slots_used),limit=Number(data.voice_limit);
+    if(Number.isFinite(limit)&&limit>=0&&Number.isFinite(used)&&used>=limit)return {available:false,reason:'full'};
+    const editMax=data.max_voice_add_edits, edits=Number(data.voice_add_edit_counter);
+    if(editMax!=null&&Number.isFinite(Number(editMax))&&Number(editMax)>0&&Number.isFinite(edits)&&edits>=Number(editMax))return {available:false,reason:'operations'};
+    if(data.can_use_instant_voice_cloning===false)return {available:false,reason:'plan'};
+    return {available:true,reason:null};
+  }catch{return {available:null,reason:'unavailable'}}
+}
+function publicCapacity(value){return {available:value.available,reason:value.available===false?value.reason:null,message:value.available===false?capacityText[value.reason]||capacityText.full:null}}
+function capacityError(cap){return elJson({error:capacityText[cap.reason]||capacityText.full,code:cap.reason==='full'?'voice_capacity_full':'voice_creation_unavailable'},409)}
+function isCapacityProviderError(detail){
+ const raw=String(detail||'').toLowerCase();
+ return /maximum amount of custom voices|custom voice limit|voice slots? (?:limit|reached|exceeded|full)|too many (?:custom )?voices|voice_limit|voice slots used/.test(raw)
+}
 async function elRequest(req,env,helpers){
   const path=new URL(req.url).pathname;
   if(!['/api/elevenlabs/voices','/api/elevenlabs/clone','/api/elevenlabs/session','/api/elevenlabs/tts'].includes(path))return elJson({error:'Not found'},404);
@@ -16,8 +42,24 @@ async function elRequest(req,env,helpers){
   if(!auth)return elJson({error:'Sign in to CallFocus first.'},401);
   if(!getKey(env))return elJson({error:'Voice cloning is temporarily unavailable. Please contact support.'},503);
   if(path==='/api/elevenlabs/voices'){
-    if(req.method!=='GET')return elJson({error:'Method not allowed.'},405);
-    return elJson({ok:true,voices:await readVoices(env,auth.user),agentConfigured:!!getAgent(env)});
+    if(req.method==='GET'){
+      const [saved,capacity]=await Promise.all([readVoices(env,auth.user),voiceCapacity(env)]);
+      return elJson({ok:true,voices:saved,capacity:publicCapacity(capacity),agentConfigured:!!getAgent(env)});
+    }
+    if(req.method==='DELETE'){
+      let body;try{body=await req.json()}catch{return elJson({error:'Invalid request.'},400)}
+      const existing=await readVoices(env,auth.user);
+      const voice=existing.find(v=>v.id===body?.voiceId);
+      if(!voice)return elJson({error:'Voice not found in your account.'},404);
+      // Delete only a voice owned by this authenticated customer, never another user's voice.
+      let removed;try{removed=await fetch(`${EL_API}/v1/voices/${encodeURIComponent(voice.voiceId)}`,{method:'DELETE',headers:withKey(env),signal:AbortSignal.timeout(20000)})}
+      catch{return elJson({error:'Could not remove this voice. Please try again.',code:'voice_delete_failed'},502)}
+      if(!removed.ok&&removed.status!==404)return badResponse(removed,'Remove voice');
+      const current=await readVoices(env,auth.user);
+      await env.CALLFOCUS_CONFIG.put(voicesKey(auth.user),JSON.stringify(current.filter(v=>v.voiceId!==voice.voiceId)));
+      return elJson({ok:true,voices:current.filter(v=>v.voiceId!==voice.voiceId)});
+    }
+    return elJson({error:'Method not allowed.'},405);
   }
   if(path==='/api/elevenlabs/clone'){
     if(req.method!=='POST')return elJson({error:'Method not allowed.'},405);
@@ -46,9 +88,18 @@ async function elRequest(req,env,helpers){
     const acceptedAudio=new File([file],`voice-sample.${ext}`,{type});
     const existing=await readVoices(env,auth.user);
     if(existing.length>=3)return elJson({error:'You already have 3 saved cloned voices.'},409);
+    // Do not send audio upstream while the shared account is at capacity.
+    const capacity=await voiceCapacity(env);
+    if(capacity.available===false)return capacityError(capacity);
     const payload=new FormData();payload.set('name',`CF ${name} ${auth.user.id.slice(0,8)}`);payload.append('files',acceptedAudio,acceptedAudio.name);
     let upstream;try{upstream=await fetch(`${EL_API}/v1/voices/add`,{method:'POST',headers:withKey(env),body:payload,signal:AbortSignal.timeout(60000)})}catch{return elJson({error:'The voice service could not be reached. Please retry.'},502)}
-    if(!upstream.ok)return badResponse(upstream,'Voice clone');
+    if(!upstream.ok){
+      let detail={};try{detail=await upstream.json()}catch{}
+      const description=JSON.stringify(detail);
+      if(isCapacityProviderError(description))return capacityError({reason:'full'});
+      const msg=String(detail?.detail?.message||detail?.error?.message||detail?.detail?.status||'');
+      return elJson({error:(msg||`Voice creation failed (HTTP ${upstream.status}).`).replace(/\b(?:Eleven\s*Labs|Open\s*AI)\b/gi,'voice service').slice(0,350)},upstream.status===429?429:upstream.status>=500?502:400);
+    }
     const created=await upstream.json().catch(()=>({}));
     if(!idValid(created.voice_id))return elJson({error:'Your voice could not be saved. Please contact support.'},502);
     const voice={id:crypto.randomUUID(),voiceId:created.voice_id,name,requiresVerification:created.requires_verification===true,createdAt:new Date().toISOString()};

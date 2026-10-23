@@ -6,7 +6,7 @@
   const auth=()=>localStorage.getItem('callfocus_server_session_v1')||'';
   const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const notify=s=>{if(typeof window.toast==='function')window.toast(s);else alert(s)};
-  let voices=[],newSelected='',repeatSelected='',noteSelected='',busy=false,active=null,recorder=null,recordedBlob=null,recordStart=0,recordTimer=0,recordStream=null;
+  let voices=[],capacity=null,newSelected='',repeatSelected='',noteSelected='',busy=false,active=null,recorder=null,recordedBlob=null,recordStart=0,recordTimer=0,recordStream=null;
   async function request(path,{method='GET',body,form=false}={}){
     if(!auth())throw Error('Sign in to CallFocus before using voice cloning.');
     const r=await fetch(path,{method,headers:{Authorization:`Bearer ${auth()}`,...(body&&!form?{'Content-Type':'application/json'}:{})},body:form?body:body?JSON.stringify(body):undefined,cache:'no-store'});
@@ -14,8 +14,8 @@
   }
   async function loadVoices(){
     if(!auth()){voices=[];render();return}
-    try{const data=await request('/api/elevenlabs/voices');voices=data.voices||[]}catch(err){console.warn('CallFocus cloned-voice list:',err.message);voices=[]}
-    render();
+    try{const data=await request('/api/elevenlabs/voices');voices=data.voices||[];capacity=data.capacity||null}catch(err){console.warn('CallFocus cloned-voice list:',err.message);capacity=null}
+    render();updateCapacityUi();
   }
   function choices(selected){return `<option value="">Use normal Male / Female voice</option>${voices.map(v=>`<option value="${esc(v.id)}" ${selected===v.id?'selected':''} ${v.requiresVerification?'disabled':''}>${esc(v.name)}${v.requiresVerification?' · verification required':''}</option>`).join('')}`;}
   function voicePanel(scope){const selected=scope==='new'?newSelected:scope==='repeat'?repeatSelected:noteSelected;return `<div class="cf-el-box" id="cf-el-${scope}"><h3>Clone your voice</h3><p>Record or upload your own voice, save it, and choose it here for your ${scope==='note'?'voice notes':'calls'}.</p><button class="cf-el-action" type="button" data-el-open>+ Create your own voice</button><label style="margin-top:17px" for="cf-el-select-${scope}">My saved cloned voice</label><select id="cf-el-select-${scope}" data-el-select="${scope}">${choices(selected)}</select><small class="cf-el-muted">Choose your normal voice or one of your saved voices.</small></div>`;}
@@ -28,7 +28,7 @@
     if(voiceRow){let host=$('cf-el-note');if(!host){host=document.createElement('div');host.id='cf-el-note';voiceRow.insertAdjacentElement('afterend',host)}host.outerHTML=voicePanel('note');}
     const hero=$('heroNewCallBtn');const quick=hero?.parentElement;
     if(quick&&!$('cf-el-home-btn')){const btn=document.createElement('button');btn.id='cf-el-home-btn';btn.className='cf-el-home';btn.type='button';btn.innerHTML='<span aria-hidden="true">◉</span><span>Clone your voice</span><span class="cf-clone-hot">HOT</span>';hero.insertAdjacentElement('afterend',btn);btn.addEventListener('click',openModal)}
-    const saved=$('cf-el-saved-list');if(saved)saved.innerHTML=voices.length?`<ul>${voices.map(v=>`<li>${esc(v.name)}${v.requiresVerification?' · verification required':''}</li>`).join('')}</ul>`:'No saved voices yet.';if($('cf-el-count'))$('cf-el-count').textContent=`${voices.length} / 3`;fitModal();
+    const saved=$('cf-el-saved-list');if(saved)saved.innerHTML=voices.length?`<ul>${voices.map(v=>`<li class="cf-el-saved-item"><span>${esc(v.name)}${v.requiresVerification?' · verification required':''}</span><button type="button" class="cf-el-delete" data-el-remove="${esc(v.id)}" aria-label="Delete saved voice ${esc(v.name)}">Delete</button></li>`).join('')}</ul>`:'No saved voices yet.';if($('cf-el-count'))$('cf-el-count').textContent=`${voices.length} / 3`;updateCapacityUi();fitModal();
   }
   function installModal(){
     if($('cf-el-layer'))return;
@@ -39,6 +39,7 @@
       <h2 id="cf-el-title">Create your own voice</h2>
       <p class="cf-el-intro">Record or upload 30–120 seconds of your own clear speech. Save it once, then choose it for future calls and voice notes.</p>
       <div class="cf-el-status" id="cf-el-status" role="status" aria-live="polite" aria-atomic="true"></div>
+      <div class="cf-el-capacity" id="cf-el-capacity" role="status" aria-live="polite" hidden></div>
       <label class="cf-el-label" for="cf-el-name">Voice name</label>
       <input type="text" id="cf-el-name" maxlength="65" placeholder="My own voice" />
       <div class="cf-el-row cf-el-record-row"><button type="button" class="cf-el-action" id="cf-el-record">Record sample</button><span id="cf-el-record-info">Not recording</span></div>
@@ -56,6 +57,7 @@
     $('cf-el-record').onclick=toggleRecording;$('cf-el-save').onclick=saveVoice;
     $('cf-el-file').addEventListener('change',()=>{const input=$('cf-el-file');const file=input.files?.[0];if(file&&!audioIsValid(file)){input.value='';$('cf-el-file-summary').textContent='No file selected';audioRejected('File type declined.');return;}$('cf-el-file-summary').textContent=file?.name||'No file selected';status(file?`Recording selected: ${file.name}`:(recordedBlob?'Your recorded sample is ready.':'Supported audio: MP3, M4A/MP4, WEBM, WAV, OGG, AAC, FLAC.') );fitModal()});
     $('cf-el-saved').addEventListener('toggle',()=>{$('cf-el-layer')?.querySelector('.cf-el-modal')?.classList.toggle('cf-el-expanded',$('cf-el-saved').open);fitModal()});
+    $('cf-el-saved-list').addEventListener('click',e=>{const button=e.target.closest('[data-el-remove]');if(button)deleteSavedVoice(button.dataset.elRemove)});
     window.addEventListener('resize',fitModal,{passive:true});
     window.visualViewport?.addEventListener('resize',fitModal,{passive:true});
   }
@@ -79,6 +81,27 @@
     });
   }
   async function openModal(){if(!auth())return notify('Sign in to CallFocus first.');installModal();$('cf-el-layer').classList.add('open');document.body.classList.add('cf-el-is-open');const currentFile=$('cf-el-file')?.files?.[0];status(currentFile?`Recording selected: ${currentFile.name}`:(recordedBlob?'Your recorded sample is ready.':'Supported audio: MP3, M4A/MP4, WEBM, WAV, OGG, AAC, FLAC.'));fitModal();$('cf-el-count').textContent=`${voices.length} / 3`;render();await loadVoices();$('cf-el-count').textContent=`${voices.length} / 3`;fitModal()}
+  function updateCapacityUi(){
+    const full=capacity?.available===false;
+    const block=$('cf-el-capacity');if(block){block.hidden=!full;block.textContent=full?(capacity.message||'New voice creation is temporarily unavailable. Please contact CallFocus support.'):''}
+    $('cf-el-layer')?.querySelector('.cf-el-modal')?.classList.toggle('cf-el-full',full);
+    const record=$('cf-el-record'),save=$('cf-el-save'),file=$('cf-el-file');
+    if(record)record.disabled=full;
+    if(save)save.disabled=full||busy||voices.length>=3;
+    if(file)file.disabled=full;
+    const picker=$('cf-el-layer')?.querySelector('.cf-el-file-picker');if(picker)picker.classList.toggle('cf-el-file-picker-disabled',full);
+    fitModal();
+  }
+  async function deleteSavedVoice(id){
+    const selected=voices.find(v=>v.id===id);if(!selected||busy)return;
+    if(!window.confirm(`Permanently delete your saved voice “${selected.name}”? This cannot be undone.`))return;
+    busy=true;updateCapacityUi();
+    try{const result=await request('/api/elevenlabs/voices',{method:'DELETE',body:{voiceId:id}});
+      voices=result.voices||voices.filter(v=>v.id!==id);
+      if(newSelected===id)newSelected='';if(repeatSelected===id)repeatSelected='';if(noteSelected===id)noteSelected='';
+      render();status('Voice deleted.');await loadVoices();
+    }catch(err){status(err.message)}finally{busy=false;updateCapacityUi()}
+  }
   function closeModal(){if(recorder?.state==='recording')recorder.stop();$('cf-el-layer')?.classList.remove('open');document.body.classList.remove('cf-el-is-open')}
   const AUDIO_HELP='Accepted file types: MP3, M4A/MP4, WEBM, WAV, OGG, AAC and FLAC.';
   function audioRejected(message){
@@ -88,6 +111,7 @@
   function status(text){const el=$('cf-el-status');if(el){el.textContent=String(text||'');el.classList.toggle('cf-el-status-active',!!text);el.classList.toggle('cf-el-status-error',/invalid|not supported|rejected|unsupported|file type|format/i.test(String(text||'')))}fitModal()}
   function audioIsValid(file){if(!file)return false;const type=String(file.type||'').toLowerCase().split(';')[0];const name=String(file.name||'').toLowerCase();return /\.(mp3|m4a|mp4|webm|wav|ogg|aac|flac)$/.test(name)||/^(audio\/(mpeg|mp3|mp4|x-m4a|webm|wav|x-wav|ogg|aac|flac|x-flac)|video\/mp4)$/.test(type)}
   async function toggleRecording(){
+    if(capacity?.available===false)return status(capacity.message);
     if(recorder?.state==='recording'){recorder.stop();return}
     if(!navigator.mediaDevices?.getUserMedia)return status('Microphone recording is not supported in this browser. Upload an audio file instead.');
     try{
@@ -98,14 +122,14 @@
       recorder.start(500);recordStart=Date.now();$('cf-el-record').textContent='Stop recording';recordTimer=setInterval(()=>{const s=Math.floor((Date.now()-recordStart)/1000);$('cf-el-record-info').textContent=`Recording ${s} seconds`;if(s>=120)recorder.stop()},1000);status('Speak clearly in your normal voice.');
     }catch(err){status('Microphone unavailable: '+err.message)}
   }
-  async function saveVoice(){if(busy)return;if(voices.length>=3)return status('You have already saved 3 voices.');
+  async function saveVoice(){if(busy)return;if(capacity?.available===false)return status(capacity.message);if(voices.length>=3)return status('You have already saved 3 voices.');
     const name=$('cf-el-name')?.value.trim();const audio=$('cf-el-file')?.files?.[0]||recordedBlob;
     if(!name)return status('Give this voice a name.');if(!audio)return status('Record or upload your own voice first.');if(audio instanceof File&&!audioIsValid(audio))return audioRejected('File type declined.');if(!$('cf-el-consent')?.checked)return status('Confirm your consent before saving.');
     const elapsed=recordedBlob===audio?(Date.now()-recordStart)/1000:null;
     if(elapsed!=null&&elapsed<10)return status('Record at least 10 seconds. 60–120 seconds is recommended for best results.');
     busy=true;$('cf-el-save').disabled=true;status('Saving your voice…');
     try{const form=new FormData();const extension=(audio.type||'').includes('mp4')?'m4a':(audio.type||'').includes('webm')?'webm':'mp3';form.set('name',name);form.set('consent','yes');form.set('audio',audio,audio.name||`my-voice.${extension}`);const result=await request('/api/elevenlabs/clone',{method:'POST',body:form,form:true});voices=[...voices,result.voice];status(result.voice.requiresVerification?'Voice created. Complete voice verification before using it.':'Voice saved. You can now select it for calls and voice notes.');$('cf-el-count').textContent=`${voices.length} / 3`;render()}
-    catch(err){/audio|type|format|unsupported|declined|rejected/i.test(err.message)?audioRejected('Your audio file was declined.'):status(err.message)}finally{busy=false;$('cf-el-save').disabled=false}
+    catch(err){if(/temporarily unavailable|voice creation/i.test(err.message)){capacity={available:false,reason:'full',message:err.message};status(err.message)}else if(/audio|type|format|unsupported|declined|rejected/i.test(err.message))audioRejected('Your audio file was declined.');else status(err.message)}finally{busy=false;updateCapacityUi()}
   }
   function send(ws,obj){if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify(obj))}
   const b64bytes=data=>{const bin=atob(data);const bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return bytes};

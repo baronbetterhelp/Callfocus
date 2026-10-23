@@ -64,3 +64,18 @@
 @media(max-width:620px){
   .hero-actions > #cf-el-home-btn{width:100%;}
 }
+
+/* V16.32 — safe account-wide voice-capacity feedback and explicit own-voice removal. */
+.cf-el-capacity:not([hidden]){display:block;padding:11px 13px;margin:0 0 8px;border-radius:13px;border:1px solid #e4ae68;background:#fff5e8;color:#794d1a;font-size:12px;line-height:1.45;font-weight:650}
+.cf-el-file-picker-disabled{opacity:.55;pointer-events:none;cursor:not-allowed}
+.cf-el-saved-item{display:flex;align-items:center;gap:8px;justify-content:space-between;list-style:disc;min-height:34px}
+.cf-el-saved-item span{min-width:0;overflow-wrap:anywhere}
+.cf-el-delete{flex:none;border:1px solid #e3bdba;border-radius:9px;padding:5px 9px;background:#fff8f7;color:#a33d36;font:700 11px Manrope,system-ui,sans-serif;cursor:pointer}
+.cf-el-delete:focus-visible{outline:2px solid #ae514b;outline-offset:2px}
+
+/* When shared clone capacity is full, don't show unusable recording controls. */
+.cf-el-modal.cf-el-full{height:auto;min-height:0;max-height:calc(100dvh - 22px);overflow-y:auto}
+.cf-el-modal.cf-el-full .cf-el-status,.cf-el-modal.cf-el-full .cf-el-label,.cf-el-modal.cf-el-full #cf-el-name,.cf-el-modal.cf-el-full .cf-el-record-row,.cf-el-modal.cf-el-full .cf-el-file-picker,.cf-el-modal.cf-el-full .cf-el-file-input,.cf-el-modal.cf-el-full .cf-el-consent,.cf-el-modal.cf-el-full .cf-el-disclosure,.cf-el-modal.cf-el-full .cf-el-save{display:none!important}
+.cf-el-modal.cf-el-full .cf-el-intro{margin-bottom:12px}
+.cf-el-modal.cf-el-full .cf-el-capacity{margin-bottom:10px}
+.cf-el-modal.cf-el-full .cf-el-saved{margin-top:10px}
