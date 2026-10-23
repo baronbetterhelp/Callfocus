@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/admin.css?v=16.29-audience" />
-<link rel="stylesheet" href="/affiliate.css?v=16.35"></head>
+<link rel="stylesheet" href="/affiliate.css?v=16.37"></head>
 <body class="admin-page">
   <header class="site-header">
     <div class="container header-inner">
@@ -334,7 +334,15 @@
         <div class="admin-section-heading"><span class="kicker">Independent partner system</span><h2>Earn Referrals</h2><p>Approve earning partners, configure commission and withdrawal rules, and manually review cash withdrawals. Legacy 100-credit referrals remain separate.</p></div>
         <div class="premium-panel ea-card"><h3>Partner program settings</h3><div class="ea-formgrid">
           <label class="ea-control">Commission per verified deposit (%)<input type="number" step="0.01" min="0" max="100" id="eaAdminRate" value="30"></label>
-          <label class="ea-control">Withdrawal weekday (Nigeria time)<select id="eaAdminDay"><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option><option value="0">Sunday</option></select></label>
+          <fieldset class="ea-weekday-fieldset"><legend>Allowed withdrawal days (Nigeria time)</legend><p class="ea-weekday-help">Select one day or several. Withdrawal requests will be available on every checked day.</p><div class="ea-weekday-grid" id="eaAdminDays">
+            <label class="ea-weekday-option"><input type="checkbox" value="1" data-ea-weekday><span>Monday</span></label>
+            <label class="ea-weekday-option"><input type="checkbox" value="2" data-ea-weekday><span>Tuesday</span></label>
+            <label class="ea-weekday-option"><input type="checkbox" value="3" data-ea-weekday><span>Wednesday</span></label>
+            <label class="ea-weekday-option"><input type="checkbox" value="4" data-ea-weekday><span>Thursday</span></label>
+            <label class="ea-weekday-option"><input type="checkbox" value="5" data-ea-weekday><span>Friday</span></label>
+            <label class="ea-weekday-option"><input type="checkbox" value="6" data-ea-weekday><span>Saturday</span></label>
+            <label class="ea-weekday-option"><input type="checkbox" value="0" data-ea-weekday><span>Sunday</span></label>
+            </div></fieldset>
           <label class="ea-control">Minimum withdrawal (₦)<input type="number" min="100" step="0.01" id="eaAdminMinimum" value="5000"></label>
           <label class="ea-control">Send withdrawal requests to this email<input type="email" id="eaAdminEmail" placeholder="payouts@yourdomain.com"></label></div>
           <label class="ea-control" style="display:flex;flex-direction:row;align-items:center;gap:12px">Enable the earning program, new commissions and withdrawal requests <input type="checkbox" id="eaAdminEnabled" style="width:22px;min-height:22px" checked></label>
@@ -614,5 +622,5 @@
   <div class="toast hidden" id="toast"></div>
   <script src="/admin.js?v=16.30-account-pages"></script><script src="/admin-video.js?v=16.07-test"></script><script src="/cf-controls-admin.js?v=16.24"></script>
 <script src="/cf-temp-voice-admin.js?v=16.34"></script>
-<script src="/affiliate-admin.js?v=16.35"></script></body>
+<script src="/affiliate-admin.js?v=16.37"></script></body>
 </html>

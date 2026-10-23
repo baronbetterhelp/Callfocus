@@ -6,6 +6,21 @@ const now = () => new Date().toISOString();
 const json = (value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'}});
 const bad = (message,status=400)=>json({ok:false,error:message},status);
 const config = db => db.prepare('SELECT * FROM affiliate_settings WHERE id=1').first();
+// Separate repeatable migration keeps the original weekday column intact for backwards compatibility.
+// Until that migration runs, read-only customer checks safely preserve the original single day.
+async function withdrawDaysMask(db,setup){
+ const oldDay=Number(setup?.weekday);
+ const fallback=1 << (Number.isInteger(oldDay)&&oldDay>=0&&oldDay<=6?oldDay:5);
+ try{
+  const item=await db.prepare('SELECT days_mask FROM affiliate_withdrawal_days WHERE id=1').first();
+  const mask=Number(item?.days_mask);
+  return Number.isInteger(mask)&&mask>=1&&mask<=127?mask:fallback;
+ }catch(error){
+  if(/no such table.*affiliate_withdrawal_days/i.test(String(error?.message||error)))return fallback;
+  throw error;
+ }
+}
+const activeDays=mask=>[1,2,3,4,5,6,0].filter(day=>(mask&(1<<day))!==0);
 const safe = v=>String(v||'').trim();
 const BANK_RE = /^[0-9]{10,20}$/;
 const newCode = ()=>'EARN'+Array.from(crypto.getRandomValues(new Uint8Array(7)),b=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[b%32]).join('');
@@ -45,6 +60,7 @@ export async function affiliateRecordPurchase(env,inviteeId,purchase){
 }
 async function publicStatus(db,userId){
  const [member,setup,bal] = await Promise.all([memberFor(db,userId),config(db),balances(db,userId)]);
+ const withdrawDays=activeDays(await withdrawDaysMask(db,setup));
  let activity=[],withdrawals=[],signups=[],lifetimeSignups=0,lifetimePurchases=0;
  if(member?.status==='approved'){
   const [cs,ws,ss,sc,pc]=await Promise.all([
@@ -57,7 +73,7 @@ async function publicStatus(db,userId){
   activity=cs.results||[];withdrawals=ws.results||[];signups=ss.results||[];lifetimeSignups=sc?.n||0;lifetimePurchases=pc?.n||0;
  }
  return {ok:true,member:member?{status:member.status,code:member.referral_code,appliedAt:member.created_at,note:member.reviewed_note}:null,
- settings:{enabled:!!setup.enabled,ratePercent:setup.rate_bps/100,withdrawDay:setup.weekday,minWithdrawKobo:setup.min_withdraw_kobo},
+ settings:{enabled:!!setup.enabled,ratePercent:setup.rate_bps/100,withdrawDay:setup.weekday,withdrawDays,minWithdrawKobo:setup.min_withdraw_kobo},
  balance:{earned:bal.earned||0,paid:bal.paid||0,reserved:bal.reserved||0,available:Math.max(0,(bal.earned||0)-(bal.paid||0)-(bal.reserved||0))},
  commissionHistory:activity,withdrawals,signupsCount:lifetimeSignups,depositsCount:lifetimePurchases};
 }
@@ -77,7 +93,7 @@ export async function affiliateCustomerApi(request,env,auth,notify){
  if(path==='/api/affiliate/withdraw' && request.method==='POST'){
   const member=await memberFor(db,id);if(member?.status!=='approved')return bad('Only approved partners can request a withdrawal.',403);
   const setup=await config(db);if(!setup?.enabled)return bad('Withdrawals are temporarily unavailable.',403);
-  if(lagosWeekday()!==Number(setup.weekday))return bad('Withdrawals can only be requested on the selected weekly withdrawal day.',403);
+  if(((await withdrawDaysMask(db,setup))&(1<<lagosWeekday()))===0)return bad('Withdrawal requests are unavailable today. Check your dashboard for the selected withdrawal days (Nigeria time).',403);
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(setup.notification_email||''))return bad('Withdrawal requests are not configured yet. Contact support.',503);
   const body=await readBody(request);if(!body)return bad('Invalid request.');
   if(body.bankConsent!==true)return bad('Confirm that you are authorized to receive payment to this bank account.');
@@ -152,17 +168,35 @@ export async function affiliateAdminApi(request,env,authorized,notify){
    db.prepare('SELECT COUNT(*) AS n FROM affiliate_members').first(),
    db.prepare('SELECT COUNT(*) AS n FROM affiliate_withdrawals').first()
   ]);
+  settings.withdrawDays=activeDays(await withdrawDaysMask(db,settings));
   return json({ok:true,settings,applications:applications.results||[],withdrawals:payouts.results||[],stats,totalApplications:appCount?.n||0,totalWithdrawals:payoutCount?.n||0});
  }
  if(path==='/api/admin/affiliate/settings'&&request.method==='POST'){
   const b=await readBody(request);if(!b)return bad('Invalid settings.');
-  const percent=Number(b.ratePercent),weekday=Number(b.withdrawDay),minimum=Number(b.minimumNaira);
-  if(!Number.isFinite(percent)||percent<0||percent>100||!Number.isInteger(weekday)||weekday<0||weekday>6||!Number.isFinite(minimum)||minimum<100||minimum>100000000) return bad('Enter a valid percentage (0–100), weekday, and minimum amount.');
+  const percent=Number(b.ratePercent),minimum=Number(b.minimumNaira);
+  const withdrawDays=b.withdrawDays;
+  if(!Array.isArray(withdrawDays)||withdrawDays.length<1||withdrawDays.length>7||
+   withdrawDays.some(n=>!Number.isInteger(n)||n<0||n>6)||new Set(withdrawDays).size!==withdrawDays.length){
+   return bad('Select at least one valid withdrawal day (Monday through Sunday).');
+  }
+  if(!Number.isFinite(percent)||percent<0||percent>100||!Number.isFinite(minimum)||minimum<100||minimum>100000000)return bad('Enter a valid percentage (0–100) and minimum withdrawal amount.');
+  const mask=withdrawDays.reduce((value,day)=>value|(1<<day),0);
+  const firstDay=withdrawDays[0];
   const email=safe(b.notificationEmail).slice(0,180);if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))return bad('Enter a valid notification email address.');
-  await db.prepare('UPDATE affiliate_settings SET rate_bps=?,weekday=?,min_withdraw_kobo=?,notification_email=?,enabled=?,updated_at=? WHERE id=1').bind(
-   Math.round(percent*100),weekday,Math.round(minimum*100),email,b.enabled?1:0,now()).run();
-  await audit(db,'admin','settings_updated','affiliate_settings',`rate=${percent},day=${weekday},min=${minimum}`);
-  return json({ok:true});
+  const timestamp=now();
+  try{
+   // D1 batch uses one database transaction, keeping the settings and weekday mask together.
+   await db.batch([
+    db.prepare('UPDATE affiliate_settings SET rate_bps=?,weekday=?,min_withdraw_kobo=?,notification_email=?,enabled=?,updated_at=? WHERE id=1').bind(
+     Math.round(percent*100),firstDay,Math.round(minimum*100),email,b.enabled?1:0,timestamp),
+    db.prepare('INSERT INTO affiliate_withdrawal_days (id,days_mask,updated_at) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET days_mask=excluded.days_mask,updated_at=excluded.updated_at').bind(mask,timestamp)
+   ]);
+  }catch(error){
+   if(/no such table.*affiliate_withdrawal_days/i.test(String(error?.message||error)))return bad('Please run the V16.37 withdrawal-days SQL setup in the callfocus-affiliates D1 Console before saving.',503);
+   throw error;
+  }
+  await audit(db,'admin','settings_updated','affiliate_settings',`rate=${percent},days=${withdrawDays.join(',')},min=${minimum}`);
+  return json({ok:true,withdrawDays:activeDays(mask)});
  }
  if(path==='/api/admin/affiliate/action'&&request.method==='POST'){
   const b=await readBody(request);if(!b)return bad('Invalid action.');
