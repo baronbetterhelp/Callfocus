@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=16.07-test" />
+  <link rel="stylesheet" href="/admin.css?v=16.29-audience" />
 </head>
 <body class="admin-page">
   <header class="site-header">
@@ -207,7 +207,6 @@
           <div class="direct-email-layout">
             <div class="direct-email-compose">
               <label>Recipient email(s)<textarea id="directCustomEmails" rows="2" maxlength="4000" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="name@example.com"></textarea><span class="field-help">Enter one or more email addresses separated by commas, spaces or new lines.</span></label>
-              <div class="direct-recipient-summary" id="directRecipientSummary">No recipients selected yet.</div>
               <div class="direct-message-library">
                 <div class="direct-message-library-head">
                   <div><strong>Saved messages</strong><small>Your current draft saves automatically on this device. Save reusable messages here to load them anytime.</small></div>
@@ -222,9 +221,18 @@
                   <button class="btn btn-ghost direct-template-delete" type="button" id="directDeleteTemplateBtn">Delete</button>
                 </div>
               </div>
-              <details class="direct-saved-customers">
-                <summary>Select saved CallFocus customer <span class="field-optional">Optional</span></summary>
-                <div class="direct-saved-customers-body">
+              <div class="direct-service-audience" id="directServiceAudience">
+                <div class="admin-users-heading"><div><h3>Audience</h3><p class="admin-panel-copy">Choose all active customers, or select individual customers for this non-promotional message.</p></div></div>
+                <div class="marketing-audience-choice direct-audience-choice" role="radiogroup" aria-label="Non-promotional email audience">
+                  <label class="marketing-audience-option active"><input type="radio" name="directAudience" value="selected" checked /><span><strong>Selected customers</strong><small>Tick the accounts you want to contact below, or enter their email addresses above.</small></span></label>
+                  <label class="marketing-audience-option"><input type="radio" name="directAudience" value="all" /><span><strong>All active customers</strong><small>Send this service message to every active account. Each batch is limited to 100 recipients.</small></span></label>
+                </div>
+                <div class="direct-recipient-summary" id="directRecipientSummary" role="status" aria-live="polite">Loading customer accounts…</div>
+                <div class="direct-audience-status" id="directAudienceStatus" role="status" aria-live="polite">Checking all customer accounts…</div>
+                <div class="direct-audience-refresh"><button class="btn btn-ghost" id="directRefreshCustomersBtn" type="button">Refresh customers</button></div>
+                <details class="direct-saved-customers" open>
+                  <summary>Browse saved CallFocus customers</summary>
+                  <div class="direct-saved-customers-body">
                   <label>Find customer<input id="directRecipientSearch" type="search" autocomplete="off" placeholder="Name, email or phone" /></label>
                   <div class="direct-customer-tools">
                     <div class="direct-funding-filters" role="group" aria-label="Filter customers by verified payment status">
@@ -237,9 +245,11 @@
                       <button class="btn btn-ghost" type="button" id="directClearShownBtn">Clear shown</button>
                     </div>
                   </div>
-                  <div class="direct-recipient-list" id="directRecipientList"><div class="admin-users-empty">Customer accounts will appear here.</div></div>
+                  <div class="direct-recipient-list" id="directRecipientList"><div class="admin-users-empty">Loading active customer accounts…</div></div>
+                  <button class="btn btn-ghost direct-load-more hidden" type="button" id="directMoreCustomersBtn">Show more customers</button>
                 </div>
-              </details>
+                </details>
+              </div>
               <label>Email subject<input id="directSubject" maxlength="160" placeholder="Your CallFocus account update" /></label>
               <label>Message<textarea id="directMessage" rows="6" maxlength="5000" placeholder="Write the message you want the customer to receive. You can use {name} to personalize it."></textarea></label>
               <div class="form-grid two">
@@ -580,6 +590,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=16.11-pocketfi"></script><script src="/admin-video.js?v=16.07-test"></script><script src="/cf-controls-admin.js?v=16.24"></script>
+  <script src="/admin.js?v=16.29-audience"></script><script src="/admin-video.js?v=16.07-test"></script><script src="/cf-controls-admin.js?v=16.24"></script>
 </body>
 </html>

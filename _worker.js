@@ -634,7 +634,7 @@ async function handleAdminDirectEmail(request, env) {
   if (requestId.length < 8) return json({ error: 'Message request identifier is missing.' }, 400);
 
   let users = selectedIds.length ? await listMarketingUsers(env, selectedIds) : [];
-  users = users.filter(user => user?.id && user?.email && user.accountDisabled !== true && user.emailVerified !== false);
+  users = users.filter(user => user?.id && user?.email && user.accountDisabled !== true);
   const byEmail = new Map();
   for (const user of users) {
     const email = normalizeCustomerEmail(user.email);

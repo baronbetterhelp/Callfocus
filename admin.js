@@ -31,6 +31,8 @@ let unlimitedCreditEmails=[];
 let adminUsers=[];
 let adminUsersCursor='';
 let adminUsersLoading=false;
+let adminUsersComplete=false;
+let adminUsersLoadError='';
 let adminUsersVisibleLimit=80;
 let adminAiUsage=null;
 let adminAiUsageLoading=false;
@@ -56,6 +58,7 @@ let quickStartItems=[];
 let marketingSelectedUserIds=new Set();
 let directSelectedUserIds=new Set();
 let directFundingFilter='all';
+let directVisibleLimit=80;
 let directSending=false;
 let directTemplates=[];
 let directDraftTimer=null;
@@ -496,7 +499,7 @@ async function loadAdminUsers(reset=false){
   if(adminUsersLoading)return;
   adminUsersLoading=true;
   const refresh=$('adminUsersRefreshBtn'),more=$('adminUsersMoreBtn'),summary=$('adminUsersSummary');
-  if(reset){adminUsers=[];adminUsersCursor='';adminUsersVisibleLimit=80;}
+  if(reset){adminUsers=[];adminUsersCursor='';adminUsersVisibleLimit=80;adminUsersComplete=false;adminUsersLoadError='';directVisibleLimit=80;renderDirectRecipients();}
   if(refresh){refresh.disabled=true;refresh.textContent='Refreshing users…';}
   if(more){more.disabled=true;more.textContent='Loading…';more.classList.add('hidden');}
   let complete=false;
@@ -520,11 +523,11 @@ async function loadAdminUsers(reset=false){
       if($('adminDashUsers'))$('adminDashUsers').textContent=byId.size.toLocaleString();
       // Keep iPhone Safari responsive. Do not rebuild thousands of DOM cards
       // for each received page: draw once on first page and once at completion.
-      if(pages===1){adminUsers=[...byId.values()];renderAdminUsers();}
+      if(pages===1){adminUsers=[...byId.values()];renderAdminUsers();renderDirectRecipients();}
       if(pages%5===0)await new Promise(resolve=>setTimeout(resolve,0));
     }while(!complete);
     adminUsers=[...byId.values()].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
-    renderAdminUsers();
+    adminUsersComplete=true;adminUsersLoadError='';renderAdminUsers();
     if(summary){
       const funded=adminUsers.filter(u=>Number(u?.wallet?.purchaseCount||0)>0).length;
       const disabled=adminUsers.filter(u=>u.accountDisabled).length;
@@ -532,6 +535,7 @@ async function loadAdminUsers(reset=false){
       summary.textContent=`${adminUsers.length.toLocaleString()} customers · ${funded} funded · ${unlimited} unlimited · ${disabled} disabled`;
     }
   }catch(err){
+    adminUsersComplete=false;adminUsersLoadError=err.message||'Customer list incomplete';
     adminUsers=[...byId.values()].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
     renderAdminUsers();
     if(summary)summary.textContent=`Partial customer list: ${adminUsers.length.toLocaleString()} loaded. ${err.message} Try Refresh users.`;
@@ -785,7 +789,7 @@ $('runDiagnosticsBtn')?.addEventListener('click',runDiagnostics);
 
 /* CallFocus V15.72 — persistent direct-email draft + reusable saved messages. */
 function directValue(id){return String($(id)?.value||'').trim();}
-function directDraftPayload(){return {customEmails:directValue('directCustomEmails'),selectedUserIds:[...directSelectedUserIds],subject:directValue('directSubject'),message:directValue('directMessage'),ctaLabel:directValue('directCtaLabel'),ctaUrl:directValue('directCtaUrl'),updatedAt:new Date().toISOString()};}
+function directDraftPayload(){return {customEmails:directValue('directCustomEmails'),audience:directAudience(),selectedUserIds:[...directSelectedUserIds],subject:directValue('directSubject'),message:directValue('directMessage'),ctaLabel:directValue('directCtaLabel'),ctaUrl:directValue('directCtaUrl'),updatedAt:new Date().toISOString()};}
 function saveDirectDraftLocal(){try{localStorage.setItem(DIRECT_DRAFT_STORAGE_KEY,JSON.stringify(directDraftPayload()));}catch{}}
 function scheduleDirectDraftSave(){clearTimeout(directDraftTimer);directDraftTimer=setTimeout(saveDirectDraftLocal,180);}
 function restoreDirectDraftLocal(){
@@ -797,6 +801,7 @@ function restoreDirectDraftLocal(){
     if($('directCtaLabel'))$('directCtaLabel').value=String(d.ctaLabel??'Open CallFocus');
     if($('directCtaUrl'))$('directCtaUrl').value=String(d.ctaUrl??'https://callfocus.link');
     if(Array.isArray(d.selectedUserIds))directSelectedUserIds=new Set(d.selectedUserIds.map(v=>String(v||'')).filter(Boolean));
+    const audience=d.audience==='all'?'all':'selected';const input=document.querySelector(`input[name="directAudience"][value="${audience}"]`);if(input)input.checked=true;
   }catch{}
 }
 function renderDirectTemplates(){
@@ -850,7 +855,10 @@ function directInvalidRecipientEmails(){
   return [...new Set(parts.filter(v=>!directEmailValid(v)))];
 }
 function directUserIsFunded(user){return Number(user?.wallet?.purchaseCount||0)>0;}
-function directEligibleUsers(){return adminUsers.filter(u=>!u.accountDisabled&&u.emailVerified!==false);}
+function directAudience(){return document.querySelector('input[name="directAudience"]:checked')?.value==='all'?'all':'selected';}
+// Transactional/service emails may include active accounts created while
+// verification was paused. This does NOT change promotional eligibility.
+function directEligibleUsers(){return adminUsers.filter(u=>!u.accountDisabled&&directEmailValid(u.email));}
 function directRecipientRows(){
   const q=String($('directRecipientSearch')?.value||'').trim().toLowerCase();
   let rows=directEligibleUsers();
@@ -873,33 +881,46 @@ function renderDirectFundingControls(){
 }
 function renderDirectRecipients(){
   const root=$('directRecipientList'),summary=$('directRecipientSummary');if(!root||!summary)return;
-  const rows=directRecipientRows();
-  const selected=[...directSelectedUserIds].filter(id=>adminUsers.some(u=>u.id===id&&!u.accountDisabled&&u.emailVerified!==false));
-  directSelectedUserIds=new Set(selected);
+  const rows=directRecipientRows(),audience=directAudience(),eligible=directEligibleUsers();
+  if(adminUsersComplete){directSelectedUserIds=new Set([...directSelectedUserIds].filter(id=>eligible.some(u=>u.id===id)));}
   const custom=directCustomRecipientEmails(),invalid=directInvalidRecipientEmails();
+  document.querySelectorAll('input[name="directAudience"]').forEach(input=>input.closest('.marketing-audience-option')?.classList.toggle('active',input.checked));
   const parts=[];
-  if(custom.length)parts.push(`${custom.length} custom email${custom.length===1?'':'s'}`);
-  if(directSelectedUserIds.size)parts.push(`${directSelectedUserIds.size} saved customer${directSelectedUserIds.size===1?'':'s'}`);
-  if(invalid.length)parts.push(`${invalid.length} invalid address${invalid.length===1?'':'es'}`);
-  summary.textContent=parts.length?`${parts.join(' · ')} selected`:'No recipients selected yet.';
+  if(audience==='all')parts.push(`${eligible.length.toLocaleString()} active customer${eligible.length===1?'':'s'}`);
+  else parts.push(`${directSelectedUserIds.size.toLocaleString()} selected customer${directSelectedUserIds.size===1?'':'s'}`);
+  if(custom.length)parts.push(`${custom.length} additional email${custom.length===1?'':'s'}`);
+  if(invalid.length)parts.push(`${invalid.length} invalid email address${invalid.length===1?'':'es'}`);
+  summary.textContent=parts.join(' · ') + (adminUsersComplete?'':' · list still loading');
   renderDirectFundingControls();
+  const status=$('directAudienceStatus');
+  if(status){
+    status.classList.toggle('is-error',!!adminUsersLoadError);
+    status.textContent=adminUsersLoading?`Loading customer accounts… ${adminUsers.length.toLocaleString()} received so far. Do not send to All until loading finishes.`:
+      adminUsersLoadError?`Customer loading incomplete: ${adminUsersLoadError}. Press Refresh customers and verify the customer storage binding if the count remains unexpected.`:
+      adminUsersComplete?`${adminUsers.length.toLocaleString()} customer records read from this website's connected storage. ${eligible.length.toLocaleString()} active accounts have email addresses.${adminUsers.length>eligible.length?' Disabled or invalid-email accounts are excluded.':''}`:
+      'Customer records have not finished loading. Press Refresh customers if needed.';
+  }
+  const refresh=$('directRefreshCustomersBtn');if(refresh){refresh.disabled=adminUsersLoading;refresh.textContent=adminUsersLoading?'Loading customers…':'Refresh customers';}
   const selectShown=$('directSelectShownBtn'),clearShown=$('directClearShownBtn');
-  if(selectShown)selectShown.disabled=!rows.length||rows.every(u=>directSelectedUserIds.has(u.id));
-  if(clearShown)clearShown.disabled=!rows.some(u=>directSelectedUserIds.has(u.id));
-  if(!rows.length){root.innerHTML='<div class="admin-users-empty">No customers match this search and funding filter. You can still send to any valid email address above.</div>';return;}
-  root.innerHTML=rows.map(u=>{
-    const funded=directUserIsFunded(u);
-    const purchaseCount=Number(u?.wallet?.purchaseCount||0);
-    const paid=Number(u?.wallet?.totalPaidNaira||0);
+  if(selectShown)selectShown.disabled=audience==='all'||!rows.length||rows.every(u=>directSelectedUserIds.has(u.id));
+  if(clearShown)clearShown.disabled=audience==='all'||!rows.some(u=>directSelectedUserIds.has(u.id));
+  const shown=rows.slice(0,directVisibleLimit),more=$('directMoreCustomersBtn');
+  if(more){more.classList.toggle('hidden',rows.length<=shown.length);more.textContent=`Show more customers (${(rows.length-shown.length).toLocaleString()} remaining)`;}
+  if(!rows.length){root.innerHTML=`<div class="admin-users-empty">${adminUsersLoading?'Loading customer accounts…':adminUsersLoadError?'Could not load the full customer list. Refresh customers to retry.':adminUsersComplete?'No active customers match this search or funding filter.':'Waiting for customer accounts…'}</div>`;return;}
+  const previousScroll=root.scrollTop;
+  root.innerHTML=shown.map(u=>{
+    const funded=directUserIsFunded(u),purchaseCount=Number(u?.wallet?.purchaseCount||0),paid=Number(u?.wallet?.totalPaidNaira||0);
     const fundingTitle=funded?`${purchaseCount} verified payment${purchaseCount===1?'':'s'} · ₦${paid.toLocaleString(undefined,{maximumFractionDigits:2})}`:'No verified payment yet';
-    return `<label class="marketing-recipient-row direct-recipient-row${directSelectedUserIds.has(u.id)?' selected':''}"><input type="checkbox" data-direct-user-id="${esc(u.id)}" ${directSelectedUserIds.has(u.id)?'checked':''}/><span class="marketing-recipient-avatar">${esc((u.name||u.email||'?').trim().charAt(0).toUpperCase()||'?')}</span><span class="marketing-recipient-copy"><strong>${esc(u.name||'Unnamed user')}</strong><small>${esc(u.email)}</small>${u.unlimited?'<small class="direct-recipient-access">Unlimited access</small>':''}</span><span class="direct-funding-badge ${funded?'funded':'not-funded'}" title="${esc(fundingTitle)}">${funded?'Funded':'Not funded'}</span></label>`;
+    return `<label class="marketing-recipient-row direct-recipient-row${directSelectedUserIds.has(u.id)?' selected':''}"><input type="checkbox" data-direct-user-id="${esc(u.id)}" ${directSelectedUserIds.has(u.id)?'checked':''} ${audience==='all'?'disabled':''}/><span class="marketing-recipient-avatar">${esc((u.name||u.email||'?').trim().charAt(0).toUpperCase()||'?')}</span><span class="marketing-recipient-copy"><strong>${esc(u.name||'Unnamed user')}</strong><small>${esc(u.email)}</small>${u.unlimited?'<small class="direct-recipient-access">Unlimited access</small>':''}${u.emailVerified===false?'<small class="direct-recipient-unverified">Email not verified</small>':''}</span><span class="direct-funding-badge ${funded?'funded':'not-funded'}" title="${esc(fundingTitle)}">${funded?'Funded':'Not funded'}</span></label>`;
   }).join('');
+  root.scrollTop=previousScroll;
 }
 function directSelectRows(select=true){
+  if(directAudience()==='all')return;
   const rows=directRecipientRows();
   rows.forEach(u=>{if(select)directSelectedUserIds.add(u.id);else directSelectedUserIds.delete(u.id);});
   renderDirectRecipients();scheduleDirectDraftSave();
-  toast(select?`${rows.length} shown customer${rows.length===1?'':'s'} selected`:`${rows.length} shown customer${rows.length===1?'':'s'} cleared`);
+  toast(select?`${rows.length} matching customer${rows.length===1?'':'s'} selected`:`${rows.length} matching customer${rows.length===1?'':'s'} cleared`);
 }
 function directShowResult(message,type='ok'){
   const box=$('directSendResult');if(!box)return;box.classList.remove('hidden','bad');if(type==='bad')box.classList.add('bad');box.textContent=message;
@@ -907,30 +928,46 @@ function directShowResult(message,type='ok'){
 async function sendDirectCustomerEmail(){
   if(directSending)return;
   const subject=directValue('directSubject'),message=directValue('directMessage'),ctaLabel=directValue('directCtaLabel'),ctaUrl=directValue('directCtaUrl');
-  const customEmails=directCustomRecipientEmails(),invalidEmails=directInvalidRecipientEmails();
+  const customEmails=directCustomRecipientEmails(),invalidEmails=directInvalidRecipientEmails(),audience=directAudience();
   if(invalidEmails.length)return toast(`Fix invalid email address${invalidEmails.length===1?'':'es'} first`);
-  if(!directSelectedUserIds.size&&!customEmails.length)return toast('Add at least one recipient email or select a saved customer');
+  if(!adminUsersComplete||adminUsersLoading||adminUsersLoadError)return toast('Finish loading customers or press Refresh customers before sending');
+  const eligible=directEligibleUsers(),selected=audience==='all'?eligible:eligible.filter(u=>directSelectedUserIds.has(u.id));
+  if(!selected.length&&!customEmails.length)return toast('Add a recipient email or select customers');
   if(!subject||!message)return toast('Add an email subject and message first');
   if((ctaLabel&&!ctaUrl)||(!ctaLabel&&ctaUrl))return toast('Add both button text and button link, or leave both blank');
-  const estimatedCount=directSelectedUserIds.size+customEmails.length;
-  if(estimatedCount>100)return toast('Direct messages are limited to 100 recipients at a time');
-  if(!confirm(`Send this direct non-promotional message to ${estimatedCount} recipient${estimatedCount===1?'':'s'}?`))return;
+  // Deduplicate manual addresses and registered customers by normalized email.
+  const ids=[...new Map(selected.map(u=>[String(u.email).toLowerCase(),u.id])).values()];
+  const existing=new Set(selected.map(u=>String(u.email).toLowerCase()));
+  const manual=customEmails.filter(email=>!existing.has(email));
+  const estimatedCount=ids.length+manual.length;
+  if(!confirm(`Send this non-promotional service email to ${estimatedCount.toLocaleString()} recipient${estimatedCount===1?'':'s'}?\n\nAudience: ${audience==='all'?'Every active registered customer':'Selected customers'}${manual.length?` plus ${manual.length} additional address(es)`:''}.\n\nRecipients will be processed in batches of up to 100. Use this only for account, service, support, or payment notices, not advertising.`))return;
   const btn=$('directSendBtn'),old=btn?.textContent||'Send direct message';
-  const requestId=(globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,100);
-  directSending=true;if(btn){btn.disabled=true;btn.textContent='Sending…';}directShowResult('Sending direct message…');
+  const requestId=(globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,80);
+  const packets=[];for(let i=0;i<ids.length;i+=100)packets.push({selectedUserIds:ids.slice(i,i+100),customEmails:[]});
+  for(let i=0;i<manual.length;i+=100)packets.push({selectedUserIds:[],customEmails:manual.slice(i,i+100)});
+  directSending=true;if(btn){btn.disabled=true;btn.textContent='Sending…';}
+  let sent=0,failed=0,batches=0;
   try{
-    const result=await api('/api/admin/direct-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subject,message,ctaLabel,ctaUrl,selectedUserIds:[...directSelectedUserIds],customEmails,requestId})});
-    const sent=Number(result.sent||0),failed=Number(result.failed||0);
-    directShowResult(`${sent} sent${failed?` · ${failed} failed`:''}`,failed&&!sent?'bad':'ok');
-    toast(failed?`Direct message completed · ${sent} sent · ${failed} failed`:`Direct message sent to ${sent} recipient${sent===1?'':'s'}`);
+    for(let i=0;i<packets.length;i++){
+      const chunk=packets[i];directShowResult(`Sending batch ${i+1} of ${packets.length}… ${sent.toLocaleString()} sent, ${failed.toLocaleString()} failed.`);
+      let result;
+      try{result=await api('/api/admin/direct-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subject,message,ctaLabel,ctaUrl,...chunk,requestId:`${requestId}-${i+1}`})});}
+      catch(err){throw new Error(`Batch ${i+1}/${packets.length} could not be confirmed: ${err.message}. ${sent} previous messages were confirmed. Do not resend the whole audience until you verify the delivery log.`);}
+      sent+=Number(result.sent||0);failed+=Number(result.failed||0);batches++;
+    }
+    directShowResult(`${sent.toLocaleString()} sent · ${failed.toLocaleString()} failed · ${batches} batch(es).`,failed&&!sent?'bad':'ok');
+    toast(failed?'Direct messages completed with delivery errors':`Direct message sent to ${sent.toLocaleString()} recipients`);
     loadMarketingStatus().catch(()=>{});
-  }catch(err){directShowResult(err.message||'Could not send direct message','bad');toast(err.message||'Could not send direct message');}
+  }catch(err){directShowResult(err.message||'Could not finish sending','bad');toast('Direct sending interrupted; check results');}
   finally{directSending=false;if(btn){btn.disabled=false;btn.textContent=old;}}
 }
 restoreDirectDraftLocal();
 ['directCustomEmails','directSubject','directMessage','directCtaLabel','directCtaUrl'].forEach(id=>$(id)?.addEventListener('input',()=>{if(id==='directCustomEmails')renderDirectRecipients();scheduleDirectDraftSave();}));
-$('directRecipientSearch')?.addEventListener('input',renderDirectRecipients);
-document.querySelectorAll('[data-direct-funding-filter]').forEach(btn=>btn.addEventListener('click',()=>{directFundingFilter=String(btn.dataset.directFundingFilter||'all');renderDirectRecipients();}));
+document.querySelectorAll('input[name="directAudience"]').forEach(input=>input.addEventListener('change',()=>{renderDirectRecipients();scheduleDirectDraftSave();}));
+$('directRefreshCustomersBtn')?.addEventListener('click',()=>loadAdminUsers(true));
+$('directMoreCustomersBtn')?.addEventListener('click',()=>{directVisibleLimit+=80;renderDirectRecipients();});
+$('directRecipientSearch')?.addEventListener('input',()=>{directVisibleLimit=80;if($('directRecipientList'))$('directRecipientList').scrollTop=0;renderDirectRecipients();});
+document.querySelectorAll('[data-direct-funding-filter]').forEach(btn=>btn.addEventListener('click',()=>{directFundingFilter=String(btn.dataset.directFundingFilter||'all');directVisibleLimit=80;renderDirectRecipients();}));
 $('directSelectShownBtn')?.addEventListener('click',()=>directSelectRows(true));
 $('directClearShownBtn')?.addEventListener('click',()=>directSelectRows(false));
 $('directRecipientList')?.addEventListener('change',event=>{const box=event.target.closest('[data-direct-user-id]');if(!box)return;const id=box.dataset.directUserId;if(box.checked)directSelectedUserIds.add(id);else directSelectedUserIds.delete(id);renderDirectRecipients();scheduleDirectDraftSave();});

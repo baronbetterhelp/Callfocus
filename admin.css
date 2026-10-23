@@ -1044,3 +1044,18 @@ body.admin-page{
 .cf-funding-note{font-size:11px;line-height:1.7;opacity:.78;}
 @media(max-width:850px){.cf-funding-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media(max-width:450px){.cf-funding-filters{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.cf-funding-filters label:first-child{grid-column:1/-1}.cf-funding-filters>button{grid-column:1/-1}.cf-funding-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+
+/* V16.29: Direct service-email audience - no changes to marketing form. */
+.direct-service-audience{display:grid;gap:11px;min-width:0;padding:17px;border:1px solid rgba(28,93,82,.14);border-radius:20px;background:linear-gradient(160deg,#f9fcfa,#f1f7f4)}
+.direct-service-audience .admin-users-heading{margin-bottom:0}
+.direct-audience-choice{margin:5px 0 0;grid-template-columns:1fr 1fr}
+.direct-service-audience .direct-audience-status{font-size:.79rem;line-height:1.5;color:#5a786e;padding:0 2px}
+.direct-service-audience .direct-audience-status.is-error{color:#a54842}
+.direct-audience-refresh{display:flex;justify-content:flex-end}
+.direct-audience-refresh .btn{font-size:.8rem;padding:9px 14px;min-height:36px}
+.direct-service-audience .direct-saved-customers{background:#fff}
+.direct-service-audience .direct-recipient-list{max-height:320px}
+.direct-service-audience .direct-load-more{width:100%;min-height:38px}
+.direct-recipient-unverified{color:#a47932!important}
+.direct-service-audience .direct-funding-badge{white-space:nowrap}
+@media(max-width:760px){.direct-audience-choice{grid-template-columns:1fr}.direct-service-audience{padding:13px}.direct-service-audience .direct-recipient-row{grid-template-columns:auto 32px minmax(0,1fr)}.direct-service-audience .direct-funding-badge{grid-column:3;justify-self:start}.direct-service-audience .direct-recipient-list{max-height:320px}}
