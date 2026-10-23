@@ -31,7 +31,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/callfocus.css?v=16.07-test" />
   <link rel="stylesheet" href="/elevenlabs.css?v=16.21">
-  <link rel="stylesheet" href="/cf-controls.css?v=16.24" />
+  <link rel="stylesheet" href="/cf-controls.css?v=16.25" />
 </head>
 <body data-cf-document-view="credits">
   <div class="app-root home-page" id="pageRoot">
@@ -562,7 +562,13 @@
           </div>
 
           <div class="credit-balance-hero">
-            <div><span>Available balance</span><strong id="creditPageBalance">0 credits</strong><small id="creditPageTime">0:00 shared audio time</small></div>
+            <div class="cf-credit-balance-column">
+              <div class="cf-credit-balance-top"><span>Available balance</span><strong id="creditPageBalance">0 credits</strong><small id="creditPageTime">0:00 shared audio time</small></div>
+              <section class="cf-credit-recent" aria-labelledby="cfCreditRecentTitle">
+                <div class="cf-credit-recent-head"><h3 id="cfCreditRecentTitle">Recent activity</h3><button type="button" data-route="history" aria-label="View full transaction and usage history">View all <span aria-hidden="true">→</span></button></div>
+                <div id="cfCreditRecentRows" class="cf-credit-recent-list" aria-live="polite" aria-busy="true"><p class="cf-credit-recent-empty">Loading your latest activity…</p></div>
+              </section>
+            </div>
             <div class="credit-rate-card"><span>Standard rate</span><strong>100 credits = 1 minute</strong><small>100 credits = ₦1,000 = 1 minute</small></div>
           </div>
 
@@ -970,5 +976,6 @@
   <script src="/callfocus.js?v=16.14-flutterwave"></script>
   <script src="/elevenlabs.js?v=16.21"></script>
   <script src="/cf-controls-client.js?v=16.24"></script>
+  <script src="/cf-credit-activity.js?v=16.25" defer></script>
 </body>
 </html>
