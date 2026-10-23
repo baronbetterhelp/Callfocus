@@ -27,7 +27,7 @@
     const voiceRow=$('voiceNotePrompt')?.closest('.voice-note-composer')?.querySelector('.voice-note-gender-row');
     if(voiceRow){let host=$('cf-el-note');if(!host){host=document.createElement('div');host.id='cf-el-note';voiceRow.insertAdjacentElement('afterend',host)}host.outerHTML=voicePanel('note');}
     const hero=$('heroNewCallBtn');const quick=hero?.parentElement;
-    if(quick&&!$('cf-el-home-btn')){const btn=document.createElement('button');btn.id='cf-el-home-btn';btn.className='cf-el-home';btn.type='button';btn.textContent='◉  Clone your voice';quick.insertAdjacentElement('afterend',btn);btn.addEventListener('click',openModal)}
+    if(quick&&!$('cf-el-home-btn')){const btn=document.createElement('button');btn.id='cf-el-home-btn';btn.className='cf-el-home';btn.type='button';btn.innerHTML='<span aria-hidden="true">◉</span><span>Clone your voice</span><span class="cf-clone-hot">HOT</span>';quick.insertAdjacentElement('afterend',btn);btn.addEventListener('click',openModal)}
     const saved=$('cf-el-saved-list');if(saved)saved.innerHTML=voices.length?`<ul>${voices.map(v=>`<li>${esc(v.name)}${v.requiresVerification?' · verification required':''}</li>`).join('')}</ul>`:'No saved voices yet.';if($('cf-el-count'))$('cf-el-count').textContent=`${voices.length} / 3`;fitModal();
   }
   function installModal(){
@@ -54,7 +54,7 @@
     $('cf-el-close').onclick=closeModal;
     div.addEventListener('click',e=>{if(e.target===div)closeModal()});
     $('cf-el-record').onclick=toggleRecording;$('cf-el-save').onclick=saveVoice;
-    $('cf-el-file').addEventListener('change',()=>{const file=$('cf-el-file').files?.[0];$('cf-el-file-summary').textContent=file?.name||'No file selected';status(file?`Recording selected: ${file.name}`:(recordedBlob?'Your recorded sample is ready.':'') );fitModal()});
+    $('cf-el-file').addEventListener('change',()=>{const input=$('cf-el-file');const file=input.files?.[0];if(file&&!audioIsValid(file)){input.value='';$('cf-el-file-summary').textContent='No file selected';audioRejected('File type declined.');return;}$('cf-el-file-summary').textContent=file?.name||'No file selected';status(file?`Recording selected: ${file.name}`:(recordedBlob?'Your recorded sample is ready.':'Supported audio: MP3, M4A/MP4, WEBM, WAV, OGG, AAC, FLAC.') );fitModal()});
     $('cf-el-saved').addEventListener('toggle',()=>{$('cf-el-layer')?.querySelector('.cf-el-modal')?.classList.toggle('cf-el-expanded',$('cf-el-saved').open);fitModal()});
     window.addEventListener('resize',fitModal,{passive:true});
     window.visualViewport?.addEventListener('resize',fitModal,{passive:true});
@@ -78,9 +78,15 @@
       fitting=false;
     });
   }
-  async function openModal(){if(!auth())return notify('Sign in to CallFocus first.');installModal();$('cf-el-layer').classList.add('open');document.body.classList.add('cf-el-is-open');const currentFile=$('cf-el-file')?.files?.[0];status(currentFile?`Recording selected: ${currentFile.name}`:(recordedBlob?'Your recorded sample is ready.':''));fitModal();$('cf-el-count').textContent=`${voices.length} / 3`;render();await loadVoices();$('cf-el-count').textContent=`${voices.length} / 3`;fitModal()}
+  async function openModal(){if(!auth())return notify('Sign in to CallFocus first.');installModal();$('cf-el-layer').classList.add('open');document.body.classList.add('cf-el-is-open');const currentFile=$('cf-el-file')?.files?.[0];status(currentFile?`Recording selected: ${currentFile.name}`:(recordedBlob?'Your recorded sample is ready.':'Supported audio: MP3, M4A/MP4, WEBM, WAV, OGG, AAC, FLAC.'));fitModal();$('cf-el-count').textContent=`${voices.length} / 3`;render();await loadVoices();$('cf-el-count').textContent=`${voices.length} / 3`;fitModal()}
   function closeModal(){if(recorder?.state==='recording')recorder.stop();$('cf-el-layer')?.classList.remove('open');document.body.classList.remove('cf-el-is-open')}
-  function status(text){const el=$('cf-el-status');if(el){el.textContent=String(text||'');el.classList.toggle('cf-el-status-active',!!text)}fitModal()}
+  const AUDIO_HELP='Accepted file types: MP3, M4A/MP4, WEBM, WAV, OGG, AAC and FLAC.';
+  function audioRejected(message){
+    status(message+' '+AUDIO_HELP);
+    const box=document.createElement('div');box.className='cf-el-file-alert';box.setAttribute('role','alert');box.textContent=message+' '+AUDIO_HELP;document.body.appendChild(box);setTimeout(()=>box.remove(),7000);
+  }
+  function status(text){const el=$('cf-el-status');if(el){el.textContent=String(text||'');el.classList.toggle('cf-el-status-active',!!text);el.classList.toggle('cf-el-status-error',/invalid|not supported|rejected|unsupported|file type|format/i.test(String(text||'')))}fitModal()}
+  function audioIsValid(file){if(!file)return false;const type=String(file.type||'').toLowerCase().split(';')[0];const name=String(file.name||'').toLowerCase();return /\.(mp3|m4a|mp4|webm|wav|ogg|aac|flac)$/.test(name)||/^(audio\/(mpeg|mp3|mp4|x-m4a|webm|wav|x-wav|ogg|aac|flac|x-flac)|video\/mp4)$/.test(type)}
   async function toggleRecording(){
     if(recorder?.state==='recording'){recorder.stop();return}
     if(!navigator.mediaDevices?.getUserMedia)return status('Microphone recording is not supported in this browser. Upload an audio file instead.');
@@ -94,12 +100,12 @@
   }
   async function saveVoice(){if(busy)return;if(voices.length>=3)return status('You have already saved 3 voices.');
     const name=$('cf-el-name')?.value.trim();const audio=$('cf-el-file')?.files?.[0]||recordedBlob;
-    if(!name)return status('Give this voice a name.');if(!audio)return status('Record or upload your own voice first.');if(!$('cf-el-consent')?.checked)return status('Confirm your consent before saving.');
+    if(!name)return status('Give this voice a name.');if(!audio)return status('Record or upload your own voice first.');if(audio instanceof File&&!audioIsValid(audio))return audioRejected('File type declined.');if(!$('cf-el-consent')?.checked)return status('Confirm your consent before saving.');
     const elapsed=recordedBlob===audio?(Date.now()-recordStart)/1000:null;
     if(elapsed!=null&&elapsed<10)return status('Record at least 10 seconds. 60–120 seconds is recommended for best results.');
     busy=true;$('cf-el-save').disabled=true;status('Saving your voice…');
     try{const form=new FormData();const extension=(audio.type||'').includes('mp4')?'m4a':(audio.type||'').includes('webm')?'webm':'mp3';form.set('name',name);form.set('consent','yes');form.set('audio',audio,audio.name||`my-voice.${extension}`);const result=await request('/api/elevenlabs/clone',{method:'POST',body:form,form:true});voices=[...voices,result.voice];status(result.voice.requiresVerification?'Voice created. Complete voice verification before using it.':'Voice saved. You can now select it for calls and voice notes.');$('cf-el-count').textContent=`${voices.length} / 3`;render()}
-    catch(err){status(err.message)}finally{busy=false;$('cf-el-save').disabled=false}
+    catch(err){/audio|type|format|unsupported|declined|rejected/i.test(err.message)?audioRejected('Your audio file was declined.'):status(err.message)}finally{busy=false;$('cf-el-save').disabled=false}
   }
   function send(ws,obj){if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify(obj))}
   const b64bytes=data=>{const bin=atob(data);const bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return bytes};

@@ -332,10 +332,17 @@
         <div class="premium-panel form-panel cf-offer-admin" id="purchaseOffersPanel">
           <div class="admin-users-heading"><div><span class="kicker">Payment bonuses</span><h3>Credit packages & extra-credit promotion</h3><p class="admin-panel-copy">Edit how many base credits each fixed NGN package gives. A bonus adds extra credits after a confirmed payment and never reduces the amount charged. New settings apply only to new payment requests.</p></div></div>
           <div class="form-grid three cf-offer-packages">
-            <label>₦3,000 gives (base credits)<input id="adminOffer3000" type="number" min="300" max="100000" step="1" value="300"></label>
-            <label>₦5,000 gives (base credits)<input id="adminOffer5000" type="number" min="300" max="100000" step="1" value="500"></label>
-            <label>₦10,000 gives (base credits)<input id="adminOffer10000" type="number" min="300" max="100000" step="1" value="1000"></label>
+            <label>Package 1 (base credits)<input id="adminOffer3000" type="number" min="300" max="100000" step="1" value="300"></label>
+            <label>Package 2 (base credits)<input id="adminOffer5000" type="number" min="300" max="100000" step="1" value="500"></label>
+            <label>Package 3 (base credits)<input id="adminOffer10000" type="number" min="300" max="100000" step="1" value="1000"></label>
           </div>
+          <div class="form-grid three cf-offer-packages">
+            <label>Price of first package (₦)<input id="adminPrice3000" type="number" min="100" max="1000000" step="1" value="3000"></label>
+            <label>Price of second package (₦)<input id="adminPrice5000" type="number" min="100" max="1000000" step="1" value="5000"></label>
+            <label>Price of third package (₦)<input id="adminPrice10000" type="number" min="100" max="1000000" step="1" value="10000"></label>
+          </div>
+          <label>Minimum deposit amount (₦)<input id="adminMinimumDeposit" type="number" min="100" max="1000000" step="1" value="3000"></label>
+          <p class="admin-panel-copy">The minimum amount is validated at checkout. Packages below your chosen minimum will not be available for new checkouts.</p>
           <label class="toggle-row"><span><strong>Enable extra-credit bonus</strong><small>Applied once on verified Paystack/KoraPay checkout or approved manual transfers</small></span><input id="adminPurchaseBonusEnabled" type="checkbox"></label>
           <div class="form-grid two"><label>Extra credits (%)<input id="adminPurchaseBonusPercent" type="number" min="0" max="100" step="1" value="30"></label></div>
           <div class="admin-recommendation" id="adminOfferPreview">Example: ₦10,000 gives 1,000 credits before any promotional bonus.</div>
@@ -346,6 +353,31 @@
           <p class="admin-availability-feedback" id="purchaseOffersFeedback" aria-live="polite"></p>
         </div>
 
+        <div class="premium-panel form-panel" id="cfNewAnnouncementAdmin">
+          <div class="admin-users-heading"><div><span class="kicker">Customer announcements</span><h3>Announcement popup</h3><p class="admin-panel-copy">Write and save an announcement independently of credit bonuses. Turn it on or off whenever you want.</p></div></div>
+          <label class="toggle-row"><span><strong>Display announcement popup</strong><small>Show to signed-in customers on Home</small></span><input type="checkbox" id="cfAnnEnabled"></label>
+          <label>Announcement heading<input type="text" maxlength="100" id="cfAnnTitle" placeholder="Important CallFocus update"></label>
+          <label>Announcement message<textarea rows="4" maxlength="1000" id="cfAnnMessage" placeholder="Write your announcement here..."></textarea></label>
+          <div class="form-grid three">
+            <label>Button label<input type="text" maxlength="36" id="cfAnnButton" value="Got it"></label>
+            <label>Open after (seconds)<input id="cfAnnOpen" type="number" min="0" max="300" step="0.5" value="2"></label>
+            <label>Auto close (seconds; 0 = stay open)<input id="cfAnnClose" type="number" min="0" max="3600" step="0.5" value="0"></label>
+          </div>
+          <button type="button" class="btn btn-primary admin-inline-save" id="cfAnnSave">Save announcement</button>
+          <p class="admin-availability-feedback" aria-live="polite" id="cfAnnFeedback"></p>
+        </div>
+        <div class="premium-panel form-panel" id="cfServiceRatesAdmin">
+          <div class="admin-users-heading"><div><span class="kicker">Usage pricing</span><h3>Credits per service</h3><p class="admin-panel-copy">Enter credits for one minute of service. Shorter usage is charged proportionally by seconds. Changes to active calls use their original rate; new sessions use saved rates.</p></div></div>
+          <div class="form-grid three">
+            <label>Voice calls · credits/min<input id="cfRateLiveCall" type="number" min="1" max="100000" step="0.1" value="100"></label>
+            <label>Voice notes · credits/min<input id="cfRateVoiceNote" type="number" min="1" max="100000" step="0.1" value="100"></label>
+            <label>Image to Video · credits/min<input id="cfRateImageVideo" type="number" min="1" max="100000" step="0.1" value="1800"></label>
+          </div>
+          <p class="admin-panel-copy" id="cfRatePreview">Examples: Voice calls 10 seconds = 16.7 credits; Image to Video 10 seconds = 300 credits.</p>
+          <p class="admin-panel-copy">Image-to-Video rates replace its separate 10/15-second costs when saved here. Other features without usage-based wallet billing are not affected.</p>
+          <button type="button" class="btn btn-primary admin-inline-save" id="cfRatesSave">Save service charges</button>
+          <p class="admin-availability-feedback" aria-live="polite" id="cfRatesFeedback"></p>
+        </div>
         <div class="admin-section-heading admin-section-heading-row"><div><span class="kicker">Payment methods</span><h2>Payment availability</h2><p>Choose which payment methods appear on CallFocus. Disabled methods disappear from the credit purchase page and cannot start new payment requests.</p></div><button class="btn btn-ghost" type="button" id="adminManualPaymentsRefreshBtn">Refresh payments</button></div>
         <div class="premium-panel form-panel manual-payment-settings-panel" id="adminPaymentMethodsPanel">
           <label class="toggle-row admin-availability-toggle"><span>Manual Bank Transfer</span><input id="adminManualPaymentsEnabled" type="checkbox" /></label>
@@ -547,6 +579,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=16.11-pocketfi"></script><script src="/admin-video.js?v=16.07-test"></script>
+  <script src="/admin.js?v=16.11-pocketfi"></script><script src="/admin-video.js?v=16.07-test"></script><script src="/cf-controls-admin.js?v=16.22"></script>
 </body>
 </html>

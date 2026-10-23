@@ -200,6 +200,8 @@ const DEFAULT_CONFIG = {
   purchaseBonusEnabled: false,
   purchaseBonusPercent: 30,
   purchasePackages: { '3000': 300, '5000': 500, '10000': 1000 },
+  purchasePackagePrices: { '3000':3000, '5000':5000, '10000':10000 },
+  minimumDepositNaira: 3000,
   purchasePromoPopupEnabled: false,
   purchasePromoPopupOpenSeconds: 8,
   purchasePromoPopupCloseSeconds: 0,
@@ -2153,7 +2155,9 @@ async function handleWalletConsume(request, env) {
     return json({ ok: true, duplicate: true, deductedSeconds: Math.max(0, Number(existing.seconds) || 0), requestedSeconds, wallet }, 200, { 'Cache-Control': 'no-store' });
   }
   const before = Math.max(0, Math.floor(Number(wallet.balanceSeconds) || 0));
-  const deductedSeconds = Math.min(before, requestedSeconds);
+  const rate=(await cfGetRates(env)).voiceNote;
+  const billedSeconds=cfChargeWalletSeconds(requestedSeconds,rate);
+  const deductedSeconds = Math.min(before, billedSeconds);
   if (deductedSeconds <= 0) return json({ error: 'Not enough CallFocus credit.', code: 'insufficient_credit', wallet }, 402, { 'Cache-Control': 'no-store' });
   wallet.balanceSeconds = Math.max(0, before - deductedSeconds);
   wallet.revision = Math.max(0, Number(wallet.revision) || 0) + 1;
@@ -2173,7 +2177,7 @@ async function handleWalletConsume(request, env) {
   const confirmedWallet = normalizeServerWallet(confirmed.wallet);
   const confirmedLedger = confirmedWallet.usage.find(row => String(row?.id || '') === ledgerId);
   if (!confirmedLedger) return json({ error: 'Credit usage could not be verified. Please try again.', code: 'wallet_write_unverified' }, 503, { 'Cache-Control': 'no-store' });
-  return json({ ok: deductedSeconds >= requestedSeconds, deductedSeconds, requestedSeconds, wallet: confirmedWallet }, deductedSeconds >= requestedSeconds ? 200 : 409, { 'Cache-Control': 'no-store' });
+  return json({ ok: deductedSeconds >= billedSeconds, deductedSeconds, requestedSeconds, billedSeconds, wallet: confirmedWallet }, deductedSeconds >= billedSeconds ? 200 : 409, { 'Cache-Control': 'no-store' });
 }
 
 async function handleAdminUnlimitedUser(request, env) {
@@ -2707,6 +2711,39 @@ async function handleAdminSignupEmailVerification(request, env) {
   return json({ ok: true, required: config.signupEmailVerificationEnabled, config });
 }
 
+// V16.22: announcement and credit tariff settings live in separate KV keys.
+const CF_ANNOUNCEMENT_KEY = 'cf:announcement:v1';
+const CF_SERVICE_RATE_KEY = 'cf:service-rates:v1';
+function cfAnnouncement(v={}) {
+  return {enabled:v.enabled===true,title:String(v.title||'').trim().slice(0,100),message:String(v.message||'').trim().slice(0,1000),buttonText:String(v.buttonText||'Close').trim().slice(0,36)||'Close',openSeconds:Math.max(0,Math.min(300,Number(v.openSeconds)||0)),closeSeconds:Math.max(0,Math.min(3600,Number(v.closeSeconds)||0)),revision:String(v.revision||'').slice(0,60)};
+}
+function cfServiceRates(v={}) {
+  const rate=(name,defaultRate)=>{const n=Number(v[name]);return Number.isFinite(n)&&n>=1&&n<=100000?Math.round(n*10)/10:defaultRate};
+  return {liveCall:rate('liveCall',100),voiceNote:rate('voiceNote',100),imageVideo:rate('imageVideo',1800),imageVideoOverride:v.imageVideoOverride===true};
+}
+async function cfGetRates(env){if(!env.CALLFOCUS_CONFIG)return cfServiceRates();try{return cfServiceRates(await env.CALLFOCUS_CONFIG.get(CF_SERVICE_RATE_KEY,{type:'json'})||{})}catch{return cfServiceRates()}}
+async function cfAdminFeatureControls(request,env){
+  if(!await adminAuthorized(request,env))return json({error:'Administrator sign-in required.'},401);
+  if(!env.CALLFOCUS_CONFIG)return json({error:'Global storage unavailable.'},503);
+  if(request.method==='GET')return json({ok:true,announcement:cfAnnouncement(await env.CALLFOCUS_CONFIG.get(CF_ANNOUNCEMENT_KEY,{type:'json'})||{}),rates:await cfGetRates(env)});
+  if(request.method!=='POST')return json({error:'Method not allowed'},405);
+  let body;try{body=await request.json()}catch{return json({error:'Invalid request.'},400)}
+  if(body.kind==='announcement'){
+    const v=cfAnnouncement(body.announcement||{});
+    if(v.enabled&&(!v.title||!v.message))return json({error:'Enter an announcement title and message before enabling.'},400);
+    v.revision=crypto.randomUUID();await env.CALLFOCUS_CONFIG.put(CF_ANNOUNCEMENT_KEY,JSON.stringify(v));return json({ok:true,announcement:v});
+  }
+  if(body.kind==='rates'){
+    const raw=body.rates||{};
+    for(const key of ['liveCall','voiceNote','imageVideo']){const n=Number(raw[key]);if(!Number.isFinite(n)||n<1||n>100000)return json({error:'Every service rate must be between 1 and 100,000 credits/minute.'},400)}
+    const rates=cfServiceRates({...raw,imageVideoOverride:true});
+    await env.CALLFOCUS_CONFIG.put(CF_SERVICE_RATE_KEY,JSON.stringify(rates));return json({ok:true,rates});
+  }
+  return json({error:'Unknown settings group.'},400);
+}
+async function cfPublicFeatureControls(env){return json({announcement:cfAnnouncement(env.CALLFOCUS_CONFIG?await env.CALLFOCUS_CONFIG.get(CF_ANNOUNCEMENT_KEY,{type:'json'})||{}:{}),rates:await cfGetRates(env)},200,{'Cache-Control':'no-store'})}
+function cfChargeWalletSeconds(durationSeconds,rate){return Math.ceil(Math.max(0,Number(durationSeconds)||0)*Math.max(1,Number(rate)||100)/100)}
+
 async function handleAdminPurchaseOffers(request,env) {
   if (!await adminAuthorized(request,env)) return json({error:'Administrator sign-in required.'},401);
   if(request.method==='GET')return json({ok:true,offers:cleanPurchaseOffers(await getConfig(env))});
@@ -2714,6 +2751,11 @@ async function handleAdminPurchaseOffers(request,env) {
   if(!env.CALLFOCUS_CONFIG)return json({error:'Global storage unavailable.'},503);
   let body;try{body=await request.json()}catch{return json({error:'Invalid request.'},400)}
   const packages=body?.purchasePackages;
+  const packagePrices=body?.purchasePackagePrices;
+  const minDeposit=Number(body?.minimumDepositNaira);
+  if(!Number.isInteger(minDeposit)||minDeposit<100||minDeposit>1000000)return json({error:'Minimum deposit must be ₦100–₦1,000,000.'},400);
+  if(!packagePrices||typeof packagePrices!=='object'||['3000','5000','10000'].some(k=>!Number.isInteger(Number(packagePrices[k]))||Number(packagePrices[k])<100||Number(packagePrices[k])>1000000))return json({error:'Enter a valid naira price for all three packages.'},400);
+  if(new Set(['3000','5000','10000'].map(k=>Number(packagePrices[k]))).size!==3)return json({error:'Package prices must be distinct.'},400);
   if(!packages||typeof packages!=='object'||Array.isArray(packages))return json({error:'Provide all three package credit amounts.'},400);
   const credits=['3000','5000','10000'].map(k=>Number(packages[k]));
   if(credits.some(c=>!Number.isInteger(c)||c<300||c>100000)||new Set(credits).size!==3)
@@ -2725,6 +2767,7 @@ async function handleAdminPurchaseOffers(request,env) {
   if(![opening,closing].every(n=>Number.isFinite(n)&&n>=0&&n<=86400))return json({error:'Popup timers must be between 0 and 86,400 seconds.'},400);
   const current=await getConfig(env);
   const config=sanitizeConfig({...current,purchasePackages:{'3000':credits[0],'5000':credits[1],'10000':credits[2]},
+    purchasePackagePrices:Object.fromEntries(['3000','5000','10000'].map(k=>[k,Number(packagePrices[k])])),minimumDepositNaira:minDeposit,
     purchaseBonusEnabled:body.purchaseBonusEnabled,purchaseBonusPercent:percent,purchasePromoPopupEnabled:body.purchasePromoPopupEnabled,
     purchasePromoPopupOpenSeconds:opening,purchasePromoPopupCloseSeconds:closing});
   await env.CALLFOCUS_CONFIG.put('global_config',JSON.stringify(config));
@@ -3457,6 +3500,9 @@ const PAYSTACK_PENDING_TTL = 60 * 60 * 24 * 2;
 function cleanPurchaseOffers(config = {}) {
   const defaults = { '3000':300, '5000':500, '10000':1000 };
   const submitted = config.purchasePackages && typeof config.purchasePackages === 'object' ? config.purchasePackages : {};
+  const savedPrices=config.purchasePackagePrices&&typeof config.purchasePackagePrices==='object'?config.purchasePackagePrices:{};
+  const prices=Object.fromEntries(Object.keys(defaults).map(k=>[k,Number.isInteger(Number(savedPrices[k]))&&Number(savedPrices[k])>=100&&Number(savedPrices[k])<=1000000?Number(savedPrices[k]):Number(k)]));
+  const minimumDepositNaira=Number.isInteger(Number(config.minimumDepositNaira))&&Number(config.minimumDepositNaira)>=100&&Number(config.minimumDepositNaira)<=1000000?Number(config.minimumDepositNaira):3000;
   const packages = {};
   for (const [amount, fallback] of Object.entries(defaults)) {
     const input = Number(submitted[amount]);
@@ -3464,6 +3510,8 @@ function cleanPurchaseOffers(config = {}) {
   }
   return {
     purchasePackages: packages,
+    purchasePackagePrices:prices,
+    minimumDepositNaira,
     purchaseBonusEnabled: config.purchaseBonusEnabled === true,
     purchaseBonusPercent: Number.isInteger(Number(config.purchaseBonusPercent)) && Number(config.purchaseBonusPercent) >= 0 && Number(config.purchaseBonusPercent) <= 100 ? Number(config.purchaseBonusPercent) : 30,
     purchasePromoPopupEnabled: config.purchasePromoPopupEnabled === true,
@@ -3479,7 +3527,8 @@ function quotePurchase(config, requestedCredits) {
   let amountNaira = baseCredits * PAYSTACK_NAIRA_PER_CREDIT;
   // Package rates are applied when the customer chooses the exact bundle value.
   const packageEntry = Object.entries(offers.purchasePackages).find(([, credits]) => credits === baseCredits);
-  if (packageEntry) amountNaira = Number(packageEntry[0]);
+  if (packageEntry) amountNaira = Number(offers.purchasePackagePrices[packageEntry[0]]||packageEntry[0]);
+  if(amountNaira < offers.minimumDepositNaira)return null;
   const percent = offers.purchaseBonusEnabled ? offers.purchaseBonusPercent : 0;
   const bonusCredits = Math.round(baseCredits * percent / 100 * 10) / 10;
   const credits = Math.round((baseCredits + bonusCredits)*10)/10;
@@ -6561,7 +6610,7 @@ async function safeCustomerRoute(label, handler) {
 const CF_VIDEO_PREFIX = 'image_video:job:';
 const CF_VIDEO_DEFAULT = Object.freeze({enabled:false,cost10:300,cost15:450,dailyLimit:3,aspectRatios:['9:16','1:1','16:9','4:5'],motionStyles:['Natural','Cinematic','Subtle motion','Dynamic','Dramatic']});
 function cfVideoSettings(v={}) {const allowedRatio=['9:16','1:1','16:9','4:5'];const allowedStyle=['Natural','Cinematic','Subtle motion','Dynamic','Dramatic'];return {enabled:v.enabled===true,cost10:Math.max(1,Math.min(100000,Math.round(Number(v.cost10)||CF_VIDEO_DEFAULT.cost10))),cost15:Math.max(1,Math.min(100000,Math.round(Number(v.cost15)||CF_VIDEO_DEFAULT.cost15))),dailyLimit:Math.max(1,Math.min(20,Math.round(Number(v.dailyLimit)||3))),aspectRatios:allowedRatio.filter(x=>(Array.isArray(v.aspectRatios)?v.aspectRatios:CF_VIDEO_DEFAULT.aspectRatios).includes(x)),motionStyles:allowedStyle.filter(x=>(Array.isArray(v.motionStyles)?v.motionStyles:CF_VIDEO_DEFAULT.motionStyles).includes(x))};}
-async function cfGetVideoSettings(env){if(!env.CALLFOCUS_CONFIG)return cfVideoSettings();return cfVideoSettings(await env.CALLFOCUS_CONFIG.get('image_video:settings',{type:'json'})||{});}
+async function cfGetVideoSettings(env){const base=cfVideoSettings(env.CALLFOCUS_CONFIG?await env.CALLFOCUS_CONFIG.get('image_video:settings',{type:'json'})||{}:{});const r=await cfGetRates(env);if(r.imageVideoOverride){base.cost10=Math.ceil(r.imageVideo/6);base.cost15=Math.ceil(r.imageVideo/4)}return base;}
 function cfVideoKey(userId,jobId){return CF_VIDEO_PREFIX+userId+':'+jobId;}
 function cfPublicVideo(job){return {id:job.id,createdAt:job.createdAt,updatedAt:job.updatedAt,duration:job.duration,cost:job.cost,charged:job.charged,refunded:job.refunded===true,status:job.status,aspectRatio:job.aspectRatio,motionStyle:job.motionStyle,prompt:job.prompt,thumbnail:job.thumbnail||'',stage:job.stage||'',videoReady:job.status==='completed',error:job.error||''};}
 async function cfPutVideoJob(env,job){job.updatedAt=new Date().toISOString();await env.CALLFOCUS_CONFIG.put(cfVideoKey(job.userId,job.id),JSON.stringify(job));}
@@ -6825,6 +6874,8 @@ export default {
     if (url.pathname === '/api/app-version'  && request.method === 'GET') return json({ version: '16.11-pocketfi-checkout-resume-test' }, 200, { 'Cache-Control': 'no-store' });
     if (url.pathname === '/api/location-search' && request.method === 'GET') { const limited = await callFocusRateLimit(request, env, 'location-search', 240, 900); if (limited) return limited; return handleLocationSearch(request); }
     if (url.pathname === '/api/public-config' && request.method === 'GET') return handlePublicConfig(env);
+    if (url.pathname === '/api/cf-feature-controls' && request.method === 'GET') return cfPublicFeatureControls(env);
+    if (url.pathname === '/api/admin/cf-feature-controls') return cfAdminFeatureControls(request,env);
     if (url.pathname === '/api/credit-entitlement') return handleCreditEntitlement(request, env);
     if (url.pathname === '/api/wallet/consume') return safeCustomerRoute('wallet-consume', () => handleWalletConsume(request, env));
     if (url.pathname === '/api/admin/login' && request.method === 'POST') { const limited = await callFocusRateLimit(request, env, 'admin-login', 8, 900); if (limited) return limited; return handleAdminLogin(request, env); }
@@ -6976,7 +7027,10 @@ async function applyLiveCallWalletCharge(env, auth, record) {
   const data = await getCustomerDataForUpdate(env, auth.user.id, auth.user.name);
   const wallet = normalizeServerWallet(data.wallet || {});
   if (unlimited) return { wallet, chargedSeconds: 0, creditExhausted: false, unlimited: true };
-  const targetSeconds = record.started === true ? Math.max(0, Math.floor(Number(record.durationSeconds) || 0)) : 0;
+  const existingRateRecord=record.chargeRateCreditsPerMinute;
+  const callRate=Number(existingRateRecord)>0?Number(existingRateRecord):(await cfGetRates(env)).liveCall;
+  record.chargeRateCreditsPerMinute=callRate;
+  const targetSeconds = record.started === true ? cfChargeWalletSeconds(Math.floor(Number(record.durationSeconds)||0),callRate) : 0;
   const ledgerId = liveCallWalletLedgerId(record.id);
   const ledgerIndex = wallet.usage.findIndex(row => String(row?.id || '') === ledgerId);
   let ledger = ledgerIndex >= 0 ? { ...wallet.usage[ledgerIndex] } : null;
@@ -7060,7 +7114,7 @@ async function handleCallUsage(request,env) {
   record.walletChargedSeconds = charge.unlimited ? 0 : Math.max(0, Number(charge.chargedSeconds) || 0);
   record.creditExhausted = charge.creditExhausted === true;
   record.creditsUsed = charge.unlimited ? 0 : Math.round((record.walletChargedSeconds / CALLFOCUS_SECONDS_PER_CREDIT) * 10) / 10;
-  if(!charge.unlimited) record.durationSeconds=Math.max(record.durationSeconds||0,record.walletChargedSeconds);
+  // Keep actual elapsed call duration separate from rate-adjusted wallet seconds.
   const priced=priceCallUsage(record);
   const telemetryDue=!Number.isFinite(storedUpdatedMs)||(nowMs-storedUpdatedMs)>=CALL_USAGE_TELEMETRY_CHECKPOINT_MS;
   const firstStartedCheckpoint=!wasStarted&&record.started===true;

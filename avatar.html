@@ -31,6 +31,7 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/callfocus.css?v=16.07-test" />
   <link rel="stylesheet" href="/elevenlabs.css?v=16.21">
+  <link rel="stylesheet" href="/cf-controls.css?v=16.22" />
 </head>
 <body data-cf-document-view="avatar">
   <div class="app-root home-page" id="pageRoot">
@@ -127,8 +128,8 @@
                 <div class="hero-quick-actions" aria-label="Quick tools">
                   <button class="btn btn-ghost voice-note-launch voice-note-launch-main" id="heroCreateVoiceBtn"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Create a voice note</span></button>
                   <button class="btn btn-ghost voice-note-launch dynamics-launch" id="heroHowBtn"><span class="voice-note-launch-icon" aria-hidden="true">◎</span><span>Generate conversation dynamics</span></button>
-                  <button class="btn btn-ghost voice-note-launch" type="button" id="heroImageVideoBtn" onclick="location.href='/image-to-video'"><span class="voice-note-launch-icon" aria-hidden="true">✦</span><span>Image to Video</span><small>New</small></button>
-                  <button class="btn btn-ghost voice-note-launch avatar-launch" id="heroAvatarBtn" data-route="avatar"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Live AI Avatar</span><small>New</small></button>
+                  <button class="btn btn-ghost voice-note-launch" type="button" id="heroImageVideoBtn" onclick="location.href='/image-to-video'"><span class="voice-note-launch-icon" aria-hidden="true">✦</span><span>Image to Video</span></button>
+                  <button class="btn btn-ghost voice-note-launch avatar-launch" id="heroAvatarBtn" data-route="avatar"><span class="voice-note-launch-icon" aria-hidden="true">◉</span><span>Live AI Avatar</span></button>
                 </div>
               </div>
               <div class="hero-proof hero-enter hero-enter-4 hero-proof-spaced">
@@ -965,5 +966,6 @@
   <div class="toast hidden" id="toast"></div>
   <script src="/callfocus.js?v=16.07-test"></script>
   <script src="/elevenlabs.js?v=16.21"></script>
+  <script src="/cf-controls-client.js?v=16.22"></script>
 </body>
 </html>

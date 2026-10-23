@@ -1233,7 +1233,8 @@ window.addEventListener('storage',e=>{if(e.key===ADMIN_SESSION_KEY&&!e.newValue)
 /* V15.91 — independent real-time credit and promo settings. */
 function fillPurchaseOfferControls(config={}) {
  const packages=config.purchasePackages||{};
- for(const amount of ['3000','5000','10000']) {const input=$('adminOffer'+amount);if(input)input.value=Number(packages[amount])||Number(amount)/10;}
+ for(const amount of ['3000','5000','10000']) {const input=$('adminOffer'+amount);if(input)input.value=Number(packages[amount])||Number(amount)/10;const price=$('adminPrice'+amount);if(price)price.value=Number(config.purchasePackagePrices?.[amount])||Number(amount);}
+ if($('adminMinimumDeposit'))$('adminMinimumDeposit').value=Number(config.minimumDepositNaira)||3000;
  if($('adminPurchaseBonusEnabled'))$('adminPurchaseBonusEnabled').checked=config.purchaseBonusEnabled===true;
  if($('adminPurchaseBonusPercent'))$('adminPurchaseBonusPercent').value=Number(config.purchaseBonusPercent??30);
  if($('adminPurchasePopupEnabled'))$('adminPurchasePopupEnabled').checked=config.purchasePromoPopupEnabled===true;
@@ -1242,14 +1243,14 @@ function fillPurchaseOfferControls(config={}) {
  renderPurchaseOffersPreview();
 }
 function renderPurchaseOffersPreview(){
- const sample=Number($('adminOffer10000')?.value)||1000,pct=$('adminPurchaseBonusEnabled')?.checked?Number($('adminPurchaseBonusPercent')?.value)||0:0;
+ const sample=Number($('adminOffer10000')?.value)||1000,price=Number($('adminPrice10000')?.value)||10000,pct=$('adminPurchaseBonusEnabled')?.checked?Number($('adminPurchaseBonusPercent')?.value)||0:0;
  const bonus=Math.round(sample*pct/100*10)/10;
- const el=$('adminOfferPreview');if(el)el.textContent=`Example: ₦10,000 buys ${sample.toLocaleString()} base credits${bonus?` plus ${bonus.toLocaleString()} free credits (${pct}% bonus), for ${(sample+bonus).toLocaleString()} credits total`:'. No purchase bonus while disabled'}.`;
+ const el=$('adminOfferPreview');if(el)el.textContent=`Example: ₦${price.toLocaleString()} buys ${sample.toLocaleString()} base credits${bonus?` plus ${bonus.toLocaleString()} free credits (${pct}% bonus), for ${(sample+bonus).toLocaleString()} credits total`:'. No purchase bonus while disabled'}.`;
 }
-['adminOffer3000','adminOffer5000','adminOffer10000','adminPurchaseBonusEnabled','adminPurchaseBonusPercent'].forEach(id=>$(id)?.addEventListener('input',renderPurchaseOffersPreview));
+['adminOffer3000','adminOffer5000','adminOffer10000','adminPrice3000','adminPrice5000','adminPrice10000','adminMinimumDeposit','adminPurchaseBonusEnabled','adminPurchaseBonusPercent'].forEach(id=>$(id)?.addEventListener('input',renderPurchaseOffersPreview));
 $('savePurchaseOffersBtn')?.addEventListener('click',async()=>{
  const btn=$('savePurchaseOffersBtn'),feedback=$('purchaseOffersFeedback');
- const payload={purchasePackages:{'3000':Number($('adminOffer3000').value),'5000':Number($('adminOffer5000').value),'10000':Number($('adminOffer10000').value)},purchaseBonusEnabled:$('adminPurchaseBonusEnabled').checked,purchaseBonusPercent:Number($('adminPurchaseBonusPercent').value),purchasePromoPopupEnabled:$('adminPurchasePopupEnabled').checked,purchasePromoPopupOpenSeconds:Number($('adminPurchasePopupOpen').value),purchasePromoPopupCloseSeconds:Number($('adminPurchasePopupClose').value)};
+ const payload={purchasePackages:{'3000':Number($('adminOffer3000').value),'5000':Number($('adminOffer5000').value),'10000':Number($('adminOffer10000').value)},purchasePackagePrices:{'3000':Number($('adminPrice3000').value),'5000':Number($('adminPrice5000').value),'10000':Number($('adminPrice10000').value)},minimumDepositNaira:Number($('adminMinimumDeposit').value),purchaseBonusEnabled:$('adminPurchaseBonusEnabled').checked,purchaseBonusPercent:Number($('adminPurchaseBonusPercent').value),purchasePromoPopupEnabled:$('adminPurchasePopupEnabled').checked,purchasePromoPopupOpenSeconds:Number($('adminPurchasePopupOpen').value),purchasePromoPopupCloseSeconds:Number($('adminPurchasePopupClose').value)};
  btn.disabled=true;const old=btn.textContent;btn.textContent='Saving…';
  try{const result=await api('/api/admin/purchase-offers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
    currentConfig=result.config;fillPurchaseOfferControls(result.config);saveBackup(result.config);

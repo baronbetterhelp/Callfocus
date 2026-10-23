@@ -1,0 +1,10 @@
+/* CallFocus V16.22 customer-only announcement styling */
+.cf-ann-overlay{position:fixed;inset:0;z-index:2147483200;display:flex;align-items:center;justify-content:center;padding:calc(16px + env(safe-area-inset-top)) 18px calc(16px + env(safe-area-inset-bottom));background:rgba(6,44,39,.72);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px)}
+.cf-ann-panel{position:relative;background:linear-gradient(155deg,#fafffc,#e9f6ef 70%,#f7f4e8);border:1px solid #cbe4d9;border-radius:28px;padding:34px 26px 28px;width:min(100%,490px);max-height:calc(100dvh - 54px);overflow-y:auto;box-shadow:0 28px 110px #052e2850;color:#153f36;font-family:Manrope,system-ui,sans-serif}
+.cf-ann-icon{display:grid;place-items:center;width:54px;height:54px;background:linear-gradient(130deg,#dbf2e5,#c4e7db);color:#17866a;border-radius:18px;margin-bottom:20px;font-size:32px}
+.cf-ann-eyebrow{color:#709181;font-size:11px;letter-spacing:.17em;font-weight:800}
+.cf-ann-panel h2{font-size:clamp(24px,5vw,34px);line-height:1.15;letter-spacing:-.03em;margin:12px 35px 16px 0;color:#123e33}
+.cf-ann-message{color:#577569;white-space:pre-wrap;overflow-wrap:anywhere;font-size:15px;line-height:1.75;margin:0 0 28px}
+.cf-ann-button{width:100%;background:#14806a;border:0;border-radius:15px;padding:16px;color:white;font:800 16px Manrope,system-ui,sans-serif;cursor:pointer}
+.cf-ann-x{position:absolute;right:20px;top:20px;border:1px solid #d0e3db;border-radius:50%;width:44px;height:44px;color:#265a4c;background:#edf6f1;font-size:27px;cursor:pointer}
+.credit-package.cf-package-too-small{opacity:.52}
