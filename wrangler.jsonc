@@ -94,6 +94,11 @@
       "binding": "CALLFOCUS_WALLET_DB",
       "database_name": "callfocus-wallet",
       "database_id": "754c82ce-2dc1-4db8-b92b-18d1e349dc49"
+    },
+    {
+      "binding": "AFFILIATE_DB",
+      "database_name": "callfocus-affiliates",
+      "database_id": "87f3ede6-6fdb-420e-91e0-de5021ba64d0"
     }
   ]
 }
