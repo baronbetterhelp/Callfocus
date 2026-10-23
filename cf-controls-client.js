@@ -1,4 +1,4 @@
-/* CallFocus V16.26: announcement refresh behavior, promo-style redesign, authoritative purchase display, per-service tariffs. */
+/* CallFocus V16.27: signed-in-only compact announcement; pricing and voice systems unchanged. */
 (()=>{'use strict';
  const $=id=>document.getElementById(id), money=n=>'₦'+Math.round(Number(n)||0).toLocaleString('en-NG');
  const defaults={purchasePackages:{'3000':300,'5000':500,'10000':1000},purchasePackagePrices:{'3000':3000,'5000':5000,'10000':10000},minimumDepositNaira:3000};
@@ -15,7 +15,7 @@
  const quote=c=>{const value=Math.floor(Number(c)||0),match=packageRows().find(p=>p.credits===value);return match?match.price:value*10};
  const minutes=(c,r)=>{const secs=c/r*60;return secs<60?`${Math.floor(secs)} seconds`:`${Number((secs/60).toFixed(1)).toLocaleString('en-NG',{maximumFractionDigits:1})} min`};
  function announceClose(){document.getElementById('cfAnnouncementOverlay')?.remove();clearTimeout(closeTimer)}
- function announcementAudience(){return home()}
+ function announcementAudience(){return home()&&signed()&&Boolean(window.CallFocusServerAccount?.isServerReady?.()&&typeof account!=='undefined'&&account?.id)}
  function buildAnnouncementParagraphs(text){
   const chunks=String(text||'').split(/\n\s*\n+/).map(s=>s.trim()).filter(Boolean);
   return chunks.length?chunks:[String(text||'').trim()].filter(Boolean);
@@ -32,17 +32,18 @@
   const message=document.createElement('div');message.className='cf-ann-promo-message';
   const intro=document.createElement('span');intro.className='cf-ann-promo-tag';intro.textContent='An update for you';message.append(intro);
   for(const part of buildAnnouncementParagraphs(announcement.message)){const p=document.createElement('p');p.textContent=part;message.append(p)}
-  const info=document.createElement('div');info.className='cf-purchase-promo-info cf-ann-promo-info';
-  const infoIcon=document.createElement('span');infoIcon.textContent='i';
-  const infoText=document.createElement('div');infoText.textContent='This announcement will keep appearing whenever the website is refreshed, until it is turned off in the admin panel.';
-  info.append(infoIcon,infoText);
   const btn=document.createElement('button');btn.type='button';btn.className='cf-purchase-promo-deposit cf-ann-promo-button';btn.textContent=announcement.buttonText||'Close';
-  const note=document.createElement('small');note.className='cf-ann-promo-note';note.textContent='Managed from Admin → Announcement popup.';
   const dismiss=()=>{announceClose()};btn.addEventListener('click',dismiss);x.addEventListener('click',dismiss);overlay.addEventListener('click',e=>{if(e.target===overlay)dismiss()});
-  panel.append(x,logoWrap,label,title,message,info,btn,note);overlay.append(panel);document.body.append(overlay);x.focus({preventScroll:true});if(Number(announcement.closeSeconds)>0)closeTimer=setTimeout(dismiss,Number(announcement.closeSeconds)*1000);
+  panel.append(x,logoWrap,label,title,message,btn);overlay.append(panel);document.body.append(overlay);x.focus({preventScroll:true});if(Number(announcement.closeSeconds)>0)closeTimer=setTimeout(dismiss,Number(announcement.closeSeconds)*1000);
  }
- function schedule(){clearTimeout(annTimer);if(!announcement?.enabled||!announcementAudience()||annShownThisLoad||$('cfAnnouncementOverlay'))return;
-  annTimer=setTimeout(openAnnouncement,Math.max(0,Number(announcement.openSeconds)||0)*1000);
+ function schedule(){
+  if(!announcement?.enabled||!announcementAudience()){
+   clearTimeout(annTimer);annTimer=null;
+   if($('cfAnnouncementOverlay'))announceClose();
+   return;
+  }
+  if(annShownThisLoad||annTimer||$('cfAnnouncementOverlay'))return;
+  annTimer=setTimeout(()=>{annTimer=null;openAnnouncement()},Math.max(0,Number(announcement.openSeconds)||0)*1000);
  }
  function syncPackages(){if(!offers)return;const items=document.querySelectorAll('#page-credits .credit-package[data-credit-package]');
   const rows=packageRows();items.forEach((btn,i)=>{if(i>=rows.length)return;const p=rows[i];btn.dataset.creditPackage=String(p.credits);btn.dataset.packageNaira=p.key;btn.dataset.cfPrice=String(p.price);
@@ -80,9 +81,10 @@
  async function refresh(force=false){if(loading||(!force&&Date.now()-lastFetch<5000))return;loading=true;
   try{const [feature,publicData]=await Promise.all([fetch('/api/cf-feature-controls',{cache:'no-store'}).then(r=>r.ok?r.json():null),fetch('/api/public-config',{cache:'no-store'}).then(r=>r.ok?r.json():null)]);
    if(feature?.rates)rates=feature.rates;if(publicData?.purchaseOffers){offers=publicData.purchaseOffers;window.CallFocusPurchaseOffers=offers;}
-   announcement=feature?.announcement||null;if(!announcement?.enabled){announceClose();annShownThisLoad=false;}
-   if((announcement?.revision||'')!==annSeen){annSeen=announcement?.revision||'';annShownThisLoad=false;announceClose();}
-   if(home())schedule();lastFetch=Date.now();render();
+   announcement=feature?.announcement||null;
+   if(!announcement?.enabled){announceClose();annShownThisLoad=false;}
+   if((announcement?.revision||'')!==annSeen){annSeen=announcement?.revision||'';annShownThisLoad=false;clearTimeout(annTimer);annTimer=null;announceClose();}
+   schedule();lastFetch=Date.now();render();
   }catch{}finally{loading=false}
  }
  document.addEventListener('click',e=>{const btn=e.target.closest?.('[data-cf-below-min="true"],.credit-package.cf-package-too-small');if(btn){e.preventDefault();e.stopImmediatePropagation();window.toast?.(`Minimum deposit is ${money(minimum())}.`)||null;}},true);
@@ -90,9 +92,12 @@
  document.addEventListener('input',e=>{if(e.target.id==='customCreditAmount')queueMicrotask(render)});
  document.addEventListener('click',e=>{if(e.target.matches?.('.credit-package'))setTimeout(render,30)});
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('cfAnnouncementOverlay'))announceClose()});
- window.addEventListener('callfocus:account-ready',()=>{refresh(true);schedule()});window.addEventListener('focus',()=>refresh(true));window.addEventListener('pageshow',()=>{annShownThisLoad=false;refresh(true)});
- const observer=new MutationObserver(()=>{if(creditsActive()||home())queueMicrotask(render);if(home())schedule()});for(const id of ['page-home','page-credits'])if($(id))observer.observe($(id),{attributes:true,attributeFilter:['class']});
+ window.addEventListener('callfocus:account-ready',()=>{refresh(true);schedule()});
+ window.addEventListener('storage',e=>{if(e.key==='callfocus_server_session_v1'){if(!e.newValue){announceClose();annShownThisLoad=false;}schedule()}});
+ window.addEventListener('focus',()=>{schedule();refresh(true)});
+ window.addEventListener('pageshow',()=>{schedule();refresh(true)});
+ const observer=new MutationObserver(()=>{if(creditsActive()||home())queueMicrotask(render);schedule()});for(const id of ['page-home','page-credits'])if($(id))observer.observe($(id),{attributes:true,attributeFilter:['class']});
  // Core UI is refreshed by earlier modules; render authoritative values last. No provider code changes.
- setInterval(()=>{if(document.visibilityState==='hidden')return;if(creditsActive()||home()||document.querySelector('[id^="cf-el-select-"]'))render();refresh()},1100);
+ setInterval(()=>{if(document.visibilityState==='hidden')return;if(!announcementAudience()){if($('cfAnnouncementOverlay'))announceClose();if(!signed())annShownThisLoad=false;}if(creditsActive()||home()||document.querySelector('[id^="cf-el-select-"]'))render();refresh()},1100);
  refresh(true);
 })();
