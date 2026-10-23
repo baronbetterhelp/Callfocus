@@ -1,4 +1,4 @@
-/* CallFocus V16.27: signed-in-only compact announcement; pricing and voice systems unchanged. */
+/* CallFocus V16.28: keep admin-defined package prices and minutes authoritative in the existing Credits UI. */
 (()=>{'use strict';
  const $=id=>document.getElementById(id), money=n=>'₦'+Math.round(Number(n)||0).toLocaleString('en-NG');
  const defaults={purchasePackages:{'3000':300,'5000':500,'10000':1000},purchasePackagePrices:{'3000':3000,'5000':5000,'10000':10000},minimumDepositNaira:3000};
@@ -7,6 +7,7 @@
  const signed=()=>{try{return !!localStorage.getItem('callfocus_server_session_v1')}catch{return false}};
  const home=()=>!!$('page-home')?.classList.contains('active');
  const creditsActive=()=>!!$('page-credits')?.classList.contains('active');
+ const setText=(node,value)=>{if(node&&node.textContent!==value)node.textContent=value};
  const safeNum=(v,d)=>Number.isFinite(Number(v))&&Number(v)>0?Number(v):d;
  const packageRows=()=>['3000','5000','10000'].map(k=>({key:k,credits:safeNum(offers?.purchasePackages?.[k],defaults.purchasePackages[k]),price:safeNum(offers?.purchasePackagePrices?.[k],defaults.purchasePackagePrices[k])}));
  const minimum=()=>safeNum(offers?.minimumDepositNaira,3000);
@@ -45,22 +46,57 @@
   if(annShownThisLoad||annTimer||$('cfAnnouncementOverlay'))return;
   annTimer=setTimeout(()=>{annTimer=null;openAnnouncement()},Math.max(0,Number(announcement.openSeconds)||0)*1000);
  }
- function syncPackages(){if(!offers)return;const items=document.querySelectorAll('#page-credits .credit-package[data-credit-package]');
-  const rows=packageRows();items.forEach((btn,i)=>{if(i>=rows.length)return;const p=rows[i];btn.dataset.creditPackage=String(p.credits);btn.dataset.packageNaira=p.key;btn.dataset.cfPrice=String(p.price);
-   const strong=btn.querySelector('strong'),small=btn.querySelector('small'),bold=btn.querySelector('b');if(strong)strong.textContent=p.credits.toLocaleString('en-NG')+' credits';if(small)small.textContent=minutes(p.credits,rate('liveCall'))+' standard calls';if(bold)bold.textContent=money(p.price);
-   btn.classList.toggle('cf-package-too-small',p.price<minimum());btn.setAttribute('aria-disabled',String(p.price<minimum()));
-   const bonus=btn.querySelector('.cf-offer-package-bonus');if(bonus){const percent=offers.purchaseBonusEnabled?safeNum(offers.purchaseBonusPercent,0):0;const extra=Math.round(p.credits*percent/100*10)/10;bonus.hidden=extra<=0;bonus.textContent=extra>0?`+${extra.toLocaleString('en-NG')} free · ${(p.credits+extra).toLocaleString('en-NG')} total`:'';}
+ function syncPackages(){
+  // Older CallFocus renderers still write static package values. Restore the
+  // authoritative settings here without editing the original calling bundle.
+  const current=window.CallFocusPurchaseOffers;
+  if(current?.purchasePackages&&current?.purchasePackagePrices)offers=current;
+  if(!offers)return;
+  const items=document.querySelectorAll('#page-credits .credit-package[data-credit-package]');
+  const rows=packageRows();items.forEach((btn,i)=>{
+   if(i>=rows.length)return;const p=rows[i];
+   if(btn.dataset.creditPackage!==String(p.credits))btn.dataset.creditPackage=String(p.credits);
+   if(btn.dataset.packageNaira!==p.key)btn.dataset.packageNaira=p.key;
+   if(btn.dataset.cfPrice!==String(p.price))btn.dataset.cfPrice=String(p.price);
+   setText(btn.querySelector('strong'),p.credits.toLocaleString('en-NG')+' credits');
+   setText(btn.querySelector('small'),minutes(p.credits,rate('liveCall'))+' standard calls');
+   setText(btn.querySelector('b'),money(p.price));
+   const below=p.price<minimum();btn.classList.toggle('cf-package-too-small',below);
+   if(btn.getAttribute('aria-disabled')!==String(below))btn.setAttribute('aria-disabled',String(below));
+   const bonus=btn.querySelector('.cf-offer-package-bonus');
+   if(bonus){const percent=offers.purchaseBonusEnabled?safeNum(offers.purchaseBonusPercent,0):0;
+    const extra=Math.round(p.credits*percent/100*10)/10;
+    if(bonus.hidden!==(extra<=0))bonus.hidden=extra<=0;
+    setText(bonus,extra>0?`+${extra.toLocaleString('en-NG')} free · ${(p.credits+extra).toLocaleString('en-NG')} total`:'');
+   }
   });
-  const inp=$('customCreditAmount');if(inp&&!didInitialValueSync){if(Number(inp.value)<minimumCredits()){const eligible=packageRows().find(row=>row.price>=minimum());inp.value=String(eligible?.credits||minimumCredits());}didInitialValueSync=true;}const base=Number(inp?.value)||0,price=quote(base);if(inp){inp.min=String(minimumCredits());inp.placeholder=`${minimumCredits().toLocaleString('en-NG')} credits or more`}
-  document.querySelectorAll('#page-credits .credit-custom-card > div:first-child small').forEach(n=>{n.textContent=`Enter ${minimumCredits().toLocaleString('en-NG')} credits or more (minimum ${money(minimum())}).`});
-  document.querySelectorAll('#page-credits .credit-section-title > small').forEach(n=>{n.textContent=`Minimum deposit ${money(minimum())}`});
-  if($('customCreditNaira')&&base>0)$('customCreditNaira').textContent=money(price);
-  if($('customCreditMinutes')&&base>0)$('customCreditMinutes').textContent=minutes(base,rate('liveCall'))+' standard call time';
+  const inp=$('customCreditAmount');
+  if(inp&&!didInitialValueSync){
+   if(Number(inp.value)<minimumCredits()){
+    const eligible=packageRows().find(row=>row.price>=minimum());inp.value=String(eligible?.credits||minimumCredits());
+   }
+   didInitialValueSync=true;
+  }
+  const base=Number(inp?.value)||0,price=quote(base);
+  if(inp){if(inp.min!==String(minimumCredits()))inp.min=String(minimumCredits());
+   const placeholder=`${minimumCredits().toLocaleString('en-NG')} credits or more`;
+   if(inp.placeholder!==placeholder)inp.placeholder=placeholder;
+  }
+  document.querySelectorAll('#page-credits .credit-custom-card > div:first-child small').forEach(n=>setText(n,`Enter ${minimumCredits().toLocaleString('en-NG')} credits or more (minimum ${money(minimum())}).`));
+  document.querySelectorAll('#page-credits .credit-section-title > small').forEach(n=>setText(n,`Minimum deposit ${money(minimum())}`));
+  if(base>0){setText($('customCreditNaira'),money(price));setText($('customCreditMinutes'),minutes(base,rate('liveCall'))+' standard call time')}
   const bonusPercent=offers.purchaseBonusEnabled?Math.max(0,Number(offers.purchaseBonusPercent)||0):0;
   const bonus=Math.round(base*bonusPercent/100*10)/10;
-  if($('creditCheckoutSummary')&&base>0)$('creditCheckoutSummary').textContent=`${base.toLocaleString('en-NG')} credits${bonus?` + ${bonus.toLocaleString('en-NG')} bonus`:''} · ${money(price)}`;
-  const invalid=base<300||!Number.isInteger(base)||price<minimum();const err=$('creditAmountError');if(err){err.textContent=base<300?'Minimum purchase is 300 credits.':`Minimum deposit is ${money(minimum())}. Choose at least ${minimumCredits().toLocaleString('en-NG')} credits or an eligible package.`;err.classList.toggle('hidden',!invalid);err.hidden=!invalid;}
-  for(const id of ['creditCheckoutBtn','korapayCheckoutBtn','pocketfiCheckoutBtn','flutterwaveCheckoutBtn','pocketfiBankBtn']){const btn=$(id);if(!btn)continue;btn.dataset.cfBelowMin=String(invalid);if(invalid&&btn.offsetParent!==null)btn.disabled=true;}
+  if(base>0)setText($('creditCheckoutSummary'),`${base.toLocaleString('en-NG')} credits${bonus?` + ${bonus.toLocaleString('en-NG')} bonus`:''} · ${money(price)}`);
+  const invalid=base<300||!Number.isInteger(base)||price<minimum();const err=$('creditAmountError');
+  if(err){setText(err,base<300?'Minimum purchase is 300 credits.':`Minimum deposit is ${money(minimum())}. Choose at least ${minimumCredits().toLocaleString('en-NG')} credits or an eligible package.`);
+   err.classList.toggle('hidden',!invalid);if(err.hidden!==!invalid)err.hidden=!invalid;
+  }
+  for(const id of ['creditCheckoutBtn','korapayCheckoutBtn','pocketfiCheckoutBtn','flutterwaveCheckoutBtn','pocketfiBankBtn']){
+   const btn=$(id);if(!btn)continue;
+   if(btn.dataset.cfBelowMin!==String(invalid))btn.dataset.cfBelowMin=String(invalid);
+   if(invalid&&btn.offsetParent!==null)btn.disabled=true;
+  }
  }
  function syncRates(){if(!rates)return;
   const host=document.querySelector('#page-credits .credit-rate-card');if(host){host.classList.add('cf-rate-overview');
@@ -78,6 +114,26 @@
   const vn=$('voiceNoteCreditRate');if(vn)vn.textContent=`Standard voice note: 1 min / ${rate('voiceNote')}c · Cloned: 1 min / ${rate('cloneVoice')}c`;
  }
  function render(){if(rendering)return;rendering=true;try{syncPackages();syncRates()}finally{rendering=false}}
+ // Older view refreshes and offer-promo code can still rewrite credit amounts.
+ // Restore in the same task when possible, and after any direct DOM change.
+ const originalOfferSync=window.CallFocusSyncOffersUI;
+ if(typeof originalOfferSync==='function'){
+  window.CallFocusSyncOffersUI=function(...args){
+   const result=originalOfferSync.apply(this,args);
+   syncPackages();
+   return result;
+  };
+ }
+ let packageRepairQueued=false;
+ const purchaseSection=$('creditPurchaseSection');
+ if(purchaseSection){
+  new MutationObserver(()=>{
+   if(!offers||packageRepairQueued)return;
+   packageRepairQueued=true;
+   queueMicrotask(()=>{packageRepairQueued=false;syncPackages()});
+  }).observe(purchaseSection,{subtree:true,childList:true,characterData:true});
+ }
+
  async function refresh(force=false){if(loading||(!force&&Date.now()-lastFetch<5000))return;loading=true;
   try{const [feature,publicData]=await Promise.all([fetch('/api/cf-feature-controls',{cache:'no-store'}).then(r=>r.ok?r.json():null),fetch('/api/public-config',{cache:'no-store'}).then(r=>r.ok?r.json():null)]);
    if(feature?.rates)rates=feature.rates;if(publicData?.purchaseOffers){offers=publicData.purchaseOffers;window.CallFocusPurchaseOffers=offers;}
