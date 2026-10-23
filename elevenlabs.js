@@ -6,7 +6,7 @@
   const auth=()=>localStorage.getItem('callfocus_server_session_v1')||'';
   const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const notify=s=>{if(typeof window.toast==='function')window.toast(s);else alert(s)};
-  let voices=[],capacity=null,newSelected='',repeatSelected='',noteSelected='',busy=false,active=null,recorder=null,recordedBlob=null,recordStart=0,recordTimer=0,recordStream=null,tempReady=false;
+  let voices=[],capacity=null,cloningAvailability={enabled:false,message:'Voice cloning is currently unavailable. Please try again later.'},newSelected='',repeatSelected='',noteSelected='',busy=false,active=null,recorder=null,recordedBlob=null,recordStart=0,recordTimer=0,recordStream=null,tempReady=false;
   let preparedAudio=null,selectedUpload=null,fileSelectionId=0;
   async function request(path,{method='GET',body,form=false}={}){
     if(!auth())throw Error('Sign in to CallFocus before using voice cloning.');
@@ -15,7 +15,8 @@
   }
   async function loadVoices(){
     if(!auth()){capacity=null;tempReady=false;newSelected=repeatSelected=noteSelected='';render();return}
-    try{const data=await request('/api/elevenlabs/voices');capacity=data.capacity||null}catch(err){console.warn('CallFocus voice availability:',err.message);capacity=null}
+    try{const data=await request('/api/elevenlabs/voices');capacity=data.capacity||null;cloningAvailability=data.availability||{enabled:false,message:'Voice cloning is temporarily unavailable.'};if(!cloningAvailability.enabled){tempReady=false;newSelected=repeatSelected=noteSelected='';}}
+    catch(err){console.warn('CallFocus voice availability:',err.message);cloningAvailability={enabled:false,message:'Voice cloning is temporarily unavailable. Please try again later.'};capacity={available:false,message:cloningAvailability.message}}
     render();updateCapacityUi();
   }
   function choices(selected){return `<option value="">Use normal Male / Female voice</option>${tempReady?`<option value="one-time" ${selected==='one-time'?'selected':''}>Use my prepared voice once · cloned rate</option>`:''}`}
@@ -85,11 +86,27 @@
       fitting=false;
     });
   }
-  async function openModal(){if(!auth())return notify('Sign in to CallFocus first.');installModal();$('cf-el-layer').classList.add('open');document.body.classList.add('cf-el-is-open');const currentFile=$('cf-el-file')?.files?.[0];status(currentFile?`Recording selected: ${currentFile.name}`:(recordedBlob?'Your recorded sample is ready.':'Supported audio: MP3, M4A/MP4, WEBM, WAV, OGG, AAC, FLAC.'));fitModal();render();await loadVoices();fitModal()}
+  async function openModal(){
+    installModal();cloningAvailability={enabled:false,message:'Checking availability…'};capacity={available:false,message:'Checking availability…'};
+    $('cf-el-layer').classList.add('open');document.body.classList.add('cf-el-is-open');updateCapacityUi();fitModal();
+    if(!auth()){
+      try{
+        const r=await fetch('/api/voice-cloning-availability',{cache:'no-store'}),data=await r.json();
+        if(data.enabled){closeModal();return notify('Sign in to CallFocus first to use voice cloning.')}
+        cloningAvailability={enabled:false,message:data.message||'Voice cloning is currently unavailable.'};
+      }catch{cloningAvailability={enabled:false,message:'Voice cloning is currently unavailable. Please try again later.'}}
+      updateCapacityUi();fitModal();return;
+    }
+    render();await loadVoices();fitModal();
+  }
   function updateCapacityUi(){
-    const full=capacity?.available===false;
-    const block=$('cf-el-capacity');if(block){block.hidden=!full;block.textContent=full?(capacity.message||'New voice creation is temporarily unavailable. Please contact CallFocus support.'):''}
-    $('cf-el-layer')?.querySelector('.cf-el-modal')?.classList.toggle('cf-el-full',full);
+    const paused=cloningAvailability.enabled!==true;
+    const full=paused||capacity?.available===false;
+    const blockedMessage=paused?(cloningAvailability.message||'Voice cloning is temporarily unavailable.'):(capacity?.message||'New voice creation is temporarily unavailable.');
+    const block=$('cf-el-capacity');if(block){block.hidden=!full;block.textContent=full?blockedMessage:''}
+    const modal=$('cf-el-layer')?.querySelector('.cf-el-modal');
+    modal?.classList.toggle('cf-el-full',full);modal?.classList.toggle('cf-el-paused',paused);
+    if($('cf-el-title'))$('cf-el-title').textContent=paused?'Voice cloning unavailable':'Prepare your voice';
     const record=$('cf-el-record'),save=$('cf-el-save'),file=$('cf-el-file');
     if(record)record.disabled=full;
     if(save)save.disabled=full||busy;

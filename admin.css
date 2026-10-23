@@ -1059,3 +1059,9 @@ body.admin-page{
 .direct-recipient-unverified{color:#a47932!important}
 .direct-service-audience .direct-funding-badge{white-space:nowrap}
 @media(max-width:760px){.direct-audience-choice{grid-template-columns:1fr}.direct-service-audience{padding:13px}.direct-service-audience .direct-recipient-row{grid-template-columns:auto 32px minmax(0,1fr)}.direct-service-audience .direct-funding-badge{grid-column:3;justify-self:start}.direct-service-audience .direct-recipient-list{max-height:320px}}
+
+/* V16.40 — isolated voice cloning availability admin controls */
+.cf-clone-admin-card{border-color:#b7d9cb!important;background:linear-gradient(145deg,#f7fcf9,#edf7f1)!important}
+.cf-clone-admin-toggle{display:flex!important;flex-direction:row!important;justify-content:space-between;align-items:center;gap:16px;background:white;border:1px solid #d5e9df;border-radius:16px;padding:15px 17px!important}
+.cf-clone-admin-toggle span{display:grid;gap:5px}.cf-clone-admin-toggle strong{font-size:15px}.cf-clone-admin-toggle small{font-size:12px;font-weight:500;color:#628076}.cf-clone-admin-toggle input{width:25px!important;height:25px!important;flex-shrink:0;accent-color:#13816a}
+.cf-clone-admin-card textarea{resize:vertical;min-height:100px;line-height:1.6}.cf-clone-admin-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.cf-clone-admin-actions span{flex:1 1 190px;font-size:12px;line-height:1.5;color:#375c50}

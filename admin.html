@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=16.29-audience" />
+  <link rel="stylesheet" href="/admin.css?v=16.40" />
 <link rel="stylesheet" href="/affiliate.css?v=16.38"></head>
 <body class="admin-page">
   <header class="site-header">
@@ -510,6 +510,13 @@
           <div class="toggle-row"><span>Speak first after the customer taps Start Call</span><input id="adminSpeakFirst" type="checkbox" /></div>
         </div>
 
+        <div class="premium-panel form-panel cf-clone-admin-card" id="cfCloneAvailabilityAdmin" style="margin-top:16px">
+          <div class="admin-users-heading"><div><h3>Voice cloning availability</h3><p class="admin-panel-copy">Temporarily stop new cloned voice calls and voice notes. Normal voice calls and voice notes stay available.</p></div></div>
+          <label class="cf-clone-admin-toggle"><span><strong>Enable voice cloning</strong><small>Switch off to pause new voice creations immediately.</small></span><input type="checkbox" id="cfCloneEnabled"></label>
+          <label for="cfCloneUnavailableMessage">Message customers see when cloning is paused<textarea id="cfCloneUnavailableMessage" maxlength="350" rows="3" placeholder="Voice cloning is currently unavailable while we make improvements. Please use the standard voices for now."></textarea></label>
+          <div class="cf-clone-admin-actions"><button type="button" class="btn btn-primary" id="cfCloneSaveAvailability">Save cloning availability</button><span id="cfCloneAvailabilityStatus" role="status" aria-live="polite">Cloning starts paused until you enable it here.</span></div>
+        </div>
+
         <div class="premium-panel form-panel" id="cfTempVoiceCleanupAdmin" style="margin-top:16px">
           <div class="admin-users-heading"><div><h3>One-time voice storage</h3><p class="admin-panel-copy">New voice cloning no longer keeps customer clones. Clean up the historical CallFocus customer clones to free existing voice slots. This permanently deletes their saved provider voices; it cannot be undone.</p></div></div>
           <button class="btn btn-ghost" type="button" id="cfTempVoicePurge">Delete previous customer cloned voices</button>
@@ -622,5 +629,6 @@
   <div class="toast hidden" id="toast"></div>
   <script src="/admin.js?v=16.30-account-pages"></script><script src="/admin-video.js?v=16.07-test"></script><script src="/cf-controls-admin.js?v=16.24"></script>
 <script src="/cf-temp-voice-admin.js?v=16.34"></script>
+<script src="/cf-clone-availability-admin.js?v=16.40"></script>
 <script src="/affiliate-admin.js?v=16.37"></script></body>
 </html>

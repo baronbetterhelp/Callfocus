@@ -94,3 +94,10 @@
 .cf-el-once-note{margin:9px 1px 0;text-align:center;color:#6f887c;font-size:11px;line-height:1.5}
 .cf-el-modal.cf-el-full .cf-el-once-note{display:none}
 .cf-el-box select{width:100%}
+
+/* V16.40: compact branded temporary-unavailability popup. */
+.cf-el-modal.cf-el-paused{height:auto!important;min-height:0!important;max-height:calc(100dvh - 28px);padding:28px 23px 25px;overflow-y:auto;zoom:1!important}
+.cf-el-modal.cf-el-paused h2{font-size:26px;line-height:1.14;margin-bottom:12px}
+.cf-el-modal.cf-el-paused .cf-el-intro{display:none}
+.cf-el-modal.cf-el-paused .cf-el-capacity{display:block;padding:19px 18px;background:#eef8f2;color:#205d4c;border:1px solid #cde5d9;border-radius:17px;font-size:15px;line-height:1.55;font-weight:600;margin:16px 0 6px;overflow-wrap:anywhere}
+.cf-el-modal.cf-el-paused .cf-el-once-note{display:none}

@@ -1,4 +1,4 @@
-import { elRequest, elCleanup, elAdminPurge } from './elevenlabs-worker.js';
+import { elRequest, elCleanup, elAdminPurge, elAdminAvailability, elGetAvailability } from './elevenlabs-worker.js';
 import {resolveEarnReferral,affiliateLinkSignup,affiliateRecordPurchase,affiliateCustomerApi,affiliateAdminApi,affiliateEmailReview} from './affiliate-worker.js';
 const LIVE_VOICES = ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar','ripple','vesper','stone','meridian','beacon','cinder','tempo','quartz','willow','gleam','bossa','delta'];
 const TTS_VOICES = ['alloy','ash','ballad','coral','echo','fable','nova','onyx','sage','shimmer','verse','marin','cedar'];
@@ -6838,6 +6838,8 @@ export default {
     const url = new URL(request.url);
     const maintenance = await maybeMaintenanceResponse(request, env, url);
     if (maintenance) return maintenance;
+    if (url.pathname === '/api/voice-cloning-availability') { if (request.method !== 'GET') return json({error:'Method not allowed.'},405); return json(await elGetAvailability(env),200,{'Cache-Control':'no-store'}); }
+    if (url.pathname === '/api/admin/voice-cloning-availability') { if (!await adminAuthorized(request, env)) return json({error:'Admin access required.'},401); return elAdminAvailability(request,env); }
     if (url.pathname === '/api/admin/elevenlabs/purge') { if (!await adminAuthorized(request, env)) return json({error:'Admin access required.'},401); return elAdminPurge(request,env); }
     if (url.pathname.startsWith('/api/elevenlabs/')) { const limited = await callFocusRateLimit(request, env, 'elevenlabs-'+url.pathname.split('/').pop(), url.pathname.endsWith('/clone') ? 6 : url.pathname.endsWith('/session') ? 40 : 100, 3600); if (limited) return limited; return safeCustomerRoute('elevenlabs', () => elRequest(request, env, {auth:authenticatedCustomer,getConfig,customerData:getCustomerDataForUpdate,normalizeWallet:normalizeServerWallet,registerUsage:registerCallUsage,saveUsage:storeCallUsage,consume:handleWalletConsume,getServiceRates:cfGetRates})); }
     if (url.pathname === '/api/auth/health' && request.method === 'GET') {

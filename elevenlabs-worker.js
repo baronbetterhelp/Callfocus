@@ -10,6 +10,32 @@ const oldVoicesPrefix='elevenlabs:voices:';
 const leasePrefix='elevenlabs:temporary:';
 const safeName=v=>String(v||'').trim().replace(/[\x00-\x1f\x7f]/g,' ').slice(0,65);
 const idValid=id=>/^[a-zA-Z0-9_-]{8,120}$/.test(String(id||''));
+const availabilityKey='callfocus:cloning:availability:v1';
+const availabilityDefaultMessage='Voice cloning is currently unavailable while we make improvements. Please use the standard voices for now.';
+// Fail closed when settings are missing or unavailable: prevents accidental provider creations.
+async function elGetAvailability(env){
+ if(!env.CALLFOCUS_CONFIG)return {enabled:false,message:availabilityDefaultMessage};
+ try{
+  const record=await env.CALLFOCUS_CONFIG.get(availabilityKey,{type:'json'});
+  return {enabled:record?.enabled===true,message:String(record?.message||availabilityDefaultMessage).slice(0,350)};
+ }catch(error){console.warn('CallFocus cloning availability read failed',String(error?.message||error).slice(0,120));return {enabled:false,message:availabilityDefaultMessage}}
+}
+async function elAdminAvailability(req,env){
+ if(req.method==='GET'){
+  const current=await elGetAvailability(env);
+  return elJson({ok:true,...current,storageConnected:!!env.CALLFOCUS_CONFIG});
+ }
+ if(req.method!=='POST')return elJson({error:'Method not allowed.'},405);
+ if(!env.CALLFOCUS_CONFIG)return elJson({error:'Settings storage is not connected. Voice cloning remains paused.'},503);
+ let data;try{data=await req.json()}catch{return elJson({error:'Invalid settings.'},400)}
+ if(typeof data?.enabled!=='boolean')return elJson({error:'Choose whether voice cloning is enabled.'},400);
+ const message=String(data.message||'').trim();
+ if(!message||message.length>350)return elJson({error:'Enter an unavailable message (1–350 characters).'},400);
+ try{
+  await env.CALLFOCUS_CONFIG.put(availabilityKey,JSON.stringify({enabled:data.enabled,message,updatedAt:new Date().toISOString()}));
+  return elJson({ok:true,enabled:data.enabled,message});
+ }catch(error){console.error('Voice availability save failure',String(error?.message||error).slice(0,140));return elJson({error:'Could not save these settings. Voice cloning remains paused.'},503)}
+}
 const capacityText={full:'Voice creation is at capacity right now. Please try again later or contact CallFocus support.',operations:'Monthly voice-creation capacity has been reached. Please contact CallFocus support.',plan:'Voice cloning is currently unavailable. Please contact CallFocus support.'};
 async function badResponse(res,what){let body={};try{body=await res.json()}catch{}
  const msg=String(body?.detail?.message||body?.detail?.status||body?.error?.message||body?.detail||`${what} failed (HTTP ${res.status}).`).replace(/\b(?:Eleven\s*Labs|Open\s*AI)\b/gi,'voice service').slice(0,350);
@@ -49,6 +75,9 @@ async function providerDelete(env,providerId){
 }
 // KV leases contain an ID, not the audio samples. Do NOT automatically expire the KV index before deletion; cron must retain a way to clean provider orphans.
 async function createTemporary(env,user,form){
+ // A second check prevents a new provider creation if Admin paused cloning after the session request started.
+ const allowed=await elGetAvailability(env);
+ if(!allowed.enabled){const err=new Error(allowed.message);err.status=503;throw err}
  const {name,file}=safeAudio(form);
  const capacity=await voiceCapacity(env);
  if(capacity.available===false){const err=new Error(capacityText[capacity.reason]||capacityText.full);err.status=409;throw err}
@@ -108,9 +137,17 @@ async function elRequest(req,env,helpers){
  const path=new URL(req.url).pathname;
  if(!['/api/elevenlabs/voices','/api/elevenlabs/clone','/api/elevenlabs/session','/api/elevenlabs/tts','/api/elevenlabs/release','/api/elevenlabs/heartbeat'].includes(path))return elJson({error:'Not found.'},404);
  const auth=await helpers.auth(req,env);if(!auth)return elJson({error:'Sign in to CallFocus first.'},401);
+ // Administrative pause applies before ANY provider request and never blocks cleanup.
+ const availability=await elGetAvailability(env);
+ if(path==='/api/elevenlabs/voices'&&req.method==='GET'&&!availability.enabled){
+  return elJson({ok:true,voices:[],capacity:{available:false,reason:'paused',message:availability.message},availability,agentConfigured:!!getAgent(env),temporary:true});
+ }
+ if((path==='/api/elevenlabs/session'||path==='/api/elevenlabs/tts')&&!availability.enabled){
+  return elJson({error:availability.message,code:'voice_cloning_paused'},503);
+ }
  if(!getKey(env))return elJson({error:'Voice cloning is temporarily unavailable. Please contact support.'},503);
  if(path==='/api/elevenlabs/voices'){
-  if(req.method==='GET')return elJson({ok:true,voices:[],capacity:publicCapacity(await voiceCapacity(env)),agentConfigured:!!getAgent(env),temporary:true});
+  if(req.method==='GET')return elJson({ok:true,voices:[],capacity:publicCapacity(await voiceCapacity(env)),availability,agentConfigured:!!getAgent(env),temporary:true});
   return elJson({error:'Permanent saved voices are no longer supported.'},410);
  }
  if(path==='/api/elevenlabs/clone')return elJson({error:'Permanent voice saving is disabled. Prepare a voice sample for one-time use.'},410);
@@ -169,4 +206,4 @@ async function elRequest(req,env,helpers){
   return elJson({ok:true,audioBase64:base64,seconds,voiceName:lease.name,wallet:updatedWallet});
  }finally{await releaseLease(env,lease)}
 }
-export {elRequest,elCleanup,elAdminPurge};
+export {elRequest,elCleanup,elAdminPurge,elAdminAvailability,elGetAvailability};
