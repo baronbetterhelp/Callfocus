@@ -1,13 +1,100 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#eaf5ee"><title>Earn Referrals | CallFocus</title><link rel="icon" href="/favicon.png"><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="/affiliate.css?v=16.37"></head><body class="ea-wrap">
-<header class="ea-header"><a class="ea-brand" href="/"><img src="/logo.png" alt=""><span><b>CallFocus</b><small>Partner earnings</small></span></a><a class="ea-btn" href="/referrals">My Referrals</a></header>
-<main class="ea-container"><span class="ea-eyebrow">Earn Referrals · Partner program</span><h1 class="ea-title">Your referrals.<br>Your real earnings.</h1><p class="ea-lede">Apply once and get approved to unlock your own earnings code. Receive a configurable commission on every verified deposit from customers who register through your partner code. This is separate from regular referral credits.</p>
-<div class="ea-message" id="eaMessage" role="status" aria-live="polite"></div>
-<section id="eaPending" class="ea-card"><h2>Partner access</h2><p id="eaState">Checking your application…</p><button class="ea-btn primary" id="eaApply" hidden>Request partner access</button></section>
-<section id="eaDashboard" hidden>
-<div class="ea-grid"><div class="ea-tile"><span>Total earned</span><strong id="eaEarned">₦0</strong></div><div class="ea-tile"><span>Available to withdraw</span><strong id="eaAvailable">₦0</strong></div><div class="ea-tile"><span>Pending / paid</span><strong id="eaReserved">₦0 / ₦0</strong></div></div>
-<div class="ea-card"><span class="ea-eyebrow">Your exclusive code</span><h2>Share and earn on repeat purchases</h2><p>Use this code when new customers sign up. Your share applies to their first and later verified deposits, not just their signup.</p><div class="ea-copy"><code id="eaCode">—</code><button type="button" id="eaCopyCode" class="ea-btn">Copy code</button><button type="button" id="eaCopyLink" class="ea-btn primary">Copy referral link</button></div><p class="ea-muted" id="eaRate"></p><p class="ea-muted" id="eaCounts"></p></div>
-<div class="ea-card"><h2>Request a withdrawal</h2><p id="eaWithdrawRule">Loading withdrawal conditions…</p><form id="eaWithdrawForm"><div class="ea-formgrid"><label class="ea-control">Amount in naira (₦)<input id="eaAmount" type="number" step="0.01" min="0" required inputmode="decimal"></label><label class="ea-control">Bank name<input id="eaBank" maxlength="90" required autocomplete="off"></label><label class="ea-control">Account holder's full name<input id="eaHolder" maxlength="120" required autocomplete="off"></label><label class="ea-control">Account number<input id="eaNumber" inputmode="numeric" pattern="[0-9]{10,20}" maxlength="20" required autocomplete="off"></label></div><label class="ea-control" style="display:flex;flex-direction:row;align-items:center;gap:10px"><input type="checkbox" id="eaBankConsent" style="width:23px;min-height:23px" required> I confirm that this is my account and I am authorized to receive the payment.</label><p class="ea-muted">You will not receive an automatic transfer. We review each request, send money manually, and then update the status here. Never enter your banking password, BVN, or PIN.</p><button class="ea-btn primary" id="eaWithdrawButton" type="submit">Request withdrawal</button></form></div>
-<div class="ea-card"><h2>Recent commission activity</h2><div class="ea-list" id="eaCommissions"></div></div>
-<div class="ea-card"><h2>Withdrawal requests</h2><div class="ea-list" id="eaWithdrawals"></div></div>
-</section>
-</main><script src="/affiliate-client.js?v=16.37"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#eaf5ee">
+  <title>Earn Referrals | CallFocus</title>
+  <link rel="icon" href="/favicon.png">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/affiliate.css?v=16.38">
+</head>
+<body class="ea-wrap">
+  <header class="ea-header">
+    <a class="ea-brand" href="/"><img src="/logo.png" alt=""><span><b>CallFocus</b><small>Partner earnings</small></span></a>
+    <a class="ea-btn" href="/referrals">My Referrals</a>
+  </header>
+
+  <main class="ea-container">
+    <section class="ea-hero-shell">
+      <div class="ea-hero-copy">
+        <span class="ea-eyebrow">Earn Referrals · Partner Program</span>
+        <h1 class="ea-title">Your referrals.<br>Your real earnings.</h1>
+        <p class="ea-lede">Get approved once to unlock your own earning code, earn a share of every verified deposit, and request manual withdrawals on eligible days.</p>
+      </div>
+      <aside class="ea-hero-note">
+        <span class="ea-tag">Manual payout</span>
+        <strong>Simple partner earnings</strong>
+        <p>Share one code, track your results clearly, and request withdrawals from the same dashboard.</p>
+      </aside>
+    </section>
+
+    <div class="ea-message" id="eaMessage" role="status" aria-live="polite"></div>
+
+    <section id="eaPending" class="ea-card ea-pending-card">
+      <span class="ea-section-kicker">Partner access</span>
+      <h2>Start earning with your own referral code</h2>
+      <p id="eaState">Checking your application…</p>
+      <div class="ea-admin-actions"><button class="ea-btn primary" id="eaApply" hidden>Request partner access</button></div>
+    </section>
+
+    <section id="eaDashboard" hidden>
+      <div class="ea-grid ea-dashboard-top">
+        <article class="ea-tile ea-stat-card"><span>Total earned</span><strong id="eaEarned">₦0</strong><small>All approved commission earned so far</small></article>
+        <article class="ea-tile ea-stat-card"><span>Available to withdraw</span><strong id="eaAvailable">₦0</strong><small>Current balance ready for withdrawal</small></article>
+        <article class="ea-tile ea-stat-card"><span>Pending / paid</span><strong id="eaReserved">₦0 / ₦0</strong><small>Amounts already requested or completed</small></article>
+      </div>
+
+      <div class="ea-primary-grid">
+        <section class="ea-card ea-code-card">
+          <span class="ea-section-kicker">Your exclusive code</span>
+          <h2>Share and earn on repeat purchases</h2>
+          <p>Use your earning code when new customers sign up. Your commission applies to verified deposits from those customers, including later top-ups.</p>
+          <div class="ea-copy-stack">
+            <code id="eaCode">—</code>
+            <div class="ea-copy-actions">
+              <button type="button" id="eaCopyCode" class="ea-btn">Copy code</button>
+              <button type="button" id="eaCopyLink" class="ea-btn primary">Copy referral link</button>
+            </div>
+          </div>
+          <p class="ea-muted" id="eaRate"></p>
+          <p class="ea-muted" id="eaCounts"></p>
+        </section>
+
+        <section class="ea-card ea-withdraw-card">
+          <span class="ea-section-kicker">Manual cash out</span>
+          <h2>Request a withdrawal</h2>
+          <p class="ea-rule-pill" id="eaWithdrawRule">Loading withdrawal conditions…</p>
+          <form id="eaWithdrawForm">
+            <div class="ea-formgrid">
+              <label class="ea-control">Amount in naira (₦)<input id="eaAmount" type="number" step="0.01" min="0" required inputmode="decimal"></label>
+              <label class="ea-control">Bank name<input id="eaBank" maxlength="90" required autocomplete="off"></label>
+              <label class="ea-control">Account holder's full name<input id="eaHolder" maxlength="120" required autocomplete="off"></label>
+              <label class="ea-control">Account number<input id="eaNumber" inputmode="numeric" pattern="[0-9]{10,20}" maxlength="20" required autocomplete="off"></label>
+            </div>
+            <label class="ea-control ea-consent-row"><input type="checkbox" id="eaBankConsent" required> I confirm that this account belongs to me and I am authorized to receive this payment.</label>
+            <p class="ea-muted">Withdrawals are reviewed manually. Do not enter your banking password, BVN, or PIN.</p>
+            <button class="ea-btn primary" id="eaWithdrawButton" type="submit">Request withdrawal</button>
+          </form>
+        </section>
+      </div>
+
+      <div class="ea-list-grid">
+        <section class="ea-card">
+          <span class="ea-section-kicker">Earnings feed</span>
+          <h2>Recent commission activity</h2>
+          <div class="ea-list" id="eaCommissions"></div>
+        </section>
+
+        <section class="ea-card">
+          <span class="ea-section-kicker">Cash out history</span>
+          <h2>Withdrawal requests</h2>
+          <div class="ea-list" id="eaWithdrawals"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script src="/affiliate-client.js?v=16.38"></script>
+</body>
+</html>

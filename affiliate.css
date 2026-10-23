@@ -14,3 +14,29 @@
 .ea-weekday-option input{width:20px;height:20px;min-height:20px;flex:none;margin:0;accent-color:#15856c;cursor:pointer}
 .ea-weekday-option:focus-within{outline:2px solid #409a82;outline-offset:2px}
 @media(max-width:380px){.ea-weekday-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+
+/* ========================================================================
+   V16.38 polished partner earnings UI
+   ======================================================================== */
+.ea-header{padding:16px clamp(20px,4vw,58px);background:rgba(255,255,255,.82);backdrop-filter:blur(14px);position:sticky;top:0;z-index:10}
+.ea-container{max-width:1120px;padding:28px 18px 88px}
+.ea-hero-shell{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(260px,.8fr);gap:18px;align-items:start;margin-bottom:18px}
+.ea-hero-copy,.ea-hero-note{border:1px solid #dceae3;border-radius:28px;background:linear-gradient(145deg,rgba(255,255,255,.92),rgba(241,249,244,.95));box-shadow:0 16px 40px rgba(16,74,61,.06)}
+.ea-hero-copy{padding:28px 30px}.ea-hero-note{padding:24px}.ea-hero-note strong{display:block;margin:14px 0 8px;font-size:22px;line-height:1.15;letter-spacing:-.04em}.ea-hero-note p{margin:0;color:#627a70;line-height:1.7}
+.ea-title{margin:10px 0 12px;font-size:clamp(34px,5vw,58px);line-height:.97;letter-spacing:-.055em}
+.ea-lede{max-width:640px;margin:0;color:#5d786d;font-size:15px;line-height:1.75}
+.ea-section-kicker{display:inline-flex;align-items:center;margin-bottom:10px;color:#23866f;font-size:12px;letter-spacing:.17em;font-weight:850;text-transform:uppercase}
+.ea-pending-card{padding:28px 30px}.ea-pending-card h2{margin:0 0 8px;font-size:clamp(26px,4vw,36px);line-height:1.05;letter-spacing:-.04em}.ea-pending-card p{max-width:700px;margin:0 0 16px}
+.ea-dashboard-top{gap:16px;margin-bottom:18px}.ea-grid.ea-dashboard-top{grid-template-columns:repeat(3,minmax(0,1fr))}
+.ea-stat-card{padding:24px;border-radius:22px;background:linear-gradient(145deg,#f8fcfa,#eef7f2);display:grid;gap:10px}
+.ea-stat-card span{font-size:12px;color:#71877d;font-weight:800;letter-spacing:.04em}.ea-stat-card strong{margin-top:0;font-size:clamp(28px,4vw,38px)}.ea-stat-card small{display:block;color:#799084;font-size:12px;line-height:1.55}
+.ea-primary-grid,.ea-list-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}.ea-primary-grid{align-items:start;margin-bottom:18px}
+.ea-card{margin:0;border-radius:28px;padding:28px 30px}.ea-card h2{font-size:clamp(28px,4vw,40px);line-height:1.05;letter-spacing:-.045em;margin:0 0 10px}.ea-card p{margin:0}
+.ea-copy-stack{display:grid;gap:16px;margin:18px 0 10px}.ea-copy-stack code{display:block;overflow-wrap:anywhere;word-break:break-word;padding:18px 20px;border-radius:20px;background:linear-gradient(145deg,#eaf5ee,#f8fbf9);border:1px solid #d6e7de;color:#115d4d;font-size:clamp(30px,4vw,44px);letter-spacing:.08em}.ea-copy-actions{display:flex;gap:10px;flex-wrap:wrap}.ea-copy-actions .ea-btn{flex:1 1 220px}
+.ea-rule-pill{margin:0 0 18px;padding:14px 16px;border:1px solid #d9e9e2;border-radius:17px;background:linear-gradient(145deg,#f4faf7,#edf7f2);color:#537166;font-size:13px;line-height:1.65}
+.ea-control{font-size:13px;margin:0 0 14px}.ea-formgrid{gap:0 14px}.ea-consent-row{display:flex;flex-direction:row;align-items:flex-start;gap:12px;margin-top:4px;padding:14px 16px;border-radius:16px;background:#f8fbf9;border:1px solid #deebe5}.ea-consent-row input{width:22px;min-height:22px;flex:none;margin-top:1px}
+.ea-withdraw-card .ea-btn.primary{margin-top:4px}
+.ea-list-grid .ea-card h2{font-size:28px}.ea-list{max-height:420px;padding-right:4px}.ea-table-row{padding:16px 0}.ea-table-row strong{font-size:15px}.ea-table-row span{font-size:13px;color:#6f857b}
+@media(max-width:860px){.ea-hero-shell,.ea-primary-grid,.ea-list-grid{grid-template-columns:1fr}.ea-grid.ea-dashboard-top{grid-template-columns:1fr 1fr}.ea-copy-actions .ea-btn{flex:1 1 0}}
+@media(max-width:660px){.ea-header{padding:14px 18px}.ea-container{padding-top:18px;padding-bottom:64px}.ea-hero-copy,.ea-hero-note,.ea-card,.ea-pending-card{padding:22px 20px;border-radius:22px}.ea-title{font-size:clamp(34px,11vw,46px)}.ea-lede{font-size:14px}.ea-grid.ea-dashboard-top{grid-template-columns:1fr}.ea-stat-card{padding:20px}.ea-card h2{font-size:clamp(26px,7vw,34px)}.ea-copy-stack code{font-size:clamp(24px,8vw,36px);padding:16px 16px}.ea-copy-actions{display:grid;grid-template-columns:1fr}.ea-copy-actions .ea-btn{width:100%}.ea-list-grid .ea-card h2{font-size:24px}}

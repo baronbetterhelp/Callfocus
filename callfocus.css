@@ -4007,3 +4007,36 @@ html[data-theme="dark"] #page-history .history-close-btn{background:#19302b;bord
 .pocketfi-recovery-fields input{box-sizing:border-box;width:100%;min-height:44px;padding:10px 12px;border:1px solid rgba(20,118,97,.23);border-radius:10px;font-size:16px;background:var(--input-bg,#fff);color:var(--text,#17443c);}
 .pocketfi-recovery-fields .btn{min-height:44px;width:100%;}
 .pocketfi-recovery-fields small{font-size:.76rem;line-height:1.45;opacity:.75;}
+
+
+/* ========================================================================
+   V16.38 referral experience polish
+   ======================================================================== */
+#page-referrals.app-page{padding-top:34px}
+#page-referrals .app-page-head{align-items:flex-start;margin-bottom:18px}
+#page-referrals .app-page-head h1{font-size:clamp(38px,5vw,50px);line-height:.98;letter-spacing:-2.4px;margin:10px 0 12px}
+#page-referrals .app-page-head p{max-width:640px;color:#6b8079}
+.referrals-shell .ea-cta{margin:10px 0 20px;padding:18px 20px;border-radius:22px;box-shadow:0 14px 34px rgba(18,82,69,.06)}
+.referrals-shell .ea-cta h2{font-size:clamp(20px,3.5vw,26px);margin:6px 0}
+.referrals-shell .ea-cta p{max-width:500px;font-size:14px;line-height:1.6}
+.referrals-shell .ea-cta .ea-btn{min-height:44px;padding:11px 18px}
+.referrals-hero-card{gap:18px;margin-top:18px}
+.referrals-code-panel,.referrals-list-card,.referrals-stats{border-color:rgba(36,112,97,.11);box-shadow:0 16px 40px rgba(18,72,60,.05)}
+.referrals-code-panel{padding:24px 24px 22px;background:linear-gradient(145deg,#ffffff,#f3faf7)}
+.referrals-code-panel>span{font-size:11px;letter-spacing:.16em;color:#668078}
+.referrals-code-panel>strong{margin-top:10px;font-size:clamp(28px,5vw,38px);letter-spacing:.08em}
+.referrals-code-panel>small{max-width:560px;margin-top:14px;font-size:12px;line-height:1.72;color:#6d807a}
+.referrals-share-actions{margin-top:18px}
+.referrals-link{margin-top:15px;font-size:11px;line-height:1.55;background:rgba(22,128,110,.06);color:#5f786f}
+.referrals-stats{padding:14px 18px;background:linear-gradient(180deg,#ffffff,#f8fcfa)}
+.referrals-stats>div{padding:18px 6px}
+.referrals-stats span{font-size:11px;color:#768883}
+.referrals-stats strong{font-size:22px}
+.referrals-list-card{margin-top:18px;padding:22px}
+.referrals-list-head{padding-bottom:14px}
+.referrals-list-head h2{font-size:24px}
+.referrals-status,.referrals-empty span,.referral-row-copy span{font-size:11px}
+.referral-row-copy strong,.referral-row-status strong{font-size:13px}
+.referral-row-status small{font-size:10px}
+@media(max-width:960px){#page-referrals.app-page{padding-top:28px}.referrals-shell .ea-cta{padding:17px 18px}}
+@media(max-width:560px){#page-referrals.app-page{padding-top:24px}.referrals-shell .ea-cta{padding:16px 16px 18px;border-radius:20px}.referrals-shell .ea-cta p{font-size:13px}.referrals-code-panel,.referrals-list-card{padding:18px}.referrals-code-panel>small{font-size:11px}.referrals-share-actions{grid-template-columns:1fr}.referrals-share-actions .btn{width:100%}}
