@@ -499,35 +499,67 @@ async function loadAdminUsers(reset=false){
   if(adminUsersLoading)return;
   adminUsersLoading=true;
   const refresh=$('adminUsersRefreshBtn'),more=$('adminUsersMoreBtn'),summary=$('adminUsersSummary');
-  if(reset){adminUsers=[];adminUsersCursor='';adminUsersVisibleLimit=80;adminUsersComplete=false;adminUsersLoadError='';directVisibleLimit=80;renderDirectRecipients();}
+  const byId=new Map(reset?[]:adminUsers.map(u=>[u.id,u]));
+  const seenCursors=new Set();
+  let complete=false,pages=0;
+  if(reset){
+    adminUsers=[];adminUsersCursor='';adminUsersVisibleLimit=80;
+    adminUsersComplete=false;adminUsersLoadError='';directVisibleLimit=80;
+    renderAdminUsers();renderDirectRecipients();
+  }
   if(refresh){refresh.disabled=true;refresh.textContent='Refreshing users…';}
   if(more){more.disabled=true;more.textContent='Loading…';more.classList.add('hidden');}
-  let complete=false;
-  let pages=0;
-  const seenCursors=new Set();
-  const byId=new Map(adminUsers.map(u=>[u.id,u]));
+  const updateProgress=(message)=>{
+    if(summary)summary.textContent=message;
+    const status=$('directAudienceStatus');if(status)status.textContent=message+' · All-customer sending is unavailable until complete.';
+    const directSummary=$('directRecipientSummary');if(directSummary)directSummary.textContent=`${byId.size.toLocaleString()} customer records received · loading`;
+  };
   try{
-    // Read all KV pages. The former 40 x 50 limit silently capped Admin at 2,000.
     do{
       const cursor=adminUsersCursor;
-      if(cursor){if(seenCursors.has(cursor))throw new Error('Repeated customer page cursor; refresh to retry.');seenCursors.add(cursor);}
-      const qs=new URLSearchParams({limit:'75'});if(cursor)qs.set('cursor',cursor);
-      const result=await api(`/api/admin/users?${qs.toString()}`);
+      if(cursor){
+        if(seenCursors.has(cursor))throw new Error('Repeated customer cursor. Resume or refresh to retry.');
+        seenCursors.add(cursor);
+      }
+      // Each account requires two KV reads; 18 per page stays within the
+      // Free-plan subrequest budget, including admin authentication/config.
+      const qs=new URLSearchParams({limit:'18'});
+      if(cursor)qs.set('cursor',cursor);
+      let result, lastFailure;
+      for(let attempt=1;attempt<=3;attempt++){
+        const controller=new AbortController();
+        const timer=setTimeout(()=>controller.abort(),16000);
+        try{
+          result=await api(`/api/admin/users?${qs.toString()}`,{signal:controller.signal});
+          clearTimeout(timer);break;
+        }catch(err){
+          clearTimeout(timer);lastFailure=err;
+          if(err.status===401||err.status===403)throw err;
+          if(attempt<3){
+            updateProgress(`Loaded ${byId.size.toLocaleString()} customers across ${pages} pages · retrying a slow page (${attempt}/3)`);
+            await new Promise(resolve=>setTimeout(resolve,Math.min(2000,attempt*700)));
+          }
+        }
+      }
+      if(!result)throw new Error(`Customer page ${pages+1} did not load after 3 attempts: ${lastFailure?.message||'Request timed out'}`);
       for(const u of (Array.isArray(result.users)?result.users:[]))if(u?.id)byId.set(u.id,u);
-      adminUsersCursor=String(result.cursor||'');
       complete=result.listComplete===true;
+      const nextCursor=String(result.cursor||'');
+      if(!complete&&!nextCursor)throw new Error('Incomplete customer page: server returned no continuation cursor.');
+      if(!complete&&nextCursor===cursor)throw new Error('The server repeated the same customer page.');
+      adminUsersCursor=nextCursor;
       pages++;
-      if(!complete&&!adminUsersCursor)throw new Error('The customer list stopped before all accounts were loaded.');
-      if(pages>1000)throw new Error('Too many customer pages; retry the refresh.');
-      if(summary)summary.textContent=`Loading customer accounts… ${byId.size.toLocaleString()} read`;
-      if($('adminDashUsers'))$('adminDashUsers').textContent=byId.size.toLocaleString();
-      // Keep iPhone Safari responsive. Do not rebuild thousands of DOM cards
-      // for each received page: draw once on first page and once at completion.
-      if(pages===1){adminUsers=[...byId.values()];renderAdminUsers();renderDirectRecipients();}
-      if(pages%5===0)await new Promise(resolve=>setTimeout(resolve,0));
+      if(pages>1000)throw new Error('Customer scan reached the pagination safety limit.');
+      // Progressively publish page results. V16.29 only published page 1
+      // and the final page, making the UI appear stuck at 75 customers.
+      adminUsers=[...byId.values()];
+      renderAdminUsers();renderDirectRecipients();
+      updateProgress(`Loading customer accounts… ${byId.size.toLocaleString()} received across ${pages} pages`);
+      if(pages%3===0)await new Promise(resolve=>setTimeout(resolve,0));
     }while(!complete);
     adminUsers=[...byId.values()].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
-    adminUsersComplete=true;adminUsersLoadError='';renderAdminUsers();
+    adminUsersComplete=true;adminUsersLoadError='';adminUsersCursor='';
+    renderAdminUsers();
     if(summary){
       const funded=adminUsers.filter(u=>Number(u?.wallet?.purchaseCount||0)>0).length;
       const disabled=adminUsers.filter(u=>u.accountDisabled).length;
@@ -535,16 +567,16 @@ async function loadAdminUsers(reset=false){
       summary.textContent=`${adminUsers.length.toLocaleString()} customers · ${funded} funded · ${unlimited} unlimited · ${disabled} disabled`;
     }
   }catch(err){
-    adminUsersComplete=false;adminUsersLoadError=err.message||'Customer list incomplete';
+    adminUsersComplete=false;adminUsersLoadError=err?.message||'Customer list incomplete';
     adminUsers=[...byId.values()].sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
     renderAdminUsers();
-    if(summary)summary.textContent=`Partial customer list: ${adminUsers.length.toLocaleString()} loaded. ${err.message} Try Refresh users.`;
-    toast('Customer refresh incomplete');
+    if(summary)summary.textContent=`Partial customer list: ${adminUsers.length.toLocaleString()} loaded across ${pages} pages. ${adminUsersLoadError}. Press Refresh users to retry.`;
+    toast('Customer loading incomplete; no bulk send performed');
     if(!adminUsers.length&&$('adminUsersList'))$('adminUsersList').innerHTML='<div class="admin-users-empty">Could not load customer accounts. Try again.</div>';
   }finally{
     adminUsersLoading=false;
     if(refresh){refresh.disabled=false;refresh.textContent='Refresh users';}
-    if(more){more.disabled=false;more.textContent='Load more users';more.classList.toggle('hidden',!adminUsersCursor);}
+    if(more){more.disabled=false;more.textContent='Load more users';more.classList.toggle('hidden',!adminUsersComplete&&!!adminUsersCursor);}
     renderMarketingRecipients();renderDirectRecipients();
   }
 }
@@ -900,7 +932,7 @@ function renderDirectRecipients(){
       adminUsersComplete?`${adminUsers.length.toLocaleString()} customer records read from this website's connected storage. ${eligible.length.toLocaleString()} active accounts have email addresses.${adminUsers.length>eligible.length?' Disabled or invalid-email accounts are excluded.':''}`:
       'Customer records have not finished loading. Press Refresh customers if needed.';
   }
-  const refresh=$('directRefreshCustomersBtn');if(refresh){refresh.disabled=adminUsersLoading;refresh.textContent=adminUsersLoading?'Loading customers…':'Refresh customers';}
+  const refresh=$('directRefreshCustomersBtn');if(refresh){refresh.disabled=adminUsersLoading;refresh.textContent=adminUsersLoading?'Loading customers…':(!adminUsersComplete&&adminUsersCursor?'Continue loading':'Refresh customers');}
   const selectShown=$('directSelectShownBtn'),clearShown=$('directClearShownBtn');
   if(selectShown)selectShown.disabled=audience==='all'||!rows.length||rows.every(u=>directSelectedUserIds.has(u.id));
   if(clearShown)clearShown.disabled=audience==='all'||!rows.some(u=>directSelectedUserIds.has(u.id));
@@ -964,7 +996,7 @@ async function sendDirectCustomerEmail(){
 restoreDirectDraftLocal();
 ['directCustomEmails','directSubject','directMessage','directCtaLabel','directCtaUrl'].forEach(id=>$(id)?.addEventListener('input',()=>{if(id==='directCustomEmails')renderDirectRecipients();scheduleDirectDraftSave();}));
 document.querySelectorAll('input[name="directAudience"]').forEach(input=>input.addEventListener('change',()=>{renderDirectRecipients();scheduleDirectDraftSave();}));
-$('directRefreshCustomersBtn')?.addEventListener('click',()=>loadAdminUsers(true));
+$('directRefreshCustomersBtn')?.addEventListener('click',()=>loadAdminUsers(!adminUsersCursor));
 $('directMoreCustomersBtn')?.addEventListener('click',()=>{directVisibleLimit+=80;renderDirectRecipients();});
 $('directRecipientSearch')?.addEventListener('input',()=>{directVisibleLimit=80;if($('directRecipientList'))$('directRecipientList').scrollTop=0;renderDirectRecipients();});
 document.querySelectorAll('[data-direct-funding-filter]').forEach(btn=>btn.addEventListener('click',()=>{directFundingFilter=String(btn.dataset.directFundingFilter||'all');directVisibleLimit=80;renderDirectRecipients();}));

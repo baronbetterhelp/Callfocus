@@ -2342,7 +2342,7 @@ async function handleAdminUsers(request, env) {
     return json({ error: 'Global account storage is not connected.' }, 503);
   }
   const url = new URL(request.url);
-  const requestedLimit = Math.max(1, Math.min(75, Number(url.searchParams.get('limit')) || 50));
+  const requestedLimit = Math.max(1, Math.min(18, Number(url.searchParams.get('limit')) || 18));
   const cursor = String(url.searchParams.get('cursor') || '').trim();
   let page;
   try {
@@ -2354,14 +2354,21 @@ async function handleAdminUsers(request, env) {
   const unlimitedEmails = Array.isArray(config.unlimitedCreditEmails)
     ? config.unlimitedCreditEmails.map(v => normalizeCustomerEmail(v)).filter(Boolean)
     : [];
-  const users = await Promise.all((page.keys || []).map(async entry => {
-    try {
-      const user = await env.CALLFOCUS_CONFIG.get(entry.name, { type: 'json' });
-      if (!user?.id) return null;
-      const data = (await env.CALLFOCUS_CONFIG.get(customerDataKey(user.id), { type: 'json' })) || defaultCustomerData(user.name);
-      return adminUserSummary(user, data, unlimitedEmails);
-    } catch { return null; }
-  }));
+  // Small bounded groups avoid exhausting a Free-plan Worker subrequest
+  // budget and overwhelming the six simultaneous outgoing connections.
+  const users = [];
+  const keys = Array.isArray(page.keys) ? page.keys : [];
+  for (let start = 0; start < keys.length; start += 4) {
+    const part = await Promise.all(keys.slice(start, start + 4).map(async entry => {
+      try {
+        const user = await env.CALLFOCUS_CONFIG.get(entry.name, { type: 'json' });
+        if (!user?.id) return null;
+        const data = (await env.CALLFOCUS_CONFIG.get(customerDataKey(user.id), { type: 'json' })) || defaultCustomerData(user.name);
+        return adminUserSummary(user, data, unlimitedEmails);
+      } catch { return null; }
+    }));
+    users.push(...part);
+  }
   return json({
     ok: true,
     users: users.filter(Boolean),
