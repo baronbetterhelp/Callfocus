@@ -104,8 +104,8 @@ export async function affiliateCustomerApi(request,env,auth,notify){
    const link=new URL('/affiliate-payout-review',request.url);link.searchParams.set('id',payoutId);link.searchParams.set('token',token);
    // Token only authorizes a specific review. GET never approves or transfers money.
    await notify(env,{to:setup.notification_email,subject:'CallFocus · Withdrawal request · '+payoutId.slice(0,8),
-     text:`Partner ${safe(user.user.name)} (${safe(user.user.email)}) requests ₦${(amount/100).toFixed(2)}.\nBank: ${bank}\nAccount name: ${holder}\nAccount number: ${number}\nReview: ${link.toString()}\nApproving does not transfer money. After the transfer, mark Paid in Admin.`,
-     html:`<h2>Withdrawal request</h2><p>Amount: ₦${(amount/100).toFixed(2)}</p><p><a href="${link.toString()}">Review and approve or reject securely</a></p><p>Approving does not transfer funds. Make the transfer yourself and record it in Admin after payment.</p>`});
+     text:`Partner ${safe(user.user.name)} (${safe(user.user.email)}) requests ₦${(amount/100).toFixed(2)}.\nBank: ${bank}\nAccount name: ${holder}\nAccount number: ${number}\nReview and confirm AFTER making the manual bank transfer: ${link.toString()}\nThe link does not send money. Confirm Payment Sent records it as Paid and notifies the customer.`,
+     html:`<h2>Withdrawal request</h2><p>Amount: ₦${(amount/100).toFixed(2)}</p><p><a href="${link.toString()}">Review payment status securely</a></p><p>Transfer the money manually before selecting Confirm Payment Sent. This link does not send money.</p>`});
    notified=true;
   }catch(error){console.error('Affiliate withdrawal notification failed',error?.message||error)}
   await db.prepare('UPDATE affiliate_withdrawals SET notification_status=? WHERE id=?').bind(notified?'sent':'failed',payoutId).run();
@@ -113,7 +113,30 @@ export async function affiliateCustomerApi(request,env,auth,notify){
  }
  return bad('Method not allowed.',405);
 }
-export async function affiliateAdminApi(request,env,authorized){
+async function sendPaidNotification(env,db,withdrawalId,notify){
+ if(typeof notify!=='function')return {sent:false,error:'Email service is not available.'};
+ const row=await db.prepare(`SELECT w.id,w.amount_kobo,w.status,w.transfer_reference,m.email
+  FROM affiliate_withdrawals w JOIN affiliate_members m ON m.user_id=w.affiliate_id
+  WHERE w.id=?`).bind(withdrawalId).first();
+ if(!row||row.status!=='paid')return {sent:false,error:'Withdrawal is not paid.'};
+ const recipient=safe(row.email);
+ if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient))return {sent:false,error:'Customer has no valid email.'};
+ const amount=(row.amount_kobo/100).toLocaleString('en-NG',{minimumFractionDigits:2,maximumFractionDigits:2});
+ const reference=safe(row.transfer_reference);
+ const safeRef=reference.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const text=`Your CallFocus Earn Referrals withdrawal of ₦${amount} has been marked Paid after the manual bank transfer.${reference?'\nTransfer reference: '+reference:''}\nSign in to your Earn Referrals dashboard to view the updated status.`;
+ const html=`<h2>Withdrawal payment confirmed</h2><p>We have marked your Earn Referrals withdrawal of <strong>₦${amount}</strong> as <strong>Paid</strong> after the manual bank transfer.</p>${reference?'<p>Transfer reference: '+safeRef+'</p>':''}<p>Sign in to CallFocus to check your dashboard.</p>`;
+ try{
+  await notify(env,{to:recipient,subject:'CallFocus · Your withdrawal has been paid',text,html});
+  try{await audit(db,'system','withdrawal_paid_email_sent',withdrawalId)}catch{}
+  return {sent:true};
+ }catch(error){
+  console.error('Affiliate payout customer notification failed',safe(error?.message||error));
+  try{await audit(db,'system','withdrawal_paid_email_failed',withdrawalId,safe(error?.message||error))}catch{}
+  return {sent:false,error:'Confirmation email could not be sent; payout status is already Paid.'};
+ }
+}
+export async function affiliateAdminApi(request,env,authorized,notify){
  if(!await authorized(request,env))return bad('Admin sign-in required.',401);
  const db=env.AFFILIATE_DB;if(!db)return failDb();
  const path=new URL(request.url).pathname;
@@ -144,7 +167,11 @@ export async function affiliateAdminApi(request,env,authorized){
  if(path==='/api/admin/affiliate/action'&&request.method==='POST'){
   const b=await readBody(request);if(!b)return bad('Invalid action.');
   const action=safe(b.action),id=safe(b.id);
-  if(!id||!['approve_member','reject_member','suspend_member','approve_payout','reject_payout','mark_paid'].includes(action))return bad('Unknown action.');
+  if(!id||!['approve_member','reject_member','suspend_member','approve_payout','reject_payout','mark_paid','resend_paid_email'].includes(action))return bad('Unknown action.');
+  if(action==='resend_paid_email'){
+   const result=await sendPaidNotification(env,db,id,notify);
+   return json({ok:result.sent,emailSent:result.sent,message:result.sent?'Payment confirmation emailed.':result.error},result.sent?200:502);
+  }
   if(action==='approve_member'){
    const m=await memberFor(db,id);if(!m||m.status!=='pending')return bad('Only pending applications can be approved.',409);
    let approved=false;
@@ -165,11 +192,15 @@ export async function affiliateAdminApi(request,env,authorized){
    if(!r.meta?.changes)return bad('Withdrawal status has changed. Refresh before trying again.',409);
   }
   await audit(db,'admin',action,id,safe(b.note).slice(0,180));
+  if(action==='mark_paid'){
+   const sent=await sendPaidNotification(env,db,id,notify);
+   return json({ok:true,status:'paid',emailSent:sent.sent,message:sent.sent?'Marked Paid. Customer confirmation email sent.':'Marked Paid. Customer email could not be sent; use Resend confirmation in Admin.'});
+  }
   return json({ok:true});
  }
  return bad('Method not allowed.',405);
 }
-export async function affiliateEmailReview(request,env){
+export async function affiliateEmailReview(request,env,notify){
  const db=env.AFFILIATE_DB;if(!db)return failDb();
  const url=new URL(request.url);let id='',token='';
  let body=null;
@@ -180,9 +211,17 @@ export async function affiliateEmailReview(request,env){
  const row=await db.prepare('SELECT * FROM affiliate_withdrawals WHERE id=? AND email_token_hash=? AND email_token_expires>?').bind(id,await sha(token),Math.floor(Date.now()/1000)).first();
  if(!row)return bad('This review link has expired or has already been used.',403);
  if(request.method==='GET')return json({ok:true,id:row.id,status:row.status,amountKobo:row.amount_kobo,bankName:row.bank_name,accountName:row.account_name,accountNumber:row.account_number,requestedAt:row.requested_at});
- const action=safe(body?.action);if(!['approve','reject'].includes(action))return bad('Choose Approve or Reject.');
- const result=await db.prepare("UPDATE affiliate_withdrawals SET status=?,updated_at=?,email_token_hash=NULL,decision_note=? WHERE id=? AND status='requested' AND email_token_hash=? AND email_token_expires>?").bind(action==='approve'?'approved':'rejected',now(),safe(body?.note).slice(0,220),id,await sha(token),Math.floor(Date.now()/1000)).run();
+ const action=safe(body?.action);if(!['confirm_paid','reject'].includes(action))return bad('Choose Confirm Payment Sent or Reject.');
+ // This is a manual-transfer acknowledgement. It never initiates a bank transfer.
+ // The one-time token is consumed by the conditional UPDATE to avoid double payout confirmation.
+ const transferReference=safe(body?.transferReference).slice(0,120);
+ const nextStatus=action==='confirm_paid'?'paid':'rejected';
+ const result=await db.prepare("UPDATE affiliate_withdrawals SET status=?,updated_at=?,email_token_hash=NULL,decision_note=?,transfer_reference=? WHERE id=? AND status='requested' AND email_token_hash=? AND email_token_expires>?").bind(nextStatus,now(),safe(body?.note).slice(0,220),action==='confirm_paid'?transferReference:row.transfer_reference,id,await sha(token),Math.floor(Date.now()/1000)).run();
  if(!result.meta?.changes)return bad('This request has already been reviewed.',409);
  await audit(db,'email_link','review_'+action,id);
- return json({ok:true,status:action==='approve'?'approved':'rejected',message:action==='approve'?'Approved for manual bank transfer. Mark Paid in Admin only after sending the money.':'Withdrawal rejected.'});
+ if(action==='confirm_paid'){
+  const sent=await sendPaidNotification(env,db,id,notify);
+  return json({ok:true,status:'paid',emailSent:sent.sent,message:sent.sent?'Payment marked Paid. The customer confirmation email was sent.':'Payment marked Paid on the customer dashboard. Email notification failed. You can resend it from Admin → Earn Referrals.'});
+ }
+ return json({ok:true,status:'rejected',message:'Withdrawal rejected. No payment has been recorded.'});
 }

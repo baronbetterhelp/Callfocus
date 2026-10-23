@@ -6857,10 +6857,10 @@ export default {
     if (url.pathname.startsWith('/api/affiliate/')) {
       const limited = request.method==='POST' ? await callFocusRateLimit(request,env,'affiliate-request',15,900) : null;
       if(limited)return limited;
-      if(url.pathname==='/api/affiliate/email-review')return affiliateEmailReview(request,env);
+      if(url.pathname==='/api/affiliate/email-review')return affiliateEmailReview(request,env,sendCallFocusEmail);
       return safeCustomerRoute('earn-referrals',()=>affiliateCustomerApi(request,env,authenticatedCustomer,sendCallFocusEmail));
     }
-    if (url.pathname.startsWith('/api/admin/affiliate')) return affiliateAdminApi(request,env,adminAuthorized);
+    if (url.pathname.startsWith('/api/admin/affiliate')) return affiliateAdminApi(request,env,adminAuthorized,sendCallFocusEmail);
     if (url.pathname === '/api/referrals') return safeCustomerRoute('referrals', () => handleCustomerReferrals(request, env));
     if (url.pathname === '/api/account' && request.method === 'DELETE') return handleCustomerDelete(request, env);
     if (url.pathname === '/api/paystack/initialize') return safeCustomerRoute('paystack-initialize', () => handlePaystackInitialize(request, env));
