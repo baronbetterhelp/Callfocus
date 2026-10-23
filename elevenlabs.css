@@ -6,36 +6,41 @@
 .cf-el-box select{display:block;width:100%;min-height:55px;padding:12px;border:1px solid #d2e0db;border-radius:14px;background:#fff;color:#183a32;font:inherit}
 .cf-el-action{padding:13px 17px;min-height:48px;border:1px solid #c2dbd0;border-radius:14px;background:#edf6f1;color:#206652;font-size:15px;font-weight:750;cursor:pointer}
 .cf-el-action:disabled{opacity:.5;cursor:default}.cf-el-muted{display:block;margin-top:9px;color:#657c74;font-size:13px;line-height:1.5}
-/* V16.20 — compact no-scroll voice-cloning modal; isolated from all normal calling styles */
-.cf-el-layer{position:fixed;inset:0;z-index:250;display:none;align-items:center;justify-content:center;padding:12px;background:#10352dd4;overflow:hidden;overscroll-behavior:contain}
+/* V16.21 — iPhone popup mirrors the original full-height layout.
+   All selectors scoped to the new cloned-voice UI. */
+.cf-el-layer{position:fixed;inset:0;z-index:250;display:none;align-items:center;justify-content:center;padding:11px;background:#10352dd4;overflow:hidden;overscroll-behavior:contain}
 .cf-el-layer.open{display:flex}
 .cf-el-is-open{overflow:hidden}
-.cf-el-modal{position:relative;background:#fbfdfb;width:min(100%,500px);max-height:none;overflow:visible;padding:21px 20px 17px;border-radius:28px;box-shadow:0 25px 100px #0a392f43;color:#193f35;box-sizing:border-box;flex-shrink:0;font-size:14px;line-height:1.3;transform-origin:center center}
-.cf-el-modal .cf-el-eyebrow{display:block;color:#779082;letter-spacing:.10em;font-size:10px;font-weight:700;margin:0 46px 5px 0}
-.cf-el-modal h2{margin:0 46px 10px 0;color:#133f32;font-size:25px;line-height:1.08;font-weight:750}
-.cf-el-modal .cf-el-intro{color:#617b70;line-height:1.38;margin:0 0 12px;font-size:13px}
-.cf-el-modal .cf-el-label{display:block;font-weight:700;font-size:12px;margin:10px 0 5px;color:#4e695e}
-.cf-el-modal input[type=text]{width:100%;height:43px;min-height:43px;border:1px solid #ceded7;border-radius:14px;padding:9px 11px;color:#214b41;background:white;font:inherit;box-sizing:border-box}
-.cf-el-modal input[type=checkbox]{width:19px;height:19px;flex-shrink:0;accent-color:#147c69;margin:1px 0 0}
-.cf-el-record-row{display:flex;gap:10px;align-items:center;flex-wrap:nowrap;margin:11px 0 6px}
-.cf-el-record-row .cf-el-action{min-height:39px;padding:9px 12px;border-radius:13px;white-space:nowrap;font-size:13px}
-#cf-el-record-info{font-size:12px;color:#5b7469;min-width:0;overflow-wrap:anywhere}
+.cf-el-modal{position:relative;display:flex;flex-direction:column;width:min(100%,520px);height:min(720px,calc(100dvh - 22px));box-sizing:border-box;background:#fbfdfb;padding:24px 20px 17px;border-radius:30px;box-shadow:0 25px 100px #0a392f43;color:#193f35;overflow:hidden;flex-shrink:0;font-size:14px;line-height:1.4}
+.cf-el-modal .cf-el-eyebrow{display:block;color:#819586;letter-spacing:.11em;font-size:10px;font-weight:750;margin:0 51px 9px 0;line-height:1.2}
+.cf-el-modal h2{margin:0 48px 16px 0;color:#133f32;font-size:24px;line-height:1.12;font-weight:750}
+.cf-el-modal .cf-el-intro{color:#617b70;line-height:1.6;margin:0 0 16px;font-size:14px;font-weight:400}
+.cf-el-modal .cf-el-label{display:block;font-weight:700;font-size:13px;margin:13px 0 8px;color:#4e695e;line-height:1.3}
+.cf-el-modal input[type=text]{width:100%;height:46px;min-height:46px;border:1px solid #ceded7;border-radius:14px;padding:10px 12px;color:#214b41;background:white;font:inherit;font-size:15px;box-sizing:border-box}
+.cf-el-modal input[type=checkbox]{width:23px;height:23px;flex-shrink:0;accent-color:#147c69;margin:2px 0 0}
+.cf-el-record-row{display:flex;gap:12px;align-items:center;flex-wrap:nowrap;margin:15px 0 8px}
+.cf-el-record-row .cf-el-action{min-height:41px;padding:9px 15px;border-radius:14px;white-space:nowrap;font-size:14px}
+#cf-el-record-info{font-size:13px;color:#5b7469;min-width:0;overflow-wrap:anywhere}
 .cf-el-file-input{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;opacity:0!important;clip-path:inset(50%);pointer-events:none}
-.cf-el-file-picker{display:flex;align-items:center;gap:10px;width:100%;min-height:43px;border:1px solid #ceded7;border-radius:14px;padding:6px 10px;background:#fff;cursor:pointer;box-sizing:border-box}
-.cf-el-file-picker span:first-child{flex-shrink:0;border-radius:9px;background:#eaf5ef;color:#256956;font-size:12px;font-weight:750;padding:7px 10px}
-#cf-el-file-summary{font-size:12px;color:#486b5e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.cf-el-consent{display:flex;gap:9px;align-items:flex-start;margin:13px 0;color:#496c61;font-size:12px;line-height:1.4}
-.cf-el-status{border-radius:13px;background:#e8f4ec;color:#247260;padding:10px 11px;margin:0 0 10px;font-size:12px;line-height:1.3;overflow-wrap:anywhere}
-.cf-el-save{display:block;width:100%;min-height:43px;border:0;border-radius:14px;background:#147f67;color:#fff;padding:10px 13px;font-weight:700;font-size:14px;cursor:pointer}
+.cf-el-file-picker{display:flex;align-items:center;gap:10px;width:100%;min-height:50px;border:1px solid #ceded7;border-radius:14px;padding:7px 10px;background:#fff;cursor:pointer;box-sizing:border-box}
+.cf-el-file-picker span:first-child{flex-shrink:0;border-radius:10px;background:#eaf5ef;color:#256956;font-size:13px;font-weight:750;padding:8px 11px}
+#cf-el-file-summary{font-size:14px;color:#486b5e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.cf-el-consent{display:flex;gap:13px;align-items:flex-start;margin:18px 0 12px;color:#496c61;font-size:13px;line-height:1.5;font-weight:600}
+.cf-el-disclosure{color:#617b70;font-size:12px;line-height:1.55;margin:0 0 16px;font-weight:400}
+.cf-el-status{border-radius:14px;background:#e8f4ec;color:#247260;padding:12px 13px;margin:0 0 3px;font-size:13px;min-height:38px;box-sizing:border-box;line-height:1.35;overflow-wrap:anywhere}
+.cf-el-status:not(.cf-el-status-active){visibility:hidden}
+.cf-el-save{display:block;width:100%;min-height:45px;border:0;border-radius:15px;background:#147f67;color:#fff;padding:10px 14px;font-weight:700;font-size:15px;cursor:pointer}
 .cf-el-save:disabled{opacity:.55}
-.cf-el-close{position:absolute;top:16px;right:18px;border:1px solid #d0e3db;border-radius:50%;width:39px;height:39px;background:#edf6f1;color:#265a4c;font-size:27px;line-height:1;cursor:pointer}
-.cf-el-saved{margin-top:11px;padding-top:10px;border-top:1px solid #d8e8e0;font-size:12px}
-.cf-el-saved summary{cursor:pointer;font-weight:700;color:#234b40}
+.cf-el-close{position:absolute;top:19px;right:19px;border:1px solid #d0e3db;border-radius:50%;width:42px;height:42px;background:#edf6f1;color:#265a4c;font-size:30px;line-height:1;cursor:pointer}
+.cf-el-saved{margin-top:auto;padding-top:14px;border-top:1px solid #d8e8e0;font-size:12px}
+.cf-el-saved summary{cursor:pointer;font-weight:700;color:#234b40;font-size:13px}
 .cf-el-saved summary span{color:#748c7f;font-weight:500;margin-left:6px}
 .cf-el-saved ul{margin:6px 0 0;padding-left:20px}
 .cf-el-saved li{padding:3px 0}
 .cf-el-saved #cf-el-saved-list:not(:has(ul)){padding-top:6px;color:#71857b}
 .cf-el-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .cf-el-note-output{width:100%;margin-top:10px}
-@media(max-width:460px){.cf-el-modal{padding:17px 17px 14px;border-radius:25px}.cf-el-box{padding:19px 16px}.cf-el-home{font-size:17px}}
-@media(max-height:740px){.cf-el-modal{padding-top:14px;padding-bottom:12px}.cf-el-modal .cf-el-intro{margin-bottom:9px}.cf-el-consent{margin:10px 0}.cf-el-status{margin-bottom:7px}.cf-el-record-row{margin:9px 0 4px}}
+.cf-el-modal.cf-el-expanded{overflow-y:auto;overscroll-behavior:contain}
+@media(max-width:460px){.cf-el-box{padding:19px 16px}.cf-el-home{font-size:17px}}
+@media(max-height:735px){.cf-el-modal{padding-top:21px;padding-bottom:13px}.cf-el-modal .cf-el-intro{line-height:1.5;margin-bottom:12px}.cf-el-modal h2{margin-bottom:11px}.cf-el-consent{margin:11px 0 9px}.cf-el-disclosure{margin-bottom:10px}.cf-el-modal .cf-el-label{margin-top:10px;margin-bottom:5px}.cf-el-record-row{margin:10px 0 5px}.cf-el-saved{padding-top:9px}}
+@media(max-height:600px){.cf-el-modal{padding-top:13px;padding-bottom:9px}.cf-el-modal .cf-el-intro{font-size:12px;line-height:1.38;margin-bottom:7px}.cf-el-modal h2{font-size:21px;margin-bottom:7px}.cf-el-modal .cf-el-label{font-size:12px;margin-top:6px;margin-bottom:4px}.cf-el-status{min-height:31px;padding:8px 10px;font-size:11px}.cf-el-consent{font-size:11px;line-height:1.3;margin:7px 0 5px}.cf-el-disclosure{font-size:10px;line-height:1.3;margin-bottom:6px}.cf-el-file-picker{min-height:38px}.cf-el-modal input[type=text]{height:37px;min-height:37px}.cf-el-record-row .cf-el-action{min-height:34px;padding:6px 10px}.cf-el-record-row{margin:7px 0 3px}.cf-el-save{min-height:38px}.cf-el-saved{padding-top:6px}}

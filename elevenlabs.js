@@ -37,15 +37,16 @@
       <button type="button" class="cf-el-close" id="cf-el-close" aria-label="Close">×</button>
       <small class="cf-el-eyebrow">YOUR PERSONAL VOICE</small>
       <h2 id="cf-el-title">Create your own voice</h2>
-      <p class="cf-el-intro">Record or upload your own clear speech. A 1–2 minute sample is recommended. Save it once for future calls and voice notes.</p>
-      <div class="cf-el-status" id="cf-el-status" aria-live="polite">Your saved voices are ready.</div>
+      <p class="cf-el-intro">Record or upload 30–120 seconds of your own clear speech. Save it once, then choose it for future calls and voice notes.</p>
+      <div class="cf-el-status" id="cf-el-status" role="status" aria-live="polite" aria-atomic="true"></div>
       <label class="cf-el-label" for="cf-el-name">Voice name</label>
       <input type="text" id="cf-el-name" maxlength="65" placeholder="My own voice" />
       <div class="cf-el-row cf-el-record-row"><button type="button" class="cf-el-action" id="cf-el-record">Record sample</button><span id="cf-el-record-info">Not recording</span></div>
       <label class="cf-el-label" for="cf-el-file">Or upload your own recording</label>
       <label for="cf-el-file" class="cf-el-file-picker"><span>Choose file</span><span id="cf-el-file-summary">No file selected</span></label>
       <input id="cf-el-file" class="cf-el-file-input" type="file" accept="audio/*,.m4a,.mp3,.mp4,.webm,.wav,.ogg,.flac,.aac" />
-      <label class="cf-el-consent"><input id="cf-el-consent" type="checkbox"/><span>This is my own adult voice. I consent to its AI cloning and understand generated speech must not be presented as a real recording of me.</span></label>
+      <label class="cf-el-consent"><input id="cf-el-consent" type="checkbox"/><span>This is my own adult voice. I consent to its AI cloning and understand that generated speech must not be presented as a real recording of me.</span></label>
+      <p class="cf-el-disclosure">Your sample is sent privately to the speech provider for cloning. Some voices may require verification before use.</p>
       <button class="cf-el-save" id="cf-el-save" type="button">Save my voice</button>
       <details class="cf-el-saved" id="cf-el-saved"><summary>My saved voices <span id="cf-el-count">0 / 3</span></summary><div id="cf-el-saved-list"></div></details>
     </div>`;
@@ -53,8 +54,8 @@
     $('cf-el-close').onclick=closeModal;
     div.addEventListener('click',e=>{if(e.target===div)closeModal()});
     $('cf-el-record').onclick=toggleRecording;$('cf-el-save').onclick=saveVoice;
-    $('cf-el-file').addEventListener('change',()=>{$('cf-el-file-summary').textContent=$('cf-el-file').files?.[0]?.name||'No file selected';fitModal()});
-    $('cf-el-saved').addEventListener('toggle',fitModal);
+    $('cf-el-file').addEventListener('change',()=>{const file=$('cf-el-file').files?.[0];$('cf-el-file-summary').textContent=file?.name||'No file selected';status(file?`Recording selected: ${file.name}`:(recordedBlob?'Your recorded sample is ready.':'') );fitModal()});
+    $('cf-el-saved').addEventListener('toggle',()=>{$('cf-el-layer')?.querySelector('.cf-el-modal')?.classList.toggle('cf-el-expanded',$('cf-el-saved').open);fitModal()});
     window.addEventListener('resize',fitModal,{passive:true});
     window.visualViewport?.addEventListener('resize',fitModal,{passive:true});
   }
@@ -63,19 +64,23 @@
     if(fitting||!$('cf-el-layer')?.classList.contains('open'))return;
     fitting=true;
     requestAnimationFrame(()=>{
-      const el=$('cf-el-modal')||$('cf-el-layer')?.querySelector('.cf-el-modal');
-      if(!el){fitting=false;return}
-      // Fit the complete modal into the visible mobile viewport without an inner scrollbar.
-      el.style.zoom='1';
-      const available=Math.max(270,(window.visualViewport?.height||window.innerHeight)-26);
-      const required=el.getBoundingClientRect().height;
-      el.style.zoom=String(Math.min(1,Math.max(0.55,(available/Math.max(1,required))-0.012)));
+      const modal=$('cf-el-layer')?.querySelector('.cf-el-modal');
+      if(!modal){fitting=false;return}
+      // Preserve the reference's near-full-screen height at normal iPhone sizes.
+      // Compact only when the actual controls require more height than available.
+      modal.style.zoom='1';
+      const v=Math.max(260,window.visualViewport?.height||window.innerHeight);
+      const available=Math.max(240,v-24);
+      const required=Math.max(modal.scrollHeight,modal.offsetHeight);
+      if(!modal.classList.contains('cf-el-expanded')&&required>available+1){
+        modal.style.zoom=String(Math.max(0.62,Math.min(1,(available-2)/required)));
+      }
       fitting=false;
     });
   }
-  async function openModal(){if(!auth())return notify('Sign in to CallFocus first.');installModal();$('cf-el-layer').classList.add('open');document.body.classList.add('cf-el-is-open');fitModal();$('cf-el-count').textContent=`${voices.length} / 3`;render();await loadVoices();$('cf-el-count').textContent=`${voices.length} / 3`;fitModal()}
+  async function openModal(){if(!auth())return notify('Sign in to CallFocus first.');installModal();$('cf-el-layer').classList.add('open');document.body.classList.add('cf-el-is-open');const currentFile=$('cf-el-file')?.files?.[0];status(currentFile?`Recording selected: ${currentFile.name}`:(recordedBlob?'Your recorded sample is ready.':''));fitModal();$('cf-el-count').textContent=`${voices.length} / 3`;render();await loadVoices();$('cf-el-count').textContent=`${voices.length} / 3`;fitModal()}
   function closeModal(){if(recorder?.state==='recording')recorder.stop();$('cf-el-layer')?.classList.remove('open');document.body.classList.remove('cf-el-is-open')}
-  function status(text){if($('cf-el-status'))$('cf-el-status').textContent=text;fitModal()}
+  function status(text){const el=$('cf-el-status');if(el){el.textContent=String(text||'');el.classList.toggle('cf-el-status-active',!!text)}fitModal()}
   async function toggleRecording(){
     if(recorder?.state==='recording'){recorder.stop();return}
     if(!navigator.mediaDevices?.getUserMedia)return status('Microphone recording is not supported in this browser. Upload an audio file instead.');
