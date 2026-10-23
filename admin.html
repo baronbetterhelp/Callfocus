@@ -370,6 +370,7 @@
           <div class="admin-users-heading"><div><span class="kicker">Usage pricing</span><h3>Credits per service</h3><p class="admin-panel-copy">Enter credits for one minute of service. Shorter usage is charged proportionally by seconds. Changes to active calls use their original rate; new sessions use saved rates.</p></div></div>
           <div class="form-grid three">
             <label>Voice calls · credits/min<input id="cfRateLiveCall" type="number" min="1" max="100000" step="0.1" value="100"></label>
+            <label>Cloned voice (calls &amp; notes) · credits/min<input id="cfRateCloneVoice" type="number" min="1" max="100000" step="0.1" value="150"></label>
             <label>Voice notes · credits/min<input id="cfRateVoiceNote" type="number" min="1" max="100000" step="0.1" value="100"></label>
             <label>Image to Video · credits/min<input id="cfRateImageVideo" type="number" min="1" max="100000" step="0.1" value="1800"></label>
           </div>
@@ -579,6 +580,6 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=16.11-pocketfi"></script><script src="/admin-video.js?v=16.07-test"></script><script src="/cf-controls-admin.js?v=16.22"></script>
+  <script src="/admin.js?v=16.11-pocketfi"></script><script src="/admin-video.js?v=16.07-test"></script><script src="/cf-controls-admin.js?v=16.24"></script>
 </body>
 </html>

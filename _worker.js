@@ -2130,7 +2130,7 @@ async function handleCreditEntitlement(request, env) {
 
 
 
-async function handleWalletConsume(request, env) {
+async function handleWalletConsume(request, env, trustedRate = null) {
   if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
   const auth = await authenticatedCustomer(request, env);
   if (!auth) return json({ error: 'Session expired.', code: 'session_expired' }, 401);
@@ -2155,7 +2155,9 @@ async function handleWalletConsume(request, env) {
     return json({ ok: true, duplicate: true, deductedSeconds: Math.max(0, Number(existing.seconds) || 0), requestedSeconds, wallet }, 200, { 'Cache-Control': 'no-store' });
   }
   const before = Math.max(0, Math.floor(Number(wallet.balanceSeconds) || 0));
-  const rate=(await cfGetRates(env)).voiceNote;
+  // An internal adapter can supply a rate for a verified saved voice.
+  // Never accept a rate or voice type from a customer-supplied request body.
+  const rate=Number(trustedRate)>=1&&Number.isFinite(Number(trustedRate))?(Number(trustedRate)):(await cfGetRates(env)).voiceNote;
   const billedSeconds=cfChargeWalletSeconds(requestedSeconds,rate);
   const deductedSeconds = Math.min(before, billedSeconds);
   if (deductedSeconds <= 0) return json({ error: 'Not enough CallFocus credit.', code: 'insufficient_credit', wallet }, 402, { 'Cache-Control': 'no-store' });
@@ -2719,7 +2721,7 @@ function cfAnnouncement(v={}) {
 }
 function cfServiceRates(v={}) {
   const rate=(name,defaultRate)=>{const n=Number(v[name]);return Number.isFinite(n)&&n>=1&&n<=100000?Math.round(n*10)/10:defaultRate};
-  return {liveCall:rate('liveCall',100),voiceNote:rate('voiceNote',100),imageVideo:rate('imageVideo',1800),imageVideoOverride:v.imageVideoOverride===true};
+  return {liveCall:rate('liveCall',100),cloneVoice:rate('cloneVoice',150),voiceNote:rate('voiceNote',100),imageVideo:rate('imageVideo',1800),imageVideoOverride:v.imageVideoOverride===true};
 }
 async function cfGetRates(env){if(!env.CALLFOCUS_CONFIG)return cfServiceRates();try{return cfServiceRates(await env.CALLFOCUS_CONFIG.get(CF_SERVICE_RATE_KEY,{type:'json'})||{})}catch{return cfServiceRates()}}
 async function cfAdminFeatureControls(request,env){
@@ -2735,7 +2737,7 @@ async function cfAdminFeatureControls(request,env){
   }
   if(body.kind==='rates'){
     const raw=body.rates||{};
-    for(const key of ['liveCall','voiceNote','imageVideo']){const n=Number(raw[key]);if(!Number.isFinite(n)||n<1||n>100000)return json({error:'Every service rate must be between 1 and 100,000 credits/minute.'},400)}
+    for(const key of ['liveCall','cloneVoice','voiceNote','imageVideo']){const n=Number(raw[key]);if(!Number.isFinite(n)||n<1||n>100000)return json({error:'Every service rate must be between 1 and 100,000 credits/minute.'},400)}
     const rates=cfServiceRates({...raw,imageVideoOverride:true});
     await env.CALLFOCUS_CONFIG.put(CF_SERVICE_RATE_KEY,JSON.stringify(rates));return json({ok:true,rates});
   }
@@ -6816,7 +6818,7 @@ export default {
     const url = new URL(request.url);
     const maintenance = await maybeMaintenanceResponse(request, env, url);
     if (maintenance) return maintenance;
-    if (url.pathname.startsWith('/api/elevenlabs/')) { const limited = await callFocusRateLimit(request, env, 'elevenlabs-'+url.pathname.split('/').pop(), url.pathname.endsWith('/clone') ? 6 : url.pathname.endsWith('/session') ? 40 : 100, 3600); if (limited) return limited; return safeCustomerRoute('elevenlabs', () => elRequest(request, env, {auth:authenticatedCustomer,getConfig,customerData:getCustomerDataForUpdate,normalizeWallet:normalizeServerWallet,registerUsage:registerCallUsage,saveUsage:storeCallUsage,consume:handleWalletConsume})); }
+    if (url.pathname.startsWith('/api/elevenlabs/')) { const limited = await callFocusRateLimit(request, env, 'elevenlabs-'+url.pathname.split('/').pop(), url.pathname.endsWith('/clone') ? 6 : url.pathname.endsWith('/session') ? 40 : 100, 3600); if (limited) return limited; return safeCustomerRoute('elevenlabs', () => elRequest(request, env, {auth:authenticatedCustomer,getConfig,customerData:getCustomerDataForUpdate,normalizeWallet:normalizeServerWallet,registerUsage:registerCallUsage,saveUsage:storeCallUsage,consume:handleWalletConsume,getServiceRates:cfGetRates})); }
     if (url.pathname === '/api/auth/health' && request.method === 'GET') {
       return json({ ok: true, storageConnected: !!env.CALLFOCUS_CONFIG, passwordHashVersion: 3, passwordIterations: CUSTOMER_PASSWORD_ITERATIONS });
     }

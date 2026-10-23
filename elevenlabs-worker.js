@@ -79,7 +79,7 @@ async function elRequest(req,env,helpers){
     const id=await helpers.registerUsage(req,env,{session:{threadId:String(body.threadId||'').slice(0,160),callTitle:String(body.title||'').slice(0,160),callerName:String(body.callerName||'').slice(0,120)}},{id:'elevenlabs-agent'},auth);
     if(!id)return elJson({error:'Could not create the call credit record.'},503);
     const index=await env.CALLFOCUS_CONFIG.get(`call_usage:id:${id}`,{type:'json'});
-    if(index?.key){const record=await env.CALLFOCUS_CONFIG.get(index.key,{type:'json'});if(record){record.model='elevenlabs-agent';record.voiceRateUsdPerMinute=0;record.missingBackendPricing=true;record.providerSessionId='elevenlabs-agent';await helpers.saveUsage(env,index.key,record);}}
+    if(index?.key){const record=await env.CALLFOCUS_CONFIG.get(index.key,{type:'json'});if(record){record.model='elevenlabs-agent';record.voiceRateUsdPerMinute=0;record.missingBackendPricing=true;record.providerSessionId='elevenlabs-agent';record.chargeRateCreditsPerMinute=(await helpers.getServiceRates(env)).cloneVoice;await helpers.saveUsage(env,index.key,record);}}
     return elJson({ok:true,signedUrl:response.signed_url,callUsageId:id,voiceId:voice.voiceId,voiceName:voice.name,context:String(body.context||'').slice(0,22000),balanceSeconds:wallet.balanceSeconds,unlimited});
   }
   if(path==='/api/elevenlabs/tts'){
@@ -98,7 +98,7 @@ async function elRequest(req,env,helpers){
     if(!unlimited){
       if(seconds>wallet.balanceSeconds)return elJson({error:`This voice note needs about ${seconds} seconds of credits. Your current balance is insufficient.`},402);
       const payReq=new Request(req.url,{method:'POST',headers:{Authorization:req.headers.get('Authorization')||'','Content-Type':'application/json'},body:JSON.stringify({type:'voice_note',referenceId:`el-${crypto.randomUUID()}`,seconds})});
-      const paid=await helpers.consume(payReq,env);if(!paid.ok)return paid;
+      const paid=await helpers.consume(payReq,env,(await helpers.getServiceRates(env)).cloneVoice);if(!paid.ok)return paid;
       const outcome=await paid.json().catch(()=>({}));
       if(!outcome?.ok)return elJson({error:'CallFocus could not confirm the credit deduction.'},503);
       updatedWallet=outcome.wallet||null;
