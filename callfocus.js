@@ -1424,10 +1424,36 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
 
   const cloneCall=c=>c?{...c,callerA:{...(c.callerA||{})},callerB:{...(c.callerB||{})}}:null;
 
+  // V16.31: Mobile WebRTC needs enough time to gather usable ICE candidates.
+  // The legacy waitForIce resolves at 2.5s even on slow networks; do not use it
+  // for new calls. This does not change the voice provider or session payload.
+  function waitForCallIce(pc,limit=12000){
+    return new Promise((resolve,reject)=>{
+      let finished=false,timer;
+      const hasCandidate=()=>/^a=candidate:/m.test(pc.localDescription?.sdp||'');
+      const done=(error)=>{
+        if(finished)return;finished=true;clearTimeout(timer);
+        pc.removeEventListener('icegatheringstatechange',check);
+        pc.removeEventListener('signalingstatechange',check);
+        error?reject(error):resolve();
+      };
+      const check=()=>{
+        if(pc.signalingState==='closed')return done(Object.assign(new Error('Connection closed while preparing audio.'),{callFocusReason:'ice_closed'}));
+        if(pc.iceGatheringState==='complete')return hasCandidate()?done():done(Object.assign(new Error('No usable network path for audio was found.'),{callFocusReason:'ice_no_candidates'}));
+      };
+      pc.addEventListener('icegatheringstatechange',check);
+      pc.addEventListener('signalingstatechange',check);
+      timer=setTimeout(()=>hasCandidate()?done():done(Object.assign(new Error('Network connection information was not ready.'),{callFocusReason:'ice_gathering_timeout'})),limit);
+      check();
+    });
+  }
+
+
   function hideFailureActions(){$('callFailureActions')?.classList.add('hidden')}
   function showFailureActions(){$('callFailureActions')?.classList.remove('hidden')}
 
   function destroyTransport(){
+    clearTimeout(live._cfConnectTimer);live._cfConnectTimer=null;
     clearInterval(live.timer); live.timer=null;
     clearTimeout(live.gracefulTimer); live.gracefulTimer=null;
     try{live.dc?.close()}catch{}
@@ -1568,11 +1594,22 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       live.stream=stream; live.pc=pc; live.dc=dc; live.audio=audio;
       stream.getAudioTracks().forEach(t=>pc.addTrack(t,stream));
       pc.ontrack=e=>{audio.srcObject=e.streams[0];audio.play().catch(()=>{})};
-      dc.onopen=()=>{$('liveCaption').textContent='Voice channel connected. Waiting for session…'};
+      dc.onopen=()=>{if(live.pc===pc)$('liveCaption').textContent='Voice channel connected. Waiting for session…'};
       dc.onmessage=e=>handleRealtimeEvent(e.data); dc.onerror=()=>{$('liveCaption').textContent='Voice connection error.'};
 
-      const offer=await pc.createOffer(); await pc.setLocalDescription(offer); await waitForIce(pc);
-      const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('callfocus_server_session_v1')||''}`},body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,voiceProfile:call.voiceProfile||null,callLanguage:call.callLanguage||'English',contextInstructions:buildInstructions(call),threadId:call.threadId,callTitle:call.title,callerName:call.callerName}})});
+      const offer=await pc.createOffer(); await pc.setLocalDescription(offer);
+      $('liveCaption').textContent='Checking the audio connection…';
+      await waitForCallIce(pc);
+      $('liveCaption').textContent='Connecting your call…';
+      const controller=new AbortController();
+      const requestTimeout=setTimeout(()=>controller.abort(),35000);
+      let res;
+      try{
+        res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${localStorage.getItem('callfocus_server_session_v1')||''}`},body:JSON.stringify({sdp:pc.localDescription.sdp,userId:account.id,session:{voiceGender:call.voiceGender,voiceProfile:call.voiceProfile||null,callLanguage:call.callLanguage||'English',contextInstructions:buildInstructions(call),threadId:call.threadId,callTitle:call.title,callerName:call.callerName}}),signal:controller.signal});
+      }catch(networkError){
+        networkError.callFocusReason=controller.signal.aborted?'session_request_timeout':(navigator.onLine===false?'device_offline':'session_network_error');
+        throw networkError;
+      }finally{clearTimeout(requestTimeout)}
       const text=await res.text();
       if(!res.ok){const reason=res.headers.get('X-CallFocus-Error-Code')||`http_${res.status}`;throw Object.assign(new Error(text||'Live session failed'),{callFocusReason:reason,httpStatus:res.status})}
       const serverBalance=Number(res.headers.get('X-CallFocus-Wallet-Balance-Seconds'));
@@ -1582,7 +1619,23 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       call.callUsageId=res.headers.get('X-CallFocus-Call-Usage-ID')||'';
       call.providerSessionId=res.headers.get('X-CallFocus-Provider-Session-ID')||'';
       window.CallFocusCallUsage?.prepared?.(call);
-      await pc.setRemoteDescription({type:'answer',sdp:text});
+      try{await pc.setRemoteDescription({type:'answer',sdp:text})}
+      catch(answerError){answerError.callFocusReason='sdp_answer_rejected';throw answerError}
+      // A successful HTTP response is not yet an established voice connection.
+      // Start Call remains hidden until the existing session.started event arrives.
+      clearTimeout(live._cfConnectTimer);
+      live._cfConnectTimer=setTimeout(()=>{
+        if(live.pc===pc&&!live.connected&&!live._cfUserClosing){
+          failCall(call,'The voice connection did not complete. Please try again or switch networks.','session_start_timeout');
+        }
+      },20000);
+      const connectionFailed=()=>{
+        if(live.pc===pc&&!live.connected&&!live._cfUserClosing){
+          failCall(call,'The audio network connection failed. Try another Wi-Fi or mobile network.','ice_connection_failed');
+        }
+      };
+      pc.addEventListener('iceconnectionstatechange',()=>{if(pc.iceConnectionState==='failed')connectionFailed()});
+      pc.addEventListener('connectionstatechange',()=>{if(pc.connectionState==='failed')connectionFailed()});
     }catch(err){
       console.error(err);
       const raw=String(err?.message||err||'').toLowerCase(); const reason=err?.callFocusReason||'';
@@ -1592,9 +1645,12 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       const mismatch=reason==='customer_account_mismatch';
       const micBlocked=err?.name==='NotAllowedError'||err?.name==='PermissionDeniedError';
       const micMissing=err?.name==='NotFoundError';
-      const safeCode=String(reason|| (err?.httpStatus?`http_${err.httpStatus}`:'connection_error')).replace(/[^a-zA-Z0-9_-]/g,'').slice(0,48);
-      const message=lowCredit?'Not enough call credit to start. Buy credits first.':expired?'Your sign-in expired. Please sign in again before calling.':mismatch?'Your account session changed. Refresh CallFocus and sign in again.':micBlocked?'Microphone permission is blocked. Allow microphone access in your browser settings.':micMissing?'No working microphone was found on this device.':inactive?'Live voice is temporarily unavailable. Please try again shortly.':`Could not connect this call. Try again or contact support with code ${safeCode}.`;
-      failCall(call,message,reason);
+      const micBusy=err?.name==='NotReadableError'||err?.name==='TrackStartError';
+      const safeCode=String(err?.callFocusReason||reason||(err?.httpStatus?`http_${err.httpStatus}`:'connection_error')).replace(/[^a-zA-Z0-9_-]/g,'').slice(0,48);
+      const networkCode=['ice_no_candidates','ice_gathering_timeout','session_network_error','session_request_timeout','ice_closed','device_offline'].includes(safeCode);
+      const message=lowCredit?'Not enough call credit to start. Buy credits first.':expired?'Your sign-in expired. Please sign in again before calling.':mismatch?'Your account session changed. Refresh CallFocus and sign in again.':micBlocked?'Microphone permission is blocked. Allow microphone access in your browser settings.':micMissing?'No working microphone was found on this device.':micBusy?'Your microphone may be in use by another app. Close it and retry.':inactive?'Live voice is temporarily unavailable. Please try again shortly.':networkCode?`The audio connection could not be established. Try another network or retry. Code: ${safeCode}.`:`Could not connect this call. Try again or contact support with code ${safeCode}.`;
+      console.warn('CallFocus live connection step failed',{code:safeCode,httpStatus:err?.httpStatus||0,iceState:live.pc?.iceConnectionState||'none',gathering:live.pc?.iceGatheringState||'none'});
+      failCall(call,message,safeCode);
     }
   };
 
@@ -1611,6 +1667,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
     let parsed;try{parsed=JSON.parse(raw)}catch{}
     previousHandle(raw);
     if(parsed?.type==='session.started'){
+      clearTimeout(live._cfConnectTimer);live._cfConnectTimer=null;
       clearTimeout(failureReturnTimer); failureReturnTimer=null; lastFailedCall=null; hideFailureActions(); document.getElementById('cfThreadRetryBanner')?.remove();
     }
     if(parsed?.type==='session.closed'&&!live.started&&live.current&&!live._cfUserClosing)failCall(live.current,'Server unavailable. Try again soon.','session_closed_before_start');
