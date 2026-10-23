@@ -485,6 +485,11 @@
           <div class="toggle-row"><span>Speak first after the customer taps Start Call</span><input id="adminSpeakFirst" type="checkbox" /></div>
         </div>
 
+        <div class="premium-panel form-panel" id="cfTempVoiceCleanupAdmin" style="margin-top:16px">
+          <div class="admin-users-heading"><div><h3>One-time voice storage</h3><p class="admin-panel-copy">New voice cloning no longer keeps customer clones. Clean up the historical CallFocus customer clones to free existing voice slots. This permanently deletes their saved provider voices; it cannot be undone.</p></div></div>
+          <button class="btn btn-ghost" type="button" id="cfTempVoicePurge">Delete previous customer cloned voices</button>
+          <p class="admin-panel-copy" id="cfTempVoicePurgeStatus" role="status" aria-live="polite">This only removes voices previously created through CallFocus, not unrelated voices in your workspace.</p>
+        </div>
       </section>
 
       <section class="admin-tab-panel" data-admin-panel="behavior">
@@ -591,5 +596,6 @@
   </main>
   <div class="toast hidden" id="toast"></div>
   <script src="/admin.js?v=16.30-account-pages"></script><script src="/admin-video.js?v=16.07-test"></script><script src="/cf-controls-admin.js?v=16.24"></script>
+<script src="/cf-temp-voice-admin.js?v=16.34"></script>
 </body>
 </html>

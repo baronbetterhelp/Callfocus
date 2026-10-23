@@ -1,4 +1,4 @@
-import { elRequest } from './elevenlabs-worker.js';
+import { elRequest, elCleanup, elAdminPurge } from './elevenlabs-worker.js';
 const LIVE_VOICES = ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar','ripple','vesper','stone','meridian','beacon','cinder','tempo','quartz','willow','gleam','bossa','delta'];
 const TTS_VOICES = ['alloy','ash','ballad','coral','echo','fable','nova','onyx','sage','shimmer','verse','marin','cedar'];
 
@@ -6825,6 +6825,7 @@ export default {
     const url = new URL(request.url);
     const maintenance = await maybeMaintenanceResponse(request, env, url);
     if (maintenance) return maintenance;
+    if (url.pathname === '/api/admin/elevenlabs/purge') { if (!await adminAuthorized(request, env)) return json({error:'Admin access required.'},401); return elAdminPurge(request,env); }
     if (url.pathname.startsWith('/api/elevenlabs/')) { const limited = await callFocusRateLimit(request, env, 'elevenlabs-'+url.pathname.split('/').pop(), url.pathname.endsWith('/clone') ? 6 : url.pathname.endsWith('/session') ? 40 : 100, 3600); if (limited) return limited; return safeCustomerRoute('elevenlabs', () => elRequest(request, env, {auth:authenticatedCustomer,getConfig,customerData:getCustomerDataForUpdate,normalizeWallet:normalizeServerWallet,registerUsage:registerCallUsage,saveUsage:storeCallUsage,consume:handleWalletConsume,getServiceRates:cfGetRates})); }
     if (url.pathname === '/api/auth/health' && request.method === 'GET') {
       return json({ ok: true, storageConnected: !!env.CALLFOCUS_CONFIG, passwordHashVersion: 3, passwordIterations: CUSTOMER_PASSWORD_ITERATIONS });
@@ -6999,6 +7000,8 @@ export default {
   async scheduled(event, env, ctx) {
     // Preserve the existing Image-to-Video five-minute polling schedule.
     if(event.cron==='*/5 * * * *')ctx.waitUntil(cfVideoCron(env));
+    // Clear abandoned one-time cloned voices; never touch OpenAI sessions.
+    if(event.cron==='*/5 * * * *')ctx.waitUntil(elCleanup(env));
     // Verify new PocketFi hosted checkouts even while customers are off-site.
     if(event.cron==='* * * * *')ctx.waitUntil(pocketfiCheckoutCron(env));
   }

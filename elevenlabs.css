@@ -88,3 +88,9 @@
 #cf-el-convert-progress:not([hidden]){display:block;flex-basis:100%;width:100%;height:5px;accent-color:#128266;margin-top:2px}
 .cf-el-modal:has(.cf-el-convert-tools:not([hidden])){overflow-y:auto;overscroll-behavior:contain}
 @media(max-height:730px){.cf-el-convert-btn{padding:5px 10px;min-height:29px}.cf-el-convert-tools:not([hidden]){margin-top:5px}}
+
+/* V16.34: one-time voice prep, no saved-customer-voice library. */
+.cf-el-modal{height:auto;min-height:0;max-height:calc(100dvh - 22px);overflow-y:auto;overscroll-behavior:contain}
+.cf-el-once-note{margin:9px 1px 0;text-align:center;color:#6f887c;font-size:11px;line-height:1.5}
+.cf-el-modal.cf-el-full .cf-el-once-note{display:none}
+.cf-el-box select{width:100%}
