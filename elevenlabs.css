@@ -51,3 +51,16 @@
 .cf-el-status-error{background:#ffe8ea!important;color:#ad1024!important;border:1px solid #ee8493!important}
 .cf-el-file-alert{position:fixed;z-index:2147483647;left:50%;top:calc(env(safe-area-inset-top,0px) + 18px);width:min(92vw,450px);transform:translateX(-50%);background:#b91c32;color:#fff;padding:16px 18px;border:2px solid #f8c4ce;border-radius:17px;box-shadow:0 15px 50px #5e0e2355;font:700 14px/1.45 system-ui,sans-serif;overflow-wrap:anywhere;text-align:left}
 @media(prefers-reduced-motion:reduce){.cf-clone-hot{animation:none}}
+
+/* V16.23: position the voice-cloning CTA directly below Start a new call.
+   Keep the original four action cards below it; no change to their handlers. */
+.hero-actions > #cf-el-home-btn{
+  width:min(100%,560px);
+  max-width:100%;
+  margin-top:4px;
+  margin-bottom:4px;
+  flex-shrink:0;
+}
+@media(max-width:620px){
+  .hero-actions > #cf-el-home-btn{width:100%;}
+}

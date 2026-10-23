@@ -27,7 +27,7 @@
     const voiceRow=$('voiceNotePrompt')?.closest('.voice-note-composer')?.querySelector('.voice-note-gender-row');
     if(voiceRow){let host=$('cf-el-note');if(!host){host=document.createElement('div');host.id='cf-el-note';voiceRow.insertAdjacentElement('afterend',host)}host.outerHTML=voicePanel('note');}
     const hero=$('heroNewCallBtn');const quick=hero?.parentElement;
-    if(quick&&!$('cf-el-home-btn')){const btn=document.createElement('button');btn.id='cf-el-home-btn';btn.className='cf-el-home';btn.type='button';btn.innerHTML='<span aria-hidden="true">◉</span><span>Clone your voice</span><span class="cf-clone-hot">HOT</span>';quick.insertAdjacentElement('afterend',btn);btn.addEventListener('click',openModal)}
+    if(quick&&!$('cf-el-home-btn')){const btn=document.createElement('button');btn.id='cf-el-home-btn';btn.className='cf-el-home';btn.type='button';btn.innerHTML='<span aria-hidden="true">◉</span><span>Clone your voice</span><span class="cf-clone-hot">HOT</span>';hero.insertAdjacentElement('afterend',btn);btn.addEventListener('click',openModal)}
     const saved=$('cf-el-saved-list');if(saved)saved.innerHTML=voices.length?`<ul>${voices.map(v=>`<li>${esc(v.name)}${v.requiresVerification?' · verification required':''}</li>`).join('')}</ul>`:'No saved voices yet.';if($('cf-el-count'))$('cf-el-count').textContent=`${voices.length} / 3`;fitModal();
   }
   function installModal(){
