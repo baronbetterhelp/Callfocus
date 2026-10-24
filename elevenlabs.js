@@ -6,7 +6,7 @@
   const auth=()=>localStorage.getItem('callfocus_server_session_v1')||'';
   const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const notify=s=>{if(typeof window.toast==='function')window.toast(s);else alert(s)};
-  let voices=[],capacity=null,cloningAvailability={enabled:false,message:'Voice cloning is currently unavailable. Please try again later.'},newSelected='',repeatSelected='',noteSelected='',busy=false,active=null,recorder=null,recordedBlob=null,recordStart=0,recordTimer=0,recordStream=null,tempReady=false;
+  let homeButtonVisible=false,voices=[],capacity=null,cloningAvailability={enabled:false,message:'Voice cloning is currently unavailable. Please try again later.'},newSelected='',repeatSelected='',noteSelected='',busy=false,active=null,recorder=null,recordedBlob=null,recordStart=0,recordTimer=0,recordStream=null,tempReady=false;
   let preparedAudio=null,selectedUpload=null,fileSelectionId=0;
   async function request(path,{method='GET',body,form=false}={}){
     if(!auth())throw Error('Sign in to CallFocus before using voice cloning.');
@@ -19,6 +19,25 @@
     catch(err){console.warn('CallFocus voice availability:',err.message);cloningAvailability={enabled:false,message:'Voice cloning is temporarily unavailable. Please try again later.'};capacity={available:false,message:cloningAvailability.message}}
     render();updateCapacityUi();
   }
+  function syncHomeCloneButton(){
+    const existing=$('cf-el-home-btn');
+    const hero=$('heroNewCallBtn');
+    if(!homeButtonVisible||!hero){existing?.remove();return;}
+    if(existing)return;
+    const btn=document.createElement('button');
+    btn.id='cf-el-home-btn';btn.className='cf-el-home';btn.type='button';
+    btn.innerHTML='<span aria-hidden="true">◉</span><span>Clone your voice</span><span class="cf-clone-hot">HOT</span>';
+    hero.insertAdjacentElement('afterend',btn);btn.addEventListener('click',openModal);
+  }
+  async function refreshHomeCloneButton(){
+    try{
+      const r=await fetch('/api/voice-cloning-availability',{method:'GET',cache:'no-store',credentials:'same-origin'});
+      if(!r.ok)throw Error('Cloning availability unavailable');
+      const data=await r.json();
+      homeButtonVisible=data.homeButtonVisible===true;
+    }catch{homeButtonVisible=false;}
+    syncHomeCloneButton();
+  }
   function choices(selected){return `<option value="">Use normal Male / Female voice</option>${tempReady?`<option value="one-time" ${selected==='one-time'?'selected':''}>Use my prepared voice once · cloned rate</option>`:''}`}
   function voicePanel(scope){const selected=scope==='new'?newSelected:scope==='repeat'?repeatSelected:noteSelected;return `<div class="cf-el-box" id="cf-el-${scope}"><h3>Use your own voice</h3><p>Record or upload a sample for a single ${scope==='note'?'voice note':'call'}. The clone is removed from the voice service after use.</p><button class="cf-el-action" type="button" data-el-open>+ Prepare a one-time voice</button><label style="margin-top:17px" for="cf-el-select-${scope}">Voice selection</label><select id="cf-el-select-${scope}" data-el-select="${scope}">${choices(selected)}</select><small class="cf-el-muted">No cloned voice is permanently saved. Prepare your recording again for another use.</small></div>`}
   function render(){
@@ -28,8 +47,7 @@
     if(repeat){let host=$('cf-el-repeat');if(!host){host=document.createElement('div');host.id='cf-el-repeat';repeat.insertAdjacentElement('afterend',host)}host.outerHTML=voicePanel('repeat')}
     const voiceRow=$('voiceNotePrompt')?.closest('.voice-note-composer')?.querySelector('.voice-note-gender-row');
     if(voiceRow){let host=$('cf-el-note');if(!host){host=document.createElement('div');host.id='cf-el-note';voiceRow.insertAdjacentElement('afterend',host)}host.outerHTML=voicePanel('note')}
-    const hero=$('heroNewCallBtn');const quick=hero?.parentElement;
-    if(quick&&!$('cf-el-home-btn')){const btn=document.createElement('button');btn.id='cf-el-home-btn';btn.className='cf-el-home';btn.type='button';btn.innerHTML='<span aria-hidden="true">◉</span><span>Clone your voice</span><span class="cf-clone-hot">HOT</span>';hero.insertAdjacentElement('afterend',btn);btn.addEventListener('click',openModal)}
+    syncHomeCloneButton();
     updateCapacityUi();fitModal();
   }
   function installModal(){
@@ -299,14 +317,16 @@
       clearSample();
     }catch(err){if(ui)ui.textContent=err.message;notify(err.message)}finally{busy=false;btn.disabled=false}
   }
-  function install(){installModal();render();loadVoices();
+  function install(){installModal();render();loadVoices();refreshHomeCloneButton();
     document.addEventListener('click',e=>{if(e.target.closest('[data-el-open]')){e.preventDefault();openModal()}});
     document.addEventListener('change',e=>{const selector=e.target.closest('[data-el-select]');if(!selector)return;const scope=selector.dataset.elSelect;if(scope==='new')newSelected=selector.value;if(scope==='repeat')repeatSelected=selector.value;if(scope==='note')noteSelected=selector.value});
     document.addEventListener('click',e=>{if(e.target.closest('[data-voice],[data-repeat-voice]')){if(e.target.closest('[data-voice]'))newSelected='';else repeatSelected='';setTimeout(render,0)}},true);
     $('voiceNoteGenerateBtn')?.addEventListener('click',createClonedNote,true);
     const original=window.startCall;if(typeof original==='function')window.startCall=async function(call){const picked=call?.mode==='repeat'?repeatSelected:newSelected;if(!picked)return original(call);return startElevenCall(call,picked)};
     const panel=$('threadDetailPanel');if(panel){let frame=0;new MutationObserver(()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{if(panel.querySelector('.cf-repeat-voice')&&!$('cf-el-repeat'))render()})}).observe(panel,{subtree:true,childList:true})}
-    setInterval(()=>{if(auth()&&document.visibilityState==='visible')loadVoices()},180000);
+    setInterval(()=>{if(document.visibilityState==='visible')refreshHomeCloneButton();if(auth()&&document.visibilityState==='visible')loadVoices()},180000);
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refreshHomeCloneButton()});
+    window.addEventListener('pageshow',refreshHomeCloneButton);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })();

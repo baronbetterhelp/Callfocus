@@ -14,11 +14,11 @@ const availabilityKey='callfocus:cloning:availability:v1';
 const availabilityDefaultMessage='Voice cloning is currently unavailable while we make improvements. Please use the standard voices for now.';
 // Fail closed when settings are missing or unavailable: prevents accidental provider creations.
 async function elGetAvailability(env){
- if(!env.CALLFOCUS_CONFIG)return {enabled:false,message:availabilityDefaultMessage};
+ if(!env.CALLFOCUS_CONFIG)return {enabled:false,message:availabilityDefaultMessage,homeButtonVisible:false};
  try{
   const record=await env.CALLFOCUS_CONFIG.get(availabilityKey,{type:'json'});
-  return {enabled:record?.enabled===true,message:String(record?.message||availabilityDefaultMessage).slice(0,350)};
- }catch(error){console.warn('CallFocus cloning availability read failed',String(error?.message||error).slice(0,120));return {enabled:false,message:availabilityDefaultMessage}}
+  return {enabled:record?.enabled===true,message:String(record?.message||availabilityDefaultMessage).slice(0,350),homeButtonVisible:record?.homeButtonVisible!==false};
+ }catch(error){console.warn('CallFocus cloning availability read failed',String(error?.message||error).slice(0,120));return {enabled:false,message:availabilityDefaultMessage,homeButtonVisible:false}}
 }
 async function elAdminAvailability(req,env){
  if(req.method==='GET'){
@@ -29,11 +29,15 @@ async function elAdminAvailability(req,env){
  if(!env.CALLFOCUS_CONFIG)return elJson({error:'Settings storage is not connected. Voice cloning remains paused.'},503);
  let data;try{data=await req.json()}catch{return elJson({error:'Invalid settings.'},400)}
  if(typeof data?.enabled!=='boolean')return elJson({error:'Choose whether voice cloning is enabled.'},400);
+ if(data.homeButtonVisible!==undefined&&typeof data.homeButtonVisible!=='boolean')return elJson({error:'Choose whether the homepage button is visible.'},400);
  const message=String(data.message||'').trim();
  if(!message||message.length>350)return elJson({error:'Enter an unavailable message (1–350 characters).'},400);
  try{
-  await env.CALLFOCUS_CONFIG.put(availabilityKey,JSON.stringify({enabled:data.enabled,message,updatedAt:new Date().toISOString()}));
-  return elJson({ok:true,enabled:data.enabled,message});
+  // Preserve the current value when an earlier admin client does not send this new field.
+  const previous=await elGetAvailability(env);
+  const homeButtonVisible=typeof data.homeButtonVisible==='boolean'?data.homeButtonVisible:previous.homeButtonVisible;
+  await env.CALLFOCUS_CONFIG.put(availabilityKey,JSON.stringify({enabled:data.enabled,message,homeButtonVisible,updatedAt:new Date().toISOString()}));
+  return elJson({ok:true,enabled:data.enabled,message,homeButtonVisible});
  }catch(error){console.error('Voice availability save failure',String(error?.message||error).slice(0,140));return elJson({error:'Could not save these settings. Voice cloning remains paused.'},503)}
 }
 const capacityText={full:'Voice creation is at capacity right now. Please try again later or contact CallFocus support.',operations:'Monthly voice-creation capacity has been reached. Please contact CallFocus support.',plan:'Voice cloning is currently unavailable. Please contact CallFocus support.'};
