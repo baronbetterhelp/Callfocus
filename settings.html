@@ -32,7 +32,23 @@
   <link rel="stylesheet" href="/callfocus.css?v=16.07-test" />
   <link rel="stylesheet" href="/elevenlabs.css?v=16.34">
   <link rel="stylesheet" href="/cf-controls.css?v=16.27" />
-<link rel="stylesheet" href="/affiliate.css?v=16.35"></head>
+<link rel="stylesheet" href="/affiliate.css?v=16.35">
+  <style id="cf-referrals-layout-fix">
+    body[data-cf-document-view="referrals"] #page-home,
+    body[data-cf-document-view="referrals"] .trust-row,
+    body[data-cf-document-view="referrals"] #customerHomePanel,
+    body[data-cf-document-view="referrals"] .cf-story-section,
+    body[data-cf-document-view="referrals"] .cf-bento-section,
+    body[data-cf-document-view="referrals"] .premium-features,
+    body[data-cf-document-view="referrals"] .cta-banner-section,
+    body[data-cf-document-view="referrals"] .faq-section,
+    body[data-cf-document-view="referrals"] .hero-scroll-cue { display:none !important; }
+    body[data-cf-document-view="referrals"] #page-referrals { display:block !important; padding-top:0 !important; }
+    body[data-cf-document-view="referrals"] #page-referrals .referrals-shell { padding-top:24px !important; }
+    body[data-cf-document-view="referrals"] #page-referrals .app-page-head { margin-top:0 !important; }
+    body[data-cf-document-view="referrals"] #page-referrals .app-page-head h1 { margin-top:0 !important; }
+  </style>
+</head>
 <body data-cf-document-view="settings">
   <div class="app-root home-page" id="pageRoot">
     <header class="site-header" id="siteHeader">
@@ -759,8 +775,8 @@
 
     <footer class="premium-footer">
       <div class="container footer-inner">
-        <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="./logo.png?v=16.07-test" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span><strong style="margin-top:8px">Business Name: Baron Luxury Services</strong></div></div>
-        <div class="footer-links"><button data-route="home">Home</button><button data-route="recent">Recent Calls</button><button data-route="profile">My Profile</button><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/support">Support</a></div>
+        <div class="footer-brand"><div class="brand-logo-shell"><img class="brand-logo-image" width="256" height="256" decoding="async" src="./logo.png?v=16.07-test" alt="" /></div><div><strong>CallFocus</strong><span>Conversation continuity, simplified.</span></div></div>
+        <div class="footer-links"><button data-route="home">Home</button><button data-route="recent">Recent Calls</button><button data-route="profile">My Profile</button><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/about">About</a><a href="/support">Support</a></div>
       </div>
     </footer>
   </div>
@@ -975,5 +991,38 @@
   <script src="/elevenlabs.js?v=16.34"></script>
   <script src="/cf-controls-client.js?v=16.28"></script>
   <script src="/cf-credit-activity.js?v=16.25" defer></script>
-<script src="/affiliate-entry.js?v=16.35"></script></body>
+<script src="/affiliate-entry.js?v=16.35"></script>
+<script id="cf-referrals-layout-fix-script">
+(function(){
+  function applyReferralLayoutFix(){
+    try{
+      var referrals = document.getElementById('page-referrals');
+      if(!referrals) return;
+      var home = document.getElementById('page-home');
+      var docIsReferrals = document.body && document.body.getAttribute('data-cf-document-view') === 'referrals';
+      var referralsActive = referrals.classList.contains('active');
+      var shouldTighten = docIsReferrals || referralsActive;
+      var selectors = ['.trust-row','#customerHomePanel','.cf-story-section','.cf-bento-section','.premium-features','.cta-banner-section','.faq-section','.hero-scroll-cue'];
+      if(home){ home.style.display = shouldTighten ? 'none' : ''; }
+      selectors.forEach(function(sel){
+        document.querySelectorAll(sel).forEach(function(node){ node.style.display = shouldTighten ? 'none' : ''; });
+      });
+      referrals.style.display = shouldTighten ? 'block' : '';
+      referrals.style.paddingTop = shouldTighten ? '0' : '';
+      var shell = referrals.querySelector('.referrals-shell');
+      if(shell){ shell.style.paddingTop = shouldTighten ? '24px' : ''; }
+    }catch(e){}
+  }
+  document.addEventListener('DOMContentLoaded', applyReferralLayoutFix);
+  window.addEventListener('pageshow', applyReferralLayoutFix);
+  window.addEventListener('hashchange', applyReferralLayoutFix);
+  window.addEventListener('popstate', applyReferralLayoutFix);
+  var mo = new MutationObserver(applyReferralLayoutFix);
+  document.addEventListener('DOMContentLoaded', function(){
+    if(document.body){ mo.observe(document.body, {subtree:true, attributes:true, attributeFilter:['class']}); }
+    applyReferralLayoutFix();
+  });
+})();
+</script>
+</body>
 </html>
