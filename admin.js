@@ -873,7 +873,15 @@ async function deleteSelectedDirectTemplate(){
   finally{if(btn){btn.disabled=false;btn.textContent=old;}}
 }
 
-function directEmailValid(email=''){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email||'').trim());}
+function directEmailValid(email=''){
+  const value=String(email||'').trim();
+  if(!value||value.length>254||/[^\x21-\x7e]/.test(value))return false;
+  const parts=value.split('@');if(parts.length!==2)return false;
+  const [local,domain]=parts;
+  if(!local||local.length>64||local.startsWith('.')||local.endsWith('.')||local.includes('..')||!/^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+$/.test(local))return false;
+  const labels=domain.split('.');
+  return domain.length<=253&&labels.length>=2&&labels.every(label=>label.length<=63&&/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label))&&/^[A-Za-z]{2,63}$/.test(labels.at(-1));
+}
 function directCustomRecipientEmails(){
   const raw=directValue('directCustomEmails');
   if(!raw)return [];
@@ -961,7 +969,7 @@ async function sendDirectCustomerEmail(){
   if(directSending)return;
   const subject=directValue('directSubject'),message=directValue('directMessage'),ctaLabel=directValue('directCtaLabel'),ctaUrl=directValue('directCtaUrl');
   const customEmails=directCustomRecipientEmails(),invalidEmails=directInvalidRecipientEmails(),audience=directAudience();
-  if(invalidEmails.length)return toast(`Fix invalid email address${invalidEmails.length===1?'':'es'} first`);
+  // Invalid manual addresses are skipped and reported, not allowed to block valid recipients.
   if(!adminUsersComplete||adminUsersLoading||adminUsersLoadError)return toast('Finish loading customers or press Refresh customers before sending');
   const eligible=directEligibleUsers(),selected=audience==='all'?eligible:eligible.filter(u=>directSelectedUserIds.has(u.id));
   if(!selected.length&&!customEmails.length)return toast('Add a recipient email or select customers');
@@ -972,23 +980,23 @@ async function sendDirectCustomerEmail(){
   const existing=new Set(selected.map(u=>String(u.email).toLowerCase()));
   const manual=customEmails.filter(email=>!existing.has(email));
   const estimatedCount=ids.length+manual.length;
-  if(!confirm(`Send this non-promotional service email to ${estimatedCount.toLocaleString()} recipient${estimatedCount===1?'':'s'}?\n\nAudience: ${audience==='all'?'Every active registered customer':'Selected customers'}${manual.length?` plus ${manual.length} additional address(es)`:''}.\n\nRecipients will be processed in batches of up to 100. Use this only for account, service, support, or payment notices, not advertising.`))return;
+  if(!confirm(`Send this non-promotional service email to ${estimatedCount.toLocaleString()} valid recipient${estimatedCount===1?'':'s'}?\n\nAudience: ${audience==='all'?'Every active registered customer':'Selected customers'}${manual.length?` plus ${manual.length} additional address(es)`:''}.${invalidEmails.length?`\n\n${invalidEmails.length} invalid manually entered address(es) will be skipped.`:''}\n\nRecipients will be processed in batches of up to 100. Use this only for account, service, support, or payment notices, not advertising.`))return;
   const btn=$('directSendBtn'),old=btn?.textContent||'Send direct message';
   const requestId=(globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,80);
   const packets=[];for(let i=0;i<ids.length;i+=100)packets.push({selectedUserIds:ids.slice(i,i+100),customEmails:[]});
   for(let i=0;i<manual.length;i+=100)packets.push({selectedUserIds:[],customEmails:manual.slice(i,i+100)});
   directSending=true;if(btn){btn.disabled=true;btn.textContent='Sending…';}
-  let sent=0,failed=0,batches=0;
+  let sent=0,failed=0,skipped=invalidEmails.length,batches=0;
   try{
     for(let i=0;i<packets.length;i++){
       const chunk=packets[i];directShowResult(`Sending batch ${i+1} of ${packets.length}… ${sent.toLocaleString()} sent, ${failed.toLocaleString()} failed.`);
       let result;
       try{result=await api('/api/admin/direct-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({subject,message,ctaLabel,ctaUrl,...chunk,requestId:`${requestId}-${i+1}`})});}
       catch(err){throw new Error(`Batch ${i+1}/${packets.length} could not be confirmed: ${err.message}. ${sent} previous messages were confirmed. Do not resend the whole audience until you verify the delivery log.`);}
-      sent+=Number(result.sent||0);failed+=Number(result.failed||0);batches++;
+      sent+=Number(result.sent||0);failed+=Number(result.failed||0);skipped+=Number(result.skippedInvalid||0);batches++;
     }
-    directShowResult(`${sent.toLocaleString()} sent · ${failed.toLocaleString()} failed · ${batches} batch(es).`,failed&&!sent?'bad':'ok');
-    toast(failed?'Direct messages completed with delivery errors':`Direct message sent to ${sent.toLocaleString()} recipients`);
+    directShowResult(`${sent.toLocaleString()} accepted by Resend · ${skipped.toLocaleString()} invalid skipped · ${failed.toLocaleString()} provider failures · ${batches} batch(es).`,failed&&!sent?'bad':'ok');
+    toast(failed?'Direct messages completed with provider failures':`Resend accepted ${sent.toLocaleString()} messages${skipped?` (${skipped} invalid skipped)`:''}`);
     loadMarketingStatus().catch(()=>{});
   }catch(err){directShowResult(err.message||'Could not finish sending','bad');toast('Direct sending interrupted; check results');}
   finally{directSending=false;if(btn){btn.disabled=false;btn.textContent=old;}}
@@ -1017,13 +1025,13 @@ function marketingHtmlText(value=''){return esc(String(value||'')).replace(/\n/g
 function marketingPersonalPreview(value=''){return String(value||'').replace(/\{name\}/gi,'Alex').replace(/\{first_name\}|\{firstname\}/gi,'Alex');}
 function marketingRecipientRows(){
   const q=String($('marketingRecipientSearch')?.value||'').trim().toLowerCase();
-  const rows=adminUsers.filter(u=>!u.accountDisabled&&u.emailVerified!==false);
+  const rows=adminUsers.filter(u=>!u.accountDisabled&&u.emailVerified!==false&&directEmailValid(u.email));
   return q?rows.filter(u=>[u.name,u.email,u.phone].some(v=>String(v||'').toLowerCase().includes(q))):rows;
 }
 function renderMarketingRecipients(){
   const root=$('marketingRecipientList'),summary=$('marketingRecipientSummary');if(!root||!summary)return;
-  const rows=marketingRecipientRows(),allActive=adminUsers.filter(u=>!u.accountDisabled&&u.emailVerified!==false);
-  const selected=[...marketingSelectedUserIds].filter(id=>adminUsers.some(u=>u.id===id&&!u.accountDisabled&&u.emailVerified!==false));
+  const rows=marketingRecipientRows(),allActive=adminUsers.filter(u=>!u.accountDisabled&&u.emailVerified!==false&&directEmailValid(u.email));
+  const selected=[...marketingSelectedUserIds].filter(id=>adminUsers.some(u=>u.id===id&&!u.accountDisabled&&u.emailVerified!==false&&directEmailValid(u.email)));
   marketingSelectedUserIds=new Set(selected);
   const audience=marketingAudience();
   summary.textContent=audience==='all'?`${allActive.length} active verified customers will be targeted · unsubscribed addresses are skipped by the server`:`${marketingSelectedUserIds.size} customer${marketingSelectedUserIds.size===1?'':'s'} selected · ${rows.length} shown`;
@@ -1068,7 +1076,7 @@ function renderMarketingPreview(){
 function renderMarketingHistory(rows=marketingHistory){
   const root=$('marketingCampaignHistory');if(!root)return;marketingHistory=Array.isArray(rows)?rows:[];
   if(!marketingHistory.length){root.innerHTML='<div class="admin-users-empty">No promotional campaigns sent yet.</div>';return;}
-  root.innerHTML=marketingHistory.map(c=>`<article class="marketing-history-item"><div><strong>${esc(c.subject||'Untitled campaign')}</strong><span>${c.createdAt?esc(new Date(c.createdAt).toLocaleString()):'—'} · ${esc(c.audience||'all')}</span></div><div class="marketing-history-stats"><span>${Number(c.sent||0)} sent</span><span>${Number(c.suppressed||0)} skipped</span><span class="${Number(c.failed||0)?'bad':''}">${Number(c.failed||0)} failed</span></div></article>`).join('');
+  root.innerHTML=marketingHistory.map(c=>`<article class="marketing-history-item"><div><strong>${esc(c.subject||'Untitled campaign')}</strong><span>${c.createdAt?esc(new Date(c.createdAt).toLocaleString()):'—'} · ${esc(c.audience||'all')}</span></div><div class="marketing-history-stats"><span>${Number(c.sent||0)} accepted</span><span>${Number(c.skippedInvalid||0)} invalid skipped</span><span>${Number(c.suppressed||0)} unsubscribed skipped</span><span class="${Number(c.failed||0)?'bad':''}">${Number(c.failed||0)} provider failures</span></div></article>`).join('');
 }
 function formatResendQuota(row){
   const used=Math.max(0,Number(row?.used)||0);
@@ -1130,14 +1138,14 @@ async function sendMarketingEmail(test=false){
   if(!p.companyName||!p.businessAddress)return toast('Add your legal business name and mailing address');
   if(!test&&!$('marketingConsentConfirmed')?.checked)return toast('Confirm that these recipients opted in to promotional email');
   const audience=marketingAudience();if(!test&&audience==='selected'&&!marketingSelectedUserIds.size)return toast('Select at least one customer');
-  const testEmail=marketingValue('marketingTestEmail');if(test&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testEmail))return toast('Enter a valid test email address');
+  const testEmail=marketingValue('marketingTestEmail');if(test&&!directEmailValid(testEmail))return toast('Enter a valid test email address');
   const btn=test?$('marketingTestBtn'):$('marketingSendBtn'),old=btn?.textContent||'';const requestId=(globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g,'').slice(0,100);
-  if(!test){const count=audience==='all'?adminUsers.filter(u=>!u.accountDisabled&&u.emailVerified!==false).length:marketingSelectedUserIds.size;if(!confirm(`Send this promotional email to ${count} ${audience==='all'?'active customer account(s)':'selected customer(s)'}?\n\nCustomers who previously unsubscribed will be skipped automatically.`))return;}
+  if(!test){const count=audience==='all'?adminUsers.filter(u=>!u.accountDisabled&&u.emailVerified!==false&&directEmailValid(u.email)).length:marketingSelectedUserIds.size;if(!confirm(`Send this promotional email to ${count} ${audience==='all'?'active customer account(s)':'selected customer(s)'}?\n\nCustomers who previously unsubscribed will be skipped automatically.`))return;}
   marketingSending=true;if(btn){btn.disabled=true;btn.textContent=test?'Sending test…':'Sending campaign…';}marketingShowResult(test?'Preparing test email…':'Preparing campaign…');
   try{
     const result=await api('/api/admin/marketing-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...p,action:test?'test':'send',testEmail,audience,selectedUserIds:[...marketingSelectedUserIds],consentConfirmed:$('marketingConsentConfirmed')?.checked===true,requestId})});
     if(test){marketingShowResult(`Test email sent to ${testEmail}. Check the inbox and spam folder before sending the campaign.`);toast('Test email sent');}
-    else{const c=result.campaign||{};marketingShowResult(`${Number(c.sent||0)} sent · ${Number(c.suppressed||0)} unsubscribed skipped · ${Number(c.failed||0)} failed${Number(c.failed||0)?' · check Resend logs for delivery details':''}`,Number(c.failed||0)&&!Number(c.sent||0)?'bad':'ok');renderMarketingHistory(result.history||[]);toast(Number(c.failed||0)?'Campaign completed with some delivery errors':'Campaign submitted to Resend');}
+    else{const c=result.campaign||{};marketingShowResult(`${Number(c.sent||0)} accepted by Resend · ${Number(c.skippedInvalid||0)} invalid skipped · ${Number(c.suppressed||0)} unsubscribed skipped · ${Number(c.failed||0)} provider failures${Number(c.failed||0)?' · check Resend logs for details':''}`,Number(c.failed||0)&&!Number(c.sent||0)?'bad':'ok');renderMarketingHistory(result.history||[]);toast(Number(c.failed||0)?'Campaign completed with some delivery errors':'Campaign submitted to Resend');}
     loadMarketingStatus().catch(()=>{});
   }catch(err){marketingShowResult(err.message||'Could not send email','bad');toast(err.message||'Could not send email');}
   finally{marketingSending=false;if(btn){btn.disabled=false;btn.textContent=old;}}

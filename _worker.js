@@ -522,6 +522,72 @@ function marketingEmailText({ user = {}, subject = '', headline = '', message = 
   const body = marketingPersonalize(marketingTextFromMessage(message), user);
   return `${title}\n\n${body}${ctaLabel && ctaUrl ? `\n\n${marketingPersonalize(ctaLabel, user)}: ${ctaUrl}` : ''}\n\n${companyName}\n${businessAddress}\n\nUnsubscribe from promotional email: ${unsubscribeUrl}`;
 }
+// V16.43: validate recipients before queueing them. This deliberately accepts only
+// ordinary ASCII mailbox addresses (including plus tags); valid-looking but
+// undeliverable mailboxes can still bounce after provider acceptance.
+function callFocusValidBatchRecipient(address = '') {
+  const value = String(address || '').trim();
+  if (!value || value.length > 254 || /[^\x21-\x7e]/.test(value)) return false;
+  const parts = value.split('@');
+  if (parts.length !== 2) return false;
+  const [local, domain] = parts;
+  if (!local || local.length > 64 || local.startsWith('.') || local.endsWith('.') || local.includes('..')) return false;
+  if (!/^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+$/.test(local)) return false;
+  if (domain.length > 253) return false;
+  const labels = domain.split('.');
+  if (labels.length < 2 || labels.some(label => !label || label.length > 63 || !/^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label))) return false;
+  if (!/^[A-Za-z]{2,63}$/.test(labels[labels.length - 1])) return false;
+  return true;
+}
+function callFocusSafeRecipientLabel(address = '') {
+  const value = String(address || '').trim();
+  const at = value.lastIndexOf('@');
+  return at > 0 ? `${value.slice(0, 2)}***@${value.slice(at + 1)}`.slice(0, 130) : '[invalid address]';
+}
+function callFocusRecipientValidationError(error) {
+  if (Number(error?.status) !== 422) return false;
+  const message = String(error?.message || '');
+  // Only retry a rejected batch when Resend identifies recipient validation.
+  // Other errors, including network timeouts, must not be resent automatically.
+  return /(?:[`'\"]to[`'\"]|\bto\s+field\b|\brecipient\b|\bemail address\b)/i.test(message);
+}
+// Resend 422 recipient validation rejects a batch. Split only that rejected
+// batch, preserving independent idempotency keys for its deterministic subsets.
+// Never retry accepted or unknown-outcome requests: prevents duplicate email.
+async function sendCallFocusVerifiedBatch(env, emails = [], idempotencyKey = '') {
+  const stats = { sent: 0, failed: 0, skippedInvalid: 0, errors: [] };
+  const eligible = [];
+  for (const email of emails) {
+    if (!Array.isArray(email?.to) || email.to.length !== 1 || !callFocusValidBatchRecipient(email.to[0])) {
+      stats.skippedInvalid++;
+      if (stats.errors.length < 5) stats.errors.push(`Invalid recipient skipped: ${callFocusSafeRecipientLabel(email?.to?.[0])}`);
+    } else eligible.push(email);
+  }
+  async function attempt(rows, path) {
+    if (!rows.length) return;
+    try {
+      await sendCallFocusBatchEmails(env, rows, `${idempotencyKey}-v1643-${path}`);
+      stats.sent += rows.length;
+    } catch (error) {
+      if (callFocusRecipientValidationError(error)) {
+        if (rows.length === 1) {
+          stats.skippedInvalid++;
+          if (stats.errors.length < 5) stats.errors.push(`Resend rejected recipient ${callFocusSafeRecipientLabel(rows[0].to?.[0])}: ${String(error.message || '').slice(0, 140)}`);
+          return;
+        }
+        const midpoint = Math.floor(rows.length / 2);
+        await attempt(rows.slice(0, midpoint), `${path}L`);
+        await attempt(rows.slice(midpoint), `${path}R`);
+      } else {
+        stats.failed += rows.length;
+        if (stats.errors.length < 5) stats.errors.push(String(error?.message || 'Resend batch failed').slice(0, 220));
+      }
+    }
+  }
+  await attempt(eligible, '0');
+  return stats;
+}
+
 async function sendCallFocusBatchEmails(env, emails = [], idempotencyKey = '') {
   if (!callFocusEmailConfigured(env)) {
     const error = new Error('Resend is not configured for CallFocus.');
@@ -636,21 +702,23 @@ async function handleAdminDirectEmail(request, env) {
 
   let users = selectedIds.length ? await listMarketingUsers(env, selectedIds) : [];
   users = users.filter(user => user?.id && user?.email && user.accountDisabled !== true);
+  let skippedInvalid = 0;
   const byEmail = new Map();
   for (const user of users) {
     const email = normalizeCustomerEmail(user.email);
-    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) byEmail.set(email, { ...user, email });
+    if (callFocusValidBatchRecipient(email)) byEmail.set(email, { ...user, email });
+    else skippedInvalid++;
   }
   const invalidCustomEmails = [];
   for (const value of customEmailInputs) {
     const email = normalizeCustomerEmail(value);
     if (!email) continue;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { invalidCustomEmails.push(email); continue; }
+    if (!callFocusValidBatchRecipient(email)) { invalidCustomEmails.push(email); continue; }
     if (!byEmail.has(email)) byEmail.set(email, { id: `custom:${email}`, email, name: '' });
   }
-  if (invalidCustomEmails.length) return json({ error: `Invalid recipient email: ${invalidCustomEmails[0]}` }, 400);
+  skippedInvalid += invalidCustomEmails.length;
   users = [...byEmail.values()];
-  if (!users.length) return json({ error: 'No valid recipient email addresses were provided.' }, 400);
+  if (!users.length) return json({ error: 'No valid recipient email addresses were provided. Invalid addresses were skipped.', skippedInvalid }, 400);
 
   const from = String(env.CALLFOCUS_FROM_EMAIL || '').trim();
   const replyTo = normalizeCustomerEmail(env.CALLFOCUS_REPLY_TO_EMAIL || '');
@@ -671,14 +739,17 @@ async function handleAdminDirectEmail(request, env) {
       tags: [{ name: 'category', value: 'customer_service' }, { name: 'message', value: requestId.slice(0, 80) }]
     }));
     try {
-      await sendCallFocusBatchEmails(env, emails, `cf-direct-${requestId}-${index + 1}`);
-      sent += emails.length;
+      const outcome = await sendCallFocusVerifiedBatch(env, emails, `cf-direct-${requestId}-${index + 1}`);
+      sent += outcome.sent;
+      failed += outcome.failed;
+      skippedInvalid += outcome.skippedInvalid;
+      errors.push(...outcome.errors);
     } catch (error) {
       failed += emails.length;
       errors.push(String(error?.message || 'Batch send failed').slice(0, 220));
     }
   }
-  return json({ ok: sent > 0, sent, failed, targeted: users.length, errors: errors.slice(0, 3) }, sent > 0 ? 200 : 502);
+  return json({ ok: sent > 0, sent, failed, skippedInvalid, targeted: users.length + skippedInvalid, errors: errors.slice(0, 5) }, sent > 0 ? 200 : 502);
 }
 
 async function readResendAccountUsage(env) {
@@ -778,7 +849,7 @@ async function handleAdminMarketingEmail(request, env) {
 
   if (action === 'test') {
     const testEmail = normalizeCustomerEmail(body?.testEmail);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testEmail)) return json({ error: 'Enter a valid test email address.' }, 400);
+    if (!callFocusValidBatchRecipient(testEmail)) return json({ error: 'Enter a valid test email address.' }, 400);
     const testUser = { id: 'test-recipient', name: 'Test recipient', email: testEmail };
     const unsub = `${origin}/email/unsubscribe-preview`;
     const html = marketingEmailHtml({ user: testUser, subject, preheader, eyebrow, headline, message, ctaLabel, ctaUrl, companyName, businessAddress, unsubscribeUrl: unsub });
@@ -799,10 +870,12 @@ async function handleAdminMarketingEmail(request, env) {
   if (audience === 'selected' && !selectedIds.length) return json({ error: 'Select at least one customer.' }, 400);
   let users = await listMarketingUsers(env, selectedIds);
   users = users.filter(user => user?.id && user?.email && user.accountDisabled !== true && user.emailVerified !== false);
+  let skippedInvalid = 0;
   const byEmail = new Map();
   for (const user of users) {
     const email = normalizeCustomerEmail(user.email);
-    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) byEmail.set(email, { ...user, email });
+    if (callFocusValidBatchRecipient(email)) byEmail.set(email, { ...user, email });
+    else skippedInvalid++;
   }
   users = [...byEmail.values()];
   if (!users.length) return json({ error: 'No active, verified customer email addresses matched this audience.' }, 400);
@@ -839,8 +912,11 @@ async function handleAdminMarketingEmail(request, env) {
       });
     }
     try {
-      await sendCallFocusBatchEmails(env, emails, `cf-marketing-${requestId}-${index + 1}`);
-      sent += emails.length;
+      const outcome = await sendCallFocusVerifiedBatch(env, emails, `cf-marketing-${requestId}-${index + 1}`);
+      sent += outcome.sent;
+      failed += outcome.failed;
+      skippedInvalid += outcome.skippedInvalid;
+      errors.push(...outcome.errors);
     } catch (error) {
       failed += emails.length;
       errors.push(String(error?.message || 'Batch send failed').slice(0, 220));
@@ -856,12 +932,13 @@ async function handleAdminMarketingEmail(request, env) {
     targeted: users.length,
     eligible: eligible.length,
     suppressed,
+    skippedInvalid,
     sent,
     failed,
     sender: from,
     companyName,
     ctaUrl,
-    status: failed ? (sent ? 'partial' : 'failed') : 'sent',
+    status: failed || skippedInvalid ? (sent ? 'partial' : 'failed') : 'sent',
     errors: errors.slice(0, 3)
   };
   await env.CALLFOCUS_CONFIG.put(marketingCampaignKey(`${Date.now()}-${requestId}`), JSON.stringify(campaign), { expirationTtl: MARKETING_CAMPAIGN_TTL });
