@@ -1,6 +1,6 @@
 /* CallFocus V16.45: limited permanent cloned-voice booking. Independent of the original OpenAI engine. */
 const SLOT_KEY='callfocus:permanent-voice:settings:v1';
-const DEF={enabled:false,popupEnabled:false,forceFull:false,slotLimit:30,minimumFundingNaira:10000,eventDate:'',headline:'Limited permanent voice cloning slots',message:'Book one of our limited permanent voice slots. Once your voice is created, it is saved for your future cloned calls and voice notes.',fullMessage:'All permanent voice cloning slots are filled. Join our Telegram channel to be the first to know when the next slots open.',telegramUrl:'https://t.me/callfocus',revision:1};
+const DEF={enabled:false,popupEnabled:false,forceFull:false,slotLimit:30,minimumFundingNaira:10000,eventDate:'',bookingOpensAt:'',bookingClosesAt:'',headline:'Limited permanent voice cloning slots',message:'Book one of our limited permanent voice slots. Once your voice is created, it is saved for your future cloned calls and voice notes.',fullMessage:'All permanent voice cloning slots are filled. Join our Telegram channel to be the first to know when the next slots open.',telegramUrl:'https://t.me/callfocus',revision:1};
 const j=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const err=(text,status=400)=>j({ok:false,error:text},status);
 const sql=env=>{if(!env.CALLFOCUS_WALLET_DB?.prepare)throw Error('VOICE_SLOTS_D1_NOT_CONFIGURED');return env.CALLFOCUS_WALLET_DB};
@@ -8,17 +8,36 @@ async function settings(env){if(!env.CALLFOCUS_CONFIG)throw Error('VOICE_SETTING
 async function row(db,userId){return db.prepare('SELECT user_id,booked_at,state,voice_id,voice_name,created_at FROM cf_permanent_voice_slots WHERE user_id=?').bind(userId).first()}
 async function tally(db){const r=await db.prepare('SELECT COUNT(*) AS n FROM cf_permanent_voice_slots').first();return Number(r?.n||0)}
 const safeText=(s,max)=>String(s||'').trim().slice(0,max);
+// These admin fields are Lagos-local wall-clock times, not browser-local or UTC.
+// Nigeria does not observe daylight-saving time: WAT = UTC+01:00.
+function bookingDateMs(value){
+ if(!value)return null;
+ if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value))throw Error('Enter a valid booking date and time.');
+ const ms=Date.parse(value+':00+01:00');
+ if(!Number.isFinite(ms)||new Date(ms+3600000).toISOString().slice(0,16)!==value)throw Error('Enter a real calendar date and time.');
+ return ms;
+}
+function bookingPhase(s,nowMs=Date.now()){
+ const opens=bookingDateMs(s.bookingOpensAt||'');
+ const closes=bookingDateMs(s.bookingClosesAt||'');
+ if(opens!==null&&nowMs<opens)return 'upcoming';
+ if(closes!==null&&nowMs>=closes)return 'ended';
+ return 'open';
+}
 function parseSettings(x,previous){
  if(typeof x?.enabled!=='boolean'||typeof x?.popupEnabled!=='boolean'||typeof x?.forceFull!=='boolean')throw Error('Select both availability switches.');
  const n=Number(x.slotLimit),funding=Number(x.minimumFundingNaira);
  if(!Number.isSafeInteger(n)||n<1||n>160)throw Error('Slot capacity must be between 1 and 160. The subscribed ElevenLabs plan must support that many saved voices.');
  if(!Number.isInteger(funding)||funding<0||funding>1000000)throw Error('Minimum confirmed deposits must be between ₦0 and ₦1,000,000.');
  const eventDate=safeText(x.eventDate,10);if(eventDate&&!/^\d{4}-\d{2}-\d{2}$/.test(eventDate))throw Error('Enter a valid event date.');
+ const bookingOpensAt=safeText(x.bookingOpensAt,16),bookingClosesAt=safeText(x.bookingClosesAt,16);
+ const openMs=bookingDateMs(bookingOpensAt),closeMs=bookingDateMs(bookingClosesAt);
+ if(openMs!==null&&closeMs!==null&&closeMs<=openMs)throw Error('Booking closing time must be later than opening time (Nigeria time).');
  const telegramUrl=safeText(x.telegramUrl,300);if(!/^https:\/\/t\.me\/[A-Za-z0-9_+\-/]{3,}$/.test(telegramUrl))throw Error('Provide a valid Telegram channel link (https://t.me/...).');
  for(const k of ['headline','message','fullMessage'])if(!safeText(x[k],k==='headline'?100:350))throw Error('Complete all customer-facing messages.');
- return {...DEF,enabled:x.enabled,popupEnabled:x.popupEnabled,forceFull:x.forceFull,slotLimit:n,minimumFundingNaira:funding,eventDate,headline:safeText(x.headline,100),message:safeText(x.message,350),fullMessage:safeText(x.fullMessage,350),telegramUrl,revision:previous.revision+1};
+ return {...DEF,enabled:x.enabled,popupEnabled:x.popupEnabled,forceFull:x.forceFull,slotLimit:n,minimumFundingNaira:funding,eventDate,bookingOpensAt,bookingClosesAt,headline:safeText(x.headline,100),message:safeText(x.message,350),fullMessage:safeText(x.fullMessage,350),telegramUrl,revision:previous.revision+1};
 }
-function publicView(s,count,record){return {ok:true,enabled:s.enabled,popupEnabled:s.popupEnabled,slotLimit:s.slotLimit,booked:count,remaining:Math.max(0,s.slotLimit-count),full:s.forceFull===true||count>=s.slotLimit,minimumFundingNaira:s.minimumFundingNaira,eventDate:s.eventDate,headline:s.headline,message:s.message,fullMessage:s.fullMessage,telegramUrl:s.telegramUrl,revision:s.revision,me:record?{state:record.state,bookedAt:record.booked_at,voiceName:record.voice_name||null,hasSavedVoice:record.state==='ready'}:null}}
+function publicView(s,count,record){const phase=bookingPhase(s);return {ok:true,enabled:s.enabled,popupEnabled:s.popupEnabled,slotLimit:s.slotLimit,booked:count,remaining:Math.max(0,s.slotLimit-count),full:s.forceFull===true||count>=s.slotLimit,minimumFundingNaira:s.minimumFundingNaira,eventDate:s.eventDate,bookingOpensAt:s.bookingOpensAt||'',bookingClosesAt:s.bookingClosesAt||'',bookingPhase:phase,canBookNow:s.enabled&&phase==='open'&&!s.forceFull&&count<s.slotLimit,headline:s.headline,message:s.message,fullMessage:s.fullMessage,telegramUrl:s.telegramUrl,revision:s.revision,me:record?{state:record.state,bookedAt:record.booked_at,voiceName:record.voice_name||null,hasSavedVoice:record.state==='ready'}:null}}
 async function slotVoiceForUser(env,userId){const v=await row(sql(env),userId);return v?.state==='ready'&&/^[A-Za-z0-9_-]{8,120}$/.test(String(v.voice_id||''))?{voiceId:v.voice_id,name:v.voice_name||'My permanent voice',persistent:true}:null}
 async function userFunding(env,user,helpers){const d=await helpers.customerData(env,user.id,user.name);const wallet=helpers.normalizeWallet(d.wallet||{});
  // Confirmed paid purchase history, not the count of bonus/starter credits or present voice time balance.
@@ -30,14 +49,18 @@ async function customer(req,env,helpers){
  let db,s;try{db=sql(env);s=await settings(env)}catch{return err('Bookings are not configured yet. Ask the administrator to complete the setup.',503)}
  const auth=await helpers.auth(req,env);const u=auth?.user||null;
  let count,record;try{count=await tally(db);record=u?await row(db,u.id):null}catch{return err('The voice-slot database is not ready. Run the included SQL setup first.',503)}
- if(req.method==='GET')return j({...publicView(s,count,record),signedIn:!!u});
- if(!u)return err('Sign in to book a voice-cloning slot.',401);
+ if(!u)return err('Sign in to view permanent voice-cloning slots.',401);
+ if(req.method==='GET')return j({...publicView(s,count,record),signedIn:true});
  if(record)return j({...publicView(s,count,record),alreadyBooked:true});
  if(!s.enabled)return err('Voice-slot booking is currently closed.',403);
+ const phase=bookingPhase(s);
+ if(phase==='upcoming')return err('Bookings have not opened yet. Check the announced opening time (Nigeria time).',403);
+ if(phase==='ended')return err('Bookings have closed for this release. Join our Telegram channel for the next opening.',403);
  if(s.forceFull===true||count>=s.slotLimit)return err(s.fullMessage,409);
  const funded=await userFunding(env,u,helpers);
  if(funded<s.minimumFundingNaira)return err(`Booking requires at least ₦${s.minimumFundingNaira.toLocaleString('en-NG')} in confirmed deposits. Your recorded deposits total ₦${funded.toLocaleString('en-NG')}.`,402);
  try{
+  if(bookingPhase(s)!=='open')return err('The booking window has closed or has not opened yet.',403);
   const now=new Date().toISOString();
   // One atomic INSERT statement: SQLite/D1 serializes writers, count check prevents overbooking, PK enforces one slot/customer.
   const result=await db.prepare(`INSERT INTO cf_permanent_voice_slots(user_id,booked_at,state,updated_at)
