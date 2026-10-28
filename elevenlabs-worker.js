@@ -4,10 +4,10 @@ import {slotVoiceForUser} from './permanent-voice-slots-worker.js';
    Provider voices exist ONLY during active jobs and are deleted on completion or by the cleanup cron. */
 const EL_API='https://api.elevenlabs.io';
 const elJson=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
-const getKey=env=>String(env.ELEVENLABS_PERMANENT_API_KEY||'').trim();
+const getKey=(env,pool='primary')=>String((pool==='secondary'?env.ELEVENLABS_PERMANENT_2_API_KEY:env.ELEVENLABS_PERMANENT_API_KEY)||'').trim();
 const oldKey=env=>String(env.ELEVENLABS_API_KEY||env.ELEVEN_LABS_API_KEY||env.ELEVENLAB_API_KEY||'').trim();
-const getAgent=env=>String(env.ELEVENLABS_PERMANENT_AGENT_ID||'').trim();
-const withKey=env=>({'xi-api-key':getKey(env)});
+const getAgent=(env,pool='primary')=>String((pool==='secondary'?env.ELEVENLABS_PERMANENT_2_AGENT_ID:env.ELEVENLABS_PERMANENT_AGENT_ID)||'').trim();
+const withKey=(env,pool='primary')=>({'xi-api-key':getKey(env,pool)});
 const oldVoicesPrefix='elevenlabs:voices:';
 const leasePrefix='elevenlabs:temporary:';
 const safeName=v=>String(v||'').trim().replace(/[\x00-\x1f\x7f]/g,' ').slice(0,65);
@@ -147,14 +147,14 @@ async function elRequest(req,env,helpers){
  const availability=await elGetAvailability(env);
  if(path==='/api/elevenlabs/voices'&&req.method==='GET'&&!availability.enabled){
   const existing=await slotVoiceForUser(env,auth.user.id).catch(()=>null);
-  return elJson({ok:true,voices:existing?[existing]:[],capacity:{available:false,reason:'paused',message:availability.message},availability,agentConfigured:!!getAgent(env),temporary:false});
+  return elJson({ok:true,voices:existing?[existing]:[],capacity:{available:false,reason:'paused',message:availability.message},availability,agentConfigured:!!getAgent(env,existing?.providerPool||'primary'),temporary:false});
  }
  if((path==='/api/elevenlabs/session'||path==='/api/elevenlabs/tts')&&!availability.enabled){
   return elJson({error:availability.message,code:'voice_cloning_paused'},503);
  }
- if(!getKey(env))return elJson({error:'Voice cloning is temporarily unavailable. Please contact support.'},503);
+ // Provider credentials are selected only AFTER reading the customer's saved voice assignment.
  if(path==='/api/elevenlabs/voices'){
-  if(req.method==='GET'){const saved=await slotVoiceForUser(env,auth.user.id).catch(()=>null);return elJson({ok:true,voices:saved?[saved]:[],capacity:{available:!!saved,message:saved?null:'Book a permanent voice slot to create your voice.'},availability,agentConfigured:!!getAgent(env),temporary:false});}
+  if(req.method==='GET'){const saved=await slotVoiceForUser(env,auth.user.id).catch(()=>null);return elJson({ok:true,voices:saved?[saved]:[],capacity:{available:!!saved,message:saved?null:'Book a permanent voice slot to create your voice.'},availability,agentConfigured:!!getAgent(env,saved?.providerPool||'primary'),temporary:false});}
   return elJson({error:'Permanent saved voices are no longer supported.'},410);
  }
  if(path==='/api/elevenlabs/clone')return elJson({error:'Use your booked permanent slot to save your voice.'},410);
@@ -173,7 +173,7 @@ async function elRequest(req,env,helpers){
  const script=String(form.get('script')||'').trim();const context=String(form.get('context')||'');
  if(path.endsWith('/tts')&&(!script||script.length>2200))return elJson({error:'Enter a script of up to 2,200 characters.'},400);
  if(path.endsWith('/session')&&context.length>24000)return elJson({error:'Call context exceeds the permitted size.'},400);
- if(path.endsWith('/session')&&!getAgent(env))return elJson({error:'The calling service is not configured yet.'},503);
+ // Each saved voice uses the agent and API key from the account that created it.
  const walletConfig=await helpers.getConfig(env);if(walletConfig.serverOnline===false)return elJson({error:'Calling is currently unavailable.'},503);
  const unlimited=(walletConfig.unlimitedCreditEmails||[]).map(x=>String(x).toLowerCase()).includes(String(auth.user.email||'').toLowerCase());
  const data=await helpers.customerData(env,auth.user.id,auth.user.name),wallet=helpers.normalizeWallet(data.wallet||{});
@@ -182,9 +182,12 @@ async function elRequest(req,env,helpers){
  if(String(form.get('mode')||'')!=='permanent')return elJson({error:'Temporary voice creation is disabled. Book and save one permanent voice instead.'},409);
  try{lease=await slotVoiceForUser(env,auth.user.id)}catch{return elJson({error:'Saved voice storage is not ready.'},503)}
  if(!lease)return elJson({error:'You do not have a saved permanent voice. Book a slot and create your voice first.'},409);
+ const pool=lease.providerPool||'primary';
+ if(!getKey(env,pool))return elJson({error:'The voice service holding your saved voice is not configured. Please contact CallFocus.'},503);
+ if(path.endsWith('/session')&&!getAgent(env,pool))return elJson({error:'The agent for your saved voice account is not configured yet.'},503);
  if(path==='/api/elevenlabs/session'){
-  const url=new URL(`${EL_API}/v1/convai/conversation/get-signed-url`);url.searchParams.set('agent_id',getAgent(env));
-  let signed;try{signed=await fetch(url,{headers:withKey(env),signal:AbortSignal.timeout(20000)})}catch{await releaseLease(env,lease);return elJson({error:'Could not connect to the calling service.'},502)}
+  const url=new URL(`${EL_API}/v1/convai/conversation/get-signed-url`);url.searchParams.set('agent_id',getAgent(env,pool));
+  let signed;try{signed=await fetch(url,{headers:withKey(env,pool),signal:AbortSignal.timeout(20000)})}catch{await releaseLease(env,lease);return elJson({error:'Could not connect to the calling service.'},502)}
   if(!signed.ok){await releaseLease(env,lease);return badResponse(signed,'Voice call')}
   const response=await signed.json().catch(()=>({}));
   if(typeof response.signed_url!=='string'||!response.signed_url.startsWith('wss://api.elevenlabs.io/')){await releaseLease(env,lease);return elJson({error:'Could not establish a secure call.'},502)}
@@ -199,7 +202,7 @@ async function elRequest(req,env,helpers){
  // Voice-note generation uses the voice exactly once and always attempts provider deletion.
  try{
   const ttsUrl=`${EL_API}/v1/text-to-speech/${encodeURIComponent(lease.voiceId)}/with-timestamps`;
-  let result;try{result=await fetch(ttsUrl,{method:'POST',headers:{...withKey(env),'Content-Type':'application/json'},body:JSON.stringify({text:script,model_id:'eleven_multilingual_v2',output_format:'mp3_44100_128'}),signal:AbortSignal.timeout(60000)})}catch{return elJson({error:'Voice note generation timed out.'},502)}
+  let result;try{result=await fetch(ttsUrl,{method:'POST',headers:{...withKey(env,pool),'Content-Type':'application/json'},body:JSON.stringify({text:script,model_id:'eleven_multilingual_v2',output_format:'mp3_44100_128'}),signal:AbortSignal.timeout(60000)})}catch{return elJson({error:'Voice note generation timed out.'},502)}
   if(!result.ok)return await badResponse(result,'Voice note');
   const item=await result.json().catch(()=>({})),base64=item.audio_base64,align=item.alignment||item.normalized_alignment||{};
   if(typeof base64!=='string'||!base64)return elJson({error:'No audio was generated.'},502);
