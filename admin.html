@@ -523,7 +523,7 @@
           <label class="cf-clone-admin-toggle"><span><strong>Enable slot bookings</strong><small>When off, customers cannot reserve new slots. Existing bookings are preserved.</small></span><input id="cfSlot_enabled" type="checkbox"></label>
           <label class="cf-clone-admin-toggle"><span><strong>Show booking announcement popup</strong><small>Show the announcement on every page refresh, for signed-in customers only. Never show it to visitors.</small></span><input id="cfSlot_popupEnabled" type="checkbox"></label>
           <label class="cf-clone-admin-toggle"><span><strong>Manually mark slots as filled</strong><small>Temporarily stop new bookings and show the Telegram full-slots notice even before capacity is reached.</small></span><input id="cfSlot_forceFull" type="checkbox"></label>
-          <div class="cf-slot-admin-grid"><label>Maximum slots<input id="cfSlot_slotLimit" type="number" min="1" max="160" value="30"></label><label>Minimum confirmed deposits (₦)<input id="cfSlot_minimumFundingNaira" type="number" min="0" step="1000" value="10000"></label></div>
+          <div class="cf-slot-admin-grid"><label>Maximum slots<input id="cfSlot_slotLimit" type="number" min="1" max="160" value="30"></label><label>Minimum available credits<input id="cfSlot_minimumCredits" type="number" min="0" max="1000000" step="100" value="1000"></label></div>
           <div class="cf-slot-admin-grid">
             <label>Booking opens (Nigeria time)<input id="cfSlot_bookingOpensAt" type="datetime-local"><small>New reservations are blocked before this time.</small></label>
             <label>Booking closes (Nigeria time)<input id="cfSlot_bookingClosesAt" type="datetime-local"><small>New reservations are blocked from this time onward. Existing bookings stay reserved.</small></label>
@@ -534,7 +534,7 @@
           <label>Announcement message<textarea id="cfSlot_message" maxlength="350" rows="3"></textarea></label>
           <label>Message when slots are filled<textarea id="cfSlot_fullMessage" maxlength="350" rows="3"></textarea></label>
           <label>Telegram channel URL<input id="cfSlot_telegramUrl" type="url" maxlength="300" placeholder="https://t.me/callfocus"></label>
-          <p class="admin-panel-copy">This setting checks total confirmed deposits in the customer wallet history, not current unused credits. It never deducts credits for booking. Enable voice cloning using the independent control above after your new provider account is configured.</p>
+          <p class="admin-panel-copy">This setting requires the customer to have the configured amount of unused CallFocus credits at booking time (including unused bonus credits). Booking never deducts credits. Enable voice cloning using the independent control above after your new provider account is configured.</p>
           <div class="cf-clone-admin-actions"><button class="btn btn-primary" id="cfSlotSave" type="button">Save slot settings</button><button class="btn btn-ghost" id="cfSlotRefresh" type="button">Refresh bookings</button></div>
           <p class="admin-panel-copy" id="cfSlotStatus" role="status" aria-live="polite">Booking system disabled until D1 setup is completed.</p>
           <p class="admin-panel-copy" id="cfSlotProvider" role="status">Provider status is not checked yet.</p><pre class="cf-slot-admin-bookings" id="cfSlotBookings" aria-label="Recent permanent voice slot reservations"></pre>
