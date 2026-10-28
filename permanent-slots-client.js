@@ -26,6 +26,15 @@ async function book(){if(pending)return;const l=$('cf-slot-layer'),btn=l?.queryS
 pending=true;btn.disabled=true;btn.textContent='Reserving your slot…';try{const r=await fetch('/api/permanent-slots/book',{method:'POST',headers:{Authorization:'Bearer '+auth()},cache:'no-store'});const data=await r.json();if(!r.ok)throw Error(data.error||'Could not reserve slot.');current=data;info.textContent='Your permanent voice slot is reserved for your account. Open Clone your voice to prepare your saved voice when it becomes available.';btn.hidden=true;document.dispatchEvent(new Event('cf-permanent-slots-changed'));}catch(e){info.textContent=e.message;btn.disabled=false;btn.textContent='Book slot';}finally{pending=false}}
 async function state(){return current||await load()}
 window.CallFocusPermanentSlots={show,load,state,close};
-let firstToken='';async function auto(){const t=auth();if(!t){firstToken='';return}if(t!==firstToken){firstToken=t;try{const s=await load();const key='cf-slot-popup-seen:'+s.revision;if(s.popupEnabled&&!s.me&&!sessionStorage.getItem(key)){sessionStorage.setItem(key,'1');show(true)}}catch{}}}
+// Show once per page load (including refresh) when the admin announcement is on.
+// No dismissal is kept in localStorage/sessionStorage, and a booked user is still shown
+// their current reservation. Signed-out visitors see the announcement and must sign in to book.
+let automaticAttemptFinished=false,automaticAttemptBusy=false;
+async function auto(){
+ if(automaticAttemptFinished||automaticAttemptBusy)return;
+ automaticAttemptBusy=true;
+ try{const s=await load();automaticAttemptFinished=true;if(s.popupEnabled)await show(false)}catch{}
+ finally{automaticAttemptBusy=false}
+}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{ensure();auto();setInterval(auto,4500)});else{ensure();auto();setInterval(auto,4500)}
 })();
