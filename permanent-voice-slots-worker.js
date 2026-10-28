@@ -55,13 +55,7 @@ async function customer(req,env,helpers){
  const auth=await helpers.auth(req,env);const u=auth?.user||null;
  let count,record;try{count=await tally(db);record=u?await row(db,u.id):null}catch{return err('The voice-slot database is not ready. Run the included SQL setup first.',503)}
  if(!u)return err('Sign in to view permanent voice-cloning slots.',401);
- if(req.method==='GET'){
-  // Show the same server-authoritative, CURRENT available wallet balance on the booking popup.
-  // Never use total deposits, historical purchases, or browser-reported credits.
-  let availableCredits=null;
-  try{availableCredits=await userAvailableCredits(env,u,helpers)}catch{}
-  return j({...publicView(s,count,record),signedIn:true,availableCredits});
- }
+ if(req.method==='GET')return j({...publicView(s,count,record),signedIn:true});
  if(record)return j({...publicView(s,count,record),alreadyBooked:true});
  if(!s.enabled)return err('Voice-slot booking is currently closed.',403);
  const phase=bookingPhase(s);
