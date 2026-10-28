@@ -654,7 +654,65 @@ async function handleMarketingUnsubscribe(request, env) {
   return new Response(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>CallFocus email preferences</title></head><body style="margin:0;background:#edf4f1;font-family:Arial,Helvetica,sans-serif;color:#173d37"><div style="max-width:560px;margin:70px auto;padding:20px"><div style="background:#fff;border:1px solid #d8e6e1;border-radius:26px;padding:34px;box-shadow:0 18px 50px rgba(21,75,65,.08)"><div style="font-size:12px;font-weight:800;letter-spacing:.18em;color:#2a897b">CALLFOCUS EMAIL</div><h1 style="font-size:32px;margin:12px 0 10px">You are unsubscribed.</h1><p style="font-size:17px;line-height:1.65;color:#60746f">You will no longer receive promotional CallFocus email at this address. Account, security and payment messages are not affected.</p><a href="https://callfocus.link" style="display:inline-block;margin-top:14px;background:#197768;color:#fff;text-decoration:none;padding:14px 20px;border-radius:14px;font-weight:800">Return to CallFocus</a></div></div></body></html>`, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
 
+/* CallFocus V16.52 — dedicated compact layout ONLY for the existing permanent voice-cloning update email.
+   All other direct customer emails continue through the unchanged default renderer below. */
+function isPermanentVoiceUpdateEmail(subject = '') {
+  return /^update on permanent voice cloning\.?$/i.test(cleanMarketingText(subject, 160).replace(/\s+/g, ' '));
+}
+function permanentVoiceEmailParagraphs(blocks = []) {
+  return blocks.map(block => `<p style="margin:0 0 9px;font-size:15px;line-height:1.55;color:#516760;">${escapeHtml(block).replace(/\n/g, '<br>')}</p>`).join('');
+}
+function permanentVoiceUpdateEmailHtml({ user = {}, subject = '', message = '', ctaLabel = '', ctaUrl = '' } = {}) {
+  const safeSubject = escapeHtml(marketingPersonalize(subject, user));
+  const safeButton = escapeHtml(marketingPersonalize(ctaLabel, user));
+  const safeLink = escapeHtml(ctaUrl);
+  const blocks = cleanMarketingText(marketingPersonalize(message, user), 5000)
+    .split(/\n{2,}/).map(v => v.trim()).filter(Boolean);
+  // Put the real CTA immediately after the greeting and first paragraph, instead
+  // of after the entire message. Any additional customer text is preserved below.
+  const firstIsGreeting = /^(?:hello|hi|dear\b)[^\n]{0,80}[!,]?$/i.test(blocks[0] || '');
+  let cutoff = firstIsGreeting ? Math.min(2, blocks.length) : Math.min(1, blocks.length);
+  // If an admin writes a long single paragraph, still keep the CTA above the fold.
+  if (blocks.length === 1 && blocks[0].length > 320) {
+    const candidate = blocks[0];
+    const sentences = [...candidate.matchAll(/[.!?](?:\s+|$)/g)];
+    const end = sentences.map(m => m.index + 1).find(pos => pos >= 65 && pos <= 280)
+      || candidate.lastIndexOf(' ', 260);
+    if (end > 65 && end < candidate.length) {
+      blocks.splice(0, 1, candidate.slice(0, end).trim(), candidate.slice(end).trim());
+      cutoff = 1;
+    }
+  }
+  const top = permanentVoiceEmailParagraphs(blocks.slice(0, cutoff));
+  const trailing = blocks.slice(cutoff);
+  const closingAt = trailing.findIndex(v => /^(?:thank you|best regards|kind regards|sincerely|warm regards|regards)[\b, .!]/i.test(v));
+  const details = permanentVoiceEmailParagraphs(closingAt < 0 ? trailing : trailing.slice(0, closingAt));
+  const closing = permanentVoiceEmailParagraphs(closingAt < 0 ? [] : trailing.slice(closingAt));
+  const cta = safeButton && safeLink ? `<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;margin:2px 0 14px;"><tr><td align="center" bgcolor="#147f68" style="border-radius:12px;background:#147f68;"><a href="${safeLink}" style="display:block;padding:15px 18px;text-align:center;color:#ffffff;text-decoration:none;font-size:16px;line-height:1.2;font-weight:700;border-radius:12px;">${safeButton} &nbsp;&#8594;</a></td></tr></table>` : '';
+  const logo = 'https://callfocus.link/logo.png';
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"></head>
+<body style="margin:0;padding:0;background:#f5f8f6;font-family:Arial,Helvetica,sans-serif;color:#173d37;">
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="width:100%;border-collapse:collapse;background:#f5f8f6;"><tr><td align="center" style="padding:16px 10px;">
+<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="width:100%;max-width:540px;background:#ffffff;border:1px solid #e4eee9;border-radius:18px;border-collapse:separate;">
+<tr><td style="padding:20px 22px 14px;border-bottom:1px solid #e8f0ec;">
+  <table role="presentation" cellpadding="0" cellspacing="0"><tr><td width="38" style="vertical-align:middle;"><img src="${logo}" alt="" width="35" height="35" style="display:block;width:35px;height:35px;border:0;"></td><td style="vertical-align:middle;padding-left:9px;font-weight:800;font-size:22px;line-height:1.2;color:#173d37;">Call<span style="color:#bf8d47;">Focus</span></td></tr></table>
+</td></tr>
+<tr><td style="padding:19px 22px 0;">
+<div style="font-size:10px;line-height:1.4;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#26816e;margin:0 0 8px;">CALLFOCUS · LIMITED RELEASE</div>
+<h1 style="font-size:24px;line-height:1.21;letter-spacing:-0.45px;font-weight:800;margin:0;color:#173d37;">${safeSubject}</h1>
+<div style="width:38px;height:3px;background:#c79a58;border-radius:3px;margin:12px 0 15px;"></div>
+${top}
+${cta}
+</td></tr>
+${details ? `<tr><td style="padding:0 22px 8px;"><div style="background:#f1f8f5;border:1px solid #e2efe9;border-radius:12px;padding:12px 14px;">${details}</div></td></tr>` : ''}
+${closing ? `<tr><td style="padding:3px 22px 4px;">${closing}</td></tr>` : ''}
+<tr><td style="padding:11px 22px 20px;"><div style="border-top:1px solid #e4ece9;padding-top:13px;font-size:11px;line-height:1.55;color:#84958e;">This is a direct CallFocus service message. Need help? Reply to this email or visit <a href="https://callfocus.link" style="color:#187768;text-decoration:underline;">callfocus.link</a>.</div></td></tr>
+</table>
+</td></tr></table></body></html>`;
+}
+
 function directServiceEmailHtml({ user = {}, subject = '', message = '', ctaLabel = '', ctaUrl = '' } = {}) {
+  if (isPermanentVoiceUpdateEmail(subject)) return permanentVoiceUpdateEmailHtml({ user, subject, message, ctaLabel, ctaUrl });
   const personalizedMessage = marketingParagraphsHtml(marketingPersonalize(message, user));
   const safeSubject = escapeHtml(marketingPersonalize(subject, user));
   const safeCtaLabel = escapeHtml(marketingPersonalize(ctaLabel, user));
