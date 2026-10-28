@@ -2822,10 +2822,21 @@ function cfServiceRates(v={}) {
   return {liveCall:rate('liveCall',100),cloneVoice:rate('cloneVoice',150),voiceNote:rate('voiceNote',100),imageVideo:rate('imageVideo',1800),imageVideoOverride:v.imageVideoOverride===true};
 }
 async function cfGetRates(env){if(!env.CALLFOCUS_CONFIG)return cfServiceRates();try{return cfServiceRates(await env.CALLFOCUS_CONFIG.get(CF_SERVICE_RATE_KEY,{type:'json'})||{})}catch{return cfServiceRates()}}
+// V16.51: The Image-to-Video page's per-duration prices are authoritative.
+// Show the equivalent 10-second per-minute rate in the cross-service pricing overview.
+async function cfGetDisplayRates(env){
+  const rates=await cfGetRates(env);
+  if(env.CALLFOCUS_CONFIG)try{
+    const saved=await env.CALLFOCUS_CONFIG.get('image_video:settings',{type:'json'});
+    const cost=Number(saved?.cost10);
+    if(Number.isFinite(cost)&&cost>=1&&cost<=100000)rates.imageVideo=Math.min(100000,cost*6);
+  }catch{}
+  return rates;
+}
 async function cfAdminFeatureControls(request,env){
   if(!await adminAuthorized(request,env))return json({error:'Administrator sign-in required.'},401);
   if(!env.CALLFOCUS_CONFIG)return json({error:'Global storage unavailable.'},503);
-  if(request.method==='GET')return json({ok:true,announcement:cfAnnouncement(await env.CALLFOCUS_CONFIG.get(CF_ANNOUNCEMENT_KEY,{type:'json'})||{}),rates:await cfGetRates(env)});
+  if(request.method==='GET')return json({ok:true,announcement:cfAnnouncement(await env.CALLFOCUS_CONFIG.get(CF_ANNOUNCEMENT_KEY,{type:'json'})||{}),rates:await cfGetDisplayRates(env)});
   if(request.method!=='POST')return json({error:'Method not allowed'},405);
   let body;try{body=await request.json()}catch{return json({error:'Invalid request.'},400)}
   if(body.kind==='announcement'){
@@ -2836,12 +2847,19 @@ async function cfAdminFeatureControls(request,env){
   if(body.kind==='rates'){
     const raw=body.rates||{};
     for(const key of ['liveCall','cloneVoice','voiceNote','imageVideo']){const n=Number(raw[key]);if(!Number.isFinite(n)||n<1||n>100000)return json({error:'Every service rate must be between 1 and 100,000 credits/minute.'},400)}
-    const rates=cfServiceRates({...raw,imageVideoOverride:true});
-    await env.CALLFOCUS_CONFIG.put(CF_SERVICE_RATE_KEY,JSON.stringify(rates));return json({ok:true,rates});
+    const rates=cfServiceRates({...raw,imageVideoOverride:false});
+    // Admin > Payments remains an explicit way to override video tariffs.
+    // Keep the original 15-second tariff if this save only changed other services.
+    const currentVideo=await cfGetVideoSettings(env);
+    if(Number(raw.imageVideo)!==currentVideo.cost10*6){
+      const nextVideo={...currentVideo,cost10:Math.ceil(rates.imageVideo/6),cost15:Math.ceil(rates.imageVideo/4)};
+      await env.CALLFOCUS_CONFIG.put('image_video:settings',JSON.stringify(nextVideo));
+    }
+    await env.CALLFOCUS_CONFIG.put(CF_SERVICE_RATE_KEY,JSON.stringify(rates));return json({ok:true,rates:await cfGetDisplayRates(env)});
   }
   return json({error:'Unknown settings group.'},400);
 }
-async function cfPublicFeatureControls(env){return json({announcement:cfAnnouncement(env.CALLFOCUS_CONFIG?await env.CALLFOCUS_CONFIG.get(CF_ANNOUNCEMENT_KEY,{type:'json'})||{}:{}),rates:await cfGetRates(env)},200,{'Cache-Control':'no-store'})}
+async function cfPublicFeatureControls(env){return json({announcement:cfAnnouncement(env.CALLFOCUS_CONFIG?await env.CALLFOCUS_CONFIG.get(CF_ANNOUNCEMENT_KEY,{type:'json'})||{}:{}),rates:await cfGetDisplayRates(env)},200,{'Cache-Control':'no-store'})}
 function cfChargeWalletSeconds(durationSeconds,rate){return Math.ceil(Math.max(0,Number(durationSeconds)||0)*Math.max(1,Number(rate)||100)/100)}
 
 async function handleAdminPurchaseOffers(request,env) {
@@ -6710,7 +6728,7 @@ async function safeCustomerRoute(label, handler) {
 const CF_VIDEO_PREFIX = 'image_video:job:';
 const CF_VIDEO_DEFAULT = Object.freeze({enabled:false,cost10:300,cost15:450,dailyLimit:3,aspectRatios:['9:16','1:1','16:9','4:5'],motionStyles:['Natural','Cinematic','Subtle motion','Dynamic','Dramatic']});
 function cfVideoSettings(v={}) {const allowedRatio=['9:16','1:1','16:9','4:5'];const allowedStyle=['Natural','Cinematic','Subtle motion','Dynamic','Dramatic'];return {enabled:v.enabled===true,cost10:Math.max(1,Math.min(100000,Math.round(Number(v.cost10)||CF_VIDEO_DEFAULT.cost10))),cost15:Math.max(1,Math.min(100000,Math.round(Number(v.cost15)||CF_VIDEO_DEFAULT.cost15))),dailyLimit:Math.max(1,Math.min(20,Math.round(Number(v.dailyLimit)||3))),aspectRatios:allowedRatio.filter(x=>(Array.isArray(v.aspectRatios)?v.aspectRatios:CF_VIDEO_DEFAULT.aspectRatios).includes(x)),motionStyles:allowedStyle.filter(x=>(Array.isArray(v.motionStyles)?v.motionStyles:CF_VIDEO_DEFAULT.motionStyles).includes(x))};}
-async function cfGetVideoSettings(env){const base=cfVideoSettings(env.CALLFOCUS_CONFIG?await env.CALLFOCUS_CONFIG.get('image_video:settings',{type:'json'})||{}:{});const r=await cfGetRates(env);if(r.imageVideoOverride){base.cost10=Math.ceil(r.imageVideo/6);base.cost15=Math.ceil(r.imageVideo/4)}return base;}
+async function cfGetVideoSettings(env){return cfVideoSettings(env.CALLFOCUS_CONFIG?await env.CALLFOCUS_CONFIG.get('image_video:settings',{type:'json'})||{}:{});}
 function cfVideoKey(userId,jobId){return CF_VIDEO_PREFIX+userId+':'+jobId;}
 function cfPublicVideo(job){return {id:job.id,createdAt:job.createdAt,updatedAt:job.updatedAt,duration:job.duration,cost:job.cost,charged:job.charged,refunded:job.refunded===true,status:job.status,aspectRatio:job.aspectRatio,motionStyle:job.motionStyle,prompt:job.prompt,thumbnail:job.thumbnail||'',stage:job.stage||'',videoReady:job.status==='completed',error:job.error||''};}
 async function cfPutVideoJob(env,job){job.updatedAt=new Date().toISOString();await env.CALLFOCUS_CONFIG.put(cfVideoKey(job.userId,job.id),JSON.stringify(job));}

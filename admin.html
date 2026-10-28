@@ -360,7 +360,7 @@
     <div class="form-grid three"><label>10-second cost (credits)<input id="adminVideo10" type="number" min="1" max="100000" value="300"></label><label>15-second cost (credits)<input id="adminVideo15" type="number" min="1" max="100000" value="450"></label><label>Max generations / user / day<input id="adminVideoDailyLimit" type="number" min="1" max="20" value="3"></label></div>
     <h3>Image crop ratios</h3><p class="admin-panel-copy">The selected picture is cropped on the customer's device; xAI image-to-video preserves its input ratio.</p><div class="form-grid two"><label><input type="checkbox" data-video-ratio="9:16" checked> 9:16</label><label><input type="checkbox" data-video-ratio="1:1" checked> 1:1</label><label><input type="checkbox" data-video-ratio="16:9" checked> 16:9</label><label><input type="checkbox" data-video-ratio="4:5" checked> 4:5</label></div>
     <h3>Motion styles</h3><div class="form-grid two"><label><input type="checkbox" data-video-motion="Natural" checked> Natural</label><label><input type="checkbox" data-video-motion="Cinematic" checked> Cinematic</label><label><input type="checkbox" data-video-motion="Subtle motion" checked> Subtle motion</label><label><input type="checkbox" data-video-motion="Dynamic" checked> Dynamic</label><label><input type="checkbox" data-video-motion="Dramatic" checked> Dramatic</label></div>
-    <button class="btn btn-primary" type="button" id="saveAdminVideo">Save Image to Video settings</button><p class="admin-availability-feedback" id="adminVideoFeedback"></p>
+    <p class="admin-panel-copy">Prices saved here are used for customer video generation. Admin → Payments can also adjust the video rate; the most recently saved pricing change takes effect.</p><button class="btn btn-primary" type="button" id="saveAdminVideo">Save Image to Video settings</button><p class="admin-availability-feedback" id="adminVideoFeedback"></p>
   </div><div class="premium-panel"><h3>Video usage analytics (most recent 150 jobs)</h3><div class="iv-admin-stats"><article><span>Total jobs</span><strong id="ivStat-total">0</strong></article><article><span>Completed</span><strong id="ivStat-completed">0</strong></article><article><span>Failed</span><strong id="ivStat-failed">0</strong></article><article><span>Refunded</span><strong id="ivStat-refunded">0</strong></article><article><span>Credits charged</span><strong id="ivStat-creditsCharged">0</strong></article><article><span>Credits refunded</span><strong id="ivStat-creditsRefunded">0</strong></article><article><span>10-second jobs</span><strong id="ivStat-duration10">0</strong></article><article><span>15-second jobs</span><strong id="ivStat-duration15">0</strong></article></div><h3>Recent generation activity</h3><div id="adminVideoActivity">Loading activity…</div></div>
 </section>
 <section class="admin-tab-panel" data-admin-panel="payments">
@@ -653,7 +653,7 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=16.43-email-validation"></script><script src="/admin-video.js?v=16.07-test"></script><script src="/cf-controls-admin.js?v=16.24"></script>
+  <script src="/admin.js?v=16.43-email-validation"></script><script src="/admin-video.js?v=16.51-price-persistence"></script><script src="/cf-controls-admin.js?v=16.24"></script>
 <script src="/cf-temp-voice-admin.js?v=16.34"></script>
 <script src="/cf-clone-availability-admin.js?v=16.44"></script><script src="/permanent-slots-admin.js?v=16.50"></script>
 <script src="/affiliate-admin.js?v=16.37"></script></body>
