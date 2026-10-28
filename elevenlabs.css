@@ -101,3 +101,6 @@
 .cf-el-modal.cf-el-paused .cf-el-intro{display:none}
 .cf-el-modal.cf-el-paused .cf-el-capacity{display:block;padding:19px 18px;background:#eef8f2;color:#205d4c;border:1px solid #cde5d9;border-radius:17px;font-size:15px;line-height:1.55;font-weight:600;margin:16px 0 6px;overflow-wrap:anywhere}
 .cf-el-modal.cf-el-paused .cf-el-once-note{display:none}
+
+/* V16.45 permanent voice display refinements */
+.cf-el-box .cf-el-action{margin-bottom:8px}.cf-el-box select{font-weight:650}

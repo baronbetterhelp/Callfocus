@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/admin.css?v=16.40" />
-<link rel="stylesheet" href="/affiliate.css?v=16.38"></head>
+<link rel="stylesheet" href="/affiliate.css?v=16.38"><style>.cf-slot-admin-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.cf-slot-admin-bookings{font:12px/1.65 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;background:rgba(100,150,120,.06);padding:14px;border-radius:12px;max-height:260px;overflow:auto}.cf-slot-admin-card small{display:block}@media(max-width:620px){.cf-slot-admin-grid{grid-template-columns:1fr}}</style></head>
 <body class="admin-page">
   <header class="site-header">
     <div class="container header-inner">
@@ -518,7 +518,23 @@
           <div class="cf-clone-admin-actions"><button type="button" class="btn btn-primary" id="cfCloneSaveAvailability">Save cloning settings</button><span id="cfCloneAvailabilityStatus" role="status" aria-live="polite">Cloning starts paused until you enable it here.</span></div>
         </div>
 
-        <div class="premium-panel form-panel" id="cfTempVoiceCleanupAdmin" style="margin-top:16px">
+        <div class="premium-panel form-panel cf-clone-admin-card" id="cfPermanentSlotAdmin" style="margin-top:16px">
+          <div class="admin-users-heading"><div><h3>Limited permanent voice slots</h3><p class="admin-panel-copy">Control the Book slot popup, booking capacity, date and Telegram waiting-list message. One reserved slot per customer. No automatic deletion of permanent voices.</p></div></div>
+          <label class="cf-clone-admin-toggle"><span><strong>Enable slot bookings</strong><small>When off, customers cannot reserve new slots. Existing bookings are preserved.</small></span><input id="cfSlot_enabled" type="checkbox"></label>
+          <label class="cf-clone-admin-toggle"><span><strong>Show booking announcement popup</strong><small>Show the Book slot announcement once per signed-in session when slots are available.</small></span><input id="cfSlot_popupEnabled" type="checkbox"></label>
+          <label class="cf-clone-admin-toggle"><span><strong>Manually mark slots as filled</strong><small>Temporarily stop new bookings and show the Telegram full-slots notice even before capacity is reached.</small></span><input id="cfSlot_forceFull" type="checkbox"></label>
+          <div class="cf-slot-admin-grid"><label>Maximum slots<input id="cfSlot_slotLimit" type="number" min="1" max="160" value="30"></label><label>Minimum confirmed deposits (₦)<input id="cfSlot_minimumFundingNaira" type="number" min="0" step="1000" value="10000"></label></div>
+          <label>Voice-cloning start date (optional)<input id="cfSlot_eventDate" type="date"><small>Customers may reserve now while bookings are enabled. Creating the voice opens on this date. Leave blank to allow creation immediately when voice cloning is enabled.</small></label>
+          <label>Announcement title<input id="cfSlot_headline" maxlength="100" placeholder="Limited permanent voice cloning slots"></label>
+          <label>Announcement message<textarea id="cfSlot_message" maxlength="350" rows="3"></textarea></label>
+          <label>Message when slots are filled<textarea id="cfSlot_fullMessage" maxlength="350" rows="3"></textarea></label>
+          <label>Telegram channel URL<input id="cfSlot_telegramUrl" type="url" maxlength="300" placeholder="https://t.me/callfocus"></label>
+          <p class="admin-panel-copy">This setting checks total confirmed deposits in the customer wallet history, not current unused credits. It never deducts credits for booking. Enable voice cloning using the independent control above after your new provider account is configured.</p>
+          <div class="cf-clone-admin-actions"><button class="btn btn-primary" id="cfSlotSave" type="button">Save slot settings</button><button class="btn btn-ghost" id="cfSlotRefresh" type="button">Refresh bookings</button></div>
+          <p class="admin-panel-copy" id="cfSlotStatus" role="status" aria-live="polite">Booking system disabled until D1 setup is completed.</p>
+          <p class="admin-panel-copy" id="cfSlotProvider" role="status">Provider status is not checked yet.</p><pre class="cf-slot-admin-bookings" id="cfSlotBookings" aria-label="Recent permanent voice slot reservations"></pre>
+        </div>
+        <div class="premium-panel form-panel" id="cfTempVoiceCleanupAdmin" style="display:none">
           <div class="admin-users-heading"><div><h3>One-time voice storage</h3><p class="admin-panel-copy">New voice cloning no longer keeps customer clones. Clean up the historical CallFocus customer clones to free existing voice slots. This permanently deletes their saved provider voices; it cannot be undone.</p></div></div>
           <button class="btn btn-ghost" type="button" id="cfTempVoicePurge">Delete previous customer cloned voices</button>
           <p class="admin-panel-copy" id="cfTempVoicePurgeStatus" role="status" aria-live="polite">This only removes voices previously created through CallFocus, not unrelated voices in your workspace.</p>
@@ -630,6 +646,6 @@
   <div class="toast hidden" id="toast"></div>
   <script src="/admin.js?v=16.43-email-validation"></script><script src="/admin-video.js?v=16.07-test"></script><script src="/cf-controls-admin.js?v=16.24"></script>
 <script src="/cf-temp-voice-admin.js?v=16.34"></script>
-<script src="/cf-clone-availability-admin.js?v=16.44"></script>
+<script src="/cf-clone-availability-admin.js?v=16.44"></script><script src="/permanent-slots-admin.js?v=16.45"></script>
 <script src="/affiliate-admin.js?v=16.37"></script></body>
 </html>

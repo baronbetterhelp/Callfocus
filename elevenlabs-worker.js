@@ -1,10 +1,12 @@
+import {slotVoiceForUser} from './permanent-voice-slots-worker.js';
 /* CallFocus V16.34: one-time voice cloning. No permanent customer voice library.
    The original OpenAI call engine and its endpoints are untouched.
    Provider voices exist ONLY during active jobs and are deleted on completion or by the cleanup cron. */
 const EL_API='https://api.elevenlabs.io';
 const elJson=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
-const getKey=env=>String(env.ELEVENLABS_API_KEY||env.ELEVEN_LABS_API_KEY||env.ELEVENLAB_API_KEY||'').trim();
-const getAgent=env=>String(env.ELEVENLABS_AGENT_ID||env.ELEVEN_LABS_AGENT_ID||env.ELEVENLAB_AGENT_ID||env.ELEVENLABS_AGENT||'').trim();
+const getKey=env=>String(env.ELEVENLABS_PERMANENT_API_KEY||'').trim();
+const oldKey=env=>String(env.ELEVENLABS_API_KEY||env.ELEVEN_LABS_API_KEY||env.ELEVENLAB_API_KEY||'').trim();
+const getAgent=env=>String(env.ELEVENLABS_PERMANENT_AGENT_ID||'').trim();
 const withKey=env=>({'xi-api-key':getKey(env)});
 const oldVoicesPrefix='elevenlabs:voices:';
 const leasePrefix='elevenlabs:temporary:';
@@ -75,7 +77,7 @@ async function formatAudio(file){
 }
 async function providerDelete(env,providerId){
  if(!idValid(providerId))return false;
- try{const r=await fetch(`${EL_API}/v1/voices/${encodeURIComponent(providerId)}`,{method:'DELETE',headers:withKey(env),signal:AbortSignal.timeout(18000)});return r.ok||r.status===404;}catch{return false}
+ try{const r=await fetch(`${EL_API}/v1/voices/${encodeURIComponent(providerId)}`,{method:'DELETE',headers:{'xi-api-key':oldKey(env)},signal:AbortSignal.timeout(18000)});return r.ok||r.status===404;}catch{return false}
 }
 // KV leases contain an ID, not the audio samples. Do NOT automatically expire the KV index before deletion; cron must retain a way to clean provider orphans.
 async function createTemporary(env,user,form){
@@ -91,14 +93,14 @@ async function createTemporary(env,user,form){
  if(!response.ok){let detail={};try{detail=await response.json()}catch{}
  const raw=JSON.stringify(detail);const msg=isCapacityError(raw)?capacityText.full:String(detail?.detail?.message||detail?.error?.message||'Could not create a temporary voice.').replace(/\b(?:Eleven\s*Labs|Open\s*AI)\b/gi,'voice service');
  const err=new Error(msg.slice(0,350));err.status=response.status===429?429:response.status>=500?502:400;throw err;}
- const created=await response.json().catch(()=>({}));if(!idValid(created.voice_id))throw new Error('Temporary voice creation failed.');
+ const created=await response.json().catch(()=>({}));if(!idValid(created.voice_id))throw new Error('Voice creation failed.');
  const leaseId=crypto.randomUUID();const lease={id:leaseId,voiceId:created.voice_id,userId:user.id,name,createdAt:Date.now(),lastSeen:Date.now(),requiresVerification:created.requires_verification===true};
  try{await env.CALLFOCUS_CONFIG.put(leasePrefix+leaseId,JSON.stringify(lease),{});}
  catch{await providerDelete(env,created.voice_id);throw new Error('Could not prepare voice cleanup. Please try again.');}
  return lease;
 }
 async function releaseLease(env,lease){
- if(!lease)return true;
+ if(!lease||lease.persistent===true)return true;
  const deleted=await providerDelete(env,lease.voiceId);
  if(deleted)await env.CALLFOCUS_CONFIG.delete(leasePrefix+lease.id);
  return deleted;
@@ -109,7 +111,7 @@ async function leaseById(env,id,userId){
  return l&&l.userId===userId?l:null;
 }
 async function elCleanup(env){
- if(!env.CALLFOCUS_CONFIG||!getKey(env))return;
+ if(!env.CALLFOCUS_CONFIG||!oldKey(env))return;
  let cursor;let scanned=0;
  do{const page=await env.CALLFOCUS_CONFIG.list({prefix:leasePrefix,limit:100,...(cursor?{cursor}:{})});
  for(const item of page.keys){scanned++;const lease=await env.CALLFOCUS_CONFIG.get(item.name,{type:'json'});if(!lease||!idValid(lease.voiceId))continue;
@@ -144,17 +146,18 @@ async function elRequest(req,env,helpers){
  // Administrative pause applies before ANY provider request and never blocks cleanup.
  const availability=await elGetAvailability(env);
  if(path==='/api/elevenlabs/voices'&&req.method==='GET'&&!availability.enabled){
-  return elJson({ok:true,voices:[],capacity:{available:false,reason:'paused',message:availability.message},availability,agentConfigured:!!getAgent(env),temporary:true});
+  const existing=await slotVoiceForUser(env,auth.user.id).catch(()=>null);
+  return elJson({ok:true,voices:existing?[existing]:[],capacity:{available:false,reason:'paused',message:availability.message},availability,agentConfigured:!!getAgent(env),temporary:false});
  }
  if((path==='/api/elevenlabs/session'||path==='/api/elevenlabs/tts')&&!availability.enabled){
   return elJson({error:availability.message,code:'voice_cloning_paused'},503);
  }
  if(!getKey(env))return elJson({error:'Voice cloning is temporarily unavailable. Please contact support.'},503);
  if(path==='/api/elevenlabs/voices'){
-  if(req.method==='GET')return elJson({ok:true,voices:[],capacity:publicCapacity(await voiceCapacity(env)),availability,agentConfigured:!!getAgent(env),temporary:true});
+  if(req.method==='GET'){const saved=await slotVoiceForUser(env,auth.user.id).catch(()=>null);return elJson({ok:true,voices:saved?[saved]:[],capacity:{available:!!saved,message:saved?null:'Book a permanent voice slot to create your voice.'},availability,agentConfigured:!!getAgent(env),temporary:false});}
   return elJson({error:'Permanent saved voices are no longer supported.'},410);
  }
- if(path==='/api/elevenlabs/clone')return elJson({error:'Permanent voice saving is disabled. Prepare a voice sample for one-time use.'},410);
+ if(path==='/api/elevenlabs/clone')return elJson({error:'Use your booked permanent slot to save your voice.'},410);
  if(path==='/api/elevenlabs/heartbeat'||path==='/api/elevenlabs/release'){
   if(req.method!=='POST')return elJson({error:'Method not allowed.'},405);
   let body={};try{body=await req.json()}catch{return elJson({error:'Invalid request.'},400)}
@@ -166,7 +169,7 @@ async function elRequest(req,env,helpers){
   const removed=await releaseLease(env,lease);return removed?elJson({ok:true,released:true}):elJson({error:'Cleanup is pending and will retry automatically.',code:'cleanup_pending'},502);
  }
  if(req.method!=='POST')return elJson({error:'Method not allowed.'},405);
- let form;try{form=await req.formData()}catch{return elJson({error:'A voice sample is required for one-time use.'},400)}
+ let form;try{form=await req.formData()}catch{return elJson({error:'Invalid cloned voice request.'},400)}
  const script=String(form.get('script')||'').trim();const context=String(form.get('context')||'');
  if(path.endsWith('/tts')&&(!script||script.length>2200))return elJson({error:'Enter a script of up to 2,200 characters.'},400);
  if(path.endsWith('/session')&&context.length>24000)return elJson({error:'Call context exceeds the permitted size.'},400);
@@ -176,8 +179,9 @@ async function elRequest(req,env,helpers){
  const data=await helpers.customerData(env,auth.user.id,auth.user.name),wallet=helpers.normalizeWallet(data.wallet||{});
  if(!unlimited&&wallet.balanceSeconds<(path.endsWith('/session')?15:5))return elJson({error:'Not enough CallFocus credits. Buy credits to continue.'},402);
  let lease;
- try{lease=await createTemporary(env,auth.user,form)}catch(e){return elJson({error:String(e?.message||'Voice creation failed.')},e.status||400)}
- if(lease.requiresVerification){await releaseLease(env,lease);return elJson({error:'This recording requires additional verification and cannot be used as a temporary voice.'},409)}
+ if(String(form.get('mode')||'')!=='permanent')return elJson({error:'Temporary voice creation is disabled. Book and save one permanent voice instead.'},409);
+ try{lease=await slotVoiceForUser(env,auth.user.id)}catch{return elJson({error:'Saved voice storage is not ready.'},503)}
+ if(!lease)return elJson({error:'You do not have a saved permanent voice. Book a slot and create your voice first.'},409);
  if(path==='/api/elevenlabs/session'){
   const url=new URL(`${EL_API}/v1/convai/conversation/get-signed-url`);url.searchParams.set('agent_id',getAgent(env));
   let signed;try{signed=await fetch(url,{headers:withKey(env),signal:AbortSignal.timeout(20000)})}catch{await releaseLease(env,lease);return elJson({error:'Could not connect to the calling service.'},502)}

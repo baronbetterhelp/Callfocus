@@ -1,4 +1,4 @@
-/* CallFocus V16.34 — one-time voice cloning and conversation adapter.
+/* CallFocus V16.45 — reusable permanent voice cloning on the ElevenLabs-only path.
    This file does not change existing GPT-Live functions, voice selection, or routes. */
 (()=>{
   'use strict';
@@ -6,7 +6,7 @@
   const auth=()=>localStorage.getItem('callfocus_server_session_v1')||'';
   const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const notify=s=>{if(typeof window.toast==='function')window.toast(s);else alert(s)};
-  let homeButtonVisible=false,voices=[],capacity=null,cloningAvailability={enabled:false,message:'Voice cloning is currently unavailable. Please try again later.'},newSelected='',repeatSelected='',noteSelected='',busy=false,active=null,recorder=null,recordedBlob=null,recordStart=0,recordTimer=0,recordStream=null,tempReady=false;
+  let bookedStatus=null,homeButtonVisible=false,voices=[],capacity=null,cloningAvailability={enabled:false,message:'Voice cloning is currently unavailable. Please try again later.'},newSelected='',repeatSelected='',noteSelected='',busy=false,active=null,recorder=null,recordedBlob=null,recordStart=0,recordTimer=0,recordStream=null,tempReady=false;
   let preparedAudio=null,selectedUpload=null,fileSelectionId=0;
   async function request(path,{method='GET',body,form=false}={}){
     if(!auth())throw Error('Sign in to CallFocus before using voice cloning.');
@@ -15,7 +15,7 @@
   }
   async function loadVoices(){
     if(!auth()){capacity=null;tempReady=false;newSelected=repeatSelected=noteSelected='';render();return}
-    try{const data=await request('/api/elevenlabs/voices');capacity=data.capacity||null;cloningAvailability=data.availability||{enabled:false,message:'Voice cloning is temporarily unavailable.'};if(!cloningAvailability.enabled){tempReady=false;newSelected=repeatSelected=noteSelected='';}}
+    try{const data=await request('/api/elevenlabs/voices');voices=data.voices||[];capacity=data.capacity||null;cloningAvailability=data.availability||{enabled:false,message:'Voice cloning is temporarily unavailable.'};if(voices.length){newSelected=newSelected||'permanent';repeatSelected=repeatSelected||'permanent';noteSelected=noteSelected||'permanent';}else{newSelected=repeatSelected=noteSelected='';}}
     catch(err){console.warn('CallFocus voice availability:',err.message);cloningAvailability={enabled:false,message:'Voice cloning is temporarily unavailable. Please try again later.'};capacity={available:false,message:cloningAvailability.message}}
     render();updateCapacityUi();
   }
@@ -38,8 +38,8 @@
     }catch{homeButtonVisible=false;}
     syncHomeCloneButton();
   }
-  function choices(selected){return `<option value="">Use normal Male / Female voice</option>${tempReady?`<option value="one-time" ${selected==='one-time'?'selected':''}>Use my prepared voice once · cloned rate</option>`:''}`}
-  function voicePanel(scope){const selected=scope==='new'?newSelected:scope==='repeat'?repeatSelected:noteSelected;return `<div class="cf-el-box" id="cf-el-${scope}"><h3>Use your own voice</h3><p>Record or upload a sample for a single ${scope==='note'?'voice note':'call'}. The clone is removed from the voice service after use.</p><button class="cf-el-action" type="button" data-el-open>+ Prepare a one-time voice</button><label style="margin-top:17px" for="cf-el-select-${scope}">Voice selection</label><select id="cf-el-select-${scope}" data-el-select="${scope}">${choices(selected)}</select><small class="cf-el-muted">No cloned voice is permanently saved. Prepare your recording again for another use.</small></div>`}
+  function choices(selected){return `<option value="">Use normal Male / Female voice</option>${voices.length?`<option value="permanent" ${selected==='permanent'?'selected':''}>My saved permanent voice · cloned rate</option>`:''}`}
+  function voicePanel(scope){const selected=scope==='new'?newSelected:scope==='repeat'?repeatSelected:noteSelected;return `<div class="cf-el-box" id="cf-el-${scope}"><h3>Use your own saved voice</h3><p>Book one slot, create your own consent-verified voice once, then reuse it for future ${scope==='note'?'voice notes':'cloned calls'}.</p><button class="cf-el-action" type="button" data-el-open>${voices.length?'View my saved voice':'Book slot / create voice'}</button><label style="margin-top:17px" for="cf-el-select-${scope}">Voice selection</label><select id="cf-el-select-${scope}" data-el-select="${scope}">${choices(selected)}</select><small class="cf-el-muted">Your original normal voice options remain independent and unchanged.</small></div>`}
   function render(){
     const field=$('newCallVoiceGender')?.closest('.field-section')?.querySelector('.field-content');
     if(field){let host=$('cf-el-new');if(!host){host=document.createElement('div');host.id='cf-el-new';const aiPicker=$('newCallAiVoicePicker');const opening=field.querySelector('.call-opening-box');field.insertBefore(host,aiPicker||opening||null)}host.outerHTML=voicePanel('new')}
@@ -56,8 +56,8 @@
     div.innerHTML=`<div class="cf-el-modal" role="dialog" aria-modal="true" aria-labelledby="cf-el-title">
       <button type="button" class="cf-el-close" id="cf-el-close" aria-label="Close">×</button>
       <small class="cf-el-eyebrow">YOUR PERSONAL VOICE</small>
-      <h2 id="cf-el-title">Prepare your voice</h2>
-      <p class="cf-el-intro">Record or upload 30–120 seconds of your own clear speech. Use it for one call or voice note. Nothing is permanently saved.</p>
+      <h2 id="cf-el-title">Create your permanent voice</h2>
+      <p class="cf-el-intro">Record or upload 30–120 seconds of your own clear speech. Your verified voice is saved to your CallFocus account for future cloned calls and voice notes.</p>
       <div class="cf-el-status" id="cf-el-status" role="status" aria-live="polite" aria-atomic="true"></div>
       <div class="cf-el-capacity" id="cf-el-capacity" role="status" aria-live="polite" hidden></div>
       <label class="cf-el-label" for="cf-el-name">Voice name</label>
@@ -72,9 +72,9 @@
         <progress id="cf-el-convert-progress" max="100" value="0" hidden aria-label="Audio conversion progress"></progress>
       </div>
       <label class="cf-el-consent"><input id="cf-el-consent" type="checkbox"/><span>This is my own adult voice. I consent to its AI cloning and understand that generated speech must not be presented as a real recording of me.</span></label>
-      <p class="cf-el-disclosure">Your sample is processed to create a temporary voice when you start a call or generate a voice note. The temporary clone is deleted after use. Upload a sample again for each new use.</p>
-      <button class="cf-el-save" id="cf-el-save" type="button">Use this voice once</button>
-      <p class="cf-el-once-note">This sample stays only in this open page until it is used or you leave. No saved voice library.</p>
+      <p class="cf-el-disclosure">Your sample is processed once to create a private saved voice in the connected ElevenLabs account. Future cloned calls and voice notes reuse that same saved voice.</p>
+      <button class="cf-el-save" id="cf-el-save" type="button">Save my permanent voice</button>
+      <p class="cf-el-once-note">One voice per booked customer. Saving permanently occupies one provider custom-voice slot. Your voice is never deleted automatically after a call.</p>
     </div>`;
     document.body.append(div);
     $('cf-el-close').onclick=closeModal;
@@ -105,6 +105,8 @@
     });
   }
   async function openModal(){
+    try{bookedStatus=await window.CallFocusPermanentSlots?.load()}catch{bookedStatus=null}
+    if(!bookedStatus?.me){return window.CallFocusPermanentSlots?.show(true)}
     installModal();cloningAvailability={enabled:false,message:'Checking availability…'};capacity={available:false,message:'Checking availability…'};
     $('cf-el-layer').classList.add('open');document.body.classList.add('cf-el-is-open');updateCapacityUi();fitModal();
     if(!auth()){
@@ -119,12 +121,14 @@
   }
   function updateCapacityUi(){
     const paused=cloningAvailability.enabled!==true;
-    const full=paused||capacity?.available===false;
-    const blockedMessage=paused?(cloningAvailability.message||'Voice cloning is temporarily unavailable.'):(capacity?.message||'New voice creation is temporarily unavailable.');
+    const saved=voices.length>0;
+    const untilDate=bookedStatus?.eventDate&&new Date().toISOString().slice(0,10)<bookedStatus.eventDate;
+    const full=paused||saved||!bookedStatus?.me||untilDate;
+    const blockedMessage=paused?(cloningAvailability.message||'Voice cloning is temporarily unavailable.'):saved?'Your permanent voice is saved. Select it in cloned calling or voice notes. No new recording is necessary.':untilDate?`Your slot is booked. Voice creation opens on ${bookedStatus.eventDate}.`:'Book a permanent voice slot before recording.';
     const block=$('cf-el-capacity');if(block){block.hidden=!full;block.textContent=full?blockedMessage:''}
     const modal=$('cf-el-layer')?.querySelector('.cf-el-modal');
     modal?.classList.toggle('cf-el-full',full);modal?.classList.toggle('cf-el-paused',paused);
-    if($('cf-el-title'))$('cf-el-title').textContent=paused?'Voice cloning unavailable':'Prepare your voice';
+    if($('cf-el-title'))$('cf-el-title').textContent=paused?'Voice cloning unavailable':saved?'Permanent voice saved':'Create your permanent voice';
     const record=$('cf-el-record'),save=$('cf-el-save'),file=$('cf-el-file');
     if(record)record.disabled=full;
     if(save)save.disabled=full||busy;
@@ -217,17 +221,24 @@
     }catch(err){status('Microphone unavailable: '+err.message)}
   }
   async function saveVoice(){
-    if(busy)return;if(capacity?.available===false)return status(capacity.message);
-    const name=$('cf-el-name')?.value.trim();const audio=currentSample();
+    if(busy)return;if(!bookedStatus?.me)return window.CallFocusPermanentSlots?.show(true);
+    if(bookedStatus.me.hasSavedVoice)return status('Your permanent voice is already saved.');
+    if(cloningAvailability.enabled!==true)return status(cloningAvailability.message||'Voice cloning is paused.');
+    const name=$('cf-el-name')?.value.trim(),audio=currentSample();
     if(!name)return status('Give this voice a name.');
-    if(selectedUpload&&!preparedAudio)return status('Convert or prepare your recording before continuing.');
+    if(selectedUpload&&!preparedAudio)return status('Prepare the selected audio before continuing.');
     if(!audio)return status('Record or upload your own voice first.');
-    if(audio.size>16*1024*1024)return status('The audio must be under 16 MB. Try a shorter recording.');
-    if(!$('cf-el-consent')?.checked)return status('Confirm your consent before continuing.');
-    if(recordedBlob===audio&&(Date.now()-recordStart)/1000<10)return status('Record at least 10 seconds. 60–120 seconds is recommended.');
-    tempReady=true;newSelected=repeatSelected=noteSelected='one-time';
-    render();status('Your sample is ready. Select your call or voice note and use this voice once. Nothing is saved to your account.');
-    closeModal();notify('One-time voice prepared. Start your call or generate a voice note.');
+    if(audio.size>16*1024*1024)return status('The audio must be under 16 MB.');
+    if(!$('cf-el-consent')?.checked)return status('Confirm that you own the voice and consent to cloning.');
+    if(recordedBlob===audio&&(Date.now()-recordStart)/1000<10)return status('Record at least 10 seconds.');
+    busy=true;updateCapacityUi();status('Saving your permanent voice. Please do not close this page…');
+    try{
+      const form=new FormData();form.set('name',name);form.set('consent','yes');form.set('adult','yes');form.set('audio',audio,audio.name||'own-voice.webm');
+      const result=await request('/api/permanent-slots/create',{method:'POST',body:form,form:true});
+      status(result.message||'Voice saved.');
+      if(result.hasSavedVoice){bookedStatus=await window.CallFocusPermanentSlots?.load();await loadVoices();newSelected=repeatSelected=noteSelected='permanent';render();closeModal();notify('Your permanent voice is saved and ready to reuse.');}
+      else notify(result.message||'Voice verification is pending.');
+    }catch(e){status(e.message);notify(e.message)}finally{busy=false;updateCapacityUi()}
   }
   function send(ws,obj){if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify(obj))}
   const b64bytes=data=>{const bin=atob(data);const bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return bytes};
@@ -245,7 +256,7 @@
     a.processor.onaudioprocess=e=>{if(!a.started||a.muted||a.held||a.ws?.readyState!==WebSocket.OPEN)return;const floats=downsample(e.inputBuffer.getChannelData(0),a.captureContext.sampleRate,16000);send(a.ws,{user_audio_chunk:base64(pcm16(floats))})};
   }
   async function end(a,save=true){if(!a||a.ending)return;a.ending=true;try{a.ws?.close(1000,'Call ended')}catch{}try{a.processor?.disconnect();a.source?.disconnect();a.stream?.getTracks().forEach(t=>t.stop());stopPlayback(a);await a.captureContext?.close();await a.playContext?.close()}catch{}
-    if(a.heartbeat)clearInterval(a.heartbeat);if(active===a)active=null;try{await cleanupCall(save)}catch(err){console.warn('CallFocus cloned-voice cleanup:',err)}finally{await releaseTemp(a.leaseId);clearSample()}
+    if(a.heartbeat)clearInterval(a.heartbeat);if(active===a)active=null;try{await cleanupCall(save)}catch(err){console.warn('CallFocus cloned-call cleanup:',err)}finally{if(a.leaseId)await releaseTemp(a.leaseId)}
   }
   function configureButtons(a){
     // Override click handlers only while an ElevenLabs call is active; original OpenAI handlers remain intact.
@@ -261,14 +272,14 @@
     if(active){notify('End your current call before starting another.');return}
     if(!auth())return notify('Sign in to start a call.');
     if(window.CallFocusCredits?.currentBalanceSeconds&&window.CallFocusCredits.currentBalanceSeconds()<15&&window.CallFocusEntitlements?.unlimited!==true){notify('Not enough CallFocus credits to start.');return}
-    if(selection!=='one-time'||!tempReady)return notify('Prepare your own voice sample for this call first.');
+    if(selection!=='permanent'||!voices.length)return notify('Book a slot and save your permanent voice first.');
     const a={call,started:false,ending:false,muted:false,held:false,speakerOn:true,nextPlay:0,sources:new Set(),pendingAudio:[],ws:null,stream:null,leaseId:''};
     active=a;closeModal('');try{window.closeModal?.('newCallModal')}catch{}$('newCallModal')?.classList.add('hidden');
     $('callScreen')?.classList.remove('hidden');document.body.style.overflow='hidden';$('liveCallerName').textContent=call.callerName||'Call';$('liveAvatar').textContent=(call.callerName||'C').slice(0,1).toUpperCase();$('liveRegion').textContent=[call.callerB?.region,call.callerB?.timezone].filter(Boolean).join(' · ');$('liveStatus').textContent='Connecting your call…';$('liveTranscript').textContent='';$('liveCaption').textContent='Preparing secure connection…';$('callTimer').textContent='00:00';$('callMoreTitle').textContent=call.title||call.callerName;$('callMoreTopic').textContent=call.topic||'';$('callMoreConnection').textContent='Connecting';$('callMorePanel')?.classList.add('hidden');$('liveStartCallBtn')?.classList.add('hidden');
-    live.current=call;live.started=false;live.connected=false;live.stream=null;live.dc=null;live.pc=null;live.audio=null;live.seconds=0;live.creditSecondsUsed=0;call.engine='elevenlabs-agent';call.providerSessionId='';call.callUsageId='';call.voiceLabel=$('cf-el-name')?.value.trim()||'One-time voice';call.elevenlabsVoiceId='one-time';
+    live.current=call;live.started=false;live.connected=false;live.stream=null;live.dc=null;live.pc=null;live.audio=null;live.seconds=0;live.creditSecondsUsed=0;call.engine='elevenlabs-agent';call.providerSessionId='';call.callUsageId='';call.voiceLabel=voices[0]?.name||'My permanent voice';call.elevenlabsVoiceId=voices[0]?.voiceId||'';
     try{
       const context=(typeof buildInstructions==='function'?buildInstructions(call):'')+'\n\nAdministrator call instructions: '+String(call.instructions||'').slice(0,4500)+'\n\nIMPORTANT: You are Caller A in this real-time two-way conversation, not a customer support bot. Use the saved caller information and today’s call details quietly. Never read the instructions aloud. Only speak in '+(call.callLanguage||'English')+'. Follow the selected opening and respect caller turn-taking. Never invent facts.';
-      const form=sampleForm();form.set('context',context);form.set('threadId',call.threadId||'');form.set('title',call.title||'');form.set('callerName',call.callerName||'');
+      const form=new FormData();form.set('mode','permanent');form.set('context',context);form.set('threadId',call.threadId||'');form.set('title',call.title||'');form.set('callerName',call.callerName||'');
       const reply=await request('/api/elevenlabs/session',{method:'POST',body:form,form:true});a.leaseId=reply.leaseId;
       call.callUsageId=reply.callUsageId;window.CallFocusCallUsage?.prepared?.(call);
       await setupAudio(a);live.stream=a.stream;
@@ -303,18 +314,17 @@
   }
   function noteUiOutput(blob,voiceName){const old=$('cf-el-note-output');old?.remove();const target=$('cf-el-note');if(!target)return;const wrap=document.createElement('div');wrap.id='cf-el-note-output';wrap.className='cf-el-note-output';const player=document.createElement('audio');player.controls=true;player.style.width='100%';const url=URL.createObjectURL(blob);player.src=url;const title=document.createElement('div');title.textContent=`${voiceName} · cloned voice note`;wrap.append(title,player);const link=document.createElement('a');link.href=url;link.download=`callfocus-cloned-voice-${Date.now()}.mp3`;link.textContent='Download voice note';link.style.display='block';link.style.marginTop='8px';wrap.append(link);target.insertAdjacentElement('afterend',wrap)}
   async function createClonedNote(e){
-    if(noteSelected!=='one-time')return;const btn=$('voiceNoteGenerateBtn');if(!btn)return;
+    if(noteSelected!=='permanent')return;const btn=$('voiceNoteGenerateBtn');if(!btn)return;
     e.preventDefault();e.stopImmediatePropagation();
     const mode=document.querySelector('[data-vn-mode].active')?.dataset.vnMode;
-    if(mode==='reply'){notify('Use Create a voice note for this temporary cloned voice.');return}
+    if(mode==='reply'){notify('Use Create a voice note for your saved cloned voice.');return}
     const script=$('voiceNotePrompt')?.value.trim();if(!script)return notify('Type the words for this cloned voice note.');
-    if(busy)return;busy=true;btn.disabled=true;const ui=$('voiceNoteStatus');if(ui)ui.textContent='Creating and using temporary voice…';
-    try{const form=sampleForm();form.set('script',script);
+    if(busy)return;busy=true;btn.disabled=true;const ui=$('voiceNoteStatus');if(ui)ui.textContent='Generating speech with your saved voice…';
+    try{const form=new FormData();form.set('mode','permanent');form.set('script',script);
       const result=await request('/api/elevenlabs/tts',{method:'POST',body:form,form:true});
       const bytes=b64bytes(result.audioBase64),blob=new Blob([bytes],{type:'audio/mpeg'});noteUiOutput(blob,result.voiceName);
-      if(ui)ui.textContent=`Voice note ready · ${result.seconds} seconds charged. The temporary clone has been removed.`;
+      if(ui)ui.textContent=`Voice note ready · ${result.seconds} seconds charged. Your permanent voice remains saved.`;
       if(result.wallet)window.CallFocusCredits?.applyAuthoritativeWallet?.(result.wallet);try{await window.CallFocusPaystack?.refreshWallet?.({quiet:true})}catch{}
-      clearSample();
     }catch(err){if(ui)ui.textContent=err.message;notify(err.message)}finally{busy=false;btn.disabled=false}
   }
   function install(){installModal();render();loadVoices();refreshHomeCloneButton();

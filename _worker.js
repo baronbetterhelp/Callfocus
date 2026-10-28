@@ -1,3 +1,4 @@
+import {slotCustomer,slotAdmin,createSavedVoice} from './permanent-voice-slots-worker.js';
 import { elRequest, elCleanup, elAdminPurge, elAdminAvailability, elGetAvailability } from './elevenlabs-worker.js';
 import {resolveEarnReferral,affiliateLinkSignup,affiliateRecordPurchase,affiliateCustomerApi,affiliateAdminApi,affiliateEmailReview} from './affiliate-worker.js';
 const LIVE_VOICES = ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar','ripple','vesper','stone','meridian','beacon','cinder','tempo','quartz','willow','gleam','bossa','delta'];
@@ -6915,6 +6916,20 @@ export default {
     const url = new URL(request.url);
     const maintenance = await maybeMaintenanceResponse(request, env, url);
     if (maintenance) return maintenance;
+    if(url.pathname==='/api/permanent-slots/status'||url.pathname==='/api/permanent-slots/book'){
+      const limited=request.method==='POST'?await callFocusRateLimit(request,env,'permanent-slots-book',8,3600):null;
+      if(limited)return limited;
+      return safeCustomerRoute('permanent-slots',()=>slotCustomer(request,env,{auth:authenticatedCustomer,customerData:getCustomerDataForUpdate,normalizeWallet:normalizeServerWallet}));
+    }
+    if(url.pathname==='/api/permanent-slots/create'){
+      const limited=await callFocusRateLimit(request,env,'permanent-slots-create',3,3600);if(limited)return limited;
+      const availability=await elGetAvailability(env);if(!availability.enabled)return json({error:availability.message},503);
+      return safeCustomerRoute('permanent-slots-create',()=>createSavedVoice(request,env,{auth:authenticatedCustomer}));
+    }
+    if(url.pathname==='/api/admin/permanent-slots'){
+      if(!await adminAuthorized(request,env))return json({error:'Admin access required.'},401);
+      return safeCustomerRoute('permanent-slots-admin',()=>slotAdmin(request,env));
+    }
     if (url.pathname === '/api/voice-cloning-availability') { if (request.method !== 'GET') return json({error:'Method not allowed.'},405); return json(await elGetAvailability(env),200,{'Cache-Control':'no-store'}); }
     if (url.pathname === '/api/admin/voice-cloning-availability') { if (!await adminAuthorized(request, env)) return json({error:'Admin access required.'},401); return elAdminAvailability(request,env); }
     if (url.pathname === '/api/admin/elevenlabs/purge') { if (!await adminAuthorized(request, env)) return json({error:'Admin access required.'},401); return elAdminPurge(request,env); }
