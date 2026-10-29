@@ -524,9 +524,24 @@
           <label class="cf-clone-admin-toggle"><span><strong>Show booking announcement popup</strong><small>Show the announcement on every page refresh, for signed-in customers only. Never show it to visitors.</small></span><input id="cfSlot_popupEnabled" type="checkbox"></label>
           <label class="cf-clone-admin-toggle"><span><strong>Manually mark slots as filled</strong><small>Temporarily stop new bookings and show the Telegram full-slots notice even before capacity is reached.</small></span><input id="cfSlot_forceFull" type="checkbox"></label>
           <div class="cf-slot-admin-grid"><label>Maximum combined bookings<input id="cfSlot_slotLimit" type="number" min="1" max="160" value="60"><small>Booking availability follows your Admin quotas, not ElevenLabs storage. Actual voice creation still requires provider capacity.</small></label><label>Minimum available credits<input id="cfSlot_minimumCredits" type="number" min="0" max="1000000" step="100" value="1000"></label></div>
-          <div class="cf-clone-admin-toggle" style="margin-top:14px;display:block"><strong>Permanent voice provider pools</strong><small>Account 1 fills first. Account 2 takes new bookings automatically once Account 1 reaches its Admin booking quota. Each user stays assigned to one provider for saved voice, calls and notes.</small></div>
+          <div class="cf-clone-admin-toggle" style="margin-top:14px;display:block"><strong>Permanent voice provider pools</strong><small>Account 1 fills first, followed by Account 2 and then Account 3, when each enabled account reaches its Admin quota. Each user stays assigned to one provider for saved voice, calls and notes.</small></div>
           <div class="cf-slot-admin-grid"><label>Account 1 booking quota<input id="cfSlot_primaryLimit" type="number" min="1" max="160" value="30"></label><label>Account 2 booking quota<input id="cfSlot_secondaryLimit" type="number" min="1" max="160" value="30"></label></div>
-          <label class="cf-clone-admin-toggle"><span><strong>Enable Account 2 overflow</strong><small>When enabled, new reservations use Account 2 once Account 1 reaches its admin booking quota. Add Account 2 credentials before customers create voices. Existing assignments never change.</small></span><input id="cfSlot_secondaryEnabled" type="checkbox"></label>
+          <label class="cf-clone-admin-toggle"><span><strong>Accept NEW bookings in Account 1</strong><small>Turn off when Account 1 is full. Existing saved voices and reservations remain usable. Useful after moving uncreated bookings to Account 3.</small></span><input id="cfSlot_primaryAcceptNew" type="checkbox" checked></label>
+          <label class="cf-clone-admin-toggle"><span><strong>Accept NEW bookings in Account 2</strong><small>Turn off if Account 2 should stop receiving new reservations while preserving existing users and voice access.</small></span><input id="cfSlot_secondaryAcceptNew" type="checkbox" checked></label>
+          <label class="cf-clone-admin-toggle"><span><strong>Enable Account 2 overflow</strong><small>New reservations can use Account 2 after Account 1 fills. Existing saved voices stay on their current account.</small></span><input id="cfSlot_secondaryEnabled" type="checkbox"></label>
+          <div class="cf-slot-admin-grid"><label>Account 3 booking quota<input id="cfSlot_tertiaryLimit" type="number" min="1" max="160" value="30"></label></div>
+          <label class="cf-clone-admin-toggle"><span><strong>Enable Account 3 overflow</strong><small>Account 3 receives new bookings after earlier enabled accounts reach their admin quotas. Configure and verify its separate paid ElevenLabs API key and Agent ID first.</small></span><input id="cfSlot_tertiaryEnabled" type="checkbox"></label>
+          <div class="cf-slot-admin-migrate" style="margin:18px 0;padding:16px;border:1px solid #d7e8df;border-radius:18px">
+            <strong style="display:block;margin-bottom:6px">Move pending reservations to Account 3</strong>
+            <p class="admin-panel-copy">Only bookings without a created voice can move. No saved voices, active creation attempts or verification requests will be touched. This action is separate from enabling overflow.</p>
+            <div class="cf-slot-admin-grid">
+              <label>Move from<select id="cfSlotMoveFrom"><option value="primary">Account 1</option><option value="secondary">Account 2</option></select></label>
+              <label>Number of bookings<input id="cfSlotMoveCount" type="number" min="1" max="30" value="10"></label>
+            </div>
+            <label>Confirmation<input id="cfSlotMoveConfirm" type="text" autocomplete="off" placeholder="MOVE UNCREATED VOICES"></label>
+            <button class="btn btn-ghost" type="button" id="cfSlotMoveBtn">Move eligible bookings</button>
+            <p id="cfSlotMoveStatus" class="admin-panel-copy" role="status" aria-live="polite"></p>
+          </div>
           <p class="admin-panel-copy" id="cfSlotPools" role="status">Provider account details load when you refresh bookings.</p>
           <div class="cf-slot-admin-grid">
             <label>Booking opens (Nigeria time)<input id="cfSlot_bookingOpensAt" type="datetime-local"><small>New reservations are blocked before this time.</small></label>
@@ -655,6 +670,6 @@
   <div class="toast hidden" id="toast"></div>
   <script src="/admin.js?v=16.43-email-validation"></script><script src="/admin-video.js?v=16.51-price-persistence"></script><script src="/cf-controls-admin.js?v=16.24"></script>
 <script src="/cf-temp-voice-admin.js?v=16.34"></script>
-<script src="/cf-clone-availability-admin.js?v=16.44"></script><script src="/permanent-slots-admin.js?v=16.53"></script>
+<script src="/cf-clone-availability-admin.js?v=16.44"></script><script src="/permanent-slots-admin.js?v=16.54"></script>
 <script src="/affiliate-admin.js?v=16.37"></script></body>
 </html>
