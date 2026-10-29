@@ -7170,7 +7170,8 @@ export default {
       '/privacy': '/privacy.html',
       '/terms': '/terms.html',
       '/support': '/support.html',
-      '/about': '/about.html'
+      '/about': '/about.html',
+      '/features': '/features.html'
     };
     const cleanPath = url.pathname === '/' ? '/' : url.pathname.replace(/\/+$/, '');
     if (request.method === 'GET' && pageMap[cleanPath]) {

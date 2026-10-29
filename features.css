@@ -1,0 +1,25 @@
+/* CallFocus V16.55 — public feature directory only. No call, admin, or customer layout overrides. */
+.cf-public-services{padding:clamp(42px,6vw,84px) 0;background:linear-gradient(180deg,#f6faf8,#edf7f3);border-top:1px solid rgba(29,110,92,.11);border-bottom:1px solid rgba(29,110,92,.1)}
+.cf-public-services-head{max-width:860px}.cf-public-services-head h2,.cf-feature-directory-head h2,.cf-feature-faq h2,.cf-feature-explainer h2{font-family:Manrope,DM Sans,sans-serif;color:#143d35;letter-spacing:-.045em;line-height:1.1;font-size:clamp(28px,4.2vw,48px);margin:12px 0 16px}
+.cf-public-services-head>p,.cf-feature-directory-head>p{max-width:790px;color:#5f7971;line-height:1.65;font-size:17px}
+.cf-public-services-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:30px 0 24px}
+.cf-public-services-grid article{border:1px solid rgba(35,105,93,.14);border-radius:22px;background:#fff;padding:24px;box-shadow:0 10px 35px rgba(17,70,57,.035)}
+.cf-public-services-grid h3{font-size:19px;line-height:1.3;color:#14483f;margin:0 0 10px}
+.cf-public-services-grid p{margin:0;color:#647d76;line-height:1.65}
+.cf-public-service-cta,.cf-public-features-link{display:inline-flex;align-items:center;gap:12px;color:#136957;font-weight:800;text-underline-offset:4px;margin-top:16px}
+.cf-public-features-link{margin-left:14px}
+.cf-features-page .cf-about-hero{padding:clamp(50px,9vw,110px) 0 58px}.cf-features-page .cf-about-hero h1{max-width:900px}
+.cf-service-pills{display:flex;flex-wrap:wrap;gap:10px;margin-top:25px}.cf-service-pills span{background:#fff;border:1px solid rgba(24,107,90,.15);padding:10px 16px;border-radius:999px;color:#266c5b;font-size:13px;font-weight:750}
+.cf-feature-directory{padding:70px 0 76px}.cf-feature-directory-head{max-width:950px;margin-bottom:34px}
+.cf-services-directory-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.cf-service-card{background:#fff;border:1px solid rgba(24,104,89,.13);box-shadow:0 18px 48px rgba(13,63,50,.045);border-radius:25px;padding:26px;display:flex;flex-direction:column;scroll-margin-top:28px}
+.cf-service-type{align-self:flex-start;display:inline-flex;border-radius:99px;padding:8px 12px;background:#eaf5f1;color:#22705f;font-size:11px;font-weight:850;letter-spacing:.065em;text-transform:uppercase}
+.cf-service-card h3{font-size:22px;line-height:1.2;letter-spacing:-.025em;color:#183f37;margin:23px 0 9px}
+.cf-service-card p{margin:0 0 16px;color:#627c74;line-height:1.68;flex:1}
+.cf-service-card a{color:#136b59;font-weight:800;display:inline-flex;gap:8px;align-items:center;margin-top:4px;align-self:flex-start;text-underline-offset:4px}
+.cf-feature-explainer{padding:64px 0;background:linear-gradient(140deg,#16483d,#0e332c);color:#fff}
+.cf-feature-explainer-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:40px}.cf-feature-explainer .section-eyebrow{color:#9ce2cc}.cf-feature-explainer h2{color:#fff}.cf-feature-explainer p{color:#c3dcd4;line-height:1.75;font-size:16px}
+.cf-feature-faq{padding:66px 0}.cf-feature-faq-inner{max-width:880px}.cf-feature-faq details{background:white;border:1px solid rgba(30,102,86,.16);border-radius:16px;padding:0 22px;margin-bottom:10px}.cf-feature-faq summary{cursor:pointer;color:#17483b;font-size:17px;font-weight:800;padding:18px 0}.cf-feature-faq details p{color:#657c75;line-height:1.65;margin:0 0 19px}
+.cf-feature-bottom{padding:46px 0 74px;text-align:center;background:#eef6f2}.cf-feature-bottom h2{font-family:Manrope,DM Sans,sans-serif;font-size:35px;letter-spacing:-.045em;color:#124437;margin:0 0 10px}.cf-feature-bottom p{color:#647d76;margin:0 0 22px}
+@media(max-width:960px){.cf-services-directory-grid,.cf-public-services-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.cf-public-services{padding:38px 0}.cf-public-services-grid,.cf-services-directory-grid,.cf-feature-explainer-grid{grid-template-columns:1fr;gap:12px}.cf-public-services-grid{margin:23px 0 12px}.cf-public-services-grid article{padding:21px;border-radius:18px}.cf-public-features-link{margin-left:0;display:flex}.cf-service-card{padding:22px;border-radius:20px}.cf-service-card h3{font-size:21px}.cf-feature-directory{padding:45px 0 55px}.cf-feature-explainer{padding:40px 0}.cf-feature-faq{padding:44px 0}.cf-features-page .cf-about-hero h1{font-size:clamp(38px,11vw,50px)}.cf-service-pills{gap:7px}.cf-service-pills span{font-size:12px;padding:8px 11px}}

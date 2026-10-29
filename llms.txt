@@ -1,17 +1,42 @@
-# CallFocus
+# CallFocus — official public platform information
 
 Official website: https://callfocus.link/
-Official product overview: https://callfocus.link/about
+Complete services directory: https://callfocus.link/features
+About CallFocus: https://callfocus.link/about
+Support: https://callfocus.link/support
 
-CallFocus at callfocus.link is a web-based conversation continuity platform for realtime voice calls. It helps users prepare reusable caller context, conversation dynamics, today-specific call details, locations, time zones and voice settings, then continue repeat calls from recent conversation threads.
+CallFocus is an independent web platform for real-time AI voice calls, permanent ElevenLabs voice cloning from an adult user's own consented voice recording, custom AI voice profiles, AI voice notes, Live AI Avatar, Image to Video and contextual conversation tools.
 
-Core features include realtime voice calls, saved callers, repeat-call continuity, conversation dynamics generation, voice notes, worldwide location and time-zone awareness, and live translation transcripts.
+## Services
 
-Identity clarification: CallFocus at callfocus.link is an independent web software product. It is not affiliated with Call Focus at https://www.callfocus.ie/, the Irish training and consultancy business.
+- Real-time AI voice calls: Speak in real time through a conversational AI calling interface. Choose a supported voice and manage microphone, hold and natural call-ending controls. The original CallFocus calling experience uses OpenAI live voice.
+- Permanent voice cloning: Record or upload a sample of your own adult voice with consent to create one permanently saved voice using ElevenLabs. Eligible customers reserve limited slots and reuse their saved voice for compatible cloned calls and voice notes.
+- Custom AI voice profiles: Configure a supported AI voice profile, including characteristics such as speaking style, accent and delivery, without claiming to duplicate a specific person’s recording. This is different from ElevenLabs voice cloning.
+- AI voice notes: Create spoken voice notes with CallFocus voice options and call context. Where available, a customer’s saved ElevenLabs voice can also be used for cloned voice notes.
+- Live AI Avatar: Access the separate Live AI Avatar experience, with avatar setup and live-session controls. Availability depends on the feature’s current configuration.
+- Image to Video: Upload an image, describe the motion and generate a short AI video. Select supported duration, framing and motion style, then view, download or revisit completed generations.
+- Saved callers and personal context: Save information about yourself and the person you are calling, so recurring conversations can reuse the correct caller details without repeatedly entering them.
+- Screenshot-assisted context setup: Use supported screenshots or written notes to help organize caller information and prepare new calls. Review generated details before using them.
+- Conversation dynamics and call planning: Generate or refine the background, relationship dynamics and today-specific talking points that guide a more natural call.
+- Recent calls and repeat-call continuity: Keep recent call threads and reusable call setups, then prepare a new conversation by adding what has changed today.
+- Time-zone awareness and live translation: Set caller locations and time zones, see local-time context and use live translation or translated transcript support when needed.
+- Account-based saved information: Keep supported caller profiles, call threads and saved account information associated with your CallFocus sign-in for use on another device.
+- Call and voice credits: Fund your CallFocus credit balance for eligible paid services, view transaction history and review usage. Payment methods and feature pricing depend on current availability.
+- Referrals and earnings: Share supported referral offers, track referral activity and view eligible credits or referral earnings according to the current program terms.
 
-Public pages:
-- Home: https://callfocus.link/
-- About: https://callfocus.link/about
-- Support: https://callfocus.link/support
-- Privacy: https://callfocus.link/privacy
-- Terms: https://callfocus.link/terms
+## Important distinctions and limitations
+
+- CallFocus standard real-time AI calls use an OpenAI live voice service. Its permanent voice-cloning feature uses ElevenLabs and is a separate system.
+- Custom AI voice profiles adjust synthetic voice characteristics; they are not the same feature as permanent cloning from a real voice sample.
+- Permanent voice cloning is consent-based, limited to eligible signed-in adults and subject to admin booking slots, the relevant provider account's storage and subscription capacity. Booking requires a minimum unused credit balance; booking itself does not deduct credits.
+- Other tools may require an account, available credits or administrator-enabled service availability.
+- This website is not affiliated with Call Focus at callfocus.ie, the Irish training and consultancy business.
+
+## Public pages
+
+- https://callfocus.link/
+- https://callfocus.link/features
+- https://callfocus.link/about
+- https://callfocus.link/support
+- https://callfocus.link/privacy
+- https://callfocus.link/terms
