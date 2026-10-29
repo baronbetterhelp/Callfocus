@@ -8,13 +8,15 @@ async function settings(env){if(!env.CALLFOCUS_CONFIG)throw Error('VOICE_SETTING
 async function row(db,userId){return db.prepare('SELECT user_id,booked_at,state,voice_id,voice_name,created_at,provider_pool FROM cf_permanent_voice_slots WHERE user_id=?').bind(userId).first()}
 async function tally(db){const r=await db.prepare('SELECT COUNT(*) AS n FROM cf_permanent_voice_slots').first();return Number(r?.n||0)}
 async function poolCounts(db){const r=await db.prepare("SELECT provider_pool,COUNT(*) n,SUM(CASE WHEN voice_id IS NOT NULL THEN 1 ELSE 0 END) created FROM cf_permanent_voice_slots GROUP BY provider_pool").all();const result={primary:{reserved:0,created:0},secondary:{reserved:0,created:0}};for(const x of (r.results||[])){if(result[x.provider_pool])result[x.provider_pool]={reserved:Number(x.n||0),created:Number(x.created||0)}}return result}
-// Only explicitly provisioned, paid accounts may be configured here. Never mix voice IDs across accounts.
+// Each booking keeps its assigned account permanently. Booking capacity is administered by CallFocus; provider capacity is enforced separately at creation time.
 const poolKey=(env,pool)=>String(pool==='secondary'?env.ELEVENLABS_PERMANENT_2_API_KEY||'':env.ELEVENLABS_PERMANENT_API_KEY||'').trim();
 const poolAgent=(env,pool)=>String(pool==='secondary'?env.ELEVENLABS_PERMANENT_2_AGENT_ID||'':env.ELEVENLABS_PERMANENT_AGENT_ID||'').trim();
 const poolLimit=(s,pool)=>pool==='secondary'?s.secondaryLimit:s.primaryLimit;
 const effectiveLimit=s=>Math.min(s.slotLimit,s.primaryLimit+(s.secondaryEnabled?s.secondaryLimit:0));
 async function subscription(env,pool){const key=poolKey(env,pool);if(!key)return {ok:false,error:'API key not configured.'};try{const r=await fetch('https://api.elevenlabs.io/v1/user/subscription',{headers:{'xi-api-key':key},signal:AbortSignal.timeout(10000)});if(!r.ok)return {ok:false,error:'Subscription check failed (HTTP '+r.status+').'};const d=await r.json();return {ok:true,tier:String(d.tier||''),voiceSlotsUsed:Number(d.voice_slots_used??0),voiceSlotLimit:Number(d.voice_limit??0),monthlyCreationUsed:d.voice_add_edit_counter??null,monthlyCreationLimit:d.max_voice_add_edits??null,canClone:d.can_use_instant_voice_cloning!==false,status:d.status||''}}catch{return {ok:false,error:'Subscription service unavailable.'}}}
-function availablePoolSlots(s,counts,pool,provider){if(!provider?.ok||!provider.canClone||['canceled','expired'].includes(provider.status))return 0;const c=counts[pool];const providerFree=Math.max(0,provider.voiceSlotLimit-provider.voiceSlotsUsed-(c.reserved-c.created));return Math.max(0,Math.min(poolLimit(s,pool)-c.reserved,providerFree));}
+// Never use provider-reported storage or subscription availability to close admin-authorized BOOKINGS.
+// Reserved voices can be created later; at creation time the actual ElevenLabs account limits are enforced.
+function adminPoolRemaining(s,counts,pool){return Math.max(0,poolLimit(s,pool)-counts[pool].reserved)}
 function reservationTotals(s,counts){const cap=effectiveLimit(s);const reserved=counts.primary.reserved+counts.secondary.reserved;return {capacity:cap,reserved,remaining:Math.max(0,cap-reserved)}}
 const safeText=(s,max)=>String(s||'').trim().slice(0,max);
 // These admin fields are Lagos-local wall-clock times, not browser-local or UTC.
@@ -36,8 +38,8 @@ function bookingPhase(s,nowMs=Date.now()){
 function parseSettings(x,previous){
  if(typeof x?.enabled!=='boolean'||typeof x?.popupEnabled!=='boolean'||typeof x?.forceFull!=='boolean')throw Error('Select both availability switches.');
  const n=Number(x.slotLimit),minimumCredits=Number(x.minimumCredits),primaryLimit=Number(x.primaryLimit),secondaryLimit=Number(x.secondaryLimit);
- if(!Number.isSafeInteger(n)||n<1||n>160)throw Error('Slot capacity must be between 1 and 160. The subscribed ElevenLabs plan must support that many saved voices.');
- if(!Number.isSafeInteger(primaryLimit)||primaryLimit<1||primaryLimit>160||!Number.isSafeInteger(secondaryLimit)||secondaryLimit<1||secondaryLimit>160)throw Error('Each account quota must be between 1 and 160, and must not exceed its provider subscription.');
+ if(!Number.isSafeInteger(n)||n<1||n>160)throw Error('Slot capacity must be between 1 and 160.');
+ if(!Number.isSafeInteger(primaryLimit)||primaryLimit<1||primaryLimit>160||!Number.isSafeInteger(secondaryLimit)||secondaryLimit<1||secondaryLimit>160)throw Error('Each account booking quota must be between 1 and 160.');
  if(typeof x.secondaryEnabled!=='boolean')throw Error('Select whether the second voice account is enabled.');
  if(!Number.isSafeInteger(minimumCredits)||minimumCredits<0||minimumCredits>1000000)throw Error('Minimum available credits must be between 0 and 1,000,000.');
  const eventDate=safeText(x.eventDate,10);if(eventDate&&!/^\d{4}-\d{2}-\d{2}$/.test(eventDate))throw Error('Enter a valid event date.');
@@ -48,7 +50,7 @@ function parseSettings(x,previous){
  for(const k of ['headline','message','fullMessage'])if(!safeText(x[k],k==='headline'?100:350))throw Error('Complete all customer-facing messages.');
  return {...DEF,enabled:x.enabled,popupEnabled:x.popupEnabled,forceFull:x.forceFull,slotLimit:n,primaryLimit,secondaryLimit,secondaryEnabled:x.secondaryEnabled,minimumCredits,eventDate,bookingOpensAt,bookingClosesAt,headline:safeText(x.headline,100),message:safeText(x.message,350),fullMessage:safeText(x.fullMessage,350),telegramUrl,revision:previous.revision+1};
 }
-function publicView(s,count,record,counts=null){const phase=bookingPhase(s);const capacity=effectiveLimit(s);return {ok:true,enabled:s.enabled,popupEnabled:s.popupEnabled,slotLimit:capacity,booked:count,remaining:Math.max(0,capacity-count),full:s.forceFull===true||count>=capacity,minimumCredits:s.minimumCredits,eventDate:s.eventDate,bookingOpensAt:s.bookingOpensAt||'',bookingClosesAt:s.bookingClosesAt||'',bookingPhase:phase,canBookNow:s.enabled&&phase==='open'&&!s.forceFull&&count<s.slotLimit,headline:s.headline,message:s.message,fullMessage:s.fullMessage,telegramUrl:s.telegramUrl,revision:s.revision,me:record?{state:record.state,bookedAt:record.booked_at,voiceName:record.voice_name||null,hasSavedVoice:record.state==='ready'}:null}}
+function publicView(s,count,record,counts=null){const phase=bookingPhase(s);const capacity=effectiveLimit(s);return {ok:true,enabled:s.enabled,popupEnabled:s.popupEnabled,slotLimit:capacity,booked:count,remaining:Math.max(0,capacity-count),full:s.forceFull===true||count>=capacity,minimumCredits:s.minimumCredits,eventDate:s.eventDate,bookingOpensAt:s.bookingOpensAt||'',bookingClosesAt:s.bookingClosesAt||'',bookingPhase:phase,canBookNow:s.enabled&&phase==='open'&&!s.forceFull&&count<capacity,headline:s.headline,message:s.message,fullMessage:s.fullMessage,telegramUrl:s.telegramUrl,revision:s.revision,me:record?{state:record.state,bookedAt:record.booked_at,voiceName:record.voice_name||null,hasSavedVoice:record.state==='ready'}:null}}
 async function slotVoiceForUser(env,userId){const v=await row(sql(env),userId);return v?.state==='ready'&&/^[A-Za-z0-9_-]{8,120}$/.test(String(v.voice_id||''))?{voiceId:v.voice_id,name:v.voice_name||'My permanent voice',persistent:true,providerPool:v.provider_pool||'primary'}:null}
 // CallFocus stores the spendable wallet as seconds. Its shared rate is
 // 100 credits per minute, or 0.6 seconds per credit. Booking is free; this
@@ -86,30 +88,22 @@ async function customer(req,env,helpers){
  try{
   if(bookingPhase(s)!=='open')return err('The booking window has closed or has not opened yet.',403);
   const now=new Date().toISOString();
-  // One atomic INSERT statement: SQLite/D1 serializes writers, count check prevents overbooking, PK enforces one slot/customer.
-  // Account 1 is filled first; account 2 begins ONLY when enabled and its own paid subscription is verified.
-  // Provider-free capacity is reduced by already reserved, not-yet-created voices.
-  // The database INSERT rechecks pool counts atomically so concurrent bookings cannot claim the last slot twice.
-  const primary=await subscription(env,'primary');
-  const secondary=s.secondaryEnabled&&poolKey(env,'secondary')&&poolAgent(env,'secondary')?await subscription(env,'secondary'):null;
-  // Never silently move customers from a temporarily unreachable primary to the other account.
-  // Overflow begins only when primary reservations have filled its configured quota,
-  // or when a successful live provider check confirms no further primary capacity.
-  const primaryExhausted=counts.primary.reserved>=s.primaryLimit||(primary.ok&&availablePoolSlots(s,counts,'primary',primary)===0);
-  if(!primary.ok&&!primaryExhausted)return err('The primary voice account cannot be verified right now. Bookings are temporarily paused.',503);
-  const choices=['primary',...(s.secondaryEnabled&&primaryExhausted?['secondary']:[])];
+  // Bookings follow ONLY administrator-selected total and per-account quotas.
+  // The provider's voice-storage/monthly-operation limits are checked when a voice is CREATED,
+  // not when a customer reserves a slot. A reservation never promises immediate creation.
+  // Every insert atomically checks the total and the assigned account's own quota.
+  const choices=['primary',...(s.secondaryEnabled?['secondary']:[])];
   let booked=null,created=false;
   for(const pool of choices){
-    const provider=pool==='primary'?primary:secondary;
-    if(!availablePoolSlots(s,counts,pool,provider))continue;
+    if(!adminPoolRemaining(s,counts,pool))continue;
     const result=await db.prepare(`INSERT INTO cf_permanent_voice_slots(user_id,booked_at,state,updated_at,provider_pool)
       SELECT ?,?,'booked',?,? WHERE
         (SELECT COUNT(*) FROM cf_permanent_voice_slots) < ?
         AND (SELECT COUNT(*) FROM cf_permanent_voice_slots WHERE provider_pool=?) < ?
-        ON CONFLICT(user_id) DO NOTHING`).bind(u.id,now,now,pool,effectiveLimit(s),pool,Math.min(poolLimit(s,pool),Math.max(0,provider.voiceSlotLimit-provider.voiceSlotsUsed+counts[pool].created))).run();
+        ON CONFLICT(user_id) DO NOTHING`).bind(u.id,now,now,pool,effectiveLimit(s),pool,poolLimit(s,pool)).run();
     booked=await row(db,u.id);if(booked){created=!!result.meta?.changes;break;}
   }
-  if(!booked)return err('All currently connected voice-account slots are reserved or unavailable. Join the Telegram channel for the next opening.',409);
+  if(!booked)return err(s.fullMessage,409);
   return j({...publicView(s,await tally(db),booked),alreadyBooked:!created});
  }catch(e){console.warn('Voice slot booking failed',String(e.message||e).slice(0,130));return err('Could not reserve a slot. Please try again.',503)}
 }
@@ -123,7 +117,7 @@ async function admin(req,env){
   const primary=await subscription(env,'primary');
   const secondary=await subscription(env,'secondary');
   const provider={apiKeyConfigured:!!poolKey(env,'primary'),agentConfigured:!!poolAgent(env,'primary'),connected:primary.ok,...(primary.ok?{tier:primary.tier,voiceSlotsUsed:primary.voiceSlotsUsed,voiceSlotLimit:primary.voiceSlotLimit,monthlyCreationUsed:primary.monthlyCreationUsed,monthlyCreationLimit:primary.monthlyCreationLimit}:{error:primary.error})};
-  const pools={primary:{...primary,apiKeyConfigured:!!poolKey(env,'primary'),agentConfigured:!!poolAgent(env,'primary'),reserved:counts.primary.reserved,created:counts.primary.created,quota:s.primaryLimit,remaining:availablePoolSlots(s,counts,'primary',primary)},secondary:{...secondary,apiKeyConfigured:!!poolKey(env,'secondary'),agentConfigured:!!poolAgent(env,'secondary'),enabled:s.secondaryEnabled,reserved:counts.secondary.reserved,created:counts.secondary.created,quota:s.secondaryLimit,remaining:s.secondaryEnabled?availablePoolSlots(s,counts,'secondary',secondary):0}};
+  const pools={primary:{...primary,apiKeyConfigured:!!poolKey(env,'primary'),agentConfigured:!!poolAgent(env,'primary'),reserved:counts.primary.reserved,created:counts.primary.created,quota:s.primaryLimit,remaining:adminPoolRemaining(s,counts,'primary')},secondary:{...secondary,apiKeyConfigured:!!poolKey(env,'secondary'),agentConfigured:!!poolAgent(env,'secondary'),enabled:s.secondaryEnabled,reserved:counts.secondary.reserved,created:counts.secondary.created,quota:s.secondaryLimit,remaining:s.secondaryEnabled?adminPoolRemaining(s,counts,'secondary'):0}};
   return j({ok:true,settings:s,booked:count,remaining:Math.max(0,effectiveLimit(s)-count),effectiveLimit:effectiveLimit(s),provider,pools,bookings:rows.results||[]});
  }
  let body;try{body=await req.json()}catch{return err('Invalid settings JSON.')}
@@ -132,8 +126,9 @@ async function admin(req,env){
  if(next.slotLimit<count||effectiveLimit(next)<count)return err(`You have ${count} occupied reservations. Total capacity cannot be reduced below that number.`,409);
  if(next.primaryLimit<counts.primary.reserved||next.secondaryLimit<counts.secondary.reserved)return err('An account quota cannot be reduced below the number of reservations already assigned to that account.',409);
  if(!next.secondaryEnabled&&counts.secondary.reserved>0)return err('Account 2 already has reservations. It must remain enabled so these customers are not stranded.',409);
- if(next.secondaryEnabled){if(!poolKey(env,'secondary')||!poolAgent(env,'secondary'))return err('Set both encrypted Account 2 API key and agent ID before enabling overflow.',409);
- const cap=await subscription(env,'secondary');if(!cap.ok||!cap.canClone||cap.voiceSlotLimit<next.secondaryLimit)return err('Account 2 has not passed subscription verification, or its provider slot limit is below the configured quota.',409)}
+ // Admin controls reservation availability; subscription credentials are required only for VOICE CREATION.
+ // Admin may enable reservations ahead of configuring an account. Dashboard reports any
+ // disconnected account visibly; existing bookings retain their original provider_pool.
  try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next));return j({ok:true,settings:next,booked:count,remaining:Math.max(0,effectiveLimit(next)-count)})}catch{return err('Could not save settings.',503)}
 }
 
@@ -158,7 +153,7 @@ async function createSavedVoice(req,env,helpers){
  // Lightweight file signature validation rather than trusting extensions.
  const head=new Uint8Array(await f.slice(0,16).arrayBuffer());const text=(start,len)=>String.fromCharCode(...head.slice(start,start+len));
  if(!(text(0,4)==='RIFF'||text(0,4)==='OggS'||text(0,4)==='fLaC'||text(0,3)==='ID3'||text(4,4)==='ftyp'||head[0]===0x1a&&head[1]===0x45||head[0]===0xff))return err('Unsupported voice recording format. Upload MP3, M4A, WEBM, WAV, OGG or FLAC.');
- // Enforce provider physical voice capacity and monthly add/edit allowance before claiming booking.
+ // Provider physical storage and monthly operation limits apply ONLY to creating a saved voice, not to booking a place.
  let cap;try{const r=await fetch('https://api.elevenlabs.io/v1/user/subscription',{headers:{'xi-api-key':key},signal:AbortSignal.timeout(10000)});if(!r.ok)return err('Could not check the assigned voice-account subscription (HTTP '+r.status+'). Cloning is paused.',503);cap=await r.json()}catch{return err('Unable to verify your assigned voice-account capacity. Try again later.',503)}
  if(cap.can_use_instant_voice_cloning===false)return err('Your subscribed provider plan does not allow instant voice cloning.',409);
  if(Number.isFinite(Number(cap.voice_limit))&&Number.isFinite(Number(cap.voice_slots_used))&&Number(cap.voice_slots_used)>=Number(cap.voice_limit))return err('All provider voice-storage slots are occupied.',409);
