@@ -2,7 +2,7 @@
 
 ## Scope (public-facing only)
 
-Adds a crawlable `/features` page and accurate service descriptions in the homepage, About page, sitemap, schema and llms.txt. No changes to payments, wallet, authentication, referral logic, voice prompts, AI call engines, ElevenLabs integrations, admin controls or customer data.
+Adds a crawlable `/features` page and accurate service descriptions in the homepage, About page, sitemap, schema and llms.txt. No changes to payments, wallet, authentication, referral logic, voice prompts, AI call engines, voice-cloning integrations, admin controls or customer data.
 
 ### Modified files
 - `index.html` — public service overview, About/FAQ updates, home structured data, metadata and navigation link
@@ -26,4 +26,4 @@ Adds a crawlable `/features` page and accurate service descriptions in the homep
 This makes service facts available in visible public HTML and crawler metadata. Google and Gemini choose independently what to crawl/index and how to answer; instant or guaranteed AI discovery is not possible. `llms.txt` is informational and is not guaranteed to be consumed by any AI engine.
 
 ### Safety
-No SQL migration. Do not run old migration SQL. Existing original OpenAI calls, ElevenLabs voices, payments, accounts, and admin features remain unchanged.
+No SQL migration. Do not run old migration SQL. Existing original original live AI calls, saved cloned voices, payments, accounts, and admin features remain unchanged.

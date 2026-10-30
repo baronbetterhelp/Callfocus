@@ -5,14 +5,14 @@ Complete services directory: https://callfocus.link/features
 About CallFocus: https://callfocus.link/about
 Support: https://callfocus.link/support
 
-CallFocus is an independent web platform for real-time AI voice calls, permanent ElevenLabs voice cloning from an adult user's own consented voice recording, custom AI voice profiles, AI voice notes, Live AI Avatar, Image to Video and contextual conversation tools.
+CallFocus is an independent web platform for real-time AI voice calls, permanent voice cloning from an adult user's consented recording, custom AI voice profiles, AI voice notes, Live AI Avatar, Image to Video and contextual conversation tools.
 
 ## Services
 
-- Real-time AI voice calls: Speak in real time through a conversational AI calling interface. Choose a supported voice and manage microphone, hold and natural call-ending controls. The original CallFocus calling experience uses OpenAI live voice.
-- Permanent voice cloning: Record or upload a sample of your own adult voice with consent to create one permanently saved voice using ElevenLabs. Eligible customers reserve limited slots and reuse their saved voice for compatible cloned calls and voice notes.
-- Custom AI voice profiles: Configure a supported AI voice profile, including characteristics such as speaking style, accent and delivery, without claiming to duplicate a specific person’s recording. This is different from ElevenLabs voice cloning.
-- AI voice notes: Create spoken voice notes with CallFocus voice options and call context. Where available, a customer’s saved ElevenLabs voice can also be used for cloned voice notes.
+- Real-time AI voice calls: Speak in real time through a conversational AI calling interface. Choose a supported voice and manage microphone, hold and natural call-ending controls. CallFocus offers real-time AI voice interaction.
+- Permanent voice cloning: Record or upload a sample of your own adult voice with consent to create one permanently saved voice through CallFocus. Eligible customers reserve limited slots and reuse their saved voice for compatible cloned calls and voice notes.
+- Custom AI voice profiles: Configure a supported AI voice profile, including characteristics such as speaking style, accent and delivery, without claiming to duplicate a specific person’s recording. This is different from permanent voice cloning based on a person’s own recording.
+- AI voice notes: Create spoken voice notes with CallFocus voice options and call context. Where available, a customer’s saved cloned voice can also be used for cloned voice notes.
 - Live AI Avatar: Access the separate Live AI Avatar experience, with avatar setup and live-session controls. Availability depends on the feature’s current configuration.
 - Image to Video: Upload an image, describe the motion and generate a short AI video. Select supported duration, framing and motion style, then view, download or revisit completed generations.
 - Saved callers and personal context: Save information about yourself and the person you are calling, so recurring conversations can reuse the correct caller details without repeatedly entering them.
@@ -26,7 +26,7 @@ CallFocus is an independent web platform for real-time AI voice calls, permanent
 
 ## Important distinctions and limitations
 
-- CallFocus standard real-time AI calls use an OpenAI live voice service. Its permanent voice-cloning feature uses ElevenLabs and is a separate system.
+- CallFocus offers real-time AI calls and a separate permanent voice-cloning service. A voice created through the cloning feature can be reused for compatible experiences.
 - Custom AI voice profiles adjust synthetic voice characteristics; they are not the same feature as permanent cloning from a real voice sample.
 - Permanent voice cloning is consent-based, limited to eligible signed-in adults and subject to admin booking slots, the relevant provider account's storage and subscription capacity. Booking requires a minimum unused credit balance; booking itself does not deduct credits.
 - Other tools may require an account, available credits or administrator-enabled service availability.
