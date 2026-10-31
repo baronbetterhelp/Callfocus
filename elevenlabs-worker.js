@@ -4,9 +4,9 @@ import {slotVoiceForUser} from './permanent-voice-slots-worker.js';
    Provider voices exist ONLY during active jobs and are deleted on completion or by the cleanup cron. */
 const EL_API='https://api.elevenlabs.io';
 const elJson=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
-const getKey=(env,pool='primary')=>String((pool==='tertiary'?env.ELEVENLABS_PERMANENT_3_API_KEY:pool==='secondary'?env.ELEVENLABS_PERMANENT_2_API_KEY:env.ELEVENLABS_PERMANENT_API_KEY)||'').trim();
+const getKey=(env,pool='primary')=>{const i=pool==='primary'?1:pool==='secondary'?2:pool==='tertiary'?3:/^pool(?:[4-9]|10)$/.test(pool)?Number(pool.slice(4)):0;return i?String(env[i===1?'ELEVENLABS_PERMANENT_API_KEY':`ELEVENLABS_PERMANENT_${i}_API_KEY`]||'').trim():'';};
 const oldKey=env=>String(env.ELEVENLABS_API_KEY||env.ELEVEN_LABS_API_KEY||env.ELEVENLAB_API_KEY||'').trim();
-const getAgent=(env,pool='primary')=>String((pool==='tertiary'?env.ELEVENLABS_PERMANENT_3_AGENT_ID:pool==='secondary'?env.ELEVENLABS_PERMANENT_2_AGENT_ID:env.ELEVENLABS_PERMANENT_AGENT_ID)||'').trim();
+const getAgent=(env,pool='primary')=>{const i=pool==='primary'?1:pool==='secondary'?2:pool==='tertiary'?3:/^pool(?:[4-9]|10)$/.test(pool)?Number(pool.slice(4)):0;return i?String(env[i===1?'ELEVENLABS_PERMANENT_AGENT_ID':`ELEVENLABS_PERMANENT_${i}_AGENT_ID`]||'').trim():'';};
 const withKey=(env,pool='primary')=>({'xi-api-key':getKey(env,pool)});
 const oldVoicesPrefix='elevenlabs:voices:';
 const leasePrefix='elevenlabs:temporary:';

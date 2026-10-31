@@ -12,7 +12,14 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/admin.css?v=16.40" />
-<link rel="stylesheet" href="/affiliate.css?v=16.38"><style>.cf-slot-admin-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.cf-slot-admin-bookings{font:12px/1.65 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;background:rgba(100,150,120,.06);padding:14px;border-radius:12px;max-height:260px;overflow:auto}.cf-slot-admin-card small{display:block}@media(max-width:620px){.cf-slot-admin-grid{grid-template-columns:1fr}}</style></head>
+<link rel="stylesheet" href="/affiliate.css?v=16.38"><style>.cf-slot-admin-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.cf-slot-admin-bookings{font:12px/1.65 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;background:rgba(100,150,120,.06);padding:14px;border-radius:12px;max-height:260px;overflow:auto}.cf-slot-admin-card small{display:block}@media(max-width:620px){.cf-slot-admin-grid{grid-template-columns:1fr}}</style><style>
+.cf-slot-stats-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}
+.cf-slot-stats-grid>div{background:#f6faf8;border:1px solid #d7e8df;border-radius:14px;padding:12px;min-width:0}
+.cf-slot-stats-grid small{display:block;color:#60776f;font-size:12px;line-height:1.4}
+.cf-slot-stats-grid strong{display:block;font-size:25px;color:#174e40;margin-top:3px;font-weight:800}
+@media(max-width:380px){.cf-slot-stats-grid strong{font-size:22px}}
+</style>
+</head>
 <body class="admin-page">
   <header class="site-header">
     <div class="container header-inner">
@@ -523,24 +530,25 @@
           <label class="cf-clone-admin-toggle"><span><strong>Enable slot bookings</strong><small>When off, customers cannot reserve new slots. Existing bookings are preserved.</small></span><input id="cfSlot_enabled" type="checkbox"></label>
           <label class="cf-clone-admin-toggle"><span><strong>Show booking announcement popup</strong><small>Show the announcement on every page refresh, for signed-in customers only. Never show it to visitors.</small></span><input id="cfSlot_popupEnabled" type="checkbox"></label>
           <label class="cf-clone-admin-toggle"><span><strong>Manually mark slots as filled</strong><small>Temporarily stop new bookings and show the Telegram full-slots notice even before capacity is reached.</small></span><input id="cfSlot_forceFull" type="checkbox"></label>
-          <div class="cf-slot-admin-grid"><label>Maximum combined bookings<input id="cfSlot_slotLimit" type="number" min="1" max="160" value="60"><small>Booking availability follows your Admin quotas, not ElevenLabs storage. Actual voice creation still requires provider capacity.</small></label><label>Minimum available credits<input id="cfSlot_minimumCredits" type="number" min="0" max="1000000" step="100" value="1000"></label></div>
-          <div class="cf-clone-admin-toggle" style="margin-top:14px;display:block"><strong>Permanent voice provider pools</strong><small>Account 1 fills first, followed by Account 2 and then Account 3, when each enabled account reaches its Admin quota. Each user stays assigned to one provider for saved voice, calls and notes.</small></div>
-          <div class="cf-slot-admin-grid"><label>Account 1 booking quota<input id="cfSlot_primaryLimit" type="number" min="1" max="160" value="30"></label><label>Account 2 booking quota<input id="cfSlot_secondaryLimit" type="number" min="1" max="160" value="30"></label></div>
-          <label class="cf-clone-admin-toggle"><span><strong>Accept NEW bookings in Account 1</strong><small>Turn off when Account 1 is full. Existing saved voices and reservations remain usable. Useful after moving uncreated bookings to Account 3.</small></span><input id="cfSlot_primaryAcceptNew" type="checkbox" checked></label>
-          <label class="cf-clone-admin-toggle"><span><strong>Accept NEW bookings in Account 2</strong><small>Turn off if Account 2 should stop receiving new reservations while preserving existing users and voice access.</small></span><input id="cfSlot_secondaryAcceptNew" type="checkbox" checked></label>
-          <label class="cf-clone-admin-toggle"><span><strong>Enable Account 2 overflow</strong><small>New reservations can use Account 2 after Account 1 fills. Existing saved voices stay on their current account.</small></span><input id="cfSlot_secondaryEnabled" type="checkbox"></label>
-          <div class="cf-slot-admin-grid"><label>Account 3 booking quota<input id="cfSlot_tertiaryLimit" type="number" min="1" max="160" value="30"></label></div>
-          <label class="cf-clone-admin-toggle"><span><strong>Enable Account 3 overflow</strong><small>Account 3 receives new bookings after earlier enabled accounts reach their admin quotas. Configure and verify its separate paid ElevenLabs API key and Agent ID first.</small></span><input id="cfSlot_tertiaryEnabled" type="checkbox"></label>
-          <div class="cf-slot-admin-migrate" style="margin:18px 0;padding:16px;border:1px solid #d7e8df;border-radius:18px">
-            <strong style="display:block;margin-bottom:6px">Move pending reservations to Account 3</strong>
-            <p class="admin-panel-copy">Only bookings without a created voice can move. No saved voices, active creation attempts or verification requests will be touched. This action is separate from enabling overflow.</p>
-            <div class="cf-slot-admin-grid">
-              <label>Move from<select id="cfSlotMoveFrom"><option value="primary">Account 1</option><option value="secondary">Account 2</option></select></label>
-              <label>Number of bookings<input id="cfSlotMoveCount" type="number" min="1" max="30" value="10"></label>
+          <div class="cf-slot-admin-grid"><label>Total voice slots across all accounts<input id="cfSlot_slotLimit" type="number" min="1" max="1000" value="60"><small>One shared capacity. Actual available slots are checked against connected voice-storage capacity and the number you release.</small></label><label>Minimum available credits<input id="cfSlot_minimumCredits" type="number" min="0" max="1000000" step="100" value="1000"></label></div>
+          <div class="cf-slot-global-summary" style="margin:18px 0;padding:16px;border:1px solid #d7e8df;border-radius:18px">
+            <strong style="display:block;margin-bottom:10px">Shared voice capacity</strong>
+            <p class="admin-panel-copy">All connected voice accounts contribute to your one total. Bookings automatically go to the first account with verified available voice storage, then the next. Existing saved voices stay on their original account.</p>
+            <div class="cf-slot-stats-grid" aria-live="polite">
+              <div><small>Total capacity</small><strong id="cfSlotGlobalTotal">—</strong></div>
+              <div><small>Saved voices</small><strong id="cfSlotGlobalCreated">—</strong></div>
+              <div><small>Not yet cloned</small><strong id="cfSlotGlobalPending">—</strong></div>
+              <div><small>Eligible to reclaim</small><strong id="cfSlotGlobalEligible">—</strong></div>
+              <div><small>Currently released</small><strong id="cfSlotGlobalRelease">—</strong></div>
             </div>
-            <label>Confirmation<input id="cfSlotMoveConfirm" type="text" autocomplete="off" placeholder="MOVE UNCREATED VOICES"></label>
-            <button class="btn btn-ghost" type="button" id="cfSlotMoveBtn">Move eligible bookings</button>
-            <p id="cfSlotMoveStatus" class="admin-panel-copy" role="status" aria-live="polite"></p>
+          </div>
+          <div class="cf-slot-admin-migrate" style="margin:18px 0;padding:16px;border:1px solid #d7e8df;border-radius:18px">
+            <strong style="display:block;margin-bottom:6px">Release slots to new customers</strong>
+            <p class="admin-panel-copy">Enter exactly how many bookings should become available publicly. First uses empty capacity. If needed, the oldest idle reservations without saved voices are cancelled and recorded in an audit log. This removes those customers' reservations. Saved voices, in-progress creation and verification requests are never removed. Once released, new customers can book immediately when booking and cloning are enabled.</p>
+            <label>Number of slots to release<input id="cfSlotReleaseCount" type="number" min="1" max="1000" value="10"></label>
+            <label>Confirmation<input id="cfSlotReleaseConfirm" type="text" autocomplete="off" placeholder="RELEASE UNCREATED SLOTS"></label>
+            <button class="btn btn-ghost" type="button" id="cfSlotReleaseBtn">Release specified slots</button>
+            <p id="cfSlotReleaseStatus" class="admin-panel-copy" role="status" aria-live="polite"></p>
           </div>
           <p class="admin-panel-copy" id="cfSlotPools" role="status">Provider account details load when you refresh bookings.</p>
           <div class="cf-slot-admin-grid">
@@ -553,7 +561,7 @@
           <label>Announcement message<textarea id="cfSlot_message" maxlength="350" rows="3"></textarea></label>
           <label>Message when slots are filled<textarea id="cfSlot_fullMessage" maxlength="350" rows="3"></textarea></label>
           <label>Telegram channel URL<input id="cfSlot_telegramUrl" type="url" maxlength="300" placeholder="https://t.me/callfocus"></label>
-          <p class="admin-panel-copy"><strong>Booking availability is controlled by Admin.</strong> ElevenLabs storage or subscription readings never close bookings. A booked customer may still need to wait for available provider storage or monthly creation operations before creating their voice. This setting requires the customer to have the configured amount of unused CallFocus credits at booking time (including unused bonus credits). Booking never deducts credits. Enable voice cloning using the independent control above after your new provider account is configured.</p>
+          <p class="admin-panel-copy"><strong>Booking release is controlled by Admin.</strong> Newly released slots are limited by verified connected account capacity. A booked customer remains assigned to their original provider unless an eligible uncreated booking can be automatically transferred to a later account. This setting requires the customer to have the configured amount of unused CallFocus credits at booking time (including unused bonus credits). Booking never deducts credits. Enable voice cloning using the independent control above after your new provider account is configured.</p>
           <div class="cf-clone-admin-actions"><button class="btn btn-primary" id="cfSlotSave" type="button">Save slot settings</button><button class="btn btn-ghost" id="cfSlotRefresh" type="button">Refresh bookings</button></div>
           <p class="admin-panel-copy" id="cfSlotStatus" role="status" aria-live="polite">Booking system disabled until D1 setup is completed.</p>
           <p class="admin-panel-copy" id="cfSlotProvider" role="status">Provider status is not checked yet.</p><pre class="cf-slot-admin-bookings" id="cfSlotBookings" aria-label="Recent permanent voice slot reservations"></pre>
@@ -670,6 +678,6 @@
   <div class="toast hidden" id="toast"></div>
   <script src="/admin.js?v=16.43-email-validation"></script><script src="/admin-video.js?v=16.51-price-persistence"></script><script src="/cf-controls-admin.js?v=16.24"></script>
 <script src="/cf-temp-voice-admin.js?v=16.34"></script>
-<script src="/cf-clone-availability-admin.js?v=16.44"></script><script src="/permanent-slots-admin.js?v=16.54"></script>
+<script src="/cf-clone-availability-admin.js?v=16.44"></script><script src="/permanent-slots-admin.js?v=16.57"></script>
 <script src="/affiliate-admin.js?v=16.37"></script></body>
 </html>
