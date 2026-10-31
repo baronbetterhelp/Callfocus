@@ -28,7 +28,7 @@ CallFocus is an independent web platform for real-time AI voice calls, permanent
 
 - CallFocus offers real-time AI calls and a separate permanent voice-cloning service. A voice created through the cloning feature can be reused for compatible experiences.
 - Custom AI voice profiles adjust synthetic voice characteristics; they are not the same feature as permanent cloning from a real voice sample.
-- Permanent voice cloning is consent-based, limited to eligible signed-in adults and subject to admin booking slots, the relevant provider account's storage and subscription capacity. Booking requires a minimum unused credit balance; booking itself does not deduct credits.
+- Permanent voice cloning is consent-based, limited to eligible signed-in adults and subject to admin booking slots, the relevant provider account's storage and subscription capacity. New permanent voice slot purchases cost 1,000 CallFocus credits deducted once; existing reservations are not retroactively charged.
 - Other tools may require an account, available credits or administrator-enabled service availability.
 - This website is not affiliated with Call Focus at callfocus.ie, the Irish training and consultancy business.
 

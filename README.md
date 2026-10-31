@@ -1,3 +1,7 @@
+CallFocus V16.58 — Paid Permanent Voice Slot Purchase (latest prepared build)
+
+See README-V16.58-PAID-PERMANENT-VOICE-SLOTS.md for scope, safeguards, one-time additive SQL and deployment order.
+
 CallFocus V16.57 — Unified Permanent Voice Slot Management (latest prepared build)
 
 See README-V16.57-GLOBAL-VOICE-SLOTS.md for migration instructions and the scope of this update.

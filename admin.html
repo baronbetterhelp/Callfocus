@@ -526,11 +526,11 @@
         </div>
 
         <div class="premium-panel form-panel cf-clone-admin-card" id="cfPermanentSlotAdmin" style="margin-top:16px">
-          <div class="admin-users-heading"><div><h3>Limited permanent voice slots</h3><p class="admin-panel-copy">Control the Book slot popup, booking capacity, opening and closing times, cloning date and Telegram waiting-list message. One reserved slot per customer. No automatic deletion of permanent voices.</p></div></div>
-          <label class="cf-clone-admin-toggle"><span><strong>Enable slot bookings</strong><small>When off, customers cannot reserve new slots. Existing bookings are preserved.</small></span><input id="cfSlot_enabled" type="checkbox"></label>
+          <div class="admin-users-heading"><div><h3>Limited permanent voice slots</h3><p class="admin-panel-copy">Control the Buy slot popup, booking capacity, opening and closing times, cloning date and Telegram waiting-list message. One reserved slot per customer. No automatic deletion of permanent voices.</p></div></div>
+          <label class="cf-clone-admin-toggle"><span><strong>Enable slot purchases</strong><small>When off, customers cannot buy new slots. Existing bookings are preserved.</small></span><input id="cfSlot_enabled" type="checkbox"></label>
           <label class="cf-clone-admin-toggle"><span><strong>Show booking announcement popup</strong><small>Show the announcement on every page refresh, for signed-in customers only. Never show it to visitors.</small></span><input id="cfSlot_popupEnabled" type="checkbox"></label>
           <label class="cf-clone-admin-toggle"><span><strong>Manually mark slots as filled</strong><small>Temporarily stop new bookings and show the Telegram full-slots notice even before capacity is reached.</small></span><input id="cfSlot_forceFull" type="checkbox"></label>
-          <div class="cf-slot-admin-grid"><label>Total voice slots across all accounts<input id="cfSlot_slotLimit" type="number" min="1" max="1000" value="60"><small>One shared capacity. Actual available slots are checked against connected voice-storage capacity and the number you release.</small></label><label>Minimum available credits<input id="cfSlot_minimumCredits" type="number" min="0" max="1000000" step="100" value="1000"></label></div>
+          <div class="cf-slot-admin-grid"><label>Total voice slots across all accounts<input id="cfSlot_slotLimit" type="number" min="1" max="1000" value="60"><small>One shared capacity. Actual available slots are checked against connected voice-storage capacity and the number you release.</small></label><label>Permanent voice slot purchase price<input id="cfSlot_minimumCredits" type="number" min="1000" max="1000" step="1" value="1000" readonly><small>Every NEW purchase deducts 1,000 credits once. Existing bookings remain paid-free; no retroactive debit.</small></label></div>
           <div class="cf-slot-global-summary" style="margin:18px 0;padding:16px;border:1px solid #d7e8df;border-radius:18px">
             <strong style="display:block;margin-bottom:10px">Shared voice capacity</strong>
             <p class="admin-panel-copy">All connected voice accounts contribute to your one total. Bookings automatically go to the first account with verified available voice storage, then the next. Existing saved voices stay on their original account.</p>
@@ -561,7 +561,7 @@
           <label>Announcement message<textarea id="cfSlot_message" maxlength="350" rows="3"></textarea></label>
           <label>Message when slots are filled<textarea id="cfSlot_fullMessage" maxlength="350" rows="3"></textarea></label>
           <label>Telegram channel URL<input id="cfSlot_telegramUrl" type="url" maxlength="300" placeholder="https://t.me/callfocus"></label>
-          <p class="admin-panel-copy"><strong>Booking release is controlled by Admin.</strong> Newly released slots are limited by verified connected account capacity. A booked customer remains assigned to their original provider unless an eligible uncreated booking can be automatically transferred to a later account. This setting requires the customer to have the configured amount of unused CallFocus credits at booking time (including unused bonus credits). Booking never deducts credits. Enable voice cloning using the independent control above after your new provider account is configured.</p>
+          <p class="admin-panel-copy"><strong>Slot release is controlled by Admin.</strong> Newly released slots are limited by verified connected account capacity. A booked customer remains assigned to their original provider unless an eligible uncreated booking can be automatically transferred to a later account. Every NEW slot purchase costs 1,000 unused CallFocus credits, deducted once after successful payment verification. Existing reservations are not charged. Purchased slots cannot be reclaimed by the older Admin release action without a refund; only legacy unpaid bookings are eligible. Enable voice cloning using the independent control above after your new provider account is configured.</p>
           <div class="cf-clone-admin-actions"><button class="btn btn-primary" id="cfSlotSave" type="button">Save slot settings</button><button class="btn btn-ghost" id="cfSlotRefresh" type="button">Refresh bookings</button></div>
           <p class="admin-panel-copy" id="cfSlotStatus" role="status" aria-live="polite">Booking system disabled until D1 setup is completed.</p>
           <p class="admin-panel-copy" id="cfSlotProvider" role="status">Provider status is not checked yet.</p><pre class="cf-slot-admin-bookings" id="cfSlotBookings" aria-label="Recent permanent voice slot reservations"></pre>
@@ -678,6 +678,6 @@
   <div class="toast hidden" id="toast"></div>
   <script src="/admin.js?v=16.43-email-validation"></script><script src="/admin-video.js?v=16.51-price-persistence"></script><script src="/cf-controls-admin.js?v=16.24"></script>
 <script src="/cf-temp-voice-admin.js?v=16.34"></script>
-<script src="/cf-clone-availability-admin.js?v=16.44"></script><script src="/permanent-slots-admin.js?v=16.57"></script>
+<script src="/cf-clone-availability-admin.js?v=16.44"></script><script src="/permanent-slots-admin.js?v=16.58"></script>
 <script src="/affiliate-admin.js?v=16.37"></script></body>
 </html>

@@ -1,11 +1,14 @@
 /* CallFocus V16.45: limited permanent cloned-voice booking. Independent of the original OpenAI engine. */
 const SLOT_KEY='callfocus:permanent-voice:settings:v1';
-const DEF={enabled:false,popupEnabled:false,forceFull:false,slotLimit:30,minimumCredits:1000,primaryLimit:30,secondaryLimit:30,secondaryEnabled:false,primaryAcceptNew:true,secondaryAcceptNew:true,tertiaryLimit:30,tertiaryEnabled:false,releaseQuota:0,releaseId:'',eventDate:'',bookingOpensAt:'',bookingClosesAt:'',headline:'Limited permanent voice cloning slots',message:'Book one of our limited permanent voice slots. Once your voice is created, it is saved for your future cloned calls and voice notes.',fullMessage:'All permanent voice cloning slots are filled. Join our Telegram channel to be the first to know when the next slots open.',telegramUrl:'https://t.me/callfocus',revision:1};
+const SLOT_PRICE_CREDITS=1000;
+const SLOT_PRICE_SECONDS=600;
+const SLOT_RECEIPT_PREFIX='permanent-slot:';
+const DEF={enabled:false,popupEnabled:false,forceFull:false,slotLimit:30,minimumCredits:1000,primaryLimit:30,secondaryLimit:30,secondaryEnabled:false,primaryAcceptNew:true,secondaryAcceptNew:true,tertiaryLimit:30,tertiaryEnabled:false,releaseQuota:0,releaseId:'',eventDate:'',bookingOpensAt:'',bookingClosesAt:'',headline:'Limited permanent voice cloning slots',message:'Buy a permanent voice-cloning slot for 1,000 credits. Your saved voice can then be reused for cloned calls and voice notes.',fullMessage:'All permanent voice cloning slots are filled. Join our Telegram channel to be the first to know when the next slots open.',telegramUrl:'https://t.me/callfocus',revision:1};
 const j=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const err=(text,status=400)=>j({ok:false,error:text},status);
 const sql=env=>{if(!env.CALLFOCUS_WALLET_DB?.prepare)throw Error('VOICE_SLOTS_D1_NOT_CONFIGURED');return env.CALLFOCUS_WALLET_DB};
-async function settings(env){if(!env.CALLFOCUS_CONFIG)throw Error('VOICE_SETTINGS_KV_UNAVAILABLE');const s=await env.CALLFOCUS_CONFIG.get(SLOT_KEY,{type:'json'});return {...DEF,...(s&&typeof s==='object'?s:{})};}
-async function row(db,userId){return db.prepare('SELECT user_id,booked_at,state,voice_id,voice_name,created_at,provider_pool FROM cf_permanent_voice_slots WHERE user_id=?').bind(userId).first()}
+async function settings(env){if(!env.CALLFOCUS_CONFIG)throw Error('VOICE_SETTINGS_KV_UNAVAILABLE');const s=await env.CALLFOCUS_CONFIG.get(SLOT_KEY,{type:'json'});return {...DEF,...(s&&typeof s==='object'?s:{}),minimumCredits:SLOT_PRICE_CREDITS};}
+async function row(db,userId){return db.prepare('SELECT user_id,booked_at,state,voice_id,voice_name,created_at,provider_pool,purchase_id FROM cf_permanent_voice_slots WHERE user_id=?').bind(userId).first()}
 async function tally(db){const r=await db.prepare('SELECT COUNT(*) AS n FROM cf_permanent_voice_slots').first();return Number(r?.n||0)}
 // Internal account order is stable. Existing voice IDs never change provider.
 const POOLS=['primary','secondary','tertiary',...Array.from({length:7},(_,i)=>`pool${i+4}`)];
@@ -83,9 +86,9 @@ function bookingPhase(s,nowMs=Date.now()){
 }
 function parseSettings(x,previous){
  if(typeof x?.enabled!=='boolean'||typeof x?.popupEnabled!=='boolean'||typeof x?.forceFull!=='boolean')throw Error('Select both availability switches.');
- const n=Number(x.slotLimit),minimumCredits=Number(x.minimumCredits);
+ const n=Number(x.slotLimit),minimumCredits=SLOT_PRICE_CREDITS;
  if(!Number.isSafeInteger(n)||n<1||n>1000)throw Error('Slot capacity must be between 1 and 1000.');
-  if(!Number.isSafeInteger(minimumCredits)||minimumCredits<0||minimumCredits>1000000)throw Error('Minimum available credits must be between 0 and 1,000,000.');
+
  const eventDate=safeText(x.eventDate,10);if(eventDate&&!/^\d{4}-\d{2}-\d{2}$/.test(eventDate))throw Error('Enter a valid event date.');
  const bookingOpensAt=safeText(x.bookingOpensAt,16),bookingClosesAt=safeText(x.bookingClosesAt,16);
  const openMs=bookingDateMs(bookingOpensAt),closeMs=bookingDateMs(bookingClosesAt);
@@ -94,17 +97,90 @@ function parseSettings(x,previous){
  for(const k of ['headline','message','fullMessage'])if(!safeText(x[k],k==='headline'?100:350))throw Error('Complete all customer-facing messages.');
  return {...DEF,enabled:x.enabled,popupEnabled:x.popupEnabled,forceFull:x.forceFull,slotLimit:n,releaseQuota:previous.releaseQuota||0,releaseId:previous.releaseId||'',minimumCredits,eventDate,bookingOpensAt,bookingClosesAt,headline:safeText(x.headline,100),message:safeText(x.message,350),fullMessage:safeText(x.fullMessage,350),telegramUrl,revision:previous.revision+1};
 }
-function publicView(s,count,record,remaining=0){const phase=bookingPhase(s);const capacity=effectiveLimit(s);return {ok:true,enabled:s.enabled,popupEnabled:s.popupEnabled,slotLimit:capacity,booked:count,remaining,full:s.forceFull===true||remaining<=0,minimumCredits:s.minimumCredits,eventDate:s.eventDate,bookingOpensAt:s.bookingOpensAt||'',bookingClosesAt:s.bookingClosesAt||'',bookingPhase:phase,canBookNow:s.enabled&&phase==='open'&&!s.forceFull&&remaining>0,headline:s.headline,message:s.message,fullMessage:s.fullMessage,telegramUrl:s.telegramUrl,revision:s.revision,me:record?{state:record.state,bookedAt:record.booked_at,voiceName:record.voice_name||null,hasSavedVoice:record.state==='ready'}:null}}
+function publicView(s,count,record,remaining=0){const phase=bookingPhase(s);const capacity=effectiveLimit(s);return {ok:true,enabled:s.enabled,popupEnabled:s.popupEnabled,slotLimit:capacity,booked:count,remaining,full:s.forceFull===true||remaining<=0,minimumCredits:SLOT_PRICE_CREDITS,purchasePrice:SLOT_PRICE_CREDITS,bookingIsPaid:true,eventDate:s.eventDate,bookingOpensAt:s.bookingOpensAt||'',bookingClosesAt:s.bookingClosesAt||'',bookingPhase:phase,canBookNow:s.enabled&&phase==='open'&&!s.forceFull&&remaining>0,headline:s.headline,message:s.message,fullMessage:s.fullMessage,telegramUrl:s.telegramUrl,revision:s.revision,me:record?{state:record.state,bookedAt:record.booked_at,voiceName:record.voice_name||null,hasSavedVoice:record.state==='ready',purchasePending:record.purchasePending===true,purchased:record.purchased===true,grandfathered:!record.purchase_id}:null}}
 async function slotVoiceForUser(env,userId){const v=await row(sql(env),userId);return v?.state==='ready'&&/^[A-Za-z0-9_-]{8,120}$/.test(String(v.voice_id||''))?{voiceId:v.voice_id,name:v.voice_name||'My permanent voice',persistent:true,providerPool:v.provider_pool||'primary'}:null}
-// CallFocus stores the spendable wallet as seconds. Its shared rate is
-// 100 credits per minute, or 0.6 seconds per credit. Booking is free; this
-// only checks the customer's CURRENT available credits, including any unused
-// starter/referral credits, without deducting or changing wallet balances.
+// A newly purchased reservation is not usable until the wallet debit is verified.
+// Older reservations have no purchase ID and are grandfathered without a retroactive charge.
+async function purchase(db,purchaseId){return purchaseId?db.prepare('SELECT * FROM cf_permanent_voice_slot_purchases WHERE purchase_id=?').bind(purchaseId).first():null}
+const receiptId=id=>SLOT_RECEIPT_PREFIX+id;
+function hasReceipt(wallet,id,type='permanent_voice_slot_purchase'){
+ return (wallet.usage||[]).some(v=>v.id===receiptId(id)&&v.type===type&&Number(v.seconds)===SLOT_PRICE_SECONDS);
+}
+async function paidRecord(db,record){
+ if(!record||!record.purchase_id)return record;
+ const p=await purchase(db,record.purchase_id);
+ return {...record,purchased:p?.state==='paid',purchasePending:p?.state!=='paid'};
+}
+// The existing CallFocus spendable wallet uses seconds (100 credits per minute).
+// Purchase receipts are unique in D1 AND in the server wallet ledger. A failed
+// verification stays blocked and is reconciled on retry rather than charging again.
 async function userAvailableCredits(env,user,helpers){
  const d=await helpers.customerData(env,user.id,user.name);
  const wallet=helpers.normalizeWallet(d.wallet||{});
  const seconds=Math.max(0,Math.floor(Number(wallet.balanceSeconds)||0));
- return Math.floor(seconds*100/60 + 1e-9);
+ return Math.floor(seconds*100/60+1e-9);
+}
+async function cancelUnpaidPurchase(db,record){
+ if(!record?.purchase_id)return;
+ await db.batch([
+  db.prepare("DELETE FROM cf_permanent_voice_slots WHERE user_id=? AND purchase_id=? AND state='booked' AND voice_id IS NULL AND EXISTS(SELECT 1 FROM cf_permanent_voice_slot_purchases WHERE purchase_id=? AND state='pending')").bind(record.user_id,record.purchase_id,record.purchase_id),
+  db.prepare("UPDATE cf_permanent_voice_slot_purchases SET state='cancelled' WHERE purchase_id=? AND state='pending'").bind(record.purchase_id)
+ ]);
+}
+async function settlePurchase(db,env,user,helpers,record){
+ const id=record?.purchase_id;
+ if(!id)return {ok:true,grandfathered:true};
+ let payment=await purchase(db,id);
+ if(!payment||payment.user_id!==user.id||payment.state==='cancelled')return {ok:false,error:'This purchase needs review. No additional credits have been deducted.',status:409};
+ if(payment.state==='paid')return {ok:true,alreadyPaid:true};
+ let data,wallet;
+ try{data=await helpers.customerData(env,user.id,user.name);wallet=helpers.normalizeWallet(data.wallet||{})}
+ catch{return {ok:false,error:'Unable to verify your wallet. Your slot purchase is pending; please retry.',status:503}}
+ // A KV write can succeed even if its HTTP response is lost. Reconcile before
+ // acquiring a new D1 charge claim, never subtract again when receipt exists.
+ if(hasReceipt(wallet,id)){
+  try{await db.prepare("UPDATE cf_permanent_voice_slot_purchases SET state='paid',paid_at=COALESCE(paid_at,?),claim_at=NULL WHERE purchase_id=? AND user_id=? AND state IN ('pending','charging')").bind(new Date().toISOString(),id,user.id).run()}
+  catch{return {ok:false,error:'Your payment was recorded. Final confirmation is pending; retry without purchasing again.',status:503}}
+  return {ok:true,alreadyPaid:true};
+ }
+ // Once a charge was claimed, no further debit is automatically attempted.
+ // Repeated requests only reconcile the existing wallet receipt above. If the
+ // earlier write was interrupted, manual review is safer than a double debit.
+ if(payment.state==='charging')
+  return {ok:false,error:'Your slot payment needs verification. No additional debit will be attempted. Check your balance and contact CallFocus if it remains pending.',status:409};
+ const available=Math.max(0,Math.floor(Number(wallet.balanceSeconds)||0));
+ if(available<SLOT_PRICE_SECONDS){
+  if(payment.state==='pending')await cancelUnpaidPurchase(db,record);
+  return {ok:false,error:`Buying a permanent voice slot costs ${SLOT_PRICE_CREDITS} credits. Your current balance is ${Math.floor(available*100/60)} credits. Top up to buy a slot.`,status:402};
+ }
+ const now=new Date().toISOString();
+ const claimed=await db.prepare("UPDATE cf_permanent_voice_slot_purchases SET state='charging',claim_at=? WHERE purchase_id=? AND user_id=? AND state='pending'")
+  .bind(now,id,user.id).run();
+ if(claimed.meta?.changes!==1)return {ok:false,error:'This slot purchase is being processed. Retry shortly.',status:409};
+ // Re-read after the claim. Never charge from the stale pre-claim wallet snapshot.
+ try{data=await helpers.customerData(env,user.id,user.name);wallet=helpers.normalizeWallet(data.wallet||{})}
+ catch{return {ok:false,error:'The wallet could not be verified after reserving the purchase. Retry shortly.',status:503}}
+ if(!hasReceipt(wallet,id)){
+  if(Number(wallet.balanceSeconds)<SLOT_PRICE_SECONDS){
+   await db.prepare("UPDATE cf_permanent_voice_slot_purchases SET state='pending',claim_at=NULL WHERE purchase_id=? AND state='charging'").bind(id).run();
+   return {ok:false,error:'Your wallet has insufficient credits. Your purchase is not yet complete.',status:402};
+  }
+  const credits=SLOT_PRICE_CREDITS;
+  wallet.balanceSeconds-=SLOT_PRICE_SECONDS;
+  wallet.revision=Math.max(0,Number(wallet.revision)||0)+1;
+  wallet.usage.unshift({id:receiptId(id),type:'permanent_voice_slot_purchase',referenceId:id,seconds:SLOT_PRICE_SECONDS,credits,createdAt:now,note:'Permanent voice-cloning slot purchase'});
+  wallet.usage=wallet.usage.slice(0,250);
+  data.wallet=wallet;
+  try{await env.CALLFOCUS_CONFIG.put(`customer:data:${user.id}`,JSON.stringify(data))}
+  catch{return {ok:false,error:'Your purchase is pending verification. Do not pay again; retry shortly.',status:503}}
+ }
+ // Verify a committed receipt before allowing voice creation.
+ let confirmed;
+ try{confirmed=helpers.normalizeWallet((await helpers.customerData(env,user.id,user.name)).wallet||{})}catch{}
+ if(!confirmed||!hasReceipt(confirmed,id))return {ok:false,error:'Your wallet purchase is awaiting confirmation. Retry shortly; do not pay again.',status:503};
+ try{await db.prepare("UPDATE cf_permanent_voice_slot_purchases SET state='paid',paid_at=COALESCE(paid_at,?),claim_at=NULL WHERE purchase_id=? AND user_id=? AND state='charging'").bind(new Date().toISOString(),id,user.id).run()}
+ catch{return {ok:false,error:'Your credits were recorded, but purchase confirmation is pending. Retry; you will not be charged twice.',status:503}}
+ return {ok:true,chargedCredits:SLOT_PRICE_CREDITS,remainingCredits:Math.floor(Math.max(0,Number(confirmed.balanceSeconds))*100/60)};
 }
 async function customer(req,env,helpers){
  if(!['GET','POST'].includes(req.method))return err('Method not allowed.',405);
@@ -113,22 +189,29 @@ async function customer(req,env,helpers){
  let db,s;try{db=sql(env);s=await settings(env)}catch{return err('Bookings are not configured yet.',503)}
  let counts,record,caps,availability;
  try{
-  counts=await poolCounts(db);record=await row(db,u.id);
-  caps=await capacities(env);
-  availability=await available(db,s,counts,caps);
- }catch{return err('The voice-slot database is not ready. Apply the V16.57 SQL migration.',503)}
+  counts=await poolCounts(db);record=await paidRecord(db,await row(db,u.id));
+  caps=await capacities(env);availability=await available(db,s,counts,caps);
+ }catch{return err('The slot purchase system is not ready. Apply the V16.58 SQL migration.',503)}
  if(req.method==='GET'){
   let availableCredits=null;try{availableCredits=await userAvailableCredits(env,u,helpers)}catch{}
   return j({...publicView(s,totalReserved(counts),record,availability.remaining),signedIn:true,availableCredits});
  }
- if(record)return j({...publicView(s,totalReserved(counts),record,availability.remaining),alreadyBooked:true});
- if(!s.enabled)return err('Voice-slot booking is currently closed.',403);
- if(bookingPhase(s)!=='open')return err('Bookings have not opened yet or have closed.',403);
+ // An interrupted charge can be resumed using its SAME purchase ID. Existing
+ // free bookings remain grandfathered and are never charged retroactively.
+ if(record){
+  if(record.purchase_id&&!record.purchased){
+   const settled=await settlePurchase(db,env,u,helpers,record);
+   if(!settled.ok)return err(settled.error,settled.status);
+   record=await paidRecord(db,await row(db,u.id));
+  }
+  return j({...publicView(s,totalReserved(counts),record,availability.remaining),alreadyBooked:true,chargedCredits:0});
+ }
+ if(!s.enabled)return err('Voice-slot purchases are currently closed.',403);
+ if(bookingPhase(s)!=='open')return err('Slot purchases have not opened yet or have closed.',403);
  if(s.forceFull||availability.remaining<=0)return err(s.fullMessage,409);
  const credits=await userAvailableCredits(env,u,helpers).catch(()=>null);
- if(credits===null)return err('Could not verify your available credits.',503);
- if(credits<s.minimumCredits)return err(`Booking requires at least ${s.minimumCredits} unused credits. Current balance: ${credits}.`,402);
- // Released reservations cannot immediately take a slot from the same new release.
+ if(credits===null)return err('Could not verify your wallet balance.',503);
+ if(credits<SLOT_PRICE_CREDITS)return err(`Buying a permanent voice slot costs ${SLOT_PRICE_CREDITS} credits. Your current balance is ${credits}.`,402);
  const banned=await db.prepare('SELECT 1 AS blocked FROM cf_permanent_voice_release_audit WHERE user_id=? AND release_id=? LIMIT 1').bind(u.id,s.releaseId).first();
  if(banned)return err('Your previous reservation was released by Admin. This release is reserved for other customers.',409);
  try{
@@ -136,22 +219,30 @@ async function customer(req,env,helpers){
   const now=new Date().toISOString();
   for(const pool of POOLS){
    if(freeInPool(caps[pool],counts[pool])<=0)continue;
-   // An atomic INSERT checks the live DB total and current-release budget.
-   const result=await db.prepare(`INSERT INTO cf_permanent_voice_slots(user_id,booked_at,state,updated_at,provider_pool,release_id)
-    SELECT ?,?,'booked',?,?,? WHERE
-    (SELECT COUNT(*) FROM cf_permanent_voice_slots) < ?
-    AND (SELECT COUNT(*) FROM cf_permanent_voice_slots WHERE release_id=?) < ?
-    AND (SELECT COUNT(*) FROM cf_permanent_voice_slots WHERE provider_pool=?) < ?
-    AND NOT EXISTS(SELECT 1 FROM cf_permanent_voice_release_audit WHERE user_id=? AND release_id=?)
-    ON CONFLICT(user_id) DO NOTHING`).bind(u.id,now,now,pool,s.releaseId,s.slotLimit,s.releaseId,s.releaseQuota,pool,
-    Math.floor(caps[pool].voiceSlotLimit-Math.max(0,caps[pool].voiceSlotsUsed-counts[pool].created)),u.id,s.releaseId).run();
+   const purchaseId=crypto.randomUUID();
+   const out=await db.batch([
+    db.prepare(`INSERT INTO cf_permanent_voice_slots(user_id,booked_at,state,updated_at,provider_pool,release_id,purchase_id)
+      SELECT ?,?,'booked',?,?,?,? WHERE
+      (SELECT COUNT(*) FROM cf_permanent_voice_slots) < ?
+      AND (SELECT COUNT(*) FROM cf_permanent_voice_slots WHERE release_id=?) < ?
+      AND (SELECT COUNT(*) FROM cf_permanent_voice_slots WHERE provider_pool=?) < ?
+      AND NOT EXISTS(SELECT 1 FROM cf_permanent_voice_release_audit WHERE user_id=? AND release_id=?)
+      ON CONFLICT(user_id) DO NOTHING`).bind(u.id,now,now,pool,s.releaseId,purchaseId,s.slotLimit,s.releaseId,s.releaseQuota,pool,
+       Math.floor(caps[pool].voiceSlotLimit-Math.max(0,caps[pool].voiceSlotsUsed-counts[pool].created)),u.id,s.releaseId),
+    db.prepare(`INSERT INTO cf_permanent_voice_slot_purchases(purchase_id,user_id,price_credits,price_seconds,state,created_at)
+      SELECT purchase_id,user_id,?,?, 'pending',? FROM cf_permanent_voice_slots WHERE user_id=? AND purchase_id=?`)
+      .bind(SLOT_PRICE_CREDITS,SLOT_PRICE_SECONDS,now,u.id,purchaseId)
+   ]);
    booked=await row(db,u.id);
-   if(booked){created=!!result.meta?.changes;break}
+   if(booked){created=Number(out?.[0]?.meta?.changes||0)===1;break}
   }
   if(!booked)return err(s.fullMessage,409);
+  const settled=await settlePurchase(db,env,u,helpers,booked);
+  if(!settled.ok)return err(settled.error,settled.status);
+  const paid=await paidRecord(db,await row(db,u.id));
   const freshCounts=await poolCounts(db),freshAvailable=await available(db,s,freshCounts,caps);
-  return j({...publicView(s,totalReserved(freshCounts),booked,freshAvailable.remaining),alreadyBooked:!created});
- }catch(e){console.warn('Voice slot booking failed',String(e?.message||e).slice(0,130));return err('Could not reserve a slot. Please try again.',503)}
+  return j({...publicView(s,totalReserved(freshCounts),paid,freshAvailable.remaining),alreadyBooked:!created,chargedCredits:created?SLOT_PRICE_CREDITS:0,remainingCredits:settled.remainingCredits??null});
+ }catch(e){console.warn('Voice slot purchase failed',String(e?.message||e).slice(0,150));return err('Could not confirm slot purchase. Check your balance and retry; a pending purchase is never charged twice.',503)}
 }
 async function admin(req,env){
  if(!['GET','POST'].includes(req.method))return err('Method not allowed.',405);
@@ -165,7 +256,9 @@ async function admin(req,env){
   const a=await available(db,s,counts,caps);
   const rows=await db.prepare('SELECT user_id,booked_at,state,voice_name,created_at,provider_pool FROM cf_permanent_voice_slots ORDER BY booked_at DESC LIMIT 100').all();
   const pools=Object.fromEntries(POOLS.map((pool,i)=>[pool,{...caps[pool],index:i+1,reserved:counts[pool].reserved,created:counts[pool].created,pending:counts[pool].pending,available:freeInPool(caps[pool],counts[pool]),apiKeyConfigured:!!poolKey(env,pool),agentConfigured:!!poolAgent(env,pool)}]));
-  return j({ok:true,settings:s,booked:totalReserved(counts),created:totalCreated(counts),pending:totalReserved(counts)-totalCreated(counts),reclaimable:totalPending(counts),total:s.slotLimit,remaining:a.remaining,physicalAvailable:physicalFree(caps,counts),releaseQuota:s.releaseQuota||0,releaseUsed:a.issued,pools,rebalanceCount:moved.length,bookings:rows.results||[]});
+  const purchaseStats=await db.prepare("SELECT COUNT(*) AS n FROM cf_permanent_voice_slot_purchases WHERE state='paid'").first();
+  const eligibleLegacy=await db.prepare("SELECT COUNT(*) AS n FROM cf_permanent_voice_slots WHERE purchase_id IS NULL AND voice_id IS NULL AND state IN ('booked','failed')").first();
+  return j({ok:true,paidPurchases:Number(purchaseStats?.n||0),settings:s,booked:totalReserved(counts),created:totalCreated(counts),pending:totalReserved(counts)-totalCreated(counts),reclaimable:Number(eligibleLegacy?.n||0),total:s.slotLimit,remaining:a.remaining,physicalAvailable:physicalFree(caps,counts),releaseQuota:s.releaseQuota||0,releaseUsed:a.issued,pools,rebalanceCount:moved.length,bookings:rows.results||[]});
  }
  let body;try{body=await req.json()}catch{return err('Invalid settings JSON.')}
  let next;try{next=parseSettings(body,s)}catch(e){return err(e.message)}
@@ -196,8 +289,11 @@ async function releasePending(req,env){
   const monthly=cap.monthlyCreationLimit==null?Infinity:Math.max(0,Math.floor(Number(cap.monthlyCreationLimit)-Number(cap.monthlyCreationUsed||0)));
   return [pool,Math.min(count.pending,spare,monthly)];
  }));
+ const legacyRows=await db.prepare("SELECT provider_pool,COUNT(*) AS n FROM cf_permanent_voice_slots WHERE purchase_id IS NULL AND voice_id IS NULL AND state IN ('booked','failed') GROUP BY provider_pool").all();
+ const legacy=Object.fromEntries((legacyRows.results||[]).map(r=>[r.provider_pool,Number(r.n||0)]));
+ for(const pool of POOLS)reclaimableByPool[pool]=Math.min(reclaimableByPool[pool],legacy[pool]||0);
  const reclaimable=Object.values(reclaimableByPool).reduce((n,v)=>n+v,0);
- if(required>reclaimable)return err(`Only ${reclaimable} pending bookings can safely be released to verified usable capacity. ${free} slots are already unassigned.`,409);
+ if(required>reclaimable)return err(`Only ${reclaimable} legacy unpaid reservations can be safely reclaimed. Purchased slots are protected from cancellation without a refund. ${free} slots are unassigned.`,409);
  const releaseId=crypto.randomUUID(),now=new Date().toISOString();
  let reclaimed=0;
  if(required){
@@ -205,7 +301,7 @@ async function releasePending(req,env){
   for(const pool of POOLS){
    const limit=reclaimableByPool[pool];if(limit<=0)continue;
    const rows=await db.prepare(`SELECT user_id,booked_at FROM cf_permanent_voice_slots
-      WHERE provider_pool=? AND voice_id IS NULL AND state IN ('booked','failed') ORDER BY booked_at ASC LIMIT ?`).bind(pool,limit).all();
+      WHERE provider_pool=? AND voice_id IS NULL AND purchase_id IS NULL AND state IN ('booked','failed') ORDER BY booked_at ASC LIMIT ?`).bind(pool,limit).all();
    candidates.push(...(rows.results||[]));
   }
   const ids=candidates.sort((a,b)=>a.booked_at.localeCompare(b.booked_at)).slice(0,required).map(r=>r.user_id);
@@ -216,8 +312,8 @@ async function releasePending(req,env){
   const statements=[
    db.prepare(`INSERT INTO cf_permanent_voice_release_audit (release_id,user_id,booked_at,provider_pool,released_at)
     SELECT ?,user_id,booked_at,provider_pool,? FROM cf_permanent_voice_slots
-    WHERE user_id IN (${sqlIds}) AND state IN ('booked','failed') AND voice_id IS NULL`).bind(releaseId,now,...ids),
-   db.prepare(`DELETE FROM cf_permanent_voice_slots WHERE user_id IN (${sqlIds}) AND state IN ('booked','failed') AND voice_id IS NULL`).bind(...ids)
+    WHERE user_id IN (${sqlIds}) AND state IN ('booked','failed') AND voice_id IS NULL AND purchase_id IS NULL`).bind(releaseId,now,...ids),
+   db.prepare(`DELETE FROM cf_permanent_voice_slots WHERE user_id IN (${sqlIds}) AND state IN ('booked','failed') AND voice_id IS NULL AND purchase_id IS NULL`).bind(...ids)
   ];
   let out;try{out=await db.batch(statements)}catch{return err('Release failed; no customer records should have changed. Refresh and check.',503)}
   reclaimed=Number(out?.[1]?.meta?.changes||0);
@@ -278,7 +374,8 @@ async function createSavedVoice(req,env,helpers){
  
  const counts=await poolCounts(db),caps=await capacities(env);
  try{await rebalance(db,env,counts,caps)}catch{}
- const v=await row(db,a.user.id);if(!v)return err('Book a permanent voice-cloning slot first.',403);
+ const v=await row(db,a.user.id);if(!v)return err('Buy a permanent voice-cloning slot first.',403);
+ if(v.purchase_id){const payment=await purchase(db,v.purchase_id);if(!payment||payment.state!=='paid')return err('Complete the 1,000-credit slot purchase before creating your voice. Open the slot popup and tap Complete purchase.',402);}
  const pool=v.provider_pool||'primary';const key=poolKey(env,pool);
  if(!key)return err('The voice account assigned to your booking has not been configured. Your reservation is safe.',503);
  if(v.state==='ready')return err('You already have a permanently saved voice.',409);
