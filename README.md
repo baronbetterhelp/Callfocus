@@ -1,3 +1,7 @@
+CallFocus V16.59 — Scroll Stability & Recent Call Draft Preservation (latest prepared build)
+
+See README-V16.59-SCROLL-STABILITY.md for details.
+
 CallFocus V16.58 — Paid Permanent Voice Slot Purchase (latest prepared build)
 
 See README-V16.58-PAID-PERMANENT-VOICE-SLOTS.md for scope, safeguards, one-time additive SQL and deployment order.

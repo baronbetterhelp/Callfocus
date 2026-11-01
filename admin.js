@@ -275,7 +275,7 @@ function renderCustomPromos(){
   root.innerHTML=quickStartItems.map((row,index)=>`<article class="admin-custom-promo" data-promo-id="${esc(row.id)}"><div class="admin-custom-promo-head"><div class="admin-custom-promo-title"><span class="admin-custom-promo-preview">${row.logo?`<img src="${esc(row.logo)}" alt="" />`:esc(promoInitial(row))}</span><span><strong>${esc(row.title||`Promo ${index+1}`)}</strong><small>Custom promo ${index+1}</small></span></div><button class="admin-promo-delete" type="button" data-promo-delete>Delete</button></div><div class="quickstart-channel-row custom"><label class="admin-promo-enabled"><span>Promo on</span><input type="checkbox" data-promo-field="enabled" ${row.enabled!==false?'checked':''} /></label><label class="admin-promo-enabled"><span>Popup</span><input type="checkbox" data-promo-field="popupEnabled" ${row.popupEnabled!==false?'checked':''} /></label><label class="admin-promo-enabled"><span>Floating</span><input type="checkbox" data-promo-field="floatingEnabled" ${row.floatingEnabled!==false?'checked':''} /></label></div><div class="form-grid two"><label>Title<input data-promo-field="title" maxlength="120" value="${esc(row.title||'')}" placeholder="New CallFocus update" /></label><label>Destination link<input data-promo-field="link" maxlength="1200" value="${esc(row.link||'')}" placeholder="https://..." /></label></div><label>Short message<textarea data-promo-field="message" rows="3" maxlength="260" placeholder="What should customers know?">${esc(row.message||'')}</textarea></label><div class="admin-promo-logo-row"><label>Logo picture<input type="file" data-promo-logo accept="image/png,image/jpeg,image/webp,image/gif" /></label><button class="btn btn-ghost admin-promo-clear-logo" type="button" data-promo-clear-logo ${row.logo?'':'disabled'}>Remove logo</button></div><div class="admin-promo-meta">Turn the promo on, then choose Popup, Floating, or both. Leaving both display methods off keeps the promo saved but not shown.</div></article>`).join('');
 }
 async function promoLogoData(file){if(!file||!String(file.type||'').startsWith('image/'))throw new Error('Choose a PNG, JPG or WebP image.');if(file.size>8*1024*1024)throw new Error('Logo image must be under 8 MB.');const url=URL.createObjectURL(file);try{const img=await new Promise((resolve,reject)=>{const el=new Image();el.onload=()=>resolve(el);el.onerror=()=>reject(new Error('Could not read that logo image.'));el.src=url});const side=Math.min(192,Math.max(img.naturalWidth||1,img.naturalHeight||1));const scale=Math.min(1,side/Math.max(img.naturalWidth||1,img.naturalHeight||1));const w=Math.max(1,Math.round((img.naturalWidth||1)*scale)),h=Math.max(1,Math.round((img.naturalHeight||1)*scale));const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;canvas.getContext('2d',{alpha:true}).drawImage(img,0,0,w,h);let data=canvas.toDataURL('image/webp',.86);if(data.length>450000)data=canvas.toDataURL('image/jpeg',.78);if(data.length>500000)throw new Error('Logo is still too large after resizing. Try a simpler image.');return data}finally{URL.revokeObjectURL(url)}}
-function addCustomPromo(){if(quickStartItems.length>=8)return toast('You can add up to 8 custom promos');quickStartItems.push({id:promoId(),enabled:true,popupEnabled:true,floatingEnabled:true,title:'CallFocus update',message:'',link:'',logo:''});renderCustomPromos();scheduleDraftBackup();setTimeout(()=>document.querySelector('.admin-custom-promo:last-child input[data-promo-field="title"]')?.focus(),0)}
+function addCustomPromo(){if(quickStartItems.length>=8)return toast('You can add up to 8 custom promos');quickStartItems.push({id:promoId(),enabled:true,popupEnabled:true,floatingEnabled:true,title:'CallFocus update',message:'',link:'',logo:''});renderCustomPromos();scheduleDraftBackup();setTimeout(()=>document.querySelector('.admin-custom-promo:last-child input[data-promo-field="title"]')?.focus({preventScroll:true}),0)}
 function bindQuickStartManager(){
   const root=$('adminCustomPromos');$('adminAddPromoBtn')?.addEventListener('click',addCustomPromo);$('saveQuickStartBtn')?.addEventListener('click',saveQuickStartDirect);
   root?.addEventListener('input',event=>{const card=event.target.closest?.('[data-promo-id]');if(!card)return;const row=quickStartItems.find(item=>item.id===card.dataset.promoId);if(!row)return;const field=event.target.dataset.promoField;if(!field)return;if(['enabled','popupEnabled','floatingEnabled'].includes(field))row[field]=event.target.checked;else row[field]=event.target.value;scheduleDraftBackup()});
@@ -613,7 +613,7 @@ function toggleAdminCreditPanel(card,button){
   const opening=panel.classList.contains('hidden');
   panel.classList.toggle('hidden',!opening);
   if(button)button.textContent=opening?'Close add balance':'Add balance';
-  if(opening)card.querySelector('[data-user-credit-amount]')?.focus();
+  if(opening)card.querySelector('[data-user-credit-amount]')?.focus({preventScroll:true});
 }
 async function runAdminAddBalance(card,button){
   const userId=card?.dataset?.adminUser;const user=adminUsers.find(u=>u.id===userId);if(!user)return;
@@ -644,7 +644,7 @@ function toggleAdminBulkGift(open){
   const shouldOpen=typeof open==='boolean'?open:panel.classList.contains('hidden');
   panel.classList.toggle('hidden',!shouldOpen);
   if(toggle)toggle.textContent=shouldOpen?'Close gift all':'Gift all customers';
-  if(shouldOpen)$('adminBulkGiftAmount')?.focus();
+  if(shouldOpen)$('adminBulkGiftAmount')?.focus({preventScroll:true});
 }
 async function runAdminGiftAll(){
   const amountInput=$('adminBulkGiftAmount'),messageInput=$('adminBulkGiftMessage'),button=$('adminBulkGiftSubmitBtn');
@@ -1168,7 +1168,7 @@ function setAdminTab(name='dashboard'){
   document.querySelectorAll('[data-admin-tab]').forEach(btn=>{
     const on=btn.dataset.adminTab===target;
     btn.classList.toggle('active',on);btn.setAttribute('aria-selected',String(on));
-    if(on)btn.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+    // Tab activation does not move the admin's viewport or tab strip.
   });
   document.querySelectorAll('[data-admin-panel]').forEach(panel=>panel.classList.toggle('active',panel.dataset.adminPanel===target));
   try{history.replaceState(history.state||{},'',`#admin-${target}`);}catch{}
@@ -1187,7 +1187,7 @@ document.querySelectorAll('[data-admin-control]').forEach(btn=>btn.addEventListe
   const [tab,id]=ADMIN_CONTROL_TARGETS[btn.dataset.adminControl]||[];
   if(!tab)return;
   setAdminTab(tab);
-  requestAnimationFrame(()=>document.getElementById(id)?.scrollIntoView({block:'start',behavior:'auto'}));
+  // Selection is enough; do not auto-scroll the administrator.
 }));
 (async()=>{
   const stamp=$('adminBuildStamp'),status=$('adminControlStatus');

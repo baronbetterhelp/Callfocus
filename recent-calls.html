@@ -16,20 +16,13 @@
   <script>
     document.documentElement.dataset.theme='pearl';
     document.documentElement.style.colorScheme='light';
-    try{history.scrollRestoration='manual';}catch{}
-    window.__CALLFOCUS_BUILD__='16.07-test';
-    (function(){
-      const cleanPath=(location.pathname||'/').replace(/\/+$/,'')||'/';
-      const topNow=()=>{try{window.scrollTo(0,0);}catch{}};
-      if(cleanPath==='/' && document.readyState==='loading') topNow();
-      window.addEventListener('pageshow',()=>{ if(cleanPath==='/'){ topNow(); requestAnimationFrame(topNow); setTimeout(topNow,80); setTimeout(topNow,260); } },{once:false});
-    })();
+    window.__CALLFOCUS_BUILD__='16.59-scroll-stability';
   </script>
   <meta name="description" content="Continue saved CallFocus conversation threads." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=16.07-test" />
+  <link rel="stylesheet" href="/callfocus.css?v=16.59-scroll-stability" />
   <link rel="stylesheet" href="/elevenlabs.css?v=16.34">
   <link rel="stylesheet" href="/cf-controls.css?v=16.27" />
 <link rel="stylesheet" href="/affiliate.css?v=16.35">
@@ -986,9 +979,9 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=16.31-connection-reliability"></script>
+  <script src="/callfocus.js?v=16.59-scroll-stability"></script>
   <script src="/cf-audio-convert.js?v=16.33"></script>
-  <link rel="stylesheet" href="/permanent-slots.css?v=16.49"><script src="/permanent-slots-client.js?v=16.58"></script><script src="/elevenlabs.js?v=16.45"></script>
+  <link rel="stylesheet" href="/permanent-slots.css?v=16.49"><script src="/permanent-slots-client.js?v=16.58"></script><script src="/elevenlabs.js?v=16.59-scroll-stability"></script>
   <script src="/cf-controls-client.js?v=16.28"></script>
   <script src="/cf-credit-activity.js?v=16.25" defer></script>
 <script src="/affiliate-entry.js?v=16.35"></script>

@@ -23,7 +23,7 @@
   --container:min(1180px,calc(100vw - 40px));
 }
 *{box-sizing:border-box}
-html{background:var(--paper);color-scheme:dark;scroll-behavior:smooth}
+html{background:var(--paper);color-scheme:dark;scroll-behavior:auto}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:'DM Sans',system-ui,-apple-system,sans-serif;min-height:100vh;overflow-x:hidden}
 body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:-1;background:radial-gradient(circle at 76% -5%,rgba(255,255,255,.065),transparent 27%),radial-gradient(circle at 5% 58%,rgba(255,255,255,.028),transparent 24%),#080808}
 button,input,textarea,select{font:inherit}

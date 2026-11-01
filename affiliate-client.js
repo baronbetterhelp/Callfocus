@@ -46,7 +46,7 @@ function tab(type,{focus=false}={}){
   $(panels[k]).hidden=!selected;
  });
  const btn=document.querySelector('[data-ea-tab="'+type+'"]');
- btn.scrollIntoView({behavior:'auto',block:'nearest',inline:'nearest'});
+ // Keep navigation tabs stationary unless moved by the customer.
  if(focus)btn.focus({preventScroll:true});
  if(type!=='overview'&&!pageState[type].loaded&&!pageState[type].loading)loadPage(type);
 }

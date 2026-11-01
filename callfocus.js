@@ -1,38 +1,18 @@
-
-/* ===== CallFocus V14.6 — iOS Safari route/back stability ===== */
+/* ===== CallFocus V16.59 — stable native scrolling ===== */
 (()=>{
-  const BUILD='16.07-test';
-  const cleanPath=()=>((location.pathname||'/').replace(/\/+$/,'')||'/');
-  const atRoot=()=>cleanPath()==='/';
-  const forceTop=()=>{ if(!atRoot())return; try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0)}catch{}} };
-
-  try{history.scrollRestoration='manual';}catch{}
-
-  // Keep the root page at the hero after an actual root load without continuously fighting Safari.
-  const settleRoot=()=>{
-    if(!atRoot())return;
-    forceTop();
-    setTimeout(forceTop,80);
-  };
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',settleRoot,{once:true});
-  else settleRoot();
-  window.addEventListener('load',settleRoot,{once:true});
-
-  // CallFocus does not require offline HTML. Old service-worker navigation interception can
-  // interact badly with iOS Safari back/forward restoration, so retire existing registrations.
+  // Let Safari/Chrome restore the user's actual position on navigation and resume.
+  // Previous versions force-scrolled the Home document several times on load.
+  try{history.scrollRestoration='auto';}catch{}
   if('serviceWorker' in navigator){
     navigator.serviceWorker.getRegistrations?.().then(regs=>Promise.all(regs.map(r=>r.unregister().catch(()=>false)))).catch(()=>{});
   }
   if('caches' in window){
     caches.keys().then(keys=>Promise.all(keys.filter(k=>/callfocus/i.test(k)).map(k=>caches.delete(k)))).catch(()=>{});
   }
-
-  // Only pause decorative animations when backgrounded. Do not refresh or mutate history on resume.
   const syncVisibility=()=>document.documentElement.classList.toggle('cf-page-hidden',document.visibilityState!=='visible');
   document.addEventListener('visibilitychange',syncVisibility,{passive:true});
   syncVisibility();
-
-  window.CallFocusBuild=BUILD;
+  window.CallFocusBuild='16.59-scroll-stability';
 })();
 
 /* ===== CallFocus V15.21 Visual Test — one-time guided CTA cue ===== */
@@ -539,7 +519,7 @@ function showView(view, scroll=true){
   activeView=view; qsa('.page-view').forEach(p=>p.classList.toggle('active',p.dataset.view===view)); qsa('.nav-anchor').forEach(n=>n.classList.toggle('active',n.dataset.route===view));
   closeMobileMenu(); $('headerAccountDropdown').classList.add('hidden');
   if(view==='recent') renderRecentThreads(); if(view==='profile')renderProfile(); if(view==='settings')renderSettings(); if(view==='referrals'||view==='credits')window.CallFocusRenderReferrals?.(); if(view==='history')window.CallFocusHistory?.refresh?.();
-  if(scroll) window.scrollTo({top:0,behavior:'smooth'});
+  // V16.59: a view render must never reposition the user's viewport.
 }
 function openMobileMenu(){ $('mobileMenuWrap').classList.remove('hidden'); $('mobileMenuBtn').setAttribute('aria-expanded','true'); $('mobileMenuBtn').querySelector('.menu-glyph').textContent='×'; renderMobileAccount(); renderMobileRecents(); }
 function closeMobileMenu(){ $('mobileMenuWrap').classList.add('hidden'); $('mobileMenuBtn').setAttribute('aria-expanded','false'); $('mobileMenuBtn').querySelector('.menu-glyph').textContent='☰'; }
@@ -717,7 +697,7 @@ function bind(){
   $('headerAccountTrigger').onclick=e=>{e.stopPropagation();$('headerAccountDropdown').classList.toggle('hidden');$('headerAccountTrigger').setAttribute('aria-expanded',String(!$('headerAccountDropdown').classList.contains('hidden')))};
   document.addEventListener('click',e=>{ if(!$('headerAccountDropdown').classList.contains('hidden')&&!$('headerAccountDropdown').contains(e.target)&&!$('headerAccountTrigger').contains(e.target))$('headerAccountDropdown').classList.add('hidden'); });
   qsa('.nav-anchor').forEach(b=>b.onclick=()=>showView(b.dataset.route)); qsa('[data-route]').filter(b=>!b.classList.contains('nav-anchor')).forEach(b=>b.onclick=()=>showView(b.dataset.route));
-  $('heroHowBtn').onclick=()=>$('how-it-works').scrollIntoView({behavior:'smooth'}); ['heroNewCallBtn','customerNewCallBtn','bottomNewCallBtn'].forEach(id=>$(id).onclick=()=>openNewCall()); $('continuityRecentBtn').onclick=()=>showView('recent');
+  $('heroHowBtn').onclick=()=>$('how-it-works').scrollIntoView({behavior:'auto'}); ['heroNewCallBtn','customerNewCallBtn','bottomNewCallBtn'].forEach(id=>$(id).onclick=()=>openNewCall()); $('continuityRecentBtn').onclick=()=>showView('recent');
   $('headerAccountDropdown').addEventListener('click',e=>{const btn=e.target.closest('[data-account-route]');if(btn)showView(btn.dataset.accountRoute)}); $('dropdownSignOutBtn').onclick=signOut;
   $('signupForm').onsubmit=createAccount; $('signinForm').onsubmit=signIn; qsa('.auth-tab').forEach(b=>b.onclick=()=>switchAuthTab(b.dataset.authTab)); qsa('[data-close]').forEach(b=>b.onclick=()=>closeModal(b.dataset.close)); qsa('.modal-backdrop').forEach(m=>m.onclick=e=>{if(e.target===m)closeModal(m.id)});
   $('newCallDynamicsMode').onchange=()=>updateDynamicsUI('newCall'); $('callerDynamicsMode').onchange=()=>updateDynamicsUI('caller'); qsa('.voice-option').forEach(b=>b.onclick=()=>{selectedNewCallVoice=b.dataset.voice;$('newCallVoiceGender').value=selectedNewCallVoice;qsa('.voice-option').forEach(x=>x.classList.toggle('active',x===b))});
@@ -1485,7 +1465,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       document.querySelectorAll('.cf-repeat-voice-option').forEach(btn=>btn.classList.toggle('active',btn.dataset.repeatVoice===(call.voiceGender||'male')));
       try{$('repeatOpeningMode')?.dispatchEvent(new Event('change',{bubbles:true}))}catch{}
       if(showRetry) injectThreadRetry(call);
-      const scroller=document.querySelector('.cf-chat-scroll'); if(scroller)scroller.scrollTop=Math.max(0,scroller.scrollHeight-920);
+      // Keep the conversation scroller where the customer left it.
     });
   }
 
@@ -1906,7 +1886,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
         </div>
       </div>`;
     bindRepeatLocationAutocomplete();
-    requestAnimationFrame(()=>{const scroller=$('threadDetailPanel')?.querySelector('.cf-chat-scroll');if(scroller)scroller.scrollTop=0;});
+    // Don't reset thread scroll after rendering: the wrapper preserves the prior position.
   };
 
   document.addEventListener('click',async e=>{
@@ -2115,7 +2095,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
   async function generateVoiceNote(){
     if(!account || !data){ requireAccount({type:'route',route:'voice-notes'},'Create an account or sign in to generate and save voice notes.'); return; }
     const prompt=$('voiceNotePrompt').value.trim();
-    if(!prompt){ toast('Type what you want the voice note to say'); $('voiceNotePrompt').focus(); return; }
+    if(!prompt){ toast('Type what you want the voice note to say'); $('voiceNotePrompt').focus({preventScroll:true}); return; }
     const creditsApi=window.CallFocusCredits;
     if(creditsApi && creditsApi.currentBalanceSeconds() < 5){
       toast('Not enough credit to generate a voice note. Buy credits first.');
@@ -2159,7 +2139,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       if(!status.classList.contains('error')){
         status.className='voice-note-status success'; status.textContent=`Voice note ready · ${creditsUsed ?? ''}${creditsUsed!=null?' credits used · ':''}Tap Play voice note to listen.`;
       }
-      requestAnimationFrame(()=>$('voiceNoteResult')?.scrollIntoView({behavior:'smooth',block:'center'}));
+      // Results appear in place without taking the user's screen away.
     }catch(err){
       status.className='voice-note-status error'; status.textContent=err?.message || 'Could not generate the voice note right now.';
     }finally{
@@ -2923,7 +2903,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
   async function generateVoiceNoteV113(){
     if(!account || !data){ requireAccount({type:'route',route:'voice-notes'},'Create an account or sign in to generate and save voice notes.'); return; }
     const prompt = $('voiceNotePrompt')?.value.trim() || '';
-    if(!prompt){ toast(voiceNoteMode === 'reply' ? 'Describe what the reply voice note should say' : 'Type the script for the voice note'); $('voiceNotePrompt')?.focus(); return; }
+    if(!prompt){ toast(voiceNoteMode === 'reply' ? 'Describe what the reply voice note should say' : 'Type the script for the voice note'); $('voiceNotePrompt')?.focus({preventScroll:true}); return; }
     const creditsApi = window.CallFocusCredits;
     if(creditsApi && creditsApi.currentBalanceSeconds() < 5){
       toast('Not enough credit to generate a voice note. Buy credits first.');
@@ -3002,7 +2982,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
         status.className = 'voice-note-status success';
         status.textContent = `${voiceNoteMode === 'reply' ? 'Reply' : 'Voice note'} ready · ${unlimitedCredit ? 'Unlimited access · ' : (creditsUsed != null ? creditsUsed + ' credits used · ' : '')}Tap Play voice note to listen.`;
       }
-      requestAnimationFrame(()=>$('voiceNoteResult')?.scrollIntoView({behavior:'smooth',block:'center'}));
+      // Results appear in place without taking the user's screen away.
     } catch(err){
       status.className = 'voice-note-status error';
       status.textContent = err?.message || 'Could not generate the voice note right now.';
@@ -3920,17 +3900,14 @@ ${approvedPatterns}
   }catch{}
   function forcePostSignupHome(){
     if(!postSignupHome)return;
-    try{history.scrollRestoration='manual';}catch{}
+    // Leave browser scroll restoration enabled after signup.
     try{history.replaceState({callfocus:true},'', '/');}catch{}
     try{if(typeof showView==='function')showView('home',false);}catch{}
-    try{window.scrollTo({top:0,left:0,behavior:'auto'});}catch{try{window.scrollTo(0,0);}catch{}}
+    // The signup route may change; let the browser retain its scroll position.
   }
   if(postSignupHome){
     forcePostSignupHome();
-    requestAnimationFrame(forcePostSignupHome);
-    setTimeout(forcePostSignupHome,80);
-    setTimeout(forcePostSignupHome,350);
-    window.addEventListener('load',()=>{forcePostSignupHome();setTimeout(forcePostSignupHome,120);},{once:true});
+    // Avoid repeated delayed route renders that used to interrupt customer scrolling.
   }
 
   function setBusy(button,busy,label){
@@ -4013,7 +3990,7 @@ ${approvedPatterns}
     if(openSignup&&!account&&params.get('signup')==='1'){
       setTimeout(()=>{
         try{showAuth('signup',null,`Referral link applied. Create your account to receive ${starterCredits.toLocaleString()} free credits.`)}catch{}
-        setTimeout(()=>$v('signupName')?.focus(),120);
+        setTimeout(()=>$v('signupName')?.focus({preventScroll:true}),120);
       },180);
     }
     return code;
@@ -4081,7 +4058,7 @@ ${approvedPatterns}
         $v('signupVerificationCode').value='';
         closeModal('authModal');
         openModal('emailVerifyModal');
-        setTimeout(()=>$v('signupVerificationCode')?.focus(),150);
+        setTimeout(()=>$v('signupVerificationCode')?.focus({preventScroll:true}),150);
         if(resend)toast('A new verification code was sent');
         return;
       }
@@ -4157,7 +4134,7 @@ ${approvedPatterns}
     $v('passwordResetCopy').textContent='Enter the email address on your CallFocus account. We will send a 6-digit reset code.';
     authStatus('', 'info', 'passwordResetModal');
     openModal('passwordResetModal');
-    setTimeout(()=>$v('passwordResetEmail')?.focus(),150);
+    setTimeout(()=>$v('passwordResetEmail')?.focus({preventScroll:true}),150);
   }
 
   async function sendResetCode(){
@@ -4181,7 +4158,7 @@ ${approvedPatterns}
       $v('passwordResetTitle').textContent='Check your email';
       $v('passwordResetCopy').textContent=`Enter the 6-digit code sent to ${email}, then choose a new password.`;
       $v('passwordResetCode').value='';
-      setTimeout(()=>$v('passwordResetCode')?.focus(),150);
+      setTimeout(()=>$v('passwordResetCode')?.focus({preventScroll:true}),150);
     }catch{
       const msg='Could not reach the password reset service. Try again.';
       authStatus(msg,'error','passwordResetModal');toast(msg);
@@ -4763,7 +4740,7 @@ ${approvedPatterns}
   });
   function safeHome(){
     applying=true;
-    try{ oldShow('home',false); setUrl('/',true); ensureBack(); window.scrollTo({top:0,left:0,behavior:'auto'}); }
+    try{ oldShow('home',false); setUrl('/',true); ensureBack(); }
     finally{ applying=false; }
   }
 
@@ -5199,7 +5176,7 @@ ${approvedPatterns}
       $('dynamicsEditBtn').textContent='Edit';
       $('dynamicsResult').classList.remove('hidden');
       setProgress(100,`Finished analyzing ${files.length} screenshot${files.length===1?'':'s'}.`);
-      $('dynamicsResult').scrollIntoView({behavior:'smooth',block:'nearest'});
+      // Generated dynamics remain visible where they were inserted without scrolling.
     }catch(error){
       setProgress(0,error?.message||'Analysis failed. Please try again.',true);
       notify(error?.message||'Analysis failed. Please try again.');
@@ -5235,7 +5212,7 @@ ${approvedPatterns}
       if(mode)mode.value='custom';
       if(field)field.value=text;
       try{ if(typeof updateDynamicsUI==='function')updateDynamicsUI('newCall'); }catch{}
-      field?.focus();
+      field?.focus({preventScroll:true});
       notify('Conversation dynamics added to your new call.');
     },80);
   }
@@ -5664,7 +5641,7 @@ ${approvedPatterns}
 
   function renderTranscriptTurn(id,role,text,final){
     if(!text)return;const normalizedRole=String(role||'').toLowerCase()==='user'?'user':'avatar';let turn=transcriptTurns.get(id);if(!turn){turn={id,role:normalizedRole,text:'',final:false,order:++transcriptOrder};transcriptTurns.set(id,turn)}turn.role=normalizedRole;turn.text=text;turn.final=!!final;
-    $a('avatarTranscriptEmpty')?.remove();const list=$a('avatarTranscript');if(!list)return;let row=list.querySelector(`[data-transcript-id="${CSS.escape(String(id))}"]`);if(!row){row=document.createElement('div');row.className='avatar-transcript-row';row.dataset.transcriptId=String(id);const bubble=document.createElement('div');bubble.className='avatar-transcript-bubble';bubble.innerHTML='<small></small><p></p>';row.appendChild(bubble);list.appendChild(row)}row.dataset.role=normalizedRole;const bubble=row.querySelector('.avatar-transcript-bubble');bubble.dataset.final=String(!!final);bubble.querySelector('small').textContent=normalizedRole==='user'?'You':'Avatar';bubble.querySelector('p').textContent=text;list.scrollTop=list.scrollHeight;if($a('avatarTranscriptState'))$a('avatarTranscriptState').textContent=final?'Live':'Transcribing…';
+    $a('avatarTranscriptEmpty')?.remove();const list=$a('avatarTranscript');if(!list)return;let row=list.querySelector(`[data-transcript-id="${CSS.escape(String(id))}"]`);if(!row){row=document.createElement('div');row.className='avatar-transcript-row';row.dataset.transcriptId=String(id);const bubble=document.createElement('div');bubble.className='avatar-transcript-bubble';bubble.innerHTML='<small></small><p></p>';row.appendChild(bubble);list.appendChild(row)}row.dataset.role=normalizedRole;const bubble=row.querySelector('.avatar-transcript-bubble');bubble.dataset.final=String(!!final);bubble.querySelector('small').textContent=normalizedRole==='user'?'You':'Avatar';bubble.querySelector('p').textContent=text;/* no automatic transcript scroll */ if($a('avatarTranscriptState'))$a('avatarTranscriptState').textContent=final?'Live':'Transcribing…';
   }
 
   function handleAppMessage(event){
@@ -5832,7 +5809,7 @@ ${approvedPatterns}
     // Keep the full-screen success animation visible long enough to register clearly.
     setTimeout(()=>{
       hideModal();
-      try{window.showView?.('credits',false);window.scrollTo({top:0,left:0,behavior:'auto'});}
+      try{window.showView?.('credits',false);}
       catch{location.href='/credits';}
     },4200);
   }
@@ -5847,7 +5824,7 @@ ${approvedPatterns}
     catch(err){if(!quiet)window.toast?.(err?.message||'Could not check payment status.');return null;}
   }
   function startPolling(){clearInterval(pollTimer);pollTimer=setInterval(()=>{if(document.visibilityState==='visible')checkStatus({quiet:true});},5000);}
-  function backHome(){hideModal();if(successMode){try{window.showView?.('credits',false);window.scrollTo({top:0,left:0,behavior:'auto'});}catch{location.href='/credits';}return;}try{window.showView?.('home');}catch{location.href='/';}startPolling();}
+  function backHome(){hideModal();if(successMode){try{window.showView?.('credits',false);}catch{location.href='/credits';}return;}try{window.showView?.('home');}catch{location.href='/';}startPolling();}
   async function copyAccount(){const value=bank?.accountNumber||$('manualAccountNumber')?.textContent||'';if(!value||value==='—')return;try{await navigator.clipboard.writeText(value);window.toast?.('Account number copied');}catch{window.toast?.('Could not copy account number');}}
   function viewActive(){if(!payment?.id&&activeId())checkStatus({quiet:false,open:true});else if(payment?.status==='pending_confirmation')showWaiting(payment);}
   function closeTop(){if(payment?.status==='pending_confirmation'){hideModal();startPolling();}else cancel();}
@@ -5920,7 +5897,7 @@ ${approvedPatterns}
     btn?.setAttribute('aria-expanded',String(state.open));
     if(state.open){
       if(!state.positioned) defaultPosition();
-      requestAnimationFrame(()=>list()?.scrollTo({top:list().scrollHeight,behavior:'smooth'}));
+      // Never auto-follow messages while a customer is reviewing the conversation.
     }
   }
 
@@ -6043,7 +6020,7 @@ ${approvedPatterns}
     }else{
       p.textContent='Translating…';meta.textContent='Listening live';
     }
-    if(state.open && l.scrollHeight-l.scrollTop-l.clientHeight<120)l.scrollTop=l.scrollHeight;
+    // Keep manual transcript/chat position unchanged on incoming updates.
   }
 
   // Wrap the final call lifecycle so every new call starts with a fresh floating transcript.
@@ -6507,7 +6484,7 @@ ${approvedPatterns}
     // Always reopen the auto-fill sheet at its true top so the heading and close button are fully visible.
     requestAnimationFrame(()=>{
       const modal=byId('cfAutoFillModal')?.querySelector('.cf-autofill-modal');
-      if(modal){modal.scrollTop=0;autoStableTop=0;}
+      if(modal){autoStableTop=modal.scrollTop||0;}
     });
   }
   function closeAutoFill(){if(autoBusy)return notify('Please wait for the current generation to finish.');closeOverlay('cfAutoFillModal');}
@@ -6623,7 +6600,7 @@ ${approvedPatterns}
       const final=await finalizeAutoFill({kind:'finalize',summaries,imageCount:autoFiles.length,analysisId,callerMeta,callerHint},finalizeProgress);
       if(!final?.aboutSelf||!final?.aboutCaller||!final?.dynamics)throw new Error('CallFocus could not create all three information sections.');
       byId('cfAutoAboutSelfResult').value=final.aboutSelf.trim();byId('cfAutoAboutCallerResult').value=final.aboutCaller.trim();byId('cfAutoRecipientNameResult').value=safeText(final.callerName||'');byId('cfAutoDynamicsResult').value=final.dynamics.trim();
-      setAutoGeneratedState(true);setAutoProgress(100,`Finished using ${autoFiles.length} screenshots.`);byId('cfAutoFillResults').scrollIntoView({behavior:'smooth',block:'nearest'});
+      setAutoGeneratedState(true);setAutoProgress(100,`Finished using ${autoFiles.length} screenshots.`);
     }catch(e){setAutoProgress(Math.max(5,autoProgressValue),e?.message||'Generation failed. Please try again.',true);notify(e?.message||'Generation failed. Please try again.');}
     finally{autoBusy=false;byId('cfAutoGenerateBtn').textContent='Generate information';byId('cfAutoClearBtn').disabled=false;renderAutoSelection();}
   }
@@ -6632,7 +6609,7 @@ ${approvedPatterns}
     const self=safeText(byId('cfAutoAboutSelfResult')?.value),caller=safeText(byId('cfAutoAboutCallerResult')?.value),dyn=safeText(byId('cfAutoDynamicsResult')?.value);if(!self||!caller||!dyn)return notify('Keep all three generated sections filled before adding them.');
     byId('newCallAboutSelf').value=self;byId('newCallAboutCaller').value=caller;byId('newCallDynamicsMode').value='custom';byId('newCallDynamics').value=dyn;try{updateDynamicsUI('newCall')}catch{}
     const inferred=safeText(byId('cfAutoRecipientNameResult')?.value);const currentRecipient=safeText(byId('newCallPersonName')?.value);if(inferred&&!currentRecipient)byId('newCallPersonName').value=inferred;else if(inferred&&currentRecipient&&inferred.toLocaleLowerCase()!==currentRecipient.toLocaleLowerCase())notify('The screenshot name differs from the name already entered for the person being called. Please check that field before calling.');
-    closeAutoFill();byId('newCallAboutSelf')?.closest('.field-section')?.scrollIntoView({behavior:'smooth',block:'center'});notify('Generated information added to the correct first-call fields.');
+    closeAutoFill();notify('Generated information added to the correct first-call fields.');
   }
 
   function captureSetup(){
@@ -7495,7 +7472,7 @@ ${approvedPatterns}
       field.dispatchEvent(new Event('change',{bubbles:true}));
       const category=safeText(payload?.category,40);
       setRebuildState(scope,'ready','Rebuild complete. Your call context has been reorganized for a more natural conversation flow.');
-      try{field.scrollIntoView({behavior:'smooth',block:'center'})}catch{}
+      // Keep the current screen in place after rebuild completes.
     }catch(error){
       setRebuildState(scope,'error',String(error?.message||'Could not rebuild this call right now.'));
     }
@@ -8073,4 +8050,61 @@ ${approvedPatterns}
     else if(token())api('/api/flutterwave/pending').then(r=>{if(r.pending){document.getElementById('flutterwaveRecoveryPanel')?.classList.remove('hidden');verify(r.reference,true);}}).catch(()=>{});
   };
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot,{once:true});else boot();
+})();
+
+
+/* ===== CallFocus V16.59 — preserve recent-call viewport and unsent drafts ===== */
+(()=>{
+  if(typeof renderRecentThreads!=='function'||typeof renderThreadDetail!=='function')return;
+  const oldRecent=renderRecentThreads;
+  const oldDetail=renderThreadDetail;
+  let lastListSignature='';
+  let lastThreadSignature='';
+  let lastThreadId='';
+  const signature=()=>{
+    try{return JSON.stringify({user:account?.id||'',selected:selectedThreadId||'',list:!!recentCallsListMode,threads:(data?.threads||[]).map(t=>[t.id,t.updatedAt,t.title,t.callerName,t.calls?.length||0])});}
+    catch{return String(Date.now())}
+  };
+  renderRecentThreads=function(...args){
+    const panel=document.getElementById('recentThreadList');
+    const next=signature();
+    if(panel?.firstElementChild && next===lastListSignature)return;
+    const y=panel?.scrollTop||0;
+    const result=oldRecent.apply(this,args);
+    lastListSignature=next;
+    // Only restore a nested list's own previously chosen position.
+    if(panel&&panel.scrollTop!==y)panel.scrollTop=y;
+    return result;
+  };
+  renderThreadDetail=function(id){
+    const panel=document.getElementById('threadDetailPanel');
+    const thread=data?.threads?.find(t=>String(t.id)===String(id));
+    let next;
+    try{next=JSON.stringify([account?.id,thread]);}catch{next=String(Date.now())}
+    if(panel?.querySelector('.cf-chat-thread,.thread-detail') && lastThreadId===String(id) && lastThreadSignature===next)return;
+    const same=lastThreadId===String(id);
+    const beforeY=window.scrollY;
+    const scroller=panel?.querySelector('.cf-chat-scroll');
+    const scrollerY=same?scroller?.scrollTop:null;
+    const fields={};const opened=[];
+    if(same && panel){
+      panel.querySelectorAll('input[id],textarea[id],select[id]').forEach(el=>{
+        fields[el.id]={value:el.value,checked:el.checked};
+      });
+      panel.querySelectorAll('details').forEach((el,i)=>{if(el.open)opened.push(i)});
+    }
+    const result=oldDetail.call(this,id);
+    lastThreadId=String(id);lastThreadSignature=next;
+    if(same&&panel){
+      for(const [id,v] of Object.entries(fields)){
+        const el=panel.querySelector('#'+CSS.escape(id));if(!el)continue;
+        el.value=v.value;if(el.type==='checkbox'||el.type==='radio')el.checked=v.checked;
+      }
+      panel.querySelectorAll('details').forEach((el,i)=>{el.open=opened.includes(i)});
+      const now=panel.querySelector('.cf-chat-scroll');if(now&&scrollerY!==null)now.scrollTop=scrollerY;
+      // Correct a layout-induced displacement, never jump to another location.
+      if(Math.abs(window.scrollY-beforeY)>1)window.scrollTo({top:beforeY,left:window.scrollX,behavior:'instant'});
+    }
+    return result;
+  };
 })();
