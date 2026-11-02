@@ -1,0 +1,1 @@
+CallFocus V16.63: Admin setting popup delay from 0 to 60 seconds. Defaults to zero for existing installations. Applied on each signed-in page load; manual popup controls are unchanged. No SQL needed; KV setting is backward-compatible. Original OpenAI voice, wallet, booking charges and providers unchanged.

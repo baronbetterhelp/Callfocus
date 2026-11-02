@@ -2,7 +2,7 @@
 const $=id=>document.getElementById(id);if(!$('cfSlotSave'))return;
 const token=()=>localStorage.getItem('callfocus_admin_session_v158')||sessionStorage.getItem('callfocus_admin_key')||'';
 const status=$('cfSlotStatus');
-const fields=['enabled','popupEnabled','forceFull','slotLimit','minimumCredits','pool4AcceptNew','eventDate','bookingOpensAt','bookingClosesAt','headline','message','fullMessage','telegramUrl'];
+const fields=['enabled','popupEnabled','popupDelaySeconds','forceFull','slotLimit','minimumCredits','pool4AcceptNew','eventDate','bookingOpensAt','bookingClosesAt','headline','message','fullMessage','telegramUrl'];
 const dirty=new Set();
 let loaded=false,fetchGeneration=0,toggleBusy=false,confirmedToggle=false,confirmedRevision=0,toggleNotice='',publicAvailabilityBusy=false,publicAvailabilityEdited=false;
 async function request(path='/api/admin/permanent-slots',method='GET',body){

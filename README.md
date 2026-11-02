@@ -1,3 +1,3 @@
-CallFocus V16.62 — Admin-controlled public voice slot availability (latest prepared build)
+CallFocus V16.63 — Configurable voice slot announcement popup delay
 
-See README-V16.62-PUBLIC-SLOT-AVAILABILITY.md. No SQL migration is required.
+See README-V16.63-POPUP-DELAY.md. No SQL required.

@@ -45,17 +45,22 @@ window.CallFocusPermanentSlots={show,load,state,close};
 // Auto-open once per signed-in customer per actual page load, including refresh.
 // A successful sign-in on this same page is picked up without changing the auth engine.
 // Closing the popup never writes a dismissal preference, so refresh opens it again.
-let handledToken='',busy=false;
+let handledToken='',busy=false,autoTimer=null;
+function clearAutoTimer(){if(autoTimer!==null){clearTimeout(autoTimer);autoTimer=null}}
 async function auto(){
  const token=auth();
- if(!token){handledToken='';current=null;close();return}
+ if(!token){clearAutoTimer();handledToken='';current=null;close();return}
  if(busy||handledToken===token)return;
  busy=true;
  try{
   const data=await load();
   if(auth()!==token||!data.signedIn)return;
   handledToken=token;
-  if(data.popupEnabled)await show(false,data);
+  if(data.popupEnabled){
+   const delay=Math.max(0,Math.min(60,Number(data.popupDelaySeconds)||0));
+   if(delay===0)await show(false,data);
+   else {clearAutoTimer();autoTimer=setTimeout(()=>{autoTimer=null;if(auth()===token)show(false,data)},delay*1000)}
+  }
  }catch(e){if(auth()!==token)handledToken=''}
  finally{busy=false}
 }
