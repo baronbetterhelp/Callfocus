@@ -310,6 +310,34 @@ async function toggleAccount4(req,env){
  return j({ok:true,pool4AcceptNew:input.enabled,revision:next.revision});
 }
 
+// Admin-owned public availability, independent of the legacy reclaim/cancel action.
+// Set an ABSOLUTE number of slots visible for sale. The existing release ID and
+// purchases are retained; changing this number never deletes or moves a booking.
+// A real reservation also needs global and verified account capacity; do not
+// advertise or sell slots that the connected accounts cannot reserve.
+async function setPublicAvailability(req,env){
+ if(req.method!=='POST')return err('Method not allowed.',405);
+ let x;try{x=await req.json()}catch{return err('Invalid public availability request.',400)}
+ const wanted=Number(x?.count);
+ if(!Number.isSafeInteger(wanted)||wanted<0||wanted>1000)return err('Enter a whole number from 0 to 1000.',400);
+ let db,s;try{db=sql(env);s=await settings(env)}catch{return err('Slot settings unavailable.',503)}
+ let counts,caps;try{[counts,caps]=await Promise.all([poolCounts(db),capacities(env)])}catch{return err('Unable to check the connected account capacity.',503)}
+ const booked=totalReserved(counts);
+ const totalFree=Math.max(0,s.slotLimit-booked);
+ const verifiedFree=physicalFree(caps,counts,s);
+ const allowed=Math.max(0,Math.min(totalFree,verifiedFree));
+ if(wanted>allowed)return err(`Only ${allowed} slots can safely be offered right now (${totalFree} unreserved of ${s.slotLimit} total, ${verifiedFree} verified usable across enabled accounts). Check Account 4 and its creation allowance if you expect more. No settings were changed.`,409);
+ // Keep the current release ID, so customers who purchased in that release
+ // continue counting toward its quota. Extend that quota by the desired number
+ // of unpurchased slots, rather than inadvertently reopening paid slots.
+ const id=s.releaseId||crypto.randomUUID();
+ let issued;try{issued=await bookedInRelease(db,s.releaseId)}catch{return err('Unable to verify the existing public release.',503)}
+ const next={...s,releaseId:id,releaseQuota:issued+wanted,revision:Number(s.revision||0)+1};
+ try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next))}
+ catch{return err('Could not save the website slot availability. No reservations were changed.',503)}
+ return j({ok:true,remaining:wanted,releaseUsed:issued,releaseQuota:next.releaseQuota,total:s.slotLimit,booked,revision:next.revision,message:`${wanted} slots are now configured for display on the website. All existing reservations are preserved.`});
+}
+
 // Admin-only explicit reclaim and release. Reservations are reclaimed only if needed
 // for requested fresh availability. Every removed booking is written to an audit table
 // in the SAME atomic D1 batch; READY/CREATING/VERIFICATION records are untouchable.
@@ -458,4 +486,4 @@ async function createSavedVoice(req,env,helpers){
  return j({ok:true,state,voiceName:name,hasSavedVoice:state==='ready',message:state==='ready'?'Your permanent voice is saved and ready for future calls and voice notes.':'Your voice requires additional provider verification. It will not be recreated automatically.'});
 }
 
-export {createSavedVoice,settings as slotSettings,customer as slotCustomer,admin as slotAdmin,slotVoiceForUser,publicView as slotPublicView,sql as slotDB,row as slotRow,userAvailableCredits,reassignPending,releasePending,toggleAccount4};
+export {createSavedVoice,settings as slotSettings,customer as slotCustomer,admin as slotAdmin,slotVoiceForUser,publicView as slotPublicView,sql as slotDB,row as slotRow,userAvailableCredits,reassignPending,releasePending,toggleAccount4,setPublicAvailability};

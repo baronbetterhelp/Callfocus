@@ -542,6 +542,13 @@
               <div><small>Currently released</small><strong id="cfSlotGlobalRelease">—</strong></div>
             </div>
           </div>
+          <div class="cf-slot-public-availability" style="margin:18px 0;padding:16px;border:1px solid #d7e8df;border-radius:18px">
+            <strong style="display:block;margin-bottom:6px">Slots available on website</strong>
+            <p class="admin-panel-copy">Choose exactly how many new slots customers can see and purchase. Your total capacity stays separate (for example, 120 total with 30 available). This button saves immediately without removing anyone's reservation. Availability decreases automatically after each successful purchase. It cannot exceed verified, unreserved capacity.</p>
+            <label for="cfSlotPublicAvailableCount">Number of slots to display as available<input id="cfSlotPublicAvailableCount" type="number" min="0" max="1000" step="1" value="30" inputmode="numeric"></label>
+            <button class="btn btn-primary" type="button" id="cfSlotPublicAvailableSave">Update website slots</button>
+            <p id="cfSlotPublicAvailableStatus" class="admin-panel-copy" role="status" aria-live="polite">Existing reservations stay unchanged. Enter 0 to close available slots without switching off purchases.</p>
+          </div>
           <div class="cf-slot-account-four" style="margin:18px 0;padding:16px;border:1px solid #d7e8df;border-radius:18px">
             <strong style="display:block;margin-bottom:6px">Account 4 setup</strong>
             <p class="admin-panel-copy">Configure its API key and Agent ID as separate Cloudflare secrets. Check its subscription and agent connection, then enable new purchases. Existing saved voices always stay with their original account. No secret values appear in this panel.</p>
@@ -685,6 +692,6 @@
   <div class="toast hidden" id="toast"></div>
   <script src="/admin.js?v=16.59-scroll-stability"></script><script src="/admin-video.js?v=16.51-price-persistence"></script><script src="/cf-controls-admin.js?v=16.24"></script>
 <script src="/cf-temp-voice-admin.js?v=16.34"></script>
-<script src="/cf-clone-availability-admin.js?v=16.44"></script><script src="/permanent-slots-admin.js?v=16.61"></script>
+<script src="/cf-clone-availability-admin.js?v=16.44"></script><script src="/permanent-slots-admin.js?v=16.62"></script>
 <script src="/affiliate-admin.js?v=16.37"></script></body>
 </html>

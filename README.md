@@ -1,24 +1,3 @@
-CallFocus V16.61 — Account 4 activation switch persistence (latest prepared build)
+CallFocus V16.62 — Admin-controlled public voice slot availability (latest prepared build)
 
-See README-V16.61-ACCOUNT4-TOGGLE-FIX.md. No SQL migration is required.
-
-CallFocus V16.60 — Account 4 onboarding and verified overflow (latest prepared build)
-
-See README-V16.60-ACCOUNT4-SETUP.md. No SQL migration is required.
-
-CallFocus V16.59 — Scroll Stability & Recent Call Draft Preservation (latest prepared build)
-
-See README-V16.59-SCROLL-STABILITY.md for details.
-
-CallFocus V16.58 — Paid Permanent Voice Slot Purchase (latest prepared build)
-
-See README-V16.58-PAID-PERMANENT-VOICE-SLOTS.md for scope, safeguards, one-time additive SQL and deployment order.
-
-CallFocus V16.57 — Unified Permanent Voice Slot Management (latest prepared build)
-
-See README-V16.57-GLOBAL-VOICE-SLOTS.md for migration instructions and the scope of this update.
-
-Historical project note:
-CallFocus V15.54 Visual Test — Caller-Focused Auto-Fill Labels
-
-Latest prepared build. See README-V15.54-TEST.md for the targeted changes.
+See README-V16.62-PUBLIC-SLOT-AVAILABILITY.md. No SQL migration is required.

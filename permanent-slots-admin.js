@@ -4,7 +4,7 @@ const token=()=>localStorage.getItem('callfocus_admin_session_v158')||sessionSto
 const status=$('cfSlotStatus');
 const fields=['enabled','popupEnabled','forceFull','slotLimit','minimumCredits','pool4AcceptNew','eventDate','bookingOpensAt','bookingClosesAt','headline','message','fullMessage','telegramUrl'];
 const dirty=new Set();
-let loaded=false,fetchGeneration=0,toggleBusy=false,confirmedToggle=false,confirmedRevision=0,toggleNotice='';
+let loaded=false,fetchGeneration=0,toggleBusy=false,confirmedToggle=false,confirmedRevision=0,toggleNotice='',publicAvailabilityBusy=false,publicAvailabilityEdited=false;
 async function request(path='/api/admin/permanent-slots',method='GET',body){
  const r=await fetch(path,{method,headers:{'X-CallFocus-Admin-Key':token(),...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store'});
  const d=await r.json().catch(()=>({}));if(!r.ok||!d.ok)throw Error(d.error||'Slot request failed.');return d;
@@ -27,6 +27,7 @@ function render(d){
  if($('cfSlotAccount4Status'))$('cfSlotAccount4Status').textContent=(toggleNotice?toggleNotice+' · ':'')+msg;
  if($('cfSlotPools'))$('cfSlotPools').textContent=Object.values(d.pools||{}).filter(p=>p.apiKeyConfigured||p.reserved).map(p=>`Account ${p.index}: ${p.ok?'connected':'check connection'} · ${p.reserved} booked · ${p.created} saved · ${p.pending} idle pending · ${p.ok?p.voiceSlotsUsed+'/'+p.voiceSlotLimit+' used':''} · ${p.available} usable slots`).join(' | ');
  if($('cfSlotProvider'))$('cfSlotProvider').textContent=`Public release: ${d.releaseUsed||0} booked from current release of ${d.releaseQuota||0}. New accounts are detected when configured with their own API key and Agent ID.`;
+ if(!publicAvailabilityBusy&&!publicAvailabilityEdited&&$('cfSlotPublicAvailableCount'))$('cfSlotPublicAvailableCount').value=String(d.remaining??0);
  if($('cfSlotBookings'))$('cfSlotBookings').textContent=(d.bookings||[]).map(r=>`${r.state.toUpperCase()} · ${r.user_id.slice(0,10)}… · ${r.voice_name||'Voice not created'} · ${r.booked_at.slice(0,10)}`).join('\n')||'No reservations yet.';
  loaded=true;
 }
@@ -73,6 +74,24 @@ $('cfSlotSave').onclick=async()=>{
  try{const d=await request('/api/admin/permanent-slots','POST',body);confirmedRevision=Math.max(confirmedRevision,Number(d.settings?.revision||0));confirmedToggle=!!d.settings?.pool4AcceptNew;dirty.clear();status.textContent='Settings saved successfully.';await refresh()}
  catch(e){status.textContent='Settings NOT saved: '+e.message}finally{btn.disabled=false}
 };
+$('cfSlotPublicAvailableCount')?.addEventListener('input',()=>{publicAvailabilityEdited=true});
+$('cfSlotPublicAvailableSave')?.addEventListener('click',async()=>{
+ if(publicAvailabilityBusy)return;
+ const input=$('cfSlotPublicAvailableCount'),button=$('cfSlotPublicAvailableSave'),message=$('cfSlotPublicAvailableStatus');
+ const count=Number(input?.value);
+ if(!input?.value.trim()||!Number.isSafeInteger(count)||count<0||count>1000){message.textContent='Enter a whole number between 0 and 1000.';return}
+ button.disabled=true;publicAvailabilityBusy=true;++fetchGeneration;
+ message.textContent='Checking available capacity and updating the website…';
+ try{
+  const d=await request('/api/admin/permanent-slots/public-availability','POST',{count});
+  confirmedRevision=Math.max(confirmedRevision,Number(d.revision||0));
+  publicAvailabilityEdited=false;
+  if($('cfSlotGlobalRelease'))$('cfSlotGlobalRelease').textContent=`${d.remaining} available · updating`;
+  message.textContent=`Saved: ${d.remaining} slots available on the website out of ${d.total} total. Existing ${d.booked} reservations were preserved.`;
+ }catch(e){message.textContent='Not saved: '+e.message}
+ finally{button.disabled=false;publicAvailabilityBusy=false}
+ await refresh();
+});
 $('cfSlotReleaseBtn')?.addEventListener('click',async()=>{
  const btn=$('cfSlotReleaseBtn'),info=$('cfSlotReleaseStatus');const count=Number($('cfSlotReleaseCount')?.value||0),confirm=$('cfSlotReleaseConfirm')?.value||'';
  if(confirm!=='RELEASE UNCREATED SLOTS'){info.textContent='Type RELEASE UNCREATED SLOTS to confirm. Only free legacy reservations may be cancelled. Paid reservations are protected until refunded.';return}
