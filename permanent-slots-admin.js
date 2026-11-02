@@ -2,13 +2,15 @@
 const $=id=>document.getElementById(id);if(!$('cfSlotSave'))return;
 const token=()=>localStorage.getItem('callfocus_admin_session_v158')||sessionStorage.getItem('callfocus_admin_key')||'';
 const status=$('cfSlotStatus');let loaded=false;
-const fields=['enabled','popupEnabled','forceFull','slotLimit','minimumCredits','eventDate','bookingOpensAt','bookingClosesAt','headline','message','fullMessage','telegramUrl'];
+const fields=['enabled','popupEnabled','forceFull','slotLimit','minimumCredits','pool4AcceptNew','eventDate','bookingOpensAt','bookingClosesAt','headline','message','fullMessage','telegramUrl'];
 async function request(path='/api/admin/permanent-slots',method='GET',body){const r=await fetch(path,{method,headers:{'X-CallFocus-Admin-Key':token(),...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok||!d.ok)throw Error(d.error||'Slot request failed.');return d;}
 function render(d){const s=d.settings;
  for(const k of fields){const el=$('cfSlot_'+k);if(!el)continue;if(el.type==='checkbox')el.checked=!!s[k];else el.value=s[k]??''}
  status.textContent=`${d.booked} reserved of ${d.total} total slots. ${d.remaining} currently open for new customers. Booking ${s.enabled?'ON':'OFF'}; popup ${s.popupEnabled?'ON':'OFF'}.`;
  const values={cfSlotGlobalTotal:`${d.booked} / ${d.total}`,cfSlotGlobalCreated:d.created,cfSlotGlobalPending:d.pending,cfSlotGlobalEligible:d.reclaimable,cfSlotGlobalRelease:`${d.remaining} available · ${d.paidPurchases||0} paid`};
  for(const [id,value] of Object.entries(values))if($(id))$(id).textContent=value;
+ const a4=d.account4||{},c4=d.pools?.pool4||{};
+ if($('cfSlotAccount4Status'))$('cfSlotAccount4Status').textContent=`${a4.ready?'Verified':'Not yet ready'} · ${a4.message||'Not checked'} · ${c4.reserved||0} booked · ${c4.created||0} saved voices · ${c4.ok?c4.voiceSlotsUsed+'/'+c4.voiceSlotLimit+' storage used':'subscription not verified'}. ${s.pool4AcceptNew?'Accepting new purchases':'New purchases disabled'}.`;
  if($('cfSlotPools'))$('cfSlotPools').textContent=Object.values(d.pools||{}).filter(p=>p.apiKeyConfigured||p.reserved).map(p=>`Account ${p.index}: ${p.ok?'connected':'check connection'} · ${p.reserved} booked · ${p.created} saved · ${p.pending} idle pending · ${p.ok?p.voiceSlotsUsed+'/'+p.voiceSlotLimit+' used':''} · ${p.available} usable slots`).join(' | ');
  if($('cfSlotProvider'))$('cfSlotProvider').textContent=`Public release: ${d.releaseUsed||0} booked from current release of ${d.releaseQuota||0}. New accounts are detected when configured with their own API key and Agent ID.`;
  if($('cfSlotBookings'))$('cfSlotBookings').textContent=(d.bookings||[]).map(r=>`${r.state.toUpperCase()} · ${r.user_id.slice(0,10)}… · ${r.voice_name||'Voice not created'} · ${r.booked_at.slice(0,10)}`).join('\n')||'No reservations yet.';
@@ -16,6 +18,7 @@ function render(d){const s=d.settings;
 }
 async function refresh(){if(!token())return;try{render(await request())}catch(e){status.textContent=e.message;loaded=false}}
 $('cfSlotRefresh').onclick=refresh;
+$('cfSlotAccount4Verify')?.addEventListener('click',refresh);
 $('cfSlotSave').onclick=async()=>{if(!loaded)return refresh();const body={};for(const k of fields){const el=$('cfSlot_'+k);body[k]=el.type==='checkbox'?el.checked:el.type==='number'?Number(el.value):el.value.trim()};const btn=$('cfSlotSave');btn.disabled=true;status.textContent='Saving…';try{await request('/api/admin/permanent-slots','POST',body);await refresh()}catch(e){status.textContent=e.message}finally{btn.disabled=false}};
 $('cfSlotReleaseBtn')?.addEventListener('click',async()=>{
  const btn=$('cfSlotReleaseBtn'),info=$('cfSlotReleaseStatus');const count=Number($('cfSlotReleaseCount')?.value||0),confirm=$('cfSlotReleaseConfirm')?.value||'';

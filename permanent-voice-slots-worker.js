@@ -3,7 +3,7 @@ const SLOT_KEY='callfocus:permanent-voice:settings:v1';
 const SLOT_PRICE_CREDITS=1000;
 const SLOT_PRICE_SECONDS=600;
 const SLOT_RECEIPT_PREFIX='permanent-slot:';
-const DEF={enabled:false,popupEnabled:false,forceFull:false,slotLimit:30,minimumCredits:1000,primaryLimit:30,secondaryLimit:30,secondaryEnabled:false,primaryAcceptNew:true,secondaryAcceptNew:true,tertiaryLimit:30,tertiaryEnabled:false,releaseQuota:0,releaseId:'',eventDate:'',bookingOpensAt:'',bookingClosesAt:'',headline:'Limited permanent voice cloning slots',message:'Buy a permanent voice-cloning slot for 1,000 credits. Your saved voice can then be reused for cloned calls and voice notes.',fullMessage:'All permanent voice cloning slots are filled. Join our Telegram channel to be the first to know when the next slots open.',telegramUrl:'https://t.me/callfocus',revision:1};
+const DEF={enabled:false,popupEnabled:false,forceFull:false,slotLimit:30,minimumCredits:1000,primaryLimit:30,secondaryLimit:30,secondaryEnabled:false,primaryAcceptNew:true,secondaryAcceptNew:true,tertiaryLimit:30,tertiaryEnabled:false,pool4AcceptNew:false,releaseQuota:0,releaseId:'',eventDate:'',bookingOpensAt:'',bookingClosesAt:'',headline:'Limited permanent voice cloning slots',message:'Buy a permanent voice-cloning slot for 1,000 credits. Your saved voice can then be reused for cloned calls and voice notes.',fullMessage:'All permanent voice cloning slots are filled. Join our Telegram channel to be the first to know when the next slots open.',telegramUrl:'https://t.me/callfocus',revision:1};
 const j=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const err=(text,status=400)=>j({ok:false,error:text},status);
 const sql=env=>{if(!env.CALLFOCUS_WALLET_DB?.prepare)throw Error('VOICE_SLOTS_D1_NOT_CONFIGURED');return env.CALLFOCUS_WALLET_DB};
@@ -21,11 +21,31 @@ async function poolCounts(db){
  for(const r of rows.results||[])if(result[r.provider_pool])result[r.provider_pool]={reserved:Number(r.n||0),created:Number(r.created||0),pending:Number(r.pending||0)};
  return result;
 }
+// Account 4 requires explicit admin activation. Earlier accounts keep their existing behavior.
+const poolOpenForNew=(s,pool)=>pool!=='pool4'||s.pool4AcceptNew===true;
 const totalReserved=counts=>POOLS.reduce((n,p)=>n+(counts[p]?.reserved||0),0);
 const totalCreated=counts=>POOLS.reduce((n,p)=>n+(counts[p]?.created||0),0);
 const totalPending=counts=>POOLS.reduce((n,p)=>n+(counts[p]?.pending||0),0);
 const effectiveLimit=s=>s.slotLimit;
 async function subscription(env,pool){const key=poolKey(env,pool);if(!key)return {ok:false,error:'Account credentials not configured.'};try{const r=await fetch('https://api.elevenlabs.io/v1/user/subscription',{headers:{'xi-api-key':key},signal:AbortSignal.timeout(10000)});if(!r.ok)return {ok:false,error:'Subscription check failed (HTTP '+r.status+').'};const d=await r.json();return {ok:true,tier:String(d.tier||''),voiceSlotsUsed:Number(d.voice_slots_used??0),voiceSlotLimit:Number(d.voice_limit??0),monthlyCreationUsed:d.voice_add_edit_counter??null,monthlyCreationLimit:d.max_voice_add_edits??null,canClone:d.can_use_instant_voice_cloning!==false,status:d.status||''}}catch{return {ok:false,error:'Subscription service unavailable.'}}}
+async function verifyAccount4(env,existingCap){
+ const hasKey=!!poolKey(env,'pool4'),hasAgent=!!poolAgent(env,'pool4');
+ if(!hasKey||!hasAgent)return {ready:false,keyConfigured:hasKey,agentConfigured:hasAgent,agentVerified:false,message:'Add both Account 4 secrets in Cloudflare.'};
+ const cap=existingCap||await subscription(env,'pool4');
+ if(!cap?.ok)return {ready:false,keyConfigured:true,agentConfigured:true,agentVerified:false,message:cap?.error||'Subscription unavailable.'};
+ if(cap.status&&!['active','trialing'].includes(String(cap.status)))return {ready:false,keyConfigured:true,agentConfigured:true,agentVerified:false,message:'Account subscription is not active.'};
+ if(cap.canClone===false)return {ready:false,keyConfigured:true,agentConfigured:true,agentVerified:false,message:'Account plan does not allow voice cloning.'};
+ if(!Number.isFinite(cap.voiceSlotLimit)||cap.voiceSlotLimit<=cap.voiceSlotsUsed)return {ready:false,keyConfigured:true,agentConfigured:true,agentVerified:false,message:'No free voice-storage slots in Account 4.'};
+ if(cap.monthlyCreationLimit!=null&&Number(cap.monthlyCreationUsed||0)>=Number(cap.monthlyCreationLimit))return {ready:false,keyConfigured:true,agentConfigured:true,agentVerified:false,message:'Monthly voice-creation allowance is exhausted.'};
+ try{
+  const agent=encodeURIComponent(poolAgent(env,'pool4'));
+  const r=await fetch('https://api.elevenlabs.io/v1/convai/agents/'+agent,{headers:{'xi-api-key':poolKey(env,'pool4')},signal:AbortSignal.timeout(10000)});
+  if(!r.ok)return {ready:false,keyConfigured:true,agentConfigured:true,agentVerified:false,message:'Agent ID verification failed (HTTP '+r.status+').'};
+  const data=await r.json().catch(()=>({}));
+  if(data?.agent_id!==poolAgent(env,'pool4'))return {ready:false,keyConfigured:true,agentConfigured:true,agentVerified:false,message:'The Agent ID did not match the verified agent.'};
+  return {ready:true,keyConfigured:true,agentConfigured:true,agentVerified:true,message:'Account 4 is verified for voice cloning and calls.'};
+ }catch{return {ready:false,keyConfigured:true,agentConfigured:true,agentVerified:false,message:'Could not check Account 4 Agent ID.'}}
+}
 async function capacities(env){
  const results=await Promise.all(POOLS.map(async id=>[id,await subscription(env,id)]));
  return Object.fromEntries(results);
@@ -36,16 +56,16 @@ function freeInPool(cap,count){
  const ops=cap.monthlyCreationLimit===null||cap.monthlyCreationLimit===undefined?Infinity:Math.max(0,Number(cap.monthlyCreationLimit)-Number(cap.monthlyCreationUsed||0)-count.pending);
  return Math.max(0,Math.floor(Math.min(physical,ops)));
 }
-function physicalFree(caps,counts){return POOLS.reduce((n,p)=>n+freeInPool(caps[p],counts[p]),0)}
+function physicalFree(caps,counts,s){return POOLS.reduce((n,p)=>n+(poolOpenForNew(s,p)?freeInPool(caps[p],counts[p]):0),0)}
 async function bookedInRelease(db,id){if(!id)return 0;const r=await db.prepare('SELECT COUNT(*) AS n FROM cf_permanent_voice_slots WHERE release_id=?').bind(id).first();return Number(r?.n||0)}
 async function available(db,s,counts,caps){
  const issued=await bookedInRelease(db,s.releaseId);
  const budget=Math.max(0,Number(s.releaseQuota||0)-issued);
- return {issued,budget,remaining:Math.max(0,Math.min(budget,s.slotLimit-totalReserved(counts),physicalFree(caps,counts)))};
+ return {issued,budget,remaining:Math.max(0,Math.min(budget,s.slotLimit-totalReserved(counts),physicalFree(caps,counts,s)))};
 }
 // Never blindly reassign READY, CREATING or VERIFICATION rows. Only an uncreated,
 // idle booking can move, and never to an account unable to honour its reservation.
-async function rebalance(db,env,counts,caps){
+async function rebalance(db,env,counts,caps,s){
  const moves=[];
  for(let i=0;i<POOLS.length;i++){
   const from=POOLS[i],info=counts[from],cap=caps[from];
@@ -54,7 +74,7 @@ async function rebalance(db,env,counts,caps){
   let overflow=Math.max(0,info.reserved-info.created-Math.max(0,physical));
   if(cap.monthlyCreationLimit!=null)overflow=Math.max(overflow,info.pending-Math.max(0,Number(cap.monthlyCreationLimit)-Number(cap.monthlyCreationUsed||0)));
   while(overflow>0){
-   const to=POOLS.slice(i+1).find(q=>freeInPool(caps[q],counts[q])>0);
+   const to=POOLS.slice(i+1).find(q=>poolOpenForNew(s,q)&&freeInPool(caps[q],counts[q])>0);
    if(!to)break;
    const result=await db.prepare(`UPDATE cf_permanent_voice_slots SET provider_pool=?,updated_at=?
      WHERE user_id=(SELECT user_id FROM cf_permanent_voice_slots WHERE provider_pool=? AND state IN ('booked','failed') AND voice_id IS NULL ORDER BY booked_at ASC LIMIT 1)
@@ -95,7 +115,8 @@ function parseSettings(x,previous){
  if(openMs!==null&&closeMs!==null&&closeMs<=openMs)throw Error('Booking closing time must be later than opening time (Nigeria time).');
  const telegramUrl=safeText(x.telegramUrl,300);if(!/^https:\/\/t\.me\/[A-Za-z0-9_+\-/]{3,}$/.test(telegramUrl))throw Error('Provide a valid Telegram channel link (https://t.me/...).');
  for(const k of ['headline','message','fullMessage'])if(!safeText(x[k],k==='headline'?100:350))throw Error('Complete all customer-facing messages.');
- return {...DEF,enabled:x.enabled,popupEnabled:x.popupEnabled,forceFull:x.forceFull,slotLimit:n,releaseQuota:previous.releaseQuota||0,releaseId:previous.releaseId||'',minimumCredits,eventDate,bookingOpensAt,bookingClosesAt,headline:safeText(x.headline,100),message:safeText(x.message,350),fullMessage:safeText(x.fullMessage,350),telegramUrl,revision:previous.revision+1};
+ if(typeof x.pool4AcceptNew!=='boolean')throw Error('Select whether Account 4 can receive new purchases.');
+ return {...DEF,enabled:x.enabled,popupEnabled:x.popupEnabled,forceFull:x.forceFull,slotLimit:n,pool4AcceptNew:x.pool4AcceptNew,releaseQuota:previous.releaseQuota||0,releaseId:previous.releaseId||'',minimumCredits,eventDate,bookingOpensAt,bookingClosesAt,headline:safeText(x.headline,100),message:safeText(x.message,350),fullMessage:safeText(x.fullMessage,350),telegramUrl,revision:previous.revision+1};
 }
 function publicView(s,count,record,remaining=0){const phase=bookingPhase(s);const capacity=effectiveLimit(s);return {ok:true,enabled:s.enabled,popupEnabled:s.popupEnabled,slotLimit:capacity,booked:count,remaining,full:s.forceFull===true||remaining<=0,minimumCredits:SLOT_PRICE_CREDITS,purchasePrice:SLOT_PRICE_CREDITS,bookingIsPaid:true,eventDate:s.eventDate,bookingOpensAt:s.bookingOpensAt||'',bookingClosesAt:s.bookingClosesAt||'',bookingPhase:phase,canBookNow:s.enabled&&phase==='open'&&!s.forceFull&&remaining>0,headline:s.headline,message:s.message,fullMessage:s.fullMessage,telegramUrl:s.telegramUrl,revision:s.revision,me:record?{state:record.state,bookedAt:record.booked_at,voiceName:record.voice_name||null,hasSavedVoice:record.state==='ready',purchasePending:record.purchasePending===true,purchased:record.purchased===true,grandfathered:!record.purchase_id}:null}}
 async function slotVoiceForUser(env,userId){const v=await row(sql(env),userId);return v?.state==='ready'&&/^[A-Za-z0-9_-]{8,120}$/.test(String(v.voice_id||''))?{voiceId:v.voice_id,name:v.voice_name||'My permanent voice',persistent:true,providerPool:v.provider_pool||'primary'}:null}
@@ -218,7 +239,7 @@ async function customer(req,env,helpers){
   let booked=null,created=false;
   const now=new Date().toISOString();
   for(const pool of POOLS){
-   if(freeInPool(caps[pool],counts[pool])<=0)continue;
+   if(!poolOpenForNew(s,pool)||freeInPool(caps[pool],counts[pool])<=0)continue;
    const purchaseId=crypto.randomUUID();
    const out=await db.batch([
     db.prepare(`INSERT INTO cf_permanent_voice_slots(user_id,booked_at,state,updated_at,provider_pool,release_id,purchase_id)
@@ -252,17 +273,22 @@ async function admin(req,env){
   const caps=await capacities(env);
   // New accounts automatically receive only eligible, uncreated reservations
   // stranded by a full earlier account. Saved voices never migrate.
-  let moved=[];try{moved=await rebalance(db,env,counts,caps)}catch(e){console.warn('Pending rebalance deferred',String(e))}
+  let moved=[];try{moved=await rebalance(db,env,counts,caps,s)}catch(e){console.warn('Pending rebalance deferred',String(e))}
   const a=await available(db,s,counts,caps);
   const rows=await db.prepare('SELECT user_id,booked_at,state,voice_name,created_at,provider_pool FROM cf_permanent_voice_slots ORDER BY booked_at DESC LIMIT 100').all();
-  const pools=Object.fromEntries(POOLS.map((pool,i)=>[pool,{...caps[pool],index:i+1,reserved:counts[pool].reserved,created:counts[pool].created,pending:counts[pool].pending,available:freeInPool(caps[pool],counts[pool]),apiKeyConfigured:!!poolKey(env,pool),agentConfigured:!!poolAgent(env,pool)}]));
+  const pools=Object.fromEntries(POOLS.map((pool,i)=>[pool,{...caps[pool],index:i+1,reserved:counts[pool].reserved,created:counts[pool].created,pending:counts[pool].pending,available:poolOpenForNew(s,pool)?freeInPool(caps[pool],counts[pool]):0,acceptingNew:poolOpenForNew(s,pool),apiKeyConfigured:!!poolKey(env,pool),agentConfigured:!!poolAgent(env,pool)}]));
+  const account4=await verifyAccount4(env,caps.pool4);
   const purchaseStats=await db.prepare("SELECT COUNT(*) AS n FROM cf_permanent_voice_slot_purchases WHERE state='paid'").first();
   const eligibleLegacy=await db.prepare("SELECT COUNT(*) AS n FROM cf_permanent_voice_slots WHERE purchase_id IS NULL AND voice_id IS NULL AND state IN ('booked','failed')").first();
-  return j({ok:true,paidPurchases:Number(purchaseStats?.n||0),settings:s,booked:totalReserved(counts),created:totalCreated(counts),pending:totalReserved(counts)-totalCreated(counts),reclaimable:Number(eligibleLegacy?.n||0),total:s.slotLimit,remaining:a.remaining,physicalAvailable:physicalFree(caps,counts),releaseQuota:s.releaseQuota||0,releaseUsed:a.issued,pools,rebalanceCount:moved.length,bookings:rows.results||[]});
+  return j({ok:true,paidPurchases:Number(purchaseStats?.n||0),settings:s,booked:totalReserved(counts),created:totalCreated(counts),pending:totalReserved(counts)-totalCreated(counts),reclaimable:Number(eligibleLegacy?.n||0),total:s.slotLimit,remaining:a.remaining,physicalAvailable:physicalFree(caps,counts,s),releaseQuota:s.releaseQuota||0,releaseUsed:a.issued,pools,account4,rebalanceCount:moved.length,bookings:rows.results||[]});
  }
  let body;try{body=await req.json()}catch{return err('Invalid settings JSON.')}
  let next;try{next=parseSettings(body,s)}catch(e){return err(e.message)}
  if(next.slotLimit<totalReserved(counts))return err(`There are ${totalReserved(counts)} reserved voices. The total capacity cannot be lower.`,409);
+ if(!s.pool4AcceptNew&&next.pool4AcceptNew){
+  const verified=await verifyAccount4(env);
+  if(!verified.ready)return err('Account 4 is not ready: '+verified.message,409);
+ }
  try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next));return j({ok:true,settings:next})}catch{return err('Could not save settings.',503)}
 }
 // Admin-only explicit reclaim and release. Reservations are reclaimed only if needed
@@ -277,14 +303,14 @@ async function releasePending(req,env){
  let db,s;try{db=sql(env);s=await settings(env)}catch{return err('Slot settings unavailable.',503)}
  if(wanted>s.slotLimit)return err('The release cannot exceed your total slots.',409);
  const counts=await poolCounts(db),caps=await capacities(env);
- const free=Math.max(0,Math.min(s.slotLimit-totalReserved(counts),physicalFree(caps,counts)));
+ const free=Math.max(0,Math.min(s.slotLimit-totalReserved(counts),physicalFree(caps,counts,s)));
  const required=Math.max(0,wanted-free);
  // Reclaim only from an account whose reported physical and monthly creation
  // capacity can actually be returned to the public. Canceling a booking on an
  // already physically exhausted account would create a misleading free slot.
  const reclaimableByPool=Object.fromEntries(POOLS.map(pool=>{
   const cap=caps[pool],count=counts[pool];
-  if(!cap?.ok||cap.canClone===false)return [pool,0];
+  if(!poolOpenForNew(s,pool)||!cap?.ok||cap.canClone===false)return [pool,0];
   const spare=Math.max(0,Math.floor(cap.voiceSlotLimit-Math.max(cap.voiceSlotsUsed,count.created)));
   const monthly=cap.monthlyCreationLimit==null?Infinity:Math.max(0,Math.floor(Number(cap.monthlyCreationLimit)-Number(cap.monthlyCreationUsed||0)));
   return [pool,Math.min(count.pending,spare,monthly)];
@@ -373,7 +399,7 @@ async function createSavedVoice(req,env,helpers){
  if(s.eventDate&&new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Lagos',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())<s.eventDate)return err(`Permanent voice creation opens on ${s.eventDate}. Your booking stays reserved.`,409);
  
  const counts=await poolCounts(db),caps=await capacities(env);
- try{await rebalance(db,env,counts,caps)}catch{}
+ try{await rebalance(db,env,counts,caps,s)}catch{}
  const v=await row(db,a.user.id);if(!v)return err('Buy a permanent voice-cloning slot first.',403);
  if(v.purchase_id){const payment=await purchase(db,v.purchase_id);if(!payment||payment.state!=='paid')return err('Complete the 1,000-credit slot purchase before creating your voice. Open the slot popup and tap Complete purchase.',402);}
  const pool=v.provider_pool||'primary';const key=poolKey(env,pool);

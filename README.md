@@ -1,3 +1,7 @@
+CallFocus V16.60 — Account 4 onboarding and verified overflow (latest prepared build)
+
+See README-V16.60-ACCOUNT4-SETUP.md. No SQL migration is required.
+
 CallFocus V16.59 — Scroll Stability & Recent Call Draft Preservation (latest prepared build)
 
 See README-V16.59-SCROLL-STABILITY.md for details.
