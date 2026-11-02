@@ -1,3 +1,7 @@
+CallFocus V16.61 — Account 4 activation switch persistence (latest prepared build)
+
+See README-V16.61-ACCOUNT4-TOGGLE-FIX.md. No SQL migration is required.
+
 CallFocus V16.60 — Account 4 onboarding and verified overflow (latest prepared build)
 
 See README-V16.60-ACCOUNT4-SETUP.md. No SQL migration is required.

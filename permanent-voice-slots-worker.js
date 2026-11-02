@@ -291,6 +291,25 @@ async function admin(req,env){
  }
  try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next));return j({ok:true,settings:next})}catch{return err('Could not save settings.',503)}
 }
+// Dedicated admin toggle: persist only Account 4 activation without overwriting
+// any other unsaved voice-slot settings in the admin form. This route is
+// protected by the same admin session guard as the full settings endpoint.
+async function toggleAccount4(req,env){
+ if(req.method!=='POST')return err('Method not allowed.',405);
+ let input;try{input=await req.json()}catch{return err('Invalid Account 4 setting.',400)}
+ if(typeof input?.enabled!=='boolean')return err('Choose whether Account 4 accepts new purchases.',400);
+ let s;try{s=await settings(env)}catch{return err('Voice-slot settings unavailable.',503)}
+ if(input.enabled&&!s.pool4AcceptNew){
+  const verified=await verifyAccount4(env);
+  if(!verified.ready)return err('Account 4 cannot be enabled: '+verified.message,409);
+ }
+ if(s.pool4AcceptNew===input.enabled)return j({ok:true,pool4AcceptNew:input.enabled,revision:s.revision,unchanged:true});
+ const next={...s,pool4AcceptNew:input.enabled,revision:Number(s.revision||0)+1};
+ try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next))}
+ catch{return err('Account 4 setting could not be saved. Please retry.',503)}
+ return j({ok:true,pool4AcceptNew:input.enabled,revision:next.revision});
+}
+
 // Admin-only explicit reclaim and release. Reservations are reclaimed only if needed
 // for requested fresh availability. Every removed booking is written to an audit table
 // in the SAME atomic D1 batch; READY/CREATING/VERIFICATION records are untouchable.
@@ -439,4 +458,4 @@ async function createSavedVoice(req,env,helpers){
  return j({ok:true,state,voiceName:name,hasSavedVoice:state==='ready',message:state==='ready'?'Your permanent voice is saved and ready for future calls and voice notes.':'Your voice requires additional provider verification. It will not be recreated automatically.'});
 }
 
-export {createSavedVoice,settings as slotSettings,customer as slotCustomer,admin as slotAdmin,slotVoiceForUser,publicView as slotPublicView,sql as slotDB,row as slotRow,userAvailableCredits,reassignPending,releasePending};
+export {createSavedVoice,settings as slotSettings,customer as slotCustomer,admin as slotAdmin,slotVoiceForUser,publicView as slotPublicView,sql as slotDB,row as slotRow,userAvailableCredits,reassignPending,releasePending,toggleAccount4};
