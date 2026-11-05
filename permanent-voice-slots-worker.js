@@ -316,7 +316,7 @@ async function admin(req,env){
   const account5=await verifyAccount5(env,caps.pool5);
   const purchaseStats=await db.prepare("SELECT COUNT(*) AS n FROM cf_permanent_voice_slot_purchases WHERE state='paid'").first();
   const eligibleLegacy=await db.prepare("SELECT COUNT(*) AS n FROM cf_permanent_voice_slots WHERE purchase_id IS NULL AND voice_id IS NULL AND state IN ('booked','failed')").first();
-  return j({ok:true,paidPurchases:Number(purchaseStats?.n||0),settings:s,booked:totalReserved(counts),created:totalCreated(counts),pending:totalReserved(counts)-totalCreated(counts),reclaimable:Number(eligibleLegacy?.n||0),total:s.slotLimit,remaining:a.remaining,physicalAvailable:physicalFree(caps,counts,s),releaseQuota:s.releaseQuota||0,releaseUsed:a.issued,pools,account4,account5,rebalanceCount:moved.length,bookings:rows.results||[]});
+  return j({ok:true,voiceAdminBuild:'16.66',paidPurchases:Number(purchaseStats?.n||0),settings:s,booked:totalReserved(counts),created:totalCreated(counts),pending:totalReserved(counts)-totalCreated(counts),reclaimable:Number(eligibleLegacy?.n||0),total:s.slotLimit,remaining:a.remaining,physicalAvailable:physicalFree(caps,counts,s),releaseQuota:s.releaseQuota||0,releaseUsed:a.issued,pools,account4,account5,rebalanceCount:moved.length,bookings:rows.results||[]});
  }
  let body;try{body=await req.json()}catch{return err('Invalid settings JSON.')}
  let next;try{next=parseSettings(body,s)}catch(e){return err(e.message)}
@@ -361,11 +361,11 @@ async function toggleAccount5(req,env){
   const verified=await verifyAccount5(env);
   if(!verified.ready)return err('Account 5 cannot be enabled: '+verified.message,409);
  }
- if(s.pool5AcceptNew===input.enabled)return j({ok:true,pool5AcceptNew:input.enabled,revision:s.revision,unchanged:true});
+ if(s.pool5AcceptNew===input.enabled)return j({ok:true,voiceAdminBuild:'16.66',pool5AcceptNew:input.enabled,revision:s.revision,unchanged:true});
  const next={...s,pool5AcceptNew:input.enabled,revision:Number(s.revision||0)+1};
  try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next))}
  catch{return err('Account 5 setting could not be saved. Please retry.',503)}
- return j({ok:true,pool5AcceptNew:input.enabled,revision:next.revision});
+ return j({ok:true,voiceAdminBuild:'16.66',pool5AcceptNew:input.enabled,revision:next.revision});
 }
 
 // Admin-owned public availability, independent of the legacy reclaim/cancel action.

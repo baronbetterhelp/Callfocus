@@ -1,16 +1,29 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id);if(!$('cfSlotSave'))return;
+const VOICE_ADMIN_BUILD='16.66';if(typeof window!=='undefined')window.__cfVoiceAdmin1666Loaded=true;
 const token=()=>localStorage.getItem('callfocus_admin_session_v158')||sessionStorage.getItem('callfocus_admin_key')||'';
 const status=$('cfSlotStatus');
 const fields=['enabled','popupEnabled','popupDelaySeconds','forceFull','slotLimit','minimumCredits','pool4AcceptNew','pool5AcceptNew','eventDate','bookingOpensAt','bookingClosesAt','headline','message','fullMessage','telegramUrl'];
 const dirty=new Set();
-let loaded=false,fetchGeneration=0,toggleBusy=false,confirmedToggle=false,confirmedRevision=0,toggleNotice='',account5Busy=false,confirmedToggle5=false,toggleNotice5='',publicAvailabilityBusy=false,publicAvailabilityEdited=false;
+let loaded=false,buildVerified=false,fetchGeneration=0,toggleBusy=false,confirmedToggle=false,confirmedRevision=0,toggleNotice='',account5Busy=false,confirmedToggle5=false,toggleNotice5='',publicAvailabilityBusy=false,publicAvailabilityEdited=false;
 async function request(path='/api/admin/permanent-slots',method='GET',body){
  const r=await fetch(path,{method,headers:{'X-CallFocus-Admin-Key':token(),...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store'});
  const d=await r.json().catch(()=>({}));if(!r.ok||!d.ok)throw Error(d.error||'Slot request failed.');return d;
 }
 function render(d){
  const s=d.settings;if(!s)return;
+  // A new Admin page must never silently talk to an older Worker.
+  if(d.voiceAdminBuild!==VOICE_ADMIN_BUILD){
+    buildVerified=false;
+    const button=$('cfSlot_pool5AcceptNew'),verify=$('cfSlotAccount5Verify');
+    if(button)button.disabled=true;if(verify)verify.disabled=true;
+    const warning=`Account 5 is unavailable because the Admin page and Worker versions do not match (expected ${VOICE_ADMIN_BUILD}, received ${d.voiceAdminBuild||'older version'}). Confirm V16.66 is active in Cloudflare, then refresh the Admin page.`;
+    if($('cfSlotAccount5Status'))$('cfSlotAccount5Status').textContent=warning;
+    status.textContent=warning;return;
+  }
+  buildVerified=true;
+  const verify=$('cfSlotAccount5Verify');if(verify)verify.disabled=false;
+  const account=$('cfSlot_pool5AcceptNew');if(account&&!account5Busy)account.disabled=false;
  // A KV read made immediately after a successful write may return older data.
  // Never let it undo the admin's newly saved Account 4 selection.
  if(Number(s.revision||0)<confirmedRevision)return;
@@ -39,7 +52,11 @@ async function refresh(){
  if(!token())return;
  const generation=++fetchGeneration;
  try{const d=await request();if(generation===fetchGeneration)render(d)}
- catch(e){if(generation===fetchGeneration){status.textContent=e.message;if(!loaded)loaded=false}}
+ catch(e){if(generation===fetchGeneration){
+   status.textContent=e.message;
+   if(!loaded)loaded=false;
+   if(!buildVerified){const a5=$('cfSlotAccount5Status');if(a5)a5.textContent=`Account 5 could not be verified: ${e.message}. Confirm the V16.66 deployment is active and refresh.`;}
+  }}
 }
 // Do not throw away edits to other settings when a background refresh completes.
 for(const k of fields){const el=$('cfSlot_'+k);if(!el||k==='pool4AcceptNew'||k==='pool5AcceptNew')continue;
@@ -71,7 +88,9 @@ if(account4)account4.addEventListener('change',async()=>{
 });
 const account5=$('cfSlot_pool5AcceptNew');
 if(account5)account5.addEventListener('change',async()=>{
- if(toggleBusy||account5Busy){account5.checked=confirmedToggle5;return;}
+ if(toggleBusy||account5Busy||!buildVerified){account5.checked=confirmedToggle5;
+   if($('cfSlotAccount5Status'))$('cfSlotAccount5Status').textContent='Wait for the verified Account 5 Admin controls to load before changing this setting.';
+   return;}
  const desired=account5.checked;
  account5Busy=true;account5.disabled=true;++fetchGeneration;
  if(account4)account4.disabled=true;
@@ -79,6 +98,7 @@ if(account5)account5.addEventListener('change',async()=>{
  if($('cfSlotAccount5Status'))$('cfSlotAccount5Status').textContent=toggleNotice5;
  try{
   const d=await request('/api/admin/permanent-slots/account5','POST',{enabled:desired});
+   if(d.voiceAdminBuild!==VOICE_ADMIN_BUILD)throw Error('The Worker changed during saving. Check the deployment and refresh before continuing.');
   confirmedToggle5=!!d.pool5AcceptNew;
   confirmedRevision=Math.max(confirmedRevision,Number(d.revision||0));
   account5.checked=confirmedToggle5;
@@ -96,7 +116,11 @@ if(account5)account5.addEventListener('change',async()=>{
 });
 $('cfSlotRefresh').onclick=refresh;
 $('cfSlotAccount4Verify')?.addEventListener('click',refresh);
-$('cfSlotAccount5Verify')?.addEventListener('click',refresh);
+$('cfSlotAccount5Verify')?.addEventListener('click',async()=>{
+   if(!buildVerified){await refresh();return;}
+   if($('cfSlotAccount5Status'))$('cfSlotAccount5Status').textContent='Verifying Account 5 subscription and Agent ID…';
+   await refresh();
+ });
 $('cfSlotSave').onclick=async()=>{
  if(!loaded)return refresh();if(toggleBusy||account5Busy){status.textContent='Finish saving the account activation switch before saving other settings.';return}
  const body={};for(const k of fields){const el=$('cfSlot_'+k);body[k]=el.type==='checkbox'?el.checked:el.type==='number'?Number(el.value):el.value.trim()}

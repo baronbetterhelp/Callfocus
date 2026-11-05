@@ -1,3 +1,3 @@
-CallFocus V16.65 — Account 5 onboarding and verified voice-slot overflow
+CallFocus V16.66 — Account 5 Admin version-consistency fix
 
-See README-V16.65-ACCOUNT5-SETUP.md. No SQL required.
+See README-V16.66-ACCOUNT5-VISIBILITY.md for implementation and deployment notes.
