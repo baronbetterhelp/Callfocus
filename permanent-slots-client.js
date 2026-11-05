@@ -1,14 +1,14 @@
 /* Standalone CallFocus slot popup. No OpenAI call files are imported or modified. */
 (()=>{'use strict';
 const auth=()=>{try{return localStorage.getItem('callfocus_server_session_v1')||''}catch{return ''}};
-let current=null,pending=false;
+let current=null,pending=false,autoDismissed=false;
 const $=id=>document.getElementById(id);
 const creditNumber=n=>Number(n||0).toLocaleString('en-NG');
 async function load(){if(!auth())throw Error('Sign in to see the limited voice-cloning slots.');const r=await fetch('/api/permanent-slots/status',{cache:'no-store',headers:auth()?{Authorization:'Bearer '+auth()}:{}}),v=await r.json();if(!r.ok)throw Error(v.error||'Booking status unavailable.');current=v;return v}
 function ensure(){if($('cf-slot-layer'))return;const layer=document.createElement('div');layer.id='cf-slot-layer';layer.className='cf-slot-layer';layer.innerHTML=`<section class="cf-slot-popup" role="dialog" aria-modal="true" aria-labelledby="cf-slot-title"><button type="button" class="cf-slot-close" aria-label="Close">×</button><small class="cf-slot-eyebrow">CALLFOCUS · LIMITED RELEASE</small><h2 id="cf-slot-title"></h2><p class="cf-slot-description"></p><div class="cf-slot-stats"><div><small>Slots remaining</small><strong class="cf-slot-remaining"></strong></div><div><small>Voice cloning date</small><strong class="cf-slot-date"></strong></div></div><p class="cf-slot-window"></p><p class="cf-slot-minimum"></p><p class="cf-slot-balance" aria-live="polite"></p><p class="cf-slot-response" role="status" aria-live="polite"></p><button class="cf-slot-book" type="button">Buy slot · 1,000 credits</button><a class="cf-slot-telegram" target="_blank" rel="noopener noreferrer">Join our Telegram channel</a></section>`;document.body.append(layer);
 layer.querySelector('.cf-slot-close').onclick=close;layer.addEventListener('click',e=>{if(e.target===layer)close()});layer.querySelector('.cf-slot-book').onclick=book;window.addEventListener('keydown',e=>{if(e.key==='Escape')close()});}
-function close(){const layer=$('cf-slot-layer');layer?.classList.remove('open');document.body.classList.remove('cf-slot-modal-open')}
-async function show(force=false,provided=null){if(!auth()){close();if(force)window.showAuth?.('signin',null,'Sign in to view voice-cloning slots.');return;}ensure();let s;try{s=provided||await load()}catch(e){if(force&&auth())window.toast?.(e.message);return}if(!s.signedIn||!auth()){close();return}
+function close(){const layer=$('cf-slot-layer');if(layer?.classList.contains('open'))autoDismissed=true;layer?.classList.remove('open');document.body.classList.remove('cf-slot-modal-open')}
+async function show(force=false,provided=null){if(force)autoDismissed=false;if(!auth()){close();if(force)window.showAuth?.('signin',null,'Sign in to view voice-cloning slots.');return;}ensure();let s;try{s=provided||await load()}catch(e){if(force&&auth())window.toast?.(e.message);return}if(!s.signedIn||!auth()){close();return}
 const layer=$('cf-slot-layer'),book=layer.querySelector('.cf-slot-book'),msg=layer.querySelector('.cf-slot-response'),isFull=s.full&&!s.me,hasSlot=!!s.me,phase=s.bookingPhase||'open',upcoming=phase==='upcoming',ended=phase==='ended';
 layer.querySelector('#cf-slot-title').textContent=isFull?'All voice cloning slots are filled':s.headline;
 layer.querySelector('.cf-slot-description').textContent=isFull?s.fullMessage:hasSlot?(s.me.purchasePending?'Your 1,000-credit slot purchase has not been confirmed yet. Tap Complete purchase to verify it.':s.me.hasSavedVoice?'Your permanent cloned voice is ready. You can reuse it for cloned calls and voice notes.':'Your permanent voice slot is yours. You can prepare your permanent voice when cloning is enabled on the announced date.'):s.message;
@@ -42,26 +42,71 @@ pending=true;btn.disabled=true;btn.textContent='Confirming your 1,000-credit pur
  try{const walletRes=await fetch('/api/account/data',{cache:'no-store',headers:{Authorization:'Bearer '+auth()}});const body=await walletRes.json().catch(()=>({}));if(walletRes.ok&&body?.data?.wallet)window.CallFocusCredits?.applyAuthoritativeWallet?.(body.data.wallet)}catch{}}catch(e){info.textContent=e.message;btn.disabled=false;btn.textContent='Buy slot · 1,000 credits';}finally{pending=false}}
 async function state(){return current||await load()}
 window.CallFocusPermanentSlots={show,load,state,close};
-// Auto-open once per signed-in customer per actual page load, including refresh.
-// A successful sign-in on this same page is picked up without changing the auth engine.
-// Closing the popup never writes a dismissal preference, so refresh opens it again.
-let handledToken='',busy=false,autoTimer=null;
+// Start the delay from page readiness, NOT from the completion of the slow
+// provider-capacity endpoint. Users see a non-purchasable preview on time if
+// real-time availability has not yet arrived. No provider details are exposed.
+let handledToken='',busy=false,autoTimer=null,activeToken='',firstSeenAt=0;
+const clock=()=>typeof performance!=='undefined'&&typeof performance.now==='function'?performance.now():Date.now();
 function clearAutoTimer(){if(autoTimer!==null){clearTimeout(autoTimer);autoTimer=null}}
+async function quickConfig(token){
+ const r=await fetch('/api/permanent-slots/popup-config',{cache:'no-store',headers:{Authorization:'Bearer '+token}});
+ const d=await r.json().catch(()=>({}));
+ if(!r.ok||!d.ok)throw Error(d.error||'Announcement settings unavailable.');
+ return d;
+}
+function preview(cfg){
+ if(autoDismissed||!auth()||!cfg.popupEnabled)return;
+ ensure();const layer=$('cf-slot-layer');
+ layer.querySelector('#cf-slot-title').textContent=cfg.headline||'Limited permanent voice cloning slots';
+ layer.querySelector('.cf-slot-description').textContent=cfg.message||'Permanent voice cloning slots are available in limited releases.';
+ layer.querySelector('.cf-slot-remaining').textContent='Checking availability…';
+ layer.querySelector('.cf-slot-date').textContent=cfg.eventDate?new Date(cfg.eventDate+'T12:00:00').toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'}):'To be announced';
+ layer.querySelector('.cf-slot-window').hidden=true;
+ layer.querySelector('.cf-slot-minimum').textContent=`Permanent voice slot price: ${creditNumber(cfg.purchasePrice||1000)} CallFocus credits (deducted once when purchased). One slot per customer.`;
+ layer.querySelector('.cf-slot-balance').hidden=true;
+ layer.querySelector('.cf-slot-response').textContent='Checking your reservation and live availability…';
+ layer.querySelector('.cf-slot-book').hidden=true;
+ layer.querySelector('.cf-slot-telegram').hidden=true;
+ layer.classList.add('open');document.body.classList.add('cf-slot-modal-open');
+}
+function statusUnavailable(){
+ const layer=$('cf-slot-layer');if(layer?.classList.contains('open')&&!autoDismissed){
+  layer.querySelector('.cf-slot-response').textContent='Current availability could not be loaded. Please refresh the page to try again.';
+ }
+}
 async function auto(){
  const token=auth();
- if(!token){clearAutoTimer();handledToken='';current=null;close();return}
+ if(!token){clearAutoTimer();handledToken='';activeToken='';current=null;close();autoDismissed=false;return}
+ if(token!==activeToken){activeToken=token;firstSeenAt=clock();autoDismissed=false;clearAutoTimer();handledToken=''}
  if(busy||handledToken===token)return;
  busy=true;
  try{
-  const data=await load();
-  if(auth()!==token||!data.signedIn)return;
+  // Begin the slower status read in parallel; catch failures immediately.
+  // Never delay popup timing on provider APIs or wallet lookups.
+  let fullData=null,fullFailed=false,previewAllowed=false;
+  const fullPromise=load().then(v=>{fullData=v;return v}).catch(()=>{fullFailed=true;return null});
+  const cfg=await quickConfig(token);
+  if(auth()!==token||!cfg.signedIn)return;
   handledToken=token;
-  if(data.popupEnabled){
-   const delay=Math.max(0,Math.min(60,Number(data.popupDelaySeconds)||0));
-   if(delay===0)await show(false,data);
-   else {clearAutoTimer();autoTimer=setTimeout(()=>{autoTimer=null;if(auth()===token)show(false,data)},delay*1000)}
-  }
- }catch(e){if(auth()!==token)handledToken=''}
+  if(!cfg.popupEnabled)return;
+  previewAllowed=true;
+  const delay=Math.max(0,Math.min(60,Number(cfg.popupDelaySeconds)||0));
+  const remainingMs=Math.max(0,delay*1000-(clock()-firstSeenAt));
+  clearAutoTimer();
+  autoTimer=setTimeout(()=>{
+   autoTimer=null;
+   if(auth()!==token||autoDismissed||!previewAllowed)return;
+   if(fullData){show(false,{...fullData,popupEnabled:true});return}
+   preview(cfg);
+   if(fullFailed)statusUnavailable();
+  },remainingMs);
+  fullPromise.then(v=>{
+   if(auth()!==token||autoDismissed||!previewAllowed)return;
+   const layer=$('cf-slot-layer');
+   if(!layer?.classList.contains('open'))return;
+   if(v)show(false,{...v,popupEnabled:true});else statusUnavailable();
+  });
+ }catch(e){if(auth()===token)handledToken=''}
  finally{busy=false}
 }
 function boot(){ensure();auto();setInterval(auto,1500)}

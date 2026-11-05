@@ -19,7 +19,7 @@ function render(d){
   if(el.type==='checkbox')el.checked=!!s[k];else el.value=s[k]??'';
  }
  if(!toggleBusy){confirmedToggle=!!s.pool4AcceptNew;confirmedRevision=Math.max(confirmedRevision,Number(s.revision||0));}
- status.textContent=`${d.booked} reserved of ${d.total} total slots. ${d.remaining} currently open for new customers. Booking ${s.enabled?'ON':'OFF'}; popup ${s.popupEnabled?'ON':'OFF'}.`;
+ status.textContent=`${d.booked} reserved of ${d.total} total slots. ${d.remaining} currently open for new customers. Booking ${s.enabled?'ON':'OFF'}; popup ${s.popupEnabled?'ON':'OFF'}; delay ${Number(s.popupDelaySeconds||0)} second(s).`;
  const values={cfSlotGlobalTotal:`${d.booked} / ${d.total}`,cfSlotGlobalCreated:d.created,cfSlotGlobalPending:d.pending,cfSlotGlobalEligible:d.reclaimable,cfSlotGlobalRelease:`${d.remaining} available · ${d.paidPurchases||0} paid`};
  for(const [id,value] of Object.entries(values))if($(id))$(id).textContent=value;
  const a4=d.account4||{},c4=d.pools?.pool4||{};
@@ -71,7 +71,7 @@ $('cfSlotSave').onclick=async()=>{
  if(!loaded)return refresh();if(toggleBusy){status.textContent='Finish saving Account 4 before saving other settings.';return}
  const body={};for(const k of fields){const el=$('cfSlot_'+k);body[k]=el.type==='checkbox'?el.checked:el.type==='number'?Number(el.value):el.value.trim()}
  const btn=$('cfSlotSave');btn.disabled=true;++fetchGeneration;status.textContent='Saving…';
- try{const d=await request('/api/admin/permanent-slots','POST',body);confirmedRevision=Math.max(confirmedRevision,Number(d.settings?.revision||0));confirmedToggle=!!d.settings?.pool4AcceptNew;dirty.clear();status.textContent='Settings saved successfully.';await refresh()}
+ try{const d=await request('/api/admin/permanent-slots','POST',body);confirmedRevision=Math.max(confirmedRevision,Number(d.settings?.revision||0));confirmedToggle=!!d.settings?.pool4AcceptNew;dirty.clear();status.textContent=`Settings saved successfully. Popup delay: ${Number(d.settings?.popupDelaySeconds||0)} second(s).`;await refresh()}
  catch(e){status.textContent='Settings NOT saved: '+e.message}finally{btn.disabled=false}
 };
 $('cfSlotPublicAvailableCount')?.addEventListener('input',()=>{publicAvailabilityEdited=true});

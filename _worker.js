@@ -1,4 +1,4 @@
-import {slotCustomer,slotAdmin,createSavedVoice,reassignPending,releasePending,toggleAccount4,setPublicAvailability} from './permanent-voice-slots-worker.js';
+import {slotCustomer,slotPopupConfig,slotAdmin,createSavedVoice,reassignPending,releasePending,toggleAccount4,setPublicAvailability} from './permanent-voice-slots-worker.js';
 import { elRequest, elCleanup, elAdminPurge, elAdminAvailability, elGetAvailability } from './elevenlabs-worker.js';
 import {resolveEarnReferral,affiliateLinkSignup,affiliateRecordPurchase,affiliateCustomerApi,affiliateAdminApi,affiliateEmailReview} from './affiliate-worker.js';
 const LIVE_VOICES = ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar','ripple','vesper','stone','meridian','beacon','cinder','tempo','quartz','willow','gleam','bossa','delta'];
@@ -6992,6 +6992,9 @@ export default {
     const url = new URL(request.url);
     const maintenance = await maybeMaintenanceResponse(request, env, url);
     if (maintenance) return maintenance;
+    if(url.pathname==='/api/permanent-slots/popup-config'){
+      return safeCustomerRoute('permanent-slots-popup-config',()=>slotPopupConfig(request,env,{auth:authenticatedCustomer}));
+    }
     if(url.pathname==='/api/permanent-slots/status'||url.pathname==='/api/permanent-slots/book'){
       const limited=request.method==='POST'?await callFocusRateLimit(request,env,'permanent-slots-book',8,3600):null;
       if(limited)return limited;

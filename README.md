@@ -1,3 +1,3 @@
-CallFocus V16.63 — Configurable voice slot announcement popup delay
+CallFocus V16.64 — Reliable permanent voice popup delay
 
-See README-V16.63-POPUP-DELAY.md. No SQL required.
+See README-V16.64-POPUP-TIMING-FIX.md. No SQL required.

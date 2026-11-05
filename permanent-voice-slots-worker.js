@@ -205,6 +205,20 @@ async function settlePurchase(db,env,user,helpers,record){
  catch{return {ok:false,error:'Your credits were recorded, but purchase confirmation is pending. Retry; you will not be charged twice.',status:503}}
  return {ok:true,chargedCredits:SLOT_PRICE_CREDITS,remainingCredits:Math.floor(Math.max(0,Number(confirmed.balanceSeconds))*100/60)};
 }
+// Fast, authenticated popup configuration. Do not wait for external voice-account
+// subscription requests just to decide *when* the announcement should open.
+// The normal status endpoint remains authoritative for availability and purchases.
+async function popupConfig(req,env,helpers){
+ if(req.method!=='GET')return err('Method not allowed.',405);
+ const authentication=await helpers.auth(req,env);
+ if(!authentication?.user)return err('Sign in to view voice-cloning announcements.',401);
+ let s;try{s=await settings(env)}catch{return err('Announcement settings unavailable.',503)}
+ return j({ok:true,signedIn:true,popupEnabled:s.popupEnabled===true,
+  popupDelaySeconds:Math.max(0,Math.min(60,Number(s.popupDelaySeconds)||0)),
+  headline:s.headline,message:s.message,eventDate:s.eventDate,
+  bookingOpensAt:s.bookingOpensAt||'',bookingClosesAt:s.bookingClosesAt||'',
+  purchasePrice:SLOT_PRICE_CREDITS,revision:s.revision});
+}
 async function customer(req,env,helpers){
  if(!['GET','POST'].includes(req.method))return err('Method not allowed.',405);
  const auth=await helpers.auth(req,env),u=auth?.user||null;
@@ -488,4 +502,4 @@ async function createSavedVoice(req,env,helpers){
  return j({ok:true,state,voiceName:name,hasSavedVoice:state==='ready',message:state==='ready'?'Your permanent voice is saved and ready for future calls and voice notes.':'Your voice requires additional provider verification. It will not be recreated automatically.'});
 }
 
-export {createSavedVoice,settings as slotSettings,customer as slotCustomer,admin as slotAdmin,slotVoiceForUser,publicView as slotPublicView,sql as slotDB,row as slotRow,userAvailableCredits,reassignPending,releasePending,toggleAccount4,setPublicAvailability};
+export {createSavedVoice,settings as slotSettings,popupConfig as slotPopupConfig,customer as slotCustomer,admin as slotAdmin,slotVoiceForUser,publicView as slotPublicView,sql as slotDB,row as slotRow,userAvailableCredits,reassignPending,releasePending,toggleAccount4,setPublicAvailability};
