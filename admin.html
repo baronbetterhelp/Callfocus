@@ -557,6 +557,13 @@
             <p id="cfSlotAccount4Status" class="admin-panel-copy" role="status" aria-live="polite">Account 4 has not been checked.</p>
             <button class="btn btn-ghost" id="cfSlotAccount4Verify" type="button">Verify Account 4 connection</button>
           </div>
+          <div class="cf-slot-account-five" style="margin:18px 0;padding:16px;border:1px solid #d7e8df;border-radius:18px">
+            <strong style="display:block;margin-bottom:6px">Account 5 setup</strong>
+            <p class="admin-panel-copy">Add the new Account 5 API key and Agent ID as separate encrypted Cloudflare secrets. Verify its active subscription, available storage and agent before enabling purchases. Existing saved voices remain on their assigned accounts. Secrets never appear in this panel.</p>
+            <label class="cf-clone-admin-toggle"><span><strong>Allow Account 5 to receive new purchases</strong><small>Initially OFF. Saves immediately after verification. New bookings use Accounts 1–4 before Account 5 when earlier accounts have no usable capacity.</small></span><input id="cfSlot_pool5AcceptNew" type="checkbox"></label>
+            <p id="cfSlotAccount5Status" class="admin-panel-copy" role="status" aria-live="polite">Account 5 has not been checked.</p>
+            <button class="btn btn-ghost" id="cfSlotAccount5Verify" type="button">Verify Account 5 connection</button>
+          </div>
           <div class="cf-slot-admin-migrate" style="margin:18px 0;padding:16px;border:1px solid #d7e8df;border-radius:18px">
             <strong style="display:block;margin-bottom:6px">Release slots to new customers</strong>
             <p class="admin-panel-copy">Enter exactly how many bookings should become available publicly. First uses empty capacity. If needed, the oldest idle reservations without saved voices are cancelled and recorded in an audit log. This removes those customers' reservations. Saved voices, in-progress creation and verification requests are never removed. Once released, new customers can book immediately when booking and cloning are enabled.</p>
@@ -693,6 +700,6 @@
   <div class="toast hidden" id="toast"></div>
   <script src="/admin.js?v=16.59-scroll-stability"></script><script src="/admin-video.js?v=16.51-price-persistence"></script><script src="/cf-controls-admin.js?v=16.24"></script>
 <script src="/cf-temp-voice-admin.js?v=16.34"></script>
-<script src="/cf-clone-availability-admin.js?v=16.44"></script><script src="/permanent-slots-admin.js?v=16.64"></script>
+<script src="/cf-clone-availability-admin.js?v=16.44"></script><script src="/permanent-slots-admin.js?v=16.65"></script>
 <script src="/affiliate-admin.js?v=16.37"></script></body>
 </html>

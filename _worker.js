@@ -1,4 +1,4 @@
-import {slotCustomer,slotPopupConfig,slotAdmin,createSavedVoice,reassignPending,releasePending,toggleAccount4,setPublicAvailability} from './permanent-voice-slots-worker.js';
+import {slotCustomer,slotPopupConfig,slotAdmin,createSavedVoice,reassignPending,releasePending,toggleAccount4,toggleAccount5,setPublicAvailability} from './permanent-voice-slots-worker.js';
 import { elRequest, elCleanup, elAdminPurge, elAdminAvailability, elGetAvailability } from './elevenlabs-worker.js';
 import {resolveEarnReferral,affiliateLinkSignup,affiliateRecordPurchase,affiliateCustomerApi,affiliateAdminApi,affiliateEmailReview} from './affiliate-worker.js';
 const LIVE_VOICES = ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar','ripple','vesper','stone','meridian','beacon','cinder','tempo','quartz','willow','gleam','bossa','delta'];
@@ -7008,6 +7008,10 @@ export default {
     if(url.pathname==='/api/admin/permanent-slots/account4'){
       if(!await adminAuthorized(request,env))return json({error:'Admin access required.'},401);
       return safeCustomerRoute('permanent-slots-account4',()=>toggleAccount4(request,env));
+    }
+    if(url.pathname==='/api/admin/permanent-slots/account5'){
+      if(!await adminAuthorized(request,env))return json({error:'Admin access required.'},401);
+      return safeCustomerRoute('permanent-slots-account5',()=>toggleAccount5(request,env));
     }
     if(url.pathname==='/api/admin/permanent-slots/public-availability'){
       if(!await adminAuthorized(request,env))return json({error:'Admin access required.'},401);
