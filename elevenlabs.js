@@ -8,6 +8,8 @@
   const notify=s=>{if(typeof window.toast==='function')window.toast(s);else alert(s)};
   let bookedStatus=null,homeButtonVisible=false,voices=[],capacity=null,cloningAvailability={enabled:false,message:'Voice cloning is currently unavailable. Please try again later.'},newSelected='',repeatSelected='',noteSelected='',busy=false,active=null,recorder=null,recordedBlob=null,recordStart=0,recordTimer=0,recordStream=null,tempReady=false;
   let preparedAudio=null,selectedUpload=null,fileSelectionId=0;
+  // The user-facing panel opens synchronously. Network checks may only unlock it later.
+  let checkingVoiceSlot=false,voiceOpenRequest=0;
   async function request(path,{method='GET',body,form=false}={}){
     if(!auth())throw Error('Sign in to CallFocus before using voice cloning.');
     const r=await fetch(path,{method,headers:{Authorization:`Bearer ${auth()}`,...(body&&!form?{'Content-Type':'application/json'}:{})},body:form?body:body?JSON.stringify(body):undefined,cache:'no-store'});
@@ -105,30 +107,60 @@
     });
   }
   async function openModal(){
-    try{bookedStatus=await window.CallFocusPermanentSlots?.load()}catch{bookedStatus=null}
-    if(!bookedStatus?.me){return window.CallFocusPermanentSlots?.show(true)}
-    installModal();cloningAvailability={enabled:false,message:'Checking availability…'};capacity={available:false,message:'Checking availability…'};
-    $('cf-el-layer').classList.add('open');document.body.classList.add('cf-el-is-open');updateCapacityUi();fitModal();
+    // Never block the first tap on a slow slot-status or voice-provider request.
+    // Render the modal immediately, but keep recording and saving disabled until
+    // the authoritative reservation and voice-availability checks finish.
     if(!auth()){
-      try{
-        const r=await fetch('/api/voice-cloning-availability',{cache:'no-store'}),data=await r.json();
-        if(data.enabled){closeModal();return notify('Sign in to CallFocus first to use voice cloning.')}
-        cloningAvailability={enabled:false,message:data.message||'Voice cloning is currently unavailable.'};
-      }catch{cloningAvailability={enabled:false,message:'Voice cloning is currently unavailable. Please try again later.'}}
-      updateCapacityUi();fitModal();return;
+      window.showAuth?.('signin',null,'Sign in to CallFocus before using voice cloning.');
+      return;
     }
-    render();await loadVoices();fitModal();
+    installModal();
+    const layer=$('cf-el-layer');
+    if(layer.classList.contains('open'))return;
+    const attempt=++voiceOpenRequest;
+    bookedStatus=null;
+    checkingVoiceSlot=true;
+    cloningAvailability={enabled:false,message:'Checking your voice slot…'};
+    capacity={available:false,message:'Checking your voice slot…'};
+    layer.classList.add('open');
+    document.body.classList.add('cf-el-is-open');
+    updateCapacityUi();fitModal();
+    try{
+      if(!window.CallFocusPermanentSlots?.load)throw Error('Voice slot service is unavailable. Please reload this page.');
+      const slot=await window.CallFocusPermanentSlots.load();
+      if(voiceOpenRequest!==attempt||!layer.classList.contains('open')||!auth())return;
+      bookedStatus=slot;
+      // A customer without a confirmed purchase belongs in the purchase popup.
+      // Reuse the verified response: do not delay them with a second status request.
+      if(!slot?.me||slot.me.purchasePending){
+        closeModal();
+        window.CallFocusPermanentSlots.show(true,slot);
+        return;
+      }
+      checkingVoiceSlot=false;
+      cloningAvailability={enabled:false,message:'Checking your voice availability…'};
+      updateCapacityUi();
+      await loadVoices();
+      if(voiceOpenRequest===attempt&&layer.classList.contains('open'))fitModal();
+    }catch(err){
+      if(voiceOpenRequest!==attempt||!layer.classList.contains('open'))return;
+      checkingVoiceSlot=false;
+      bookedStatus=null;
+      cloningAvailability={enabled:false,message:'Unable to check your voice slot right now. Close and try again.'};
+      console.warn('CallFocus voice slot check:',err.message);
+      updateCapacityUi();
+    }
   }
   function updateCapacityUi(){
-    const paused=cloningAvailability.enabled!==true;
+    const paused=checkingVoiceSlot||cloningAvailability.enabled!==true;
     const saved=voices.length>0;
     const untilDate=bookedStatus?.eventDate&&new Date().toISOString().slice(0,10)<bookedStatus.eventDate;
     const full=paused||saved||!bookedStatus?.me||untilDate;
-    const blockedMessage=paused?(cloningAvailability.message||'Voice cloning is temporarily unavailable.'):saved?'Your permanent voice is saved. Select it in cloned calling or voice notes. No new recording is necessary.':untilDate?`Your slot is booked. Voice creation opens on ${bookedStatus.eventDate}.`:'Book a permanent voice slot before recording.';
+    const blockedMessage=checkingVoiceSlot?'Checking your voice slot…':paused?(cloningAvailability.message||'Voice cloning is temporarily unavailable.'):saved?'Your permanent voice is saved. Select it in cloned calling or voice notes. No new recording is necessary.':untilDate?`Your slot is booked. Voice creation opens on ${bookedStatus.eventDate}.`:'Book a permanent voice slot before recording.';
     const block=$('cf-el-capacity');if(block){block.hidden=!full;block.textContent=full?blockedMessage:''}
     const modal=$('cf-el-layer')?.querySelector('.cf-el-modal');
     modal?.classList.toggle('cf-el-full',full);modal?.classList.toggle('cf-el-paused',paused);
-    if($('cf-el-title'))$('cf-el-title').textContent=paused?'Voice cloning unavailable':saved?'Permanent voice saved':'Create your permanent voice';
+    if($('cf-el-title'))$('cf-el-title').textContent=checkingVoiceSlot?'Checking your voice slot…':paused?'Voice cloning unavailable':saved?'Permanent voice saved':'Create your permanent voice';
     const record=$('cf-el-record'),save=$('cf-el-save'),file=$('cf-el-file');
     if(record)record.disabled=full;
     if(save)save.disabled=full||busy;
@@ -151,7 +183,7 @@
     const form=new FormData();form.set('name',name);form.set('consent','yes');form.set('audio',audio,audio.name||`one-time-voice.${extension}`);return form;
   }
   async function releaseTemp(leaseId){if(!leaseId)return;try{await request('/api/elevenlabs/release',{method:'POST',body:{leaseId}})}catch(err){console.warn('Temporary voice provider cleanup deferred:',err.message)}}
-  function closeModal(){if(recorder?.state==='recording')recorder.stop();$('cf-el-layer')?.classList.remove('open');document.body.classList.remove('cf-el-is-open')}
+  function closeModal(){voiceOpenRequest++;checkingVoiceSlot=false;if(recorder?.state==='recording')recorder.stop();$('cf-el-layer')?.classList.remove('open');document.body.classList.remove('cf-el-is-open')}
   function setConvertTools(visible,hint='',pct=null){
     const row=$('cf-el-convert-tools');if(!row)return;
     row.hidden=!visible;
