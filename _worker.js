@@ -2064,6 +2064,139 @@ function manualPaymentReady(config = {}) {
     && !!String(config?.manualPaymentAccountNumber || '').trim();
 }
 
+// V16.70: Serialize expensive customer operations using an atomic D1 claim.
+// This is a service-submission guard, NOT a replacement for the pending KV -> D1 wallet cutover.
+async function cfAcquireExpenseGuard(env,userId,purpose,ttlSeconds=180){
+  const db=env?.CALLFOCUS_WALLET_DB;
+  if(!db||typeof db.prepare!=='function')throw new Error('Expense protection database is unavailable.');
+  const id=String(userId||'').slice(0,120);
+  if(!id)throw new Error('Missing authenticated customer.');
+  const token=crypto.randomUUID(),now=Date.now(),expiry=now+Math.max(30,Math.min(300,ttlSeconds))*1000;
+  const result=await db.prepare(`INSERT INTO cf_expense_guards(user_id,guard_token,purpose,expires_at_ms)
+    VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET
+    guard_token=excluded.guard_token,purpose=excluded.purpose,expires_at_ms=excluded.expires_at_ms
+    WHERE cf_expense_guards.expires_at_ms<?`).bind(id,token,String(purpose).slice(0,50),expiry,now).run();
+  if(result?.success===false)throw new Error('Expense protection could not be confirmed.');
+  if(result?.meta?.changes!==1)return null;
+  return {id,token};
+}
+async function cfReleaseExpenseGuard(env,lock){
+  if(!lock)return;
+  try{await env.CALLFOCUS_WALLET_DB.prepare('DELETE FROM cf_expense_guards WHERE user_id=? AND guard_token=?').bind(lock.id,lock.token).run();}
+  catch(e){console.warn('Expense guard release deferred',String(e?.message||e));}
+}
+function cfExpenseUnavailable(){return json({error:'A credit-protected operation is already running, or secure billing is temporarily unavailable. Please try again.',code:'secure_billing_unavailable'},503,{'Cache-Control':'no-store','Retry-After':'15'});}
+async function cfEconomyQuota(request,env,service,maxPerDay){
+  const auth=await authenticatedCustomer(request,env);
+  if(!auth)return json({error:'Sign in before using this service.',code:'session_expired'},401);
+  const db=env?.CALLFOCUS_WALLET_DB;
+  if(!db?.prepare)return cfExpenseUnavailable();
+  const day=new Date().toISOString().slice(0,10);
+  try{
+    const result=await db.prepare(`INSERT INTO cf_expense_quotas(user_id,service,period_id,attempts)
+      VALUES(?,?,?,1) ON CONFLICT(user_id,service,period_id)
+      DO UPDATE SET attempts=cf_expense_quotas.attempts+1
+      WHERE cf_expense_quotas.attempts<?`)
+      .bind(String(auth.user.id).slice(0,120),String(service).slice(0,60),day,maxPerDay).run();
+    if(result?.meta?.changes!==1)return json({error:'Daily safety limit reached for this service. Please try again tomorrow.',code:'daily_safety_limit'},429,{'Retry-After':'3600','Cache-Control':'no-store'});
+    return null;
+  }catch(e){console.error('Cost-control quota unavailable',service,String(e?.message||e));return cfExpenseUnavailable()}
+}
+// Durable processing journal so an interrupted voice-note request can be refunded later.
+async function cfVoiceNoteJournal(env,id,userId,reservedSeconds,state='preparing'){
+  const db=env.CALLFOCUS_WALLET_DB;
+  const result=await db.prepare(`INSERT INTO cf_voice_note_security(note_id,user_id,reserved_seconds,state,created_at_ms,updated_at_ms)
+    VALUES(?,?,?,?,?,?)`).bind(id,userId,reservedSeconds,state,Date.now(),Date.now()).run();
+  if(result?.success===false||result?.meta?.changes!==1)throw new Error('Voice-note reservation journal could not be secured.');
+}
+async function cfVoiceNoteJournalState(env,id,state){
+  const result=await env.CALLFOCUS_WALLET_DB.prepare('UPDATE cf_voice_note_security SET state=?,updated_at_ms=? WHERE note_id=?')
+    .bind(state,Date.now(),id).run();
+  if(result?.success===false||result?.meta?.changes!==1)throw new Error('Voice-note settlement could not be journaled.');
+}
+async function cfRecoverAbandonedVoiceNotes(env){
+  const db=env?.CALLFOCUS_WALLET_DB;
+  if(!db?.prepare||!env?.CALLFOCUS_CONFIG)return;
+  let items;
+  try{items=await db.prepare(`SELECT note_id,user_id FROM cf_voice_note_security
+    WHERE state IN ('preparing','held','refund_pending') AND created_at_ms<?
+    ORDER BY created_at_ms LIMIT 40`).bind(Date.now()-10*60000).all();}
+  catch(e){console.warn('Voice-note recovery schema unavailable',String(e?.message||e));return;}
+  for(const item of items?.results||[]){
+    let guard;
+    try{
+      guard=await cfAcquireExpenseGuard(env,item.user_id,'voice-note-recovery',120);
+      if(!guard)continue;
+      const account=await env.CALLFOCUS_CONFIG.get(customerUserKey(item.user_id),{type:'json'});
+      if(!account)continue; // Never guess a wallet or create a replacement account.
+      const data=await getCustomerDataForUpdate(env,item.user_id,account.name);
+      const usage=normalizeServerWallet(data.wallet).usage;
+      const find=(kind)=>usage.find(x=>x.id===`voice-note:${kind}:${item.note_id}`);
+      if(find('refund')){await cfVoiceNoteJournalState(env,item.note_id,'refunded');continue}
+      const held=Number(find('reserve')?.seconds)||0;
+      const additional=Number(find('additional')?.seconds)||0;
+      const unused=Number(find('unused')?.seconds)||0;
+      const refund=Math.max(0,held+additional-unused);
+      if(refund){const result=await cfVoiceNoteCreditChange(env,{user:account},item.note_id,'refund',refund);if(!result.ok)continue}
+      await cfVoiceNoteJournalState(env,item.note_id,'refunded');
+    }catch(e){console.warn('Deferred voice-note settlement',String(e?.message||e));}
+    finally{await cfReleaseExpenseGuard(env,guard)}
+  }
+}
+
+// Use only server-created IDs and server-established amounts for paid audio.
+async function cfVoiceNoteCreditChange(env,auth,noteId,kind,seconds){
+  if(!Number.isSafeInteger(seconds)||seconds<0)throw new Error('Invalid voice note settlement');
+  const data=await getCustomerDataForUpdate(env,auth.user.id,auth.user.name);
+  const wallet=normalizeServerWallet(data.wallet);
+  const id=`voice-note:${kind}:${noteId}`;
+  const prev=wallet.usage.find(row=>row.id===id);
+  if(prev)return {ok:true,duplicate:true,wallet};
+  const debit=kind==='reserve'||kind==='additional';
+  if(debit&&wallet.balanceSeconds<seconds)return {ok:false,insufficient:true,wallet};
+  if(seconds){
+    wallet.balanceSeconds=Math.max(0,wallet.balanceSeconds+(debit?-seconds:seconds));
+    wallet.revision=Math.max(0,Number(wallet.revision)||0)+1;
+  }
+  wallet.usage.unshift({id,type:debit?'voice_note':'voice_note_refund',referenceId:noteId,seconds,
+    credits:Math.round(seconds/CALLFOCUS_SECONDS_PER_CREDIT*10)/10,createdAt:new Date().toISOString(),
+    note:kind==='reserve'?'Voice note secured generation charge':kind==='additional'?'Voice note duration adjustment':'Voice note unused / failed generation refund'});
+  wallet.usage=wallet.usage.slice(0,250);
+  data.wallet=wallet;
+  await env.CALLFOCUS_CONFIG.put(customerDataKey(auth.user.id),JSON.stringify(data));
+  const confirmed=normalizeServerWallet((await getCustomerDataForUpdate(env,auth.user.id,auth.user.name)).wallet);
+  if(!confirmed.usage.some(row=>row.id===id))throw new Error('Voice note billing could not be verified.');
+  return {ok:true,wallet:confirmed};
+}
+// Parse MPEG Layer III audio frames; never trust client-supplied duration for settlement.
+function cfMp3DurationSeconds(arrayBuffer){
+  const b=new Uint8Array(arrayBuffer);
+  let offset=0;
+  if(b.length>10&&b[0]===73&&b[1]===68&&b[2]===51){
+    offset=10+((b[6]&127)<<21)+((b[7]&127)<<14)+((b[8]&127)<<7)+(b[9]&127)+(b[5]&16?10:0);
+  }
+  const rates1=[0,32,40,48,56,64,80,96,112,128,160,192,224,256,320,0];
+  const rates2=[0,8,16,24,32,40,48,56,64,80,96,112,128,144,160,0];
+  const samples=[44100,48000,32000];
+  let frames=0,seconds=0,scanned=0;
+  for(let i=offset;i+4<b.length&&scanned<1000000;scanned++){
+    if(b[i]!==255||(b[i+1]&0xe0)!==0xe0){i++;if(frames)break;continue;}
+    const version=(b[i+1]>>3)&3,layer=(b[i+1]>>1)&3,br=(b[i+2]>>4)&15,sr=(b[i+2]>>2)&3,pad=(b[i+2]>>1)&1;
+    if(version===1||layer!==1||sr===3||br===0||br===15){i++;if(frames)break;continue;}
+    const sampleRate=samples[sr]/(version===3?1:version===2?2:4);
+    const bitrate=(version===3?rates1[br]:rates2[br])*1000;
+    const len=Math.floor((version===3?144:72)*bitrate/sampleRate)+pad;
+    if(len<20||i+len>b.length){i++;if(frames)break;continue;}
+    seconds+=(version===3?1152:576)/sampleRate;
+    frames++;i+=len;
+  }
+  return frames>=3&&seconds>0&&Number.isFinite(seconds)?seconds:null;
+}
+function cfVoiceNoteQuoteSeconds(script){
+  const words=(String(script||'').match(/\S+/g)||[]).length;
+  return Math.max(8,Math.min(600,Math.ceil(words*.68+8)));
+}
+
 // V15.44: keep a KV quota event from becoming a raw Cloudflare 1101 page.
 function isKvCapacityError(error) {
   const text = String(error?.message || error || '').toLowerCase();
@@ -2115,7 +2248,8 @@ async function callFocusRateLimit(request, env, bucket, limit, windowSeconds) {
     await env.CALLFOCUS_CONFIG.put(key, String(current + 1), { expirationTtl: windowSeconds + 60 });
   } catch (error) {
     // Rate limiting must never take the entire customer/account API down when KV is at capacity.
-    console.warn('CallFocus rate-limit storage unavailable; allowing request', bucket, error?.message || error);
+    console.warn('CallFocus rate-limit storage unavailable', bucket, error?.message || error);
+    if (/^(voice-note|session-open|image-video-submit|avatar-session)$/.test(bucket)) return cfExpenseUnavailable();
   }
   return null;
 }
@@ -2159,6 +2293,8 @@ async function adminTokenAuthorized(token,env){
   if(signed){
     const expectedSig=await adminHmacSha256Hex(expected,`${signed.issued}.${signed.nonce}`);
     if(expectedSig!==signed.signature)return false;
+    const issuedAt=Number(signed.issued);
+    if(!Number.isSafeInteger(issuedAt)||issuedAt>Date.now()+300000||Date.now()-issuedAt>15552000000)return false;
     if(env.CALLFOCUS_CONFIG){const revoked=await env.CALLFOCUS_CONFIG.get(`admin:revoked:${await sha256Hex(supplied)}`);if(revoked)return false;}
     return true;
   }
@@ -2168,6 +2304,9 @@ async function adminTokenAuthorized(token,env){
 }
 async function adminAuthorized(request, env) {
   const headerToken=String(request.headers.get('X-CallFocus-Admin-Key')||'');
+  // The raw passcode can authenticate only the login exchange, not routine APIs.
+  // All other admin actions must use the returned signed session.
+  if(headerToken&&headerToken===String(env.CALLFOCUS_ADMIN_PASSCODE||'')&&new URL(request.url).pathname!=='/api/admin/login')return false;
   if(await adminTokenAuthorized(headerToken,env))return true;
   const cookieToken=adminCookieToken(request);
   if(cookieToken&&cookieToken!==headerToken&&await adminTokenAuthorized(cookieToken,env))return true;
@@ -2285,6 +2424,7 @@ async function handleWalletConsume(request, env, trustedRate = null) {
   if (!auth) return json({ error: 'Session expired.', code: 'session_expired' }, 401);
   let body = {};
   try { body = await request.json(); } catch { return json({ error: 'Invalid credit usage request.' }, 400); }
+  if(trustedRate===null)return json({error:'Voice-note billing is settled by the generation server. Refresh the page before generating.',code:'voice_note_server_billed'},409);
   const requestedSeconds = Math.max(0, Math.min(3600, Math.ceil(Number(body?.seconds) || 0)));
   const referenceId = String(body?.referenceId || '').trim().replace(/[^A-Za-z0-9:_-]/g, '').slice(0, 140);
   const type = String(body?.type || '').trim().toLowerCase();
@@ -3339,6 +3479,12 @@ async function handleVoiceNote(request, env) {
   const customVoice = customVoiceById(config, selectedVoice);
   const voice = customVoice ? customVoice.id : (TTS_VOICES.includes(selectedVoice) ? selectedVoice : (gender === 'female' ? 'marin' : 'cedar'));
   const userVoiceStyle = userAiVoiceInstructions(userVoiceProfile);
+  let securityGuard;
+  try{securityGuard=await cfAcquireExpenseGuard(env,auth.user.id,'voice-note',180)}catch(e){console.error('Voice-note expense guard',String(e?.message||e));return cfExpenseUnavailable()}
+  if(!securityGuard)return json({error:'A generation is already running for this account. Please finish it first.',code:'generation_in_progress'},409);
+  try{
+    const limit=await cfEconomyQuota(request,env,'voice-note-attempt',120);
+    if(limit)return limit;
 
   const writerInstructions = `You write the exact spoken words for one private voice note.
 
@@ -3459,6 +3605,17 @@ Return only the final spoken voice-note text.`;
     adminVoiceNoteStyle ? `Owner speech-style guidance: ${adminVoiceNoteStyle}` : ''
   ].filter(Boolean).join(' ');
 
+  // Secure the anticipated audio charge before making the expensive synthesis call.
+  // The resulting MP3's actual duration is settled server-side before any audio is delivered.
+  const billRate=(await cfGetRates(env)).voiceNote;
+  const reservedSeconds=voiceUnlimited?0:cfChargeWalletSeconds(cfVoiceNoteQuoteSeconds(script),billRate);
+  const noteId=crypto.randomUUID();
+  if(!voiceUnlimited){
+    await cfVoiceNoteJournal(env,noteId,auth.user.id,reservedSeconds);
+    const hold=await cfVoiceNoteCreditChange(env,auth,noteId,'reserve',reservedSeconds);
+    if(!hold.ok){await cfVoiceNoteJournalState(env,noteId,'refunded');return json({error:'Not enough CallFocus credits for this voice note. Shorten the script or add credits.',code:'insufficient_credit'},402)}
+    await cfVoiceNoteJournalState(env,noteId,'held');
+  }
   let speech;
   try {
     speech = await fetch('https://api.openai.com/v1/audio/speech', {
@@ -3477,6 +3634,7 @@ Return only the final spoken voice-note text.`;
       })
     });
   } catch {
+    if(!voiceUnlimited){await cfVoiceNoteJournalState(env,noteId,'refund_pending');await cfVoiceNoteCreditChange(env,auth,noteId,'refund',reservedSeconds);await cfVoiceNoteJournalState(env,noteId,'refunded')}
     return json({ error: 'Could not generate the voice note right now. Please try again.' }, 502);
   }
 
@@ -3485,11 +3643,27 @@ Return only the final spoken voice-note text.`;
     let parsed = {};
     try { parsed = JSON.parse(raw); } catch {}
     const code = parsed?.error?.code || parsed?.error?.type || '';
+    if(!voiceUnlimited){await cfVoiceNoteJournalState(env,noteId,'refund_pending');await cfVoiceNoteCreditChange(env,auth,noteId,'refund',reservedSeconds);await cfVoiceNoteJournalState(env,noteId,'refunded')}
     const quota = speech.status === 429 || code === 'credit_balance_exhausted' || code === 'insufficient_quota';
     return json({ error: quota ? 'Voice notes are temporarily unavailable. Please try again soon.' : 'Could not generate the voice note right now. Please try again.' }, quota ? 503 : speech.status);
   }
 
   const audio = await speech.arrayBuffer();
+  const audioSeconds=cfMp3DurationSeconds(audio);
+  // If metadata cannot be decoded, use the script quote rather than trusting the browser.
+  const finalSeconds=voiceUnlimited?0:cfChargeWalletSeconds(Math.max(1,Math.ceil(audioSeconds||cfVoiceNoteQuoteSeconds(script))),billRate);
+  if(!voiceUnlimited&&finalSeconds>reservedSeconds){
+    const more=await cfVoiceNoteCreditChange(env,auth,noteId,'additional',finalSeconds-reservedSeconds);
+    if(!more.ok){
+      await cfVoiceNoteJournalState(env,noteId,'refund_pending');
+      await cfVoiceNoteCreditChange(env,auth,noteId,'refund',reservedSeconds);
+      await cfVoiceNoteJournalState(env,noteId,'refunded');
+      return json({error:'This voice note needs more credit than the available balance. No audio was released; the reserved credits were refunded.',code:'insufficient_credit'},402);
+    }
+  }else if(!voiceUnlimited&&finalSeconds<reservedSeconds){
+    await cfVoiceNoteCreditChange(env,auth,noteId,'unused',reservedSeconds-finalSeconds);
+  }
+  if(!voiceUnlimited)await cfVoiceNoteJournalState(env,noteId,'completed');
   const headers = new Headers({
     'Content-Type': 'audio/mpeg',
     'Cache-Control': 'no-store',
@@ -3498,9 +3672,20 @@ Return only the final spoken voice-note text.`;
     'X-CallFocus-Voice': userVoiceProfile?.name || voice,
     'X-CallFocus-Base-Voice': voice,
     'X-CallFocus-AI-Voice': userVoiceProfile ? '1' : '0',
-    'X-CallFocus-Script': encodeURIComponent(script)
+    'X-CallFocus-Script': encodeURIComponent(script),
+    'X-CallFocus-Server-Billed': '1',
+    'X-CallFocus-Voice-Note-ID': noteId,
+    'X-CallFocus-Billed-Seconds': String(voiceUnlimited?0:finalSeconds),
+    'X-CallFocus-Audio-Seconds': String(audioSeconds||0),
+    'X-CallFocus-Unlimited-Credit': voiceUnlimited?'1':'0'
   });
   return new Response(audio, { status: 200, headers });
+  }catch(error){
+    // An unexpected exception must not silently deliver uncharged audio. Pending
+    // reservations remain in the D1 journal for the five-minute recovery sweep.
+    console.error('Voice-note secure settlement deferred',String(error?.message||error));
+    return json({error:'Voice note service could not safely settle this request. Any reserved credits will be returned automatically if the generation did not complete.',code:'secure_billing_unavailable'},503);
+  }finally{await cfReleaseExpenseGuard(env,securityGuard)}
 }
 
 function paceInstruction(pace) {
@@ -6820,7 +7005,20 @@ async function cfVideoPoll(env,job){
   if(!['processing','accepted','submitting'].includes(job.status))return job;
   if(job.status==='submitting'&&!job.requestId){
     if(Date.now()-Date.parse(job.createdAt)>120000){
-      job.status='failed';job.error='Generation was not accepted. No credits were deducted.';
+      // If the Worker died after the wallet debit but before persisting `charged`,
+      // recover the existing ledger entry before deciding whether to refund.
+      if(!job.charged){
+        try{
+          const owner=await env.CALLFOCUS_CONFIG.get(customerUserKey(job.userId),{type:'json'});
+          if(owner){
+            const d=await getCustomerDataForUpdate(env,job.userId,owner.name);
+            const charge=normalizeServerWallet(d.wallet).usage.find(x=>x.id==='image-video:charge:'+job.id);
+            if(charge){job.charged=true;job.unlimited=Number(charge.credits||0)===0;}
+          }
+        }catch(error){console.warn('Video charge recovery deferred',String(error?.message||error));return job}
+      }
+      job.status='failed';job.error='Video submission could not be confirmed. Prepaid credits are being refunded.';
+      if(job.charged)return cfVideoRefund(env,job);
       await cfPutVideoJob(env,job);
     }
     return job;
@@ -6877,11 +7075,94 @@ async function cfVideoPoll(env,job){
   }
   return job;
 }
-async function cfVideoGenerate(request,env){if(request.method!=='POST')return json({error:'Method not allowed'},405);const auth=await authenticatedCustomer(request,env);if(!auth)return json({error:'Sign in to generate videos'},401);const s=await cfGetVideoSettings(env);if(!s.enabled)return json({error:'Image to Video is currently unavailable.'},403);if(!env.XAI_API_KEY)return json({error:'Image to Video is not configured yet.'},503);let b;try{if(Number(request.headers.get('content-length')||0)>3000000)return json({error:'Image file is too large.'},413);b=await request.json()}catch{return json({error:'Invalid generation request'},400)}const duration=Number(b.duration);const cost=duration===10?s.cost10:duration===15?s.cost15:0;const prompt=String(b.prompt||'').trim().slice(0,1100);const aspectRatio=String(b.aspectRatio||'9:16');const motionStyle=String(b.motionStyle||'Natural');const image=String(b.image||'');const thumbnail=String(b.thumbnail||'');if(!cost||!s.aspectRatios.includes(aspectRatio)||!s.motionStyles.includes(motionStyle)||!prompt||prompt.length<5)return json({error:'Choose valid video settings and describe the motion.'},400);if(!/^data:image\/(?:jpeg|png|webp);base64,[a-zA-Z0-9+/=]+$/.test(image)||image.length>2100000)return json({error:'Upload a valid JPEG, PNG, or WebP image (max 1.5 MB compressed).'},400);const jobs=await cfListVideoJobs(env,CF_VIDEO_PREFIX+auth.user.id+':',100);if(jobs.some(j=>['submitting','processing','accepted'].includes(j.status)))return json({error:'Finish your current generation before starting another.'},409);const today=new Date().toISOString().slice(0,10);if(jobs.filter(j=>j.createdAt?.startsWith(today)&&['submitting','accepted','processing','completed'].includes(j.status)).length>=s.dailyLimit)return json({error:'Daily Image to Video limit reached.'},429);const wallet=normalizeServerWallet((await getCustomerDataForUpdate(env,auth.user.id,auth.user.name)).wallet);const unlimited=(await getConfig(env)).unlimitedCreditEmails.map(normalizeCustomerEmail).includes(normalizeCustomerEmail(auth.user.email));if(!unlimited&&wallet.balanceSeconds<callFocusSecondsForCredits(cost))return json({error:'Not enough CallFocus credits. Deposit to continue.',code:'insufficient_credit',required:cost},402);const inFlightKey='image_video:busy:'+auth.user.id;if(await env.CALLFOCUS_CONFIG.get(inFlightKey))return json({error:'A generation request is already starting. Please wait before trying again.'},409);await env.CALLFOCUS_CONFIG.put(inFlightKey,'1',{expirationTtl:120});const id=crypto.randomUUID();const job={id,userId:auth.user.id,userEmail:auth.user.email,prompt,duration,cost,aspectRatio,motionStyle,thumbnail:/^data:image\/jpeg;base64,[\w+/=]+$/.test(thumbnail)&&thumbnail.length<46000?thumbnail:'',status:'submitting',charged:false,refunded:false,stage:'Preparing',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+async function cfVideoGenerate(request,env){
+  if(request.method!=='POST')return json({error:'Method not allowed'},405);
+  const auth=await authenticatedCustomer(request,env);
+  if(!auth)return json({error:'Sign in to generate videos'},401);
+  const s=await cfGetVideoSettings(env);
+  if(!s.enabled)return json({error:'Image to Video is currently unavailable.'},403);
+  if(!env.XAI_API_KEY)return json({error:'Image to Video is not configured yet.'},503);
+  let b;
+  try{
+    if(Number(request.headers.get('content-length')||0)>3000000)return json({error:'Image file is too large.'},413);
+    b=await request.json();
+  }catch{return json({error:'Invalid generation request'},400)}
+  const duration=Number(b.duration),cost=duration===10?s.cost10:duration===15?s.cost15:0;
+  const prompt=String(b.prompt||'').trim().slice(0,1100);
+  const aspectRatio=String(b.aspectRatio||'9:16'),motionStyle=String(b.motionStyle||'Natural');
+  const image=String(b.image||''),thumbnail=String(b.thumbnail||'');
+  if(!cost||!s.aspectRatios.includes(aspectRatio)||!s.motionStyles.includes(motionStyle)||prompt.length<5)
+    return json({error:'Choose valid video settings and describe the motion.'},400);
+  if(!/^data:image\/(?:jpeg|png|webp);base64,[a-zA-Z0-9+/=]+$/.test(image)||image.length>2100000)
+    return json({error:'Upload a valid JPEG, PNG, or WebP image (max 1.5 MB compressed).'},400);
+  let guard;
+  try{guard=await cfAcquireExpenseGuard(env,auth.user.id,'image-to-video',180)}
+  catch(e){console.error('Video expense guard unavailable',String(e?.message||e));return cfExpenseUnavailable()}
+  if(!guard)return json({error:'Another paid generation is starting. Finish it first.',code:'generation_in_progress'},409);
+  try{
+    const limit=await cfEconomyQuota(request,env,'image-video-attempt',15);
+    if(limit)return limit;
+    const jobs=await cfListVideoJobs(env,CF_VIDEO_PREFIX+auth.user.id+':',100);
+    if(jobs.some(j=>['submitting','processing','accepted'].includes(j.status)))return json({error:'Finish your current generation before starting another.'},409);
+    const today=new Date().toISOString().slice(0,10);
+    if(jobs.filter(j=>j.createdAt?.startsWith(today)&&['submitting','accepted','processing','completed'].includes(j.status)).length>=s.dailyLimit)
+      return json({error:'Daily Image to Video limit reached.'},429);
+    const wallet=normalizeServerWallet((await getCustomerDataForUpdate(env,auth.user.id,auth.user.name)).wallet);
+    const unlimited=(await getConfig(env)).unlimitedCreditEmails.map(normalizeCustomerEmail).includes(normalizeCustomerEmail(auth.user.email));
+    if(!unlimited&&wallet.balanceSeconds<callFocusSecondsForCredits(cost))return json({error:'Not enough CallFocus credits. Deposit to continue.',code:'insufficient_credit',required:cost},402);
+    const id=crypto.randomUUID();
+    const job={id,userId:auth.user.id,userEmail:auth.user.email,prompt,duration,cost,aspectRatio,motionStyle,
+      thumbnail:/^data:image\/jpeg;base64,[\w+/=]+$/.test(thumbnail)&&thumbnail.length<46000?thumbnail:'',
+      status:'submitting',charged:false,refunded:false,stage:'Securing credits',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
+    // Persist a recovery record first; a crash after wallet debit must not lose the job.
+    await cfPutVideoJob(env,job);
+    // Billing is secured before any upstream video-generation request is made.
+    const charged=await cfVideoWalletChange(env,auth.user,job,'charge');
+    if(!charged.ok){
+      job.status='failed';job.error='No video generation was submitted because the wallet charge was not secured.';
+      await cfPutVideoJob(env,job);
+      return json({error:'The video charge could not be secured. No generation was submitted.',code:charged.insufficient?'insufficient_credit':'wallet_write_unverified'},charged.insufficient?402:503);
+    }
+    job.charged=true;job.unlimited=charged.unlimited===true;job.stage='Submitting to video service';
+    await cfPutVideoJob(env,job);
 // V15.97: realism-focused image-to-video direction. Preserve the user's prompt and selected motion style.
 const motions={'Natural':'Natural documentary-like camera behavior and lifelike movement at an unhurried pace.','Cinematic':'A gentle, physically plausible cinematic camera move with realistic depth of field.','Subtle motion':'Mostly steady framing with tiny believable movements, such as breathing, blinking, fabric or environmental motion where appropriate.','Dynamic':'Energetic but physically coherent movement, natural inertia and stable scene continuity.','Dramatic':'Expressive but believable camera movement and authentic lighting transitions, without unnatural morphing.'};
 const cfVideoRealismDirection='Use the uploaded image as the first frame. Create a convincing real-world video of the action described by the customer. Keep the same person or subject, facial identity, proportions, clothing, surroundings, objects, framing, and original scene details consistent throughout. Preserve natural skin texture, fine details, accurate shadows, reflections and depth. Animate with physically plausible weight, timing, human posture and anatomy; use natural breathing and occasional blinking only where appropriate. Keep camera motion smooth and believable, with realistic focus and stable exposure. Avoid face deformation, flickering, warped hands or limbs, duplicated objects, rubbery motion, sudden scene changes, and unrequested text or stylization. Do not add speaking or lip movement unless the requested action calls for it. Prioritize the customer-requested action and do not add unrelated events.';
-let r;try{r=await cfXaiFetch(env,'https://api.x.ai/v1/videos/generations',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'grok-imagine-video-1.5-lite',image:{url:image},prompt:prompt+'\nMotion direction: '+motions[motionStyle]+'\nRealism and visual continuity: '+cfVideoRealismDirection,duration,resolution:'720p',storage_options:{filename:'callfocus-'+id+'.mp4'}})});}catch(e){job.status='failed';job.error='Could not reach video provider. No credits charged.';await cfPutVideoJob(env,job);await env.CALLFOCUS_CONFIG.delete(inFlightKey);return json({error:job.error},502)}let body;try{body=await r.json()}catch{body={}}if(!r.ok||!body.request_id){job.status='failed';job.error='Provider did not accept the request. No credits charged.';await cfPutVideoJob(env,job);await env.CALLFOCUS_CONFIG.delete(inFlightKey);return json({error:job.error,details:String(body?.error?.message||'').slice(0,160)},502)}job.requestId=String(body.request_id);job.status='accepted';job.stage='Generating';const charged=await cfVideoWalletChange(env,auth.user,job,'charge');if(!charged.ok){job.status='failed';job.error='Generation accepted but wallet charge could not be secured. Please contact support.';await cfPutVideoJob(env,job);return json({error:job.error},503)}job.charged=true;job.unlimited=charged.unlimited===true;job.status='processing';await cfPutVideoJob(env,job);await env.CALLFOCUS_CONFIG.delete(inFlightKey);return json({ok:true,job:cfPublicVideo(job)});}
+
+    let upstream;
+    try{
+      upstream=await cfXaiFetch(env,'https://api.x.ai/v1/videos/generations',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({model:'grok-imagine-video-1.5-lite',image:{url:image},
+          prompt:prompt+'\nMotion direction: '+motions[motionStyle]+'\nRealism and visual continuity: '+cfVideoRealismDirection,
+          duration,resolution:'720p',storage_options:{filename:'callfocus-'+id+'.mp4'}})
+      });
+    }catch(e){
+      // A network interruption does not prove rejection. Keep the prepaid job visible
+      // until the background settlement can confirm/expire it and refund.
+      job.stage='Video submission response unavailable. Recovering automatically.';
+      job.lastStatusHttp=0;
+      await cfPutVideoJob(env,job);
+      return json({ok:true,job:cfPublicVideo(job)});
+    }
+    let body;try{body=await upstream.json()}catch{body={}}
+    if(!upstream.ok){
+      job.status='failed';job.error='The video service rejected the generation.';
+      await cfPutVideoJob(env,job);
+      await cfVideoRefund(env,job);
+      return json({error:'The video service could not accept the generation. Credits were returned or marked for automatic refund.',details:String(body?.error?.message||'').slice(0,160)},502);
+    }
+    if(!body.request_id){
+      job.stage='Video submission not confirmed. Recovering automatically.';
+      await cfPutVideoJob(env,job);
+      return json({ok:true,job:cfPublicVideo(job)});
+    }
+    job.requestId=String(body.request_id);
+    job.status='processing';job.stage='Generating';
+    await cfPutVideoJob(env,job);
+    return json({ok:true,job:cfPublicVideo(job)});
+  }finally{await cfReleaseExpenseGuard(env,guard)}
+}
 async function cfVideoStatus(request,env){const auth=await authenticatedCustomer(request,env);if(!auth)return json({error:'Sign in required'},401);const id=new URL(request.url).searchParams.get('id')||'';let job=await cfLoadVideoJob(env,auth.user.id,id);if(!job)return json({error:'Video not found'},404);job=await cfVideoPoll(env,job);return json({ok:true,job:cfPublicVideo(job)});}
 async function cfVideoHistory(request,env){const auth=await authenticatedCustomer(request,env);if(!auth)return json({error:'Sign in required'},401);const jobs=await cfListVideoJobs(env,CF_VIDEO_PREFIX+auth.user.id+':',80);const refreshed=[];for(const j of jobs.slice(0,3))refreshed.push(await cfVideoPoll(env,j));return json({ok:true,jobs:jobs.map(j=>cfPublicVideo(refreshed.find(x=>x.id===j.id)||j))});}
 async function cfVideoFile(request,env,id){const auth=await authenticatedCustomer(request,env);const suppliedToken=new URL(request.url).searchParams.get('access')||'';const access=!auth&&/^[a-f0-9-]{36}$/.test(suppliedToken)?await env.CALLFOCUS_CONFIG.get('image_video:access:'+suppliedToken,{type:'json'}):null;if(!auth&&(!access||access.id!==id))return json({error:'Sign in required'},401);const job=await cfLoadVideoJob(env,auth?.user?.id||access.userId,id);if(!job||job.status!=='completed')return json({error:'Video not available'},404);let res;if(job.fileId){res=await cfXaiFetch(env,'https://api.x.ai/v1/files/'+encodeURIComponent(job.fileId)+'/content',{headers:request.headers.get('range')?{'Range':request.headers.get('range')}: {}});}else if(cfVideoAllowedHost(job.ephemeralUrl)){res=await fetch(job.ephemeralUrl,{headers:request.headers.get('range')?{'Range':request.headers.get('range')}:{}});}else return json({error:'Stored video not available. Contact support.'},404);if(!res.ok)return json({error:'Video storage temporarily unavailable'},502);const headers=new Headers({'Content-Type':'video/mp4','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Disposition':new URL(request.url).searchParams.get('download')==='1'?`attachment; filename="CallFocus-${job.duration}s-${job.id.slice(0,8)}.mp4"`:'inline'});for(const k of ['Content-Length','Content-Range','Accept-Ranges']){if(res.headers.has(k))headers.set(k,res.headers.get(k));}return new Response(res.body,{status:res.status,headers});}
@@ -7202,7 +7483,7 @@ export default {
     if (url.pathname === '/email/unsubscribe' && (request.method === 'GET' || request.method === 'POST')) return handleMarketingUnsubscribe(request, env);
     // Separate Image to Video routes. All customer endpoints authenticate via existing CallFocus sessions.
     if (url.pathname === '/api/image-to-video/config' && request.method === 'GET') return json({ok:true,settings:await cfGetVideoSettings(env)});
-    if (url.pathname === '/api/image-to-video/generate') return safeCustomerRoute('image-video-generate',()=>cfVideoGenerate(request,env));
+    if (url.pathname === '/api/image-to-video/generate') { const limited=await callFocusRateLimit(request,env,'image-video-submit',180,3600);if(limited)return limited;return safeCustomerRoute('image-video-generate',()=>cfVideoGenerate(request,env)); }
     if (url.pathname === '/api/image-to-video/status' && request.method === 'GET') return safeCustomerRoute('image-video-status',()=>cfVideoStatus(request,env));
     if (url.pathname === '/api/image-to-video/history' && request.method === 'GET') return safeCustomerRoute('image-video-history',()=>cfVideoHistory(request,env));
     if (url.pathname === '/api/image-to-video/link' && request.method === 'GET') return safeCustomerRoute('image-video-link',()=>cfVideoFileLink(request,env));
@@ -7224,6 +7505,15 @@ export default {
     if (url.pathname === '/api/admin/quick-start') return handleAdminQuickStart(request, env);
     if (url.pathname === '/api/admin/funding-report') return handleAdminFundingReport(request, env);
     if (url.pathname === '/api/admin/d1-wallet/preflight') return handleAdminD1WalletPreflight(request,env);
+    if (url.pathname === '/api/admin/expense-security/preflight'){
+      if(!await adminAuthorized(request,env))return json({error:'Admin sign-in required.'},401);
+      if(request.method!=='GET')return json({error:'Method not allowed.'},405);
+      try{
+        const rows=await env.CALLFOCUS_WALLET_DB.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name IN ('cf_expense_guards','cf_voice_note_security','cf_expense_quotas')`).all();
+        const names=(rows.results||[]).map(r=>r.name);
+        return json({ok:true,ready:['cf_expense_guards','cf_voice_note_security','cf_expense_quotas'].every(x=>names.includes(x)),tables:names},200,{'Cache-Control':'no-store'});
+      }catch{return json({ok:false,ready:false,error:'Expense security database is not ready.'},503)}
+    }
     if (url.pathname === '/api/admin/users') return handleAdminUsers(request, env);
     if (url.pathname === '/api/admin/direct-email') return handleAdminDirectEmail(request, env);
     if (url.pathname === '/api/admin/direct-email-templates') return handleAdminDirectEmailTemplates(request, env);
@@ -7244,19 +7534,21 @@ export default {
     if (url.pathname === '/api/admin/custom-voices/access') return handleAdminCustomVoiceAccess(request, env);
     if (url.pathname === '/api/admin/custom-voices/create') return handleAdminCustomVoiceCreate(request, env);
     if (url.pathname === '/api/admin/diagnostics' && request.method === 'GET') return handleAdminDiagnostics(request, env);
-    if (url.pathname === '/api/voice-note' && request.method === 'POST') return handleVoiceNote(request, env);
+    if (url.pathname === '/api/voice-note' && request.method === 'POST') { const limited=await callFocusRateLimit(request,env,'voice-note',180,3600);if(limited)return limited;return safeCustomerRoute('voice-note',()=>handleVoiceNote(request,env)); }
     if (url.pathname.startsWith('/api/avatar/media/')) return handleAvatarMedia(request, env, decodeURIComponent(url.pathname.slice('/api/avatar/media/'.length)));
     if (url.pathname === '/api/avatar/stock-faces') { const limited = await callFocusRateLimit(request, env, 'avatar-stock-faces', 60, 3600); if (limited) return limited; return safeCustomerRoute('avatar-stock-faces', () => handleAvatarStockFaces(request, env)); }
     if (url.pathname === '/api/avatar/profile') return safeCustomerRoute('avatar-profile', () => handleAvatarProfile(request, env));
-    if (url.pathname === '/api/avatar/create') { const limited = await callFocusRateLimit(request, env, 'avatar-create', 6, 86400); if (limited) return limited; return safeCustomerRoute('avatar-create', () => handleAvatarCreate(request, env)); }
-    if (url.pathname === '/api/avatar/session') { const limited = await callFocusRateLimit(request, env, 'avatar-session', 30, 3600); if (limited) return limited; return safeCustomerRoute('avatar-session', () => handleAvatarSession(request, env)); }
+    if (url.pathname === '/api/avatar/create') { const limited = await callFocusRateLimit(request, env, 'avatar-create', 6, 86400); if (limited) return limited; const quota=await cfEconomyQuota(request,env,'avatar-create',2);if(quota)return quota;return safeCustomerRoute('avatar-create', () => handleAvatarCreate(request, env)); }
+    if (url.pathname === '/api/avatar/session') { const limited = await callFocusRateLimit(request, env, 'avatar-session', 30, 3600); if (limited) return limited; const quota=await cfEconomyQuota(request,env,'avatar-session',12);if(quota)return quota;return safeCustomerRoute('avatar-session', () => handleAvatarSession(request, env)); }
     if (url.pathname === '/api/avatar/end') return safeCustomerRoute('avatar-end', () => handleAvatarEnd(request, env));
     if (url.pathname === '/api/live-translate') { const limited = await callFocusRateLimit(request, env, 'live-translate', 900, 3600); if (limited) return limited; return safeCustomerRoute('live-translate', () => handleLiveTranscriptTranslate(request, env)); }
-    if (url.pathname === '/api/dynamics/analyze') { const limited = await callFocusRateLimit(request, env, 'dynamics-analyze', 40, 900); if (limited) return limited; return safeCustomerRoute('dynamics-analyze', () => handleDynamicsAnalyze(request, env)); }
-    if (url.pathname === '/api/call-plan/rebuild') { const limited = await callFocusRateLimit(request, env, 'call-plan-rebuild', 60, 3600); if (limited) return limited; return safeCustomerRoute('call-plan-rebuild', () => handleCallPlanRebuild(request, env)); }
-    if (url.pathname === '/api/call-context/analyze') { const limited = await callFocusRateLimit(request, env, 'call-context-analyze', 40, 900); if (limited) return limited; return safeCustomerRoute('call-context-analyze', () => handleCallContextAnalyze(request, env)); }
+    if (url.pathname === '/api/dynamics/analyze') { const limited = await callFocusRateLimit(request, env, 'dynamics-analyze', 40, 900); if (limited) return limited; const quota=await cfEconomyQuota(request,env,'dynamics-analyze',30);if(quota)return quota;return safeCustomerRoute('dynamics-analyze', () => handleDynamicsAnalyze(request, env)); }
+    if (url.pathname === '/api/call-plan/rebuild') { const limited = await callFocusRateLimit(request, env, 'call-plan-rebuild', 60, 3600); if (limited) return limited; const quota=await cfEconomyQuota(request,env,'call-plan-rebuild',80);if(quota)return quota;return safeCustomerRoute('call-plan-rebuild', () => handleCallPlanRebuild(request, env)); }
+    if (url.pathname === '/api/call-context/analyze') { const limited = await callFocusRateLimit(request, env, 'call-context-analyze', 40, 900); if (limited) return limited; const quota=await cfEconomyQuota(request,env,'call-context-analyze',60);if(quota)return quota;return safeCustomerRoute('call-context-analyze', () => handleCallContextAnalyze(request, env)); }
     if (url.pathname === '/api/session') {
       if (request.method !== 'POST') return new Response('Method not allowed.', { status: 405, headers: { Allow: 'POST' } });
+      const limited=await callFocusRateLimit(request,env,'session-open',30,3600);
+      if(limited)return limited;
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
@@ -7341,7 +7633,10 @@ export default {
   },
   async scheduled(event, env, ctx) {
     // Preserve the existing Image-to-Video five-minute polling schedule.
-    if(event.cron==='*/5 * * * *')ctx.waitUntil(cfVideoCron(env));
+    if(event.cron==='*/5 * * * *'){
+      ctx.waitUntil(cfVideoCron(env));
+      ctx.waitUntil(cfRecoverAbandonedVoiceNotes(env));
+    }
     // Clear abandoned one-time cloned voices; never touch OpenAI sessions.
     if(event.cron==='*/5 * * * *')ctx.waitUntil(elCleanup(env));
     // Verify new PocketFi hosted checkouts even while customers are off-site.

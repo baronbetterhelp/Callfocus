@@ -2120,22 +2120,18 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       const script=decodeURIComponent(res.headers.get('X-CallFocus-Script')||'');
       const voiceName=res.headers.get('X-CallFocus-Voice') || (vnGender==='female'?loadAdmin().femaleVoice:loadAdmin().maleVoice);
       const duration=await audioDuration(blob);
-      const billableSeconds=Math.max(1,Math.ceil(Number(duration)||1));
-      const noteId=uuid();
-      let creditResult=null;
-      if(window.CallFocusCredits){
-        creditResult=await window.CallFocusCredits.consumeUsageSeconds(billableSeconds,{type:'voice_note',referenceId:noteId});
-        if(!creditResult?.ok){
-          status.className='voice-note-status error';
-          status.textContent=creditResult?.reason==='credit'?'Voice note generated, but your remaining credit was exhausted. Top up before creating another one.':'Voice note generated, but the credit update could not be confirmed. Refresh your balance before creating another one.';
-        }
-      }
-      const creditsUsed=window.CallFocusCredits ? Math.round(window.CallFocusCredits.creditsForSeconds(creditResult?.deductedSeconds ?? billableSeconds)*10)/10 : null;
-      const note={id:noteId,prompt,script,voiceGender:vnGender,voiceName,duration,creditsUsed,creditSecondsUsed:creditResult?.deductedSeconds ?? billableSeconds,createdAt:new Date().toISOString()};
+      const secure = res.headers.get('X-CallFocus-Server-Billed') === '1';
+      if(!secure)throw new Error('Voice note secure billing is not yet active. Please refresh the website.');
+      const billableSeconds=Math.max(0,Number(res.headers.get('X-CallFocus-Billed-Seconds')||0));
+      const unlimitedCredit=res.headers.get('X-CallFocus-Unlimited-Credit')==='1';
+      const noteId=res.headers.get('X-CallFocus-Voice-Note-ID')||uuid();
+      const creditsUsed=unlimitedCredit ? null : Math.round(billableSeconds/60*Number(window.CallFocusPricing?.creditsPerMinute||100)*10)/10;
+      const note={id:noteId,prompt,script,voiceGender:vnGender,voiceName,duration,creditsUsed,creditSecondsUsed:billableSeconds,createdAt:new Date().toISOString()};
       ensureVoiceNoteData(); data.voiceNotes.unshift(note); data.voiceNotes=data.voiceNotes.slice(0,60);
       await saveVoiceBlob(note.id,blob);
       saveData(); latestVoiceNoteId=note.id; renderVoiceNoteResult(note); renderVoiceNoteHistory();
       if(window.CallFocusCredits) window.CallFocusCredits.render();
+      window.CallFocusPaystack?.refreshWallet?.({quiet:true})?.catch?.(()=>{});
       if(!status.classList.contains('error')){
         status.className='voice-note-status success'; status.textContent=`Voice note ready · ${creditsUsed ?? ''}${creditsUsed!=null?' credits used · ':''}Tap Play voice note to listen.`;
       }
@@ -2943,18 +2939,14 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       const voiceName = res.headers.get('X-CallFocus-Voice') || (gender === 'female' ? loadAdmin().femaleVoice : loadAdmin().maleVoice);
       const voiceNoteLanguage = res.headers.get('X-CallFocus-Language') || $('voiceNoteLanguage')?.value || 'English';
       const duration = await audioDuration(blob);
-      const billableSeconds = Math.max(1, Math.ceil(Number(duration) || 1));
-      const noteId = uuid();
-      let creditResult = null;
-      if(window.CallFocusCredits){
-        creditResult = await window.CallFocusCredits.consumeUsageSeconds(billableSeconds, { type:'voice_note', referenceId:noteId });
-        if(!creditResult?.ok){
-          status.className = 'voice-note-status error';
-          status.textContent = creditResult?.reason==='credit' ? 'Voice note generated, but your remaining credit was exhausted. Top up before creating another one.' : 'Voice note generated, but the credit update could not be confirmed. Refresh your balance before creating another one.';
-        }
-      }
-      const unlimitedCredit = !!creditResult?.unlimited;
-      const creditsUsed = unlimitedCredit ? null : (window.CallFocusCredits ? Math.round(window.CallFocusCredits.creditsForSeconds(creditResult?.deductedSeconds ?? billableSeconds) * 10) / 10 : null);
+      // V16.70: voice notes are charged by the Worker BEFORE audio is released.
+      // Do not submit a second wallet/consume charge from the browser.
+      const serverBilled = res.headers.get('X-CallFocus-Server-Billed') === '1';
+      if(!serverBilled)throw new Error('Secure voice-note billing is not active. Refresh your page and try again.');
+      const billableSeconds = Math.max(0,Number(res.headers.get('X-CallFocus-Billed-Seconds')||0));
+      const unlimitedCredit = res.headers.get('X-CallFocus-Unlimited-Credit') === '1';
+      const creditsUsed = unlimitedCredit ? null : Math.round((billableSeconds / 60 * Number(window.CallFocusPricing?.creditsPerMinute||100)) * 10) / 10;
+      const noteId = res.headers.get('X-CallFocus-Voice-Note-ID') || uuid();
       const note = {
         id:noteId,
         mode:voiceNoteMode,
@@ -2966,7 +2958,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
         duration,
         creditsUsed,
         unlimitedCredit,
-        creditSecondsUsed:unlimitedCredit ? 0 : (creditResult?.deductedSeconds ?? billableSeconds),
+        creditSecondsUsed:unlimitedCredit ? 0 : billableSeconds,
         createdAt:new Date().toISOString()
       };
       ensureVoiceNoteData();
@@ -2978,6 +2970,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
       renderVoiceNoteResult(note);
       renderVoiceNoteHistory();
       if(window.CallFocusCredits) window.CallFocusCredits.render();
+      window.CallFocusPaystack?.refreshWallet?.({quiet:true})?.catch?.(()=>{});
       if(!status.classList.contains('error')){
         status.className = 'voice-note-status success';
         status.textContent = `${voiceNoteMode === 'reply' ? 'Reply' : 'Voice note'} ready · ${unlimitedCredit ? 'Unlimited access · ' : (creditsUsed != null ? creditsUsed + ' credits used · ' : '')}Tap Play voice note to listen.`;
