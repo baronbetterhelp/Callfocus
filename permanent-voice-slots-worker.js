@@ -1,9 +1,11 @@
-/* CallFocus V16.45: limited permanent cloned-voice booking. Independent of the original OpenAI engine. */
+/* CallFocus V16.75: monthly subscriptions for new and existing slot owners; migration 0003 required. OpenAI unchanged. */
+import {subscriptionForUser,startSubscriptionIfPurchased,renew as renewSubscription,adminReport,releaseExpired} from './cf-voice-subscriptions.js';
 const SLOT_KEY='callfocus:permanent-voice:settings:v1';
 const SLOT_PRICE_CREDITS=1000;
 const SLOT_PRICE_SECONDS=600;
+const RENEWAL_PRICE_DEFAULT=1000;
 const SLOT_RECEIPT_PREFIX='permanent-slot:';
-const DEF={enabled:false,popupEnabled:false,popupDelaySeconds:0,forceFull:false,slotLimit:30,minimumCredits:1000,primaryLimit:30,secondaryLimit:30,secondaryEnabled:false,primaryAcceptNew:true,secondaryAcceptNew:true,tertiaryLimit:30,tertiaryEnabled:false,pool4AcceptNew:false,pool5AcceptNew:false,pool6AcceptNew:false,releaseQuota:0,releaseId:'',eventDate:'',bookingOpensAt:'',bookingClosesAt:'',headline:'Limited permanent voice cloning slots',message:'Buy a permanent voice-cloning slot for 1,000 credits. Your saved voice can then be reused for cloned calls and voice notes.',fullMessage:'All permanent voice cloning slots are filled. Join our Telegram channel to be the first to know when the next slots open.',telegramUrl:'https://t.me/callfocus',revision:1};
+const DEF={enabled:false,popupEnabled:false,popupDelaySeconds:0,forceFull:false,slotLimit:30,minimumCredits:1000,renewalCredits:RENEWAL_PRICE_DEFAULT,primaryLimit:30,secondaryLimit:30,secondaryEnabled:false,primaryAcceptNew:true,secondaryAcceptNew:true,tertiaryLimit:30,tertiaryEnabled:false,pool4AcceptNew:false,pool5AcceptNew:false,pool6AcceptNew:false,releaseQuota:0,releaseId:'',eventDate:'',bookingOpensAt:'',bookingClosesAt:'',headline:'Limited permanent voice cloning slots',message:'Buy a voice-cloning slot for 1,000 credits including your first 30 days. Renew every 30 days to keep using your saved voice. Existing slot owners renew 30 days after their original booking date.',fullMessage:'All permanent voice cloning slots are filled. Join our Telegram channel to be the first to know when the next slots open.',telegramUrl:'https://t.me/callfocus',revision:1};
 const j=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const err=(text,status=400)=>j({ok:false,error:text},status);
 const sql=env=>{if(!env.CALLFOCUS_WALLET_DB?.prepare)throw Error('VOICE_SLOTS_D1_NOT_CONFIGURED');return env.CALLFOCUS_WALLET_DB};
@@ -146,6 +148,8 @@ function parseSettings(x,previous){
  const popupDelaySeconds=x.popupDelaySeconds===undefined?Number(previous.popupDelaySeconds||0):Number(x.popupDelaySeconds);
  if(!Number.isSafeInteger(popupDelaySeconds)||popupDelaySeconds<0||popupDelaySeconds>60)throw Error('Popup delay must be a whole number from 0 to 60 seconds.');
  const n=Number(x.slotLimit),minimumCredits=SLOT_PRICE_CREDITS;
+ const renewalCredits=x.renewalCredits===undefined?Number(previous.renewalCredits||RENEWAL_PRICE_DEFAULT):Number(x.renewalCredits);
+ if(!Number.isSafeInteger(renewalCredits)||renewalCredits<100||renewalCredits>100000||renewalCredits%100!==0)throw Error('Monthly renewal price must be 100–100,000 credits in steps of 100.');
  if(!Number.isSafeInteger(n)||n<1||n>1000)throw Error('Slot capacity must be between 1 and 1000.');
 
  const eventDate=safeText(x.eventDate,10);if(eventDate&&!/^\d{4}-\d{2}-\d{2}$/.test(eventDate))throw Error('Enter a valid event date.');
@@ -157,12 +161,12 @@ function parseSettings(x,previous){
  if(typeof x.pool4AcceptNew!=='boolean')throw Error('Select whether Account 4 can receive new purchases.');
  if(typeof x.pool5AcceptNew!=='boolean')throw Error('Select whether Account 5 can receive new purchases.');
  if(typeof x.pool6AcceptNew!=='boolean')throw Error('Select whether Account 6 can receive new purchases.');
- return {...DEF,enabled:x.enabled,popupEnabled:x.popupEnabled,popupDelaySeconds,forceFull:x.forceFull,slotLimit:n,pool4AcceptNew:x.pool4AcceptNew,pool5AcceptNew:x.pool5AcceptNew,pool6AcceptNew:x.pool6AcceptNew,releaseQuota:previous.releaseQuota||0,releaseId:previous.releaseId||'',minimumCredits,eventDate,bookingOpensAt,bookingClosesAt,headline:safeText(x.headline,100),message:safeText(x.message,350),fullMessage:safeText(x.fullMessage,350),telegramUrl,revision:previous.revision+1};
+ return {...DEF,enabled:x.enabled,popupEnabled:x.popupEnabled,popupDelaySeconds,forceFull:x.forceFull,slotLimit:n,pool4AcceptNew:x.pool4AcceptNew,pool5AcceptNew:x.pool5AcceptNew,pool6AcceptNew:x.pool6AcceptNew,releaseQuota:previous.releaseQuota||0,releaseId:previous.releaseId||'',minimumCredits,renewalCredits,eventDate,bookingOpensAt,bookingClosesAt,headline:safeText(x.headline,100),message:safeText(x.message,350),fullMessage:safeText(x.fullMessage,350),telegramUrl,revision:previous.revision+1};
 }
-function publicView(s,count,record,remaining=0){const phase=bookingPhase(s);const capacity=effectiveLimit(s);return {ok:true,enabled:s.enabled,popupEnabled:s.popupEnabled,popupDelaySeconds:Math.max(0,Math.min(60,Number(s.popupDelaySeconds)||0)),slotLimit:capacity,booked:count,remaining,full:s.forceFull===true||remaining<=0,minimumCredits:SLOT_PRICE_CREDITS,purchasePrice:SLOT_PRICE_CREDITS,bookingIsPaid:true,eventDate:s.eventDate,bookingOpensAt:s.bookingOpensAt||'',bookingClosesAt:s.bookingClosesAt||'',bookingPhase:phase,canBookNow:s.enabled&&phase==='open'&&!s.forceFull&&remaining>0,headline:s.headline,message:s.message,fullMessage:s.fullMessage,telegramUrl:s.telegramUrl,revision:s.revision,me:record?{state:record.state,bookedAt:record.booked_at,voiceName:record.voice_name||null,hasSavedVoice:record.state==='ready',purchasePending:record.purchasePending===true,purchased:record.purchased===true,grandfathered:!record.purchase_id}:null}}
-async function slotVoiceForUser(env,userId){const v=await row(sql(env),userId);return v?.state==='ready'&&/^[A-Za-z0-9_-]{8,120}$/.test(String(v.voice_id||''))?{voiceId:v.voice_id,name:v.voice_name||'My permanent voice',persistent:true,providerPool:v.provider_pool||'primary'}:null}
+function publicView(s,count,record,remaining=0){const phase=bookingPhase(s);const capacity=effectiveLimit(s);return {ok:true,enabled:s.enabled,popupEnabled:s.popupEnabled,popupDelaySeconds:Math.max(0,Math.min(60,Number(s.popupDelaySeconds)||0)),slotLimit:capacity,booked:count,remaining,full:s.forceFull===true||remaining<=0,minimumCredits:SLOT_PRICE_CREDITS,purchasePrice:SLOT_PRICE_CREDITS,renewalCredits:s.renewalCredits||RENEWAL_PRICE_DEFAULT,subscriptionPeriodDays:30,subscriptionGraceDays:7,bookingIsPaid:true,eventDate:s.eventDate,bookingOpensAt:s.bookingOpensAt||'',bookingClosesAt:s.bookingClosesAt||'',bookingPhase:phase,canBookNow:s.enabled&&phase==='open'&&!s.forceFull&&remaining>0,headline:s.headline,message:s.message,fullMessage:s.fullMessage,telegramUrl:s.telegramUrl,revision:s.revision,me:record?{state:record.state,bookedAt:record.booked_at,voiceName:record.voice_name||null,hasSavedVoice:record.state==='ready',purchasePending:record.purchasePending===true,purchased:record.purchased===true,initialPurchaseExempt:!record.purchase_id}:null}}
+async function slotVoiceForUser(env,userId){const v=await row(sql(env),userId);if(v?.state!=='ready'||!/^[A-Za-z0-9_-]{8,120}$/.test(String(v.voice_id||'')))return null;const sub=await subscriptionForUser(env,userId);if(!sub.canUseVoice)return null;return {voiceId:v.voice_id,name:v.voice_name||'My saved voice',persistent:true,providerPool:v.provider_pool||'primary'};}
 // A newly purchased reservation is not usable until the wallet debit is verified.
-// Older reservations have no purchase ID and are grandfathered without a retroactive charge.
+// Older reservations have no purchase ID; initial purchase fee is waived, but monthly renewals still apply from original booked_at.
 async function purchase(db,purchaseId){return purchaseId?db.prepare('SELECT * FROM cf_permanent_voice_slot_purchases WHERE purchase_id=?').bind(purchaseId).first():null}
 const receiptId=id=>SLOT_RECEIPT_PREFIX+id;
 function hasReceipt(wallet,id,type='permanent_voice_slot_purchase'){
@@ -256,7 +260,7 @@ async function popupConfig(req,env,helpers){
   popupDelaySeconds:Math.max(0,Math.min(60,Number(s.popupDelaySeconds)||0)),
   headline:s.headline,message:s.message,eventDate:s.eventDate,
   bookingOpensAt:s.bookingOpensAt||'',bookingClosesAt:s.bookingClosesAt||'',
-  purchasePrice:SLOT_PRICE_CREDITS,revision:s.revision});
+  purchasePrice:SLOT_PRICE_CREDITS,renewalCredits:s.renewalCredits||RENEWAL_PRICE_DEFAULT,revision:s.revision});
 }
 async function customer(req,env,helpers){
  if(!['GET','POST'].includes(req.method))return err('Method not allowed.',405);
@@ -266,21 +270,24 @@ async function customer(req,env,helpers){
  let counts,record,caps,availability;
  try{
   counts=await poolCounts(db);record=await paidRecord(db,await row(db,u.id));
+  if(record?.purchased)await startSubscriptionIfPurchased(db,record);
   caps=await capacities(env);availability=await available(db,s,counts,caps);
  }catch{return err('The slot purchase system is not ready. Apply the V16.58 SQL migration.',503)}
  if(req.method==='GET'){
   let availableCredits=null;try{availableCredits=await userAvailableCredits(env,u,helpers)}catch{}
-  return j({...publicView(s,totalReserved(counts),record,availability.remaining),signedIn:true,availableCredits});
+  let subscription=null;try{if(record)subscription=await subscriptionForUser(env,u.id)}catch{return err('Run the V16.74 monthly voice migration before enabling subscriptions.',503)}
+  return j({...publicView(s,totalReserved(counts),record,availability.remaining),signedIn:true,availableCredits,subscription});
  }
  // An interrupted charge can be resumed using its SAME purchase ID. Existing
- // free bookings remain grandfathered and are never charged retroactively.
+ // old bookings never pay a retroactive INITIAL fee; their monthly schedule is based on original booked_at.
  if(record){
   if(record.purchase_id&&!record.purchased){
    const settled=await settlePurchase(db,env,u,helpers,record);
    if(!settled.ok)return err(settled.error,settled.status);
    record=await paidRecord(db,await row(db,u.id));
   }
-  return j({...publicView(s,totalReserved(counts),record,availability.remaining),alreadyBooked:true,chargedCredits:0});
+  if(record?.purchased)await startSubscriptionIfPurchased(db,record);
+   return j({...publicView(s,totalReserved(counts),record,availability.remaining),alreadyBooked:true,chargedCredits:0,subscription:await subscriptionForUser(env,u.id)});
  }
  if(!s.enabled)return err('Voice-slot purchases are currently closed.',403);
  if(bookingPhase(s)!=='open')return err('Slot purchases have not opened yet or have closed.',403);
@@ -316,8 +323,9 @@ async function customer(req,env,helpers){
   const settled=await settlePurchase(db,env,u,helpers,booked);
   if(!settled.ok)return err(settled.error,settled.status);
   const paid=await paidRecord(db,await row(db,u.id));
+  await startSubscriptionIfPurchased(db,paid);
   const freshCounts=await poolCounts(db),freshAvailable=await available(db,s,freshCounts,caps);
-  return j({...publicView(s,totalReserved(freshCounts),paid,freshAvailable.remaining),alreadyBooked:!created,chargedCredits:created?SLOT_PRICE_CREDITS:0,remainingCredits:settled.remainingCredits??null});
+  return j({...publicView(s,totalReserved(freshCounts),paid,freshAvailable.remaining),alreadyBooked:!created,chargedCredits:created?SLOT_PRICE_CREDITS:0,remainingCredits:settled.remainingCredits??null,subscription:await subscriptionForUser(env,u.id)});
  }catch(e){console.warn('Voice slot purchase failed',String(e?.message||e).slice(0,150));return err('Could not confirm slot purchase. Check your balance and retry; a pending purchase is never charged twice.',503)}
 }
 async function admin(req,env){
@@ -335,9 +343,10 @@ async function admin(req,env){
   const account4=await verifyAccount4(env,caps.pool4);
   const account5=await verifyAccount5(env,caps.pool5);
   const account6=await verifyAccount6(env,caps.pool6);
+  const monthly=await adminReport(db);
   const purchaseStats=await db.prepare("SELECT COUNT(*) AS n FROM cf_permanent_voice_slot_purchases WHERE state='paid'").first();
   const eligibleLegacy=await db.prepare("SELECT COUNT(*) AS n FROM cf_permanent_voice_slots WHERE purchase_id IS NULL AND voice_id IS NULL AND state IN ('booked','failed')").first();
-  return j({ok:true,voiceAdminBuild:'16.73',paidPurchases:Number(purchaseStats?.n||0),settings:s,booked:totalReserved(counts),created:totalCreated(counts),pending:totalReserved(counts)-totalCreated(counts),reclaimable:Number(eligibleLegacy?.n||0),total:s.slotLimit,remaining:a.remaining,physicalAvailable:physicalFree(caps,counts,s),releaseQuota:s.releaseQuota||0,releaseUsed:a.issued,pools,account4,account5,account6,rebalanceCount:moved.length,bookings:rows.results||[]});
+  return j({ok:true,voiceAdminBuild:'16.75',monthly,paidPurchases:Number(purchaseStats?.n||0),settings:s,booked:totalReserved(counts),created:totalCreated(counts),pending:totalReserved(counts)-totalCreated(counts),reclaimable:Number(eligibleLegacy?.n||0),total:s.slotLimit,remaining:a.remaining,physicalAvailable:physicalFree(caps,counts,s),releaseQuota:s.releaseQuota||0,releaseUsed:a.issued,pools,account4,account5,account6,rebalanceCount:moved.length,bookings:rows.results||[]});
  }
  let body;try{body=await req.json()}catch{return err('Invalid settings JSON.')}
  let next;try{next=parseSettings(body,s)}catch(e){return err(e.message)}
@@ -386,11 +395,11 @@ async function toggleAccount5(req,env){
   const verified=await verifyAccount5(env);
   if(!verified.ready)return err('Account 5 cannot be enabled: '+verified.message,409);
  }
- if(s.pool5AcceptNew===input.enabled)return j({ok:true,voiceAdminBuild:'16.73',pool5AcceptNew:input.enabled,revision:s.revision,unchanged:true});
+ if(s.pool5AcceptNew===input.enabled)return j({ok:true,voiceAdminBuild:'16.75',pool5AcceptNew:input.enabled,revision:s.revision,unchanged:true});
  const next={...s,pool5AcceptNew:input.enabled,revision:Number(s.revision||0)+1};
  try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next))}
  catch{return err('Account 5 setting could not be saved. Please retry.',503)}
- return j({ok:true,voiceAdminBuild:'16.73',pool5AcceptNew:input.enabled,revision:next.revision});
+ return j({ok:true,voiceAdminBuild:'16.75',pool5AcceptNew:input.enabled,revision:next.revision});
 }
 
 
@@ -405,11 +414,11 @@ async function toggleAccount6(req,env){
   const verified=await verifyAccount6(env);
   if(!verified.ready)return err('Account 6 cannot be enabled: '+verified.message,409);
  }
- if(s.pool6AcceptNew===input.enabled)return j({ok:true,voiceAdminBuild:'16.73',pool6AcceptNew:input.enabled,revision:s.revision,unchanged:true});
+ if(s.pool6AcceptNew===input.enabled)return j({ok:true,voiceAdminBuild:'16.75',pool6AcceptNew:input.enabled,revision:s.revision,unchanged:true});
  const next={...s,pool6AcceptNew:input.enabled,revision:Number(s.revision||0)+1};
  try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next))}
  catch{return err('Account 6 setting could not be saved. Please retry.',503)}
- return j({ok:true,voiceAdminBuild:'16.73',pool6AcceptNew:input.enabled,revision:next.revision});
+ return j({ok:true,voiceAdminBuild:'16.75',pool6AcceptNew:input.enabled,revision:next.revision});
 }
 
 // Admin-owned public availability, independent of the legacy reclaim/cancel action.
@@ -549,7 +558,8 @@ async function createSavedVoice(req,env,helpers){
  
  const counts=await poolCounts(db),caps=await capacities(env);
  try{await rebalance(db,env,counts,caps,s)}catch{}
- const v=await row(db,a.user.id);if(!v)return err('Buy a permanent voice-cloning slot first.',403);
+ const v=await row(db,a.user.id);if(!v)return err('Buy a voice-cloning slot first.',403);
+ const subscription=await subscriptionForUser(env,a.user.id);if(!subscription.canUseVoice)return err(subscription.message+' Renew your monthly voice subscription first.',402);
  if(v.purchase_id){const payment=await purchase(db,v.purchase_id);if(!payment||payment.state!=='paid')return err('Complete the 1,000-credit slot purchase before creating your voice. Open the slot popup and tap Complete purchase.',402);}
  const pool=v.provider_pool||'primary';const key=poolKey(env,pool);
  if(!key)return err('The voice account assigned to your booking has not been configured. Your reservation is safe.',503);
@@ -588,4 +598,6 @@ async function createSavedVoice(req,env,helpers){
  return j({ok:true,state,voiceName:name,hasSavedVoice:state==='ready',message:state==='ready'?'Your permanent voice is saved and ready for future calls and voice notes.':'Your voice requires additional provider verification. It will not be recreated automatically.'});
 }
 
-export {createSavedVoice,settings as slotSettings,popupConfig as slotPopupConfig,customer as slotCustomer,admin as slotAdmin,slotVoiceForUser,publicView as slotPublicView,sql as slotDB,row as slotRow,userAvailableCredits,reassignPending,releasePending,toggleAccount4,toggleAccount5,toggleAccount6,setPublicAvailability};
+async function slotRenew(req,env,helpers){const s=await settings(env);return renewSubscription(req,env,helpers,s.renewalCredits||RENEWAL_PRICE_DEFAULT)}
+const slotReleaseExpired=releaseExpired;
+export {slotRenew,slotReleaseExpired,createSavedVoice,settings as slotSettings,popupConfig as slotPopupConfig,customer as slotCustomer,admin as slotAdmin,slotVoiceForUser,publicView as slotPublicView,sql as slotDB,row as slotRow,userAvailableCredits,reassignPending,releasePending,toggleAccount4,toggleAccount5,toggleAccount6,setPublicAvailability};

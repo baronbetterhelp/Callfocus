@@ -1,9 +1,9 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id);if(!$('cfSlotSave'))return;
-const VOICE_ADMIN_BUILD='16.73';if(typeof window!=='undefined')window.__cfVoiceAdmin1673Loaded=true;
+const VOICE_ADMIN_BUILD='16.75';if(typeof window!=='undefined')window.__cfVoiceAdmin1675Loaded=true;
 const token=()=>localStorage.getItem('callfocus_admin_session_v158')||sessionStorage.getItem('callfocus_admin_key')||'';
 const status=$('cfSlotStatus');
-const fields=['enabled','popupEnabled','popupDelaySeconds','forceFull','slotLimit','minimumCredits','pool4AcceptNew','pool5AcceptNew','pool6AcceptNew','eventDate','bookingOpensAt','bookingClosesAt','headline','message','fullMessage','telegramUrl'];
+const fields=['enabled','popupEnabled','popupDelaySeconds','forceFull','slotLimit','minimumCredits','renewalCredits','pool4AcceptNew','pool5AcceptNew','pool6AcceptNew','eventDate','bookingOpensAt','bookingClosesAt','headline','message','fullMessage','telegramUrl'];
 const dirty=new Set();
 let loaded=false,buildVerified=false,fetchGeneration=0,toggleBusy=false,confirmedToggle=false,confirmedRevision=0,toggleNotice='',account5Busy=false,confirmedToggle5=false,toggleNotice5='',account6Busy=false,confirmedToggle6=false,toggleNotice6='',publicAvailabilityBusy=false,publicAvailabilityEdited=false;
 async function request(path='/api/admin/permanent-slots',method='GET',body){
@@ -19,7 +19,7 @@ function render(d){
     if(button)button.disabled=true;if(verify)verify.disabled=true;
     const button6=$('cfSlot_pool6AcceptNew'),verify6=$('cfSlotAccount6Verify');
     if(button6)button6.disabled=true;if(verify6)verify6.disabled=true;
-    const warning=`Account 5 and 6 controls are unavailable because the Admin page and Worker versions do not match (expected ${VOICE_ADMIN_BUILD}, received ${d.voiceAdminBuild||'older version'}). Confirm V16.73 is active in Cloudflare, then refresh the Admin page.`;
+    const warning=`Account 5 and 6 controls are unavailable because the Admin page and Worker versions do not match (expected ${VOICE_ADMIN_BUILD}, received ${d.voiceAdminBuild||'older version'}). Confirm V16.75 is active in Cloudflare, then refresh the Admin page.`;
     if($('cfSlotAccount5Status'))$('cfSlotAccount5Status').textContent=warning;
     if($('cfSlotAccount6Status'))$('cfSlotAccount6Status').textContent=warning;
     status.textContent=warning;return;
@@ -54,8 +54,30 @@ function render(d){
  if($('cfSlotPools'))$('cfSlotPools').textContent=Object.values(d.pools||{}).filter(p=>p.apiKeyConfigured||p.reserved).map(p=>`Account ${p.index}: ${p.ok?'connected':'check connection'} · ${p.reserved} booked · ${p.created} saved · ${p.pending} idle pending · ${p.ok?p.voiceSlotsUsed+'/'+p.voiceSlotLimit+' used':''} · ${p.available} usable slots`).join(' | ');
  if($('cfSlotProvider'))$('cfSlotProvider').textContent=`Public release: ${d.releaseUsed||0} booked from current release of ${d.releaseQuota||0}. New accounts are detected when configured with their own API key and Agent ID.`;
  if(!publicAvailabilityBusy&&!publicAvailabilityEdited&&$('cfSlotPublicAvailableCount'))$('cfSlotPublicAvailableCount').value=String(d.remaining??0);
+ renderMonthly(d.monthly||{});
  if($('cfSlotBookings'))$('cfSlotBookings').textContent=(d.bookings||[]).map(r=>`${r.state.toUpperCase()} · ${r.user_id.slice(0,10)}… · ${r.voice_name||'Voice not created'} · ${r.booked_at.slice(0,10)}`).join('\n')||'No reservations yet.';
  loaded=true;
+}
+function renderMonthly(monthly){
+ const totals=monthly.totals||{};
+ if($('cfSlotMonthlyOverall'))$('cfSlotMonthlyOverall').textContent=`${totals.subscribed||0} active · ${totals.grace||0} grace · ${totals.eligible||0} eligible for release · ${totals.grandfathered||0} awaiting transition`;
+ const target=$('cfSlotMonthlyAccounts');if(target){target.innerHTML='';for(let i=1;i<=10;i++){
+  const pool=i===1?'primary':i===2?'secondary':i===3?'tertiary':`pool${i}`,p=monthly.pools?.[pool];
+  if(!p||(!p.total&&!p.subscribed&&!p.grace&&!p.eligible))continue;
+  const row=document.createElement('div');row.className='cf-monthly-account-row';
+  const title=document.createElement('strong');title.textContent=`Account ${i} · ${p.total} total reserved`;
+  const label=document.createElement('span');label.textContent=`${p.subscribed} subscribed · ${p.grace} in 7-day grace · ${p.eligible} releasable · ${p.grandfathered} awaiting transition${p.releasing?' · '+p.releasing+' pending deletion':''}`;
+  row.append(title,label);target.append(row);
+ }}
+ const due=$('cfSlotMonthlyDue');if(due){due.innerHTML='';
+   for(const item of (monthly.due||[]).slice(0,100)){
+     const index=item.provider_pool==='primary'?1:item.provider_pool==='secondary'?2:item.provider_pool==='tertiary'?3:String(item.provider_pool).slice(4);
+     const row=document.createElement('div');row.className='cf-monthly-due-row';
+     row.textContent=`Account ${index} · Customer ${String(item.user_id||'').slice(0,14)}… · paid until ${String(item.paid_through||'').slice(0,10)} · grace ends ${String(item.grace_until||'').slice(0,10)} · ${item.status}`;
+     due.append(row);
+   }
+   if(!due.children.length)due.textContent='No overdue monthly subscriptions currently recorded.';
+ }
 }
 async function refresh(){
  if(!token())return;
@@ -64,7 +86,7 @@ async function refresh(){
  catch(e){if(generation===fetchGeneration){
    status.textContent=e.message;
    if(!loaded)loaded=false;
-   if(!buildVerified){const message=`Account 5 and 6 controls could not be verified: ${e.message}. Confirm the V16.73 deployment is active and refresh.`;for(const id of ['cfSlotAccount5Status','cfSlotAccount6Status']){const el=$(id);if(el)el.textContent=message;}}
+   if(!buildVerified){const message=`Account 5 and 6 controls could not be verified: ${e.message}. Confirm the V16.74 deployment is active and refresh.`;for(const id of ['cfSlotAccount5Status','cfSlotAccount6Status']){const el=$(id);if(el)el.textContent=message;}}
   }}
 }
 // Do not throw away edits to other settings when a background refresh completes.
@@ -156,6 +178,15 @@ if(account6)account6.addEventListener('change',async()=>{
  await refresh();
 });
 $('cfSlotRefresh').onclick=refresh;
+$('cfSlotMonthlyReleaseBtn')?.addEventListener('click',async()=>{
+ const pool=$('cfSlotMonthlyPool')?.value,count=Number($('cfSlotMonthlyCount')?.value),confirm=$('cfSlotMonthlyConfirm')?.value||'',notice=$('cfSlotMonthlyReleaseStatus'),button=$('cfSlotMonthlyReleaseBtn');
+ if(confirm!=='RELEASE EXPIRED VOICES'){notice.textContent='Type RELEASE EXPIRED VOICES to confirm. This permanently deletes eligible saved voices after seven full days overdue.';return;}
+ if(!Number.isSafeInteger(count)||count<1||count>12){notice.textContent='Enter between 1 and 12 eligible slots to release.';return;}
+ if(!window.confirm(`Permanently release up to ${count} expired voice slot(s) on ${$('cfSlotMonthlyPool')?.selectedOptions[0]?.textContent||'this account'}? The saved voices are deleted from their account and cannot be recovered.`))return;
+ button.disabled=true;notice.textContent='Verifying seven-day overdue dates, checking payments, and releasing saved voices…';
+ try{const result=await request('/api/admin/permanent-slots/release-expired','POST',{pool,count,confirm});notice.textContent=result.message+(result.details?.length?' '+result.details.join(' '):'');$('cfSlotMonthlyConfirm').value='';await refresh()}
+ catch(e){notice.textContent=e.message}finally{button.disabled=false}
+});
 $('cfSlotAccount4Verify')?.addEventListener('click',refresh);
 $('cfSlotAccount6Verify')?.addEventListener('click',async()=>{
    if(!buildVerified){await refresh();return;}

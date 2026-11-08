@@ -5,8 +5,8 @@ let current=null,pending=false,autoDismissed=false;
 const $=id=>document.getElementById(id);
 const creditNumber=n=>Number(n||0).toLocaleString('en-NG');
 async function load(){if(!auth())throw Error('Sign in to see the limited voice-cloning slots.');const r=await fetch('/api/permanent-slots/status',{cache:'no-store',headers:auth()?{Authorization:'Bearer '+auth()}:{}}),v=await r.json();if(!r.ok)throw Error(v.error||'Booking status unavailable.');current=v;return v}
-function ensure(){if($('cf-slot-layer'))return;const layer=document.createElement('div');layer.id='cf-slot-layer';layer.className='cf-slot-layer';layer.innerHTML=`<section class="cf-slot-popup" role="dialog" aria-modal="true" aria-labelledby="cf-slot-title"><button type="button" class="cf-slot-close" aria-label="Close">×</button><small class="cf-slot-eyebrow">CALLFOCUS · LIMITED RELEASE</small><h2 id="cf-slot-title"></h2><p class="cf-slot-description"></p><div class="cf-slot-default-offer" hidden><span class="cf-slot-default-eyebrow">CALLS ARE STILL AVAILABLE</span><strong>Voice cloning is full, but you can still make calls.</strong><p>Choose our standard Male or Female voice and start a regular CallFocus call.</p><button class="cf-slot-default-btn" type="button">Use our default voice <span aria-hidden="true">→</span></button></div><div class="cf-slot-stats"><div><small>Slots remaining</small><strong class="cf-slot-remaining"></strong></div><div><small>Voice cloning date</small><strong class="cf-slot-date"></strong></div></div><p class="cf-slot-window"></p><p class="cf-slot-minimum"></p><p class="cf-slot-balance" aria-live="polite"></p><p class="cf-slot-response" role="status" aria-live="polite"></p><button class="cf-slot-book" type="button">Buy slot · 1,000 credits</button><p class="cf-slot-telegram-description" hidden></p><a class="cf-slot-telegram" target="_blank" rel="noopener noreferrer">Join our Telegram channel</a></section>`;document.body.append(layer);
-layer.querySelector('.cf-slot-close').onclick=close;layer.addEventListener('click',e=>{if(e.target===layer)close()});layer.querySelector('.cf-slot-book').onclick=book;layer.querySelector('.cf-slot-default-btn').onclick=openDefaultVoiceCall;window.addEventListener('keydown',e=>{if(e.key==='Escape')close()});}
+function ensure(){if($('cf-slot-layer'))return;const layer=document.createElement('div');layer.id='cf-slot-layer';layer.className='cf-slot-layer';layer.innerHTML=`<section class="cf-slot-popup" role="dialog" aria-modal="true" aria-labelledby="cf-slot-title"><button type="button" class="cf-slot-close" aria-label="Close">×</button><small class="cf-slot-eyebrow">CALLFOCUS · LIMITED RELEASE</small><h2 id="cf-slot-title"></h2><p class="cf-slot-description"></p><div class="cf-slot-default-offer" hidden><span class="cf-slot-default-eyebrow">CALLS ARE STILL AVAILABLE</span><strong>Voice cloning is full, but you can still make calls.</strong><p>Choose our standard Male or Female voice and start a regular CallFocus call.</p><button class="cf-slot-default-btn" type="button">Use our default voice <span aria-hidden="true">→</span></button></div><div class="cf-slot-stats"><div><small>Slots remaining</small><strong class="cf-slot-remaining"></strong></div><div><small>Voice cloning date</small><strong class="cf-slot-date"></strong></div></div><p class="cf-slot-window"></p><p class="cf-slot-minimum"></p><p class="cf-slot-balance" aria-live="polite"></p><div class="cf-slot-monthly" hidden><strong class="cf-slot-monthly-title">Monthly voice subscription</strong><p class="cf-slot-monthly-status"></p><button class="cf-slot-renew-btn" type="button" hidden>Renew monthly voice access</button></div><p class="cf-slot-response" role="status" aria-live="polite"></p><button class="cf-slot-book" type="button">Buy slot · 1,000 credits</button><p class="cf-slot-telegram-description" hidden></p><a class="cf-slot-telegram" target="_blank" rel="noopener noreferrer">Join our Telegram channel</a></section>`;document.body.append(layer);
+layer.querySelector('.cf-slot-close').onclick=close;layer.addEventListener('click',e=>{if(e.target===layer)close()});layer.querySelector('.cf-slot-book').onclick=book;layer.querySelector('.cf-slot-renew-btn').onclick=renew;layer.querySelector('.cf-slot-default-btn').onclick=openDefaultVoiceCall;window.addEventListener('keydown',e=>{if(e.key==='Escape')close()});}
 // Guided entry only: the ordinary New Call button still owns the call form,
 // validation, profile-prefill and provider/voice behavior. No call is started here.
 let defaultVoiceGuideWatcher=null;
@@ -63,7 +63,7 @@ layer.querySelector('.cf-slot-default-offer').hidden=!isFull;
 const description=layer.querySelector('.cf-slot-description'),telegramDescription=layer.querySelector('.cf-slot-telegram-description');
 // Keep the regular slot status below the heading, but put the full-release
 // Telegram explanation immediately above its destination button.
-description.textContent=isFull?'':hasSlot?(s.me.purchasePending?'Your 1,000-credit slot purchase has not been confirmed yet. Tap Complete purchase to verify it.':s.me.hasSavedVoice?'Your permanent cloned voice is ready. You can reuse it for cloned calls and voice notes.':'Your permanent voice slot is yours. You can prepare your permanent voice when cloning is enabled on the announced date.'):s.message;
+description.textContent=isFull?'':hasSlot?(s.me.purchasePending?'Your 1,000-credit slot purchase has not been confirmed yet. Tap Complete purchase to verify it.':s.me.hasSavedVoice?'Your saved cloned voice is ready while your monthly subscription is active. You can renew from this panel.':'Your monthly voice slot is reserved. You can prepare your saved voice when cloning is enabled.'):s.message;
 description.hidden=isFull;
 telegramDescription.textContent=isFull?s.fullMessage:'';
 telegramDescription.hidden=!isFull;
@@ -72,7 +72,7 @@ layer.querySelector('.cf-slot-date').textContent=s.eventDate?new Date(s.eventDat
 const formatWAT=value=>{if(!value)return '';const d=new Date(value+':00+01:00');return new Intl.DateTimeFormat('en-NG',{timeZone:'Africa/Lagos',day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true}).format(d)+' WAT'};
 const windowLabel=[s.bookingOpensAt?'Bookings open: '+formatWAT(s.bookingOpensAt):'',s.bookingClosesAt?'Bookings close: '+formatWAT(s.bookingClosesAt):''].filter(Boolean).join(' · ');
 const times=layer.querySelector('.cf-slot-window');times.textContent=windowLabel;times.hidden=!windowLabel;
-layer.querySelector('.cf-slot-minimum').textContent=`Permanent voice slot price: ${creditNumber(s.purchasePrice||1000)} CallFocus credits (deducted once when purchased). One slot per customer.`;
+layer.querySelector('.cf-slot-minimum').textContent=`New voice slot: ${creditNumber(s.purchasePrice||1000)} credits including the first 30 days. Renew manually every 30 days (${creditNumber(s.renewalCredits||1000)} credits at the current rate). After expiry, cloned voice access pauses and the slot is protected for 7 days before it may be released by Admin. One slot per customer.`;
 // Reflect the exact current, unused server wallet, not cumulative payments.
 // Booking eligibility is enforced again by the server when Book slot is tapped.
 const balance=layer.querySelector('.cf-slot-balance');
@@ -83,6 +83,12 @@ if((!hasSlot||s.me?.purchasePending)&&s.availableCredits!==null&&s.availableCred
  balance.hidden=false;
 }else{balance.textContent='';balance.hidden=true;}
 msg.textContent='';book.hidden=(hasSlot&&!s.me?.purchasePending)||(!hasSlot&&(isFull||!s.enabled||upcoming||ended));book.disabled=pending;book.textContent=s.me?.purchasePending?'Complete purchase':`Buy slot · ${creditNumber(s.purchasePrice||1000)} credits`;
+const monthly=layer.querySelector('.cf-slot-monthly'),renewBtn=layer.querySelector('.cf-slot-renew-btn'),monthlyStatus=layer.querySelector('.cf-slot-monthly-status');
+const subscription=s.subscription||null;monthly.hidden=!hasSlot||!subscription;
+if(subscription){monthlyStatus.textContent=subscription.message||'';renewBtn.hidden=!subscription.mayRenew;renewBtn.disabled=pending;
+ renewBtn.textContent=`Renew for 30 days · ${creditNumber(s.renewalCredits||1000)} credits`;
+ if(subscription.state==='grandfathered')monthlyStatus.textContent='Your monthly subscription transition is pending. Your saved voice stays available until the transition is activated.';
+}
 const telegram=layer.querySelector('.cf-slot-telegram');telegram.href=s.telegramUrl||'https://t.me/callfocus';telegram.hidden=!isFull&&!ended&&s.enabled;
 if(!s.enabled&&!isFull&&!hasSlot)msg.textContent='Slot booking is currently paused. Watch this page for the next opening.';
 else if(upcoming&&!hasSlot)msg.textContent='Bookings are not open yet. Reservations begin at the announced opening time (Nigeria time).';
@@ -91,12 +97,21 @@ if(!force&&!s.popupEnabled)return;
 layer.classList.add('open');document.body.classList.add('cf-slot-modal-open');
 }
 async function book(){if(pending)return;const l=$('cf-slot-layer'),btn=l?.querySelector('.cf-slot-book'),info=l?.querySelector('.cf-slot-response');if(!auth()){info.textContent='Sign in to your CallFocus account and try again.';return}
-pending=true;btn.disabled=true;btn.textContent='Confirming your 1,000-credit purchase…';try{const r=await fetch('/api/permanent-slots/book',{method:'POST',headers:{Authorization:'Bearer '+auth()},cache:'no-store'});const data=await r.json();if(!r.ok)throw Error(data.error||'Could not reserve slot.');current=data;info.textContent=data.chargedCredits>0?'Purchase successful. 1,000 credits were deducted once. Your permanent voice slot is ready for cloning when enabled.':'Your permanent voice slot purchase is confirmed. No additional credits were deducted.';btn.hidden=true;document.dispatchEvent(new Event('cf-permanent-slots-changed'));
+pending=true;btn.disabled=true;btn.textContent='Confirming your 1,000-credit purchase…';try{const r=await fetch('/api/permanent-slots/book',{method:'POST',headers:{Authorization:'Bearer '+auth()},cache:'no-store'});const data=await r.json();if(!r.ok)throw Error(data.error||'Could not reserve slot.');current=data;info.textContent=data.chargedCredits>0?'Slot purchased. Your first 30 days are included. Renew monthly to continue using your saved voice.':'Your permanent voice slot purchase is confirmed. No additional credits were deducted.';btn.hidden=true;document.dispatchEvent(new Event('cf-permanent-slots-changed'));
  // Refresh only the existing authoritative wallet display. Never calculate a
  // client-side debit or fabricate a local balance after a slot purchase.
  try{const walletRes=await fetch('/api/account/data',{cache:'no-store',headers:{Authorization:'Bearer '+auth()}});const body=await walletRes.json().catch(()=>({}));if(walletRes.ok&&body?.data?.wallet)window.CallFocusCredits?.applyAuthoritativeWallet?.(body.data.wallet)}catch{}}catch(e){info.textContent=e.message;btn.disabled=false;btn.textContent='Buy slot · 1,000 credits';}finally{pending=false}}
+async function renew(){if(pending||!auth())return;
+ const layer=$('cf-slot-layer'),button=layer?.querySelector('.cf-slot-renew-btn'),info=layer?.querySelector('.cf-slot-response');
+ pending=true;if(button)button.disabled=true;if(info)info.textContent='Verifying your monthly renewal and wallet credits…';
+ try{const r=await fetch('/api/permanent-slots/renew',{method:'POST',headers:{Authorization:'Bearer '+auth()},cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok||!d.ok)throw Error(d.error||'Renewal could not be confirmed.');
+   current=await load();show(true,current);if(info)info.textContent=d.chargedCredits?`Subscription renewed for 30 days. ${d.chargedCredits} credits deducted once.`:'Your previously paid renewal was confirmed. No second charge.';
+   document.dispatchEvent(new Event('cf-permanent-slots-changed'));
+   try{const w=await fetch('/api/account/data',{cache:'no-store',headers:{Authorization:'Bearer '+auth()}});const x=await w.json().catch(()=>({}));if(w.ok&&x?.data?.wallet)window.CallFocusCredits?.applyAuthoritativeWallet?.(x.data.wallet)}catch{}
+ }catch(e){if(info)info.textContent=e.message}finally{pending=false;if(button)button.disabled=false}
+}
 async function state(){return current||await load()}
-window.CallFocusPermanentSlots={show,load,state,close};
+window.CallFocusPermanentSlots={show,load,state,close,renew};
 // Start the delay from page readiness, NOT from the completion of the slow
 // provider-capacity endpoint. Users see a non-purchasable preview on time if
 // real-time availability has not yet arrived. No provider details are exposed.
@@ -121,7 +136,8 @@ function preview(cfg){
  layer.querySelector('.cf-slot-remaining').textContent='Checking availability…';
  layer.querySelector('.cf-slot-date').textContent=cfg.eventDate?new Date(cfg.eventDate+'T12:00:00').toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'}):'To be announced';
  layer.querySelector('.cf-slot-window').hidden=true;
- layer.querySelector('.cf-slot-minimum').textContent=`Permanent voice slot price: ${creditNumber(cfg.purchasePrice||1000)} CallFocus credits (deducted once when purchased). One slot per customer.`;
+ layer.querySelector('.cf-slot-minimum').textContent=`New slot: ${creditNumber(cfg.purchasePrice||1000)} credits for the first 30 days. Monthly renewal required to keep using your saved voice.`;
+   layer.querySelector('.cf-slot-monthly').hidden=true;
  layer.querySelector('.cf-slot-balance').hidden=true;
  layer.querySelector('.cf-slot-response').textContent='Checking your reservation and live availability…';
  layer.querySelector('.cf-slot-book').hidden=true;

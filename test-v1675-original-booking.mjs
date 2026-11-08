@@ -1,0 +1,48 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {DatabaseSync} from 'node:sqlite';
+import {subscriptionForUser,startSubscriptionIfPurchased,view} from './cf-voice-subscriptions.js';
+const d=new DatabaseSync(':memory:');
+d.exec(`CREATE TABLE cf_permanent_voice_slots (user_id TEXT PRIMARY KEY,provider_pool TEXT,booked_at TEXT,state TEXT,voice_id TEXT,purchase_id TEXT);CREATE TABLE cf_permanent_voice_slot_purchases (purchase_id TEXT PRIMARY KEY,user_id TEXT,state TEXT,paid_at TEXT,created_at TEXT);`);
+const put=(userId,bookedAt,purchaseId=null,pool='primary')=>d.prepare('INSERT INTO cf_permanent_voice_slots(user_id,booked_at,provider_pool,state,voice_id,purchase_id) VALUES(?,?,?,\'ready\',?,?)').run(userId,bookedAt,pool,'voice'+userId+'ABC00000',purchaseId);
+put('oct10','2026-10-10T15:00:00.000Z');
+put('oct30','2026-10-30T15:00:00.000Z');
+put('sept01','2026-09-01T13:00:00.000Z');
+put('invalid','not-a-date');
+put('already-renewed','2026-09-01T13:00:00.000Z');
+put('unpaid','2026-10-12T13:00:00.000Z','pending1');
+put('v1674-unrenewed','2026-10-11T14:00:00.000Z');
+d.prepare("INSERT INTO cf_permanent_voice_slot_purchases VALUES('pending1','unpaid','pending','2026-10-12T13:00:00.000Z','2026-10-12T13:00:00.000Z')").run();
+d.exec(readFileSync(new URL('./migrations/0002_voice_monthly_subscriptions.sql',import.meta.url),'utf8'));
+d.prepare("UPDATE cf_permanent_voice_subscriptions SET status='active',started_at=?,paid_through=?,grace_until=? WHERE user_id='v1674-unrenewed'").run('2026-10-13T14:00:00.000Z','2026-11-12T14:00:00.000Z','2026-11-19T14:00:00.000Z');
+d.prepare("UPDATE cf_permanent_voice_subscriptions SET status='active',started_at=?,paid_through=?,grace_until=?,last_renewal_id=? WHERE user_id='already-renewed'").run('2026-09-01T13:00:00.000Z','2026-12-09T13:00:00.000Z','2026-12-16T13:00:00.000Z','receipt-unchanged');
+const sql=readFileSync(new URL('./migrations/0003_all_slot_owners_monthly_transition.sql',import.meta.url),'utf8');
+d.exec(sql);
+const sub=id=>d.prepare('SELECT * FROM cf_permanent_voice_subscriptions WHERE user_id=?').get(id);
+assert.equal(sub('oct10').started_at,'2026-10-10T15:00:00.000Z');
+assert.equal(sub('oct10').paid_through,'2026-11-09T15:00:00.000Z');
+assert.equal(sub('oct10').grace_until,'2026-11-16T15:00:00.000Z');
+assert.equal(sub('oct30').paid_through,'2026-11-29T15:00:00.000Z');
+assert.equal(sub('sept01').paid_through,'2026-10-01T13:00:00.000Z');
+assert.equal(view(sub('sept01'),Date.parse('2026-11-08T12:00:00.000Z')).state,'overdue');
+assert.equal(view(sub('oct10'),Date.parse('2026-11-08T12:00:00.000Z')).state,'active');
+assert.equal(sub('invalid').status,'legacy');
+assert.equal(sub('unpaid').status,'legacy');
+assert.equal(sub('v1674-unrenewed').started_at,'2026-10-11T14:00:00.000Z');
+assert.equal(sub('v1674-unrenewed').paid_through,'2026-11-10T14:00:00.000Z');
+assert.equal(sub('already-renewed').paid_through,'2026-12-09T13:00:00.000Z');
+assert.equal(sub('already-renewed').last_renewal_id,'receipt-unchanged');
+d.exec(sql);assert.equal(sub('already-renewed').last_renewal_id,'receipt-unchanged'); // repeat is idempotent
+class D1Stmt{constructor(sql,args=[]){this.sql=sql;this.args=args}bind(...a){return new D1Stmt(this.sql,a)}async first(){return d.prepare(this.sql).get(...this.args)||null}async run(){return {meta:{changes:Number(d.prepare(this.sql).run(...this.args).changes)}}}}
+const db={prepare(sql){return new D1Stmt(sql)}};
+const nowIso=new Date().toISOString(),bookingIso=new Date(Date.now()-2*86400000).toISOString();
+put('latepayment',bookingIso,'latepurchase','pool6');
+d.prepare('INSERT INTO cf_permanent_voice_slot_purchases VALUES(?,?,?,?,?)').run('latepurchase','latepayment','paid',nowIso,nowIso);
+await startSubscriptionIfPurchased(db,{user_id:'latepayment',provider_pool:'pool6',purchase_id:'latepurchase',booked_at:bookingIso});
+assert.equal(sub('latepayment').started_at,bookingIso);
+assert.equal(sub('latepayment').paid_through,new Date(Date.parse(bookingIso)+30*86400000).toISOString());
+// Earlier legacy row initially inserted by 0002: settlement converts it anchored to the original date.
+d.prepare("UPDATE cf_permanent_voice_slot_purchases SET state='paid' WHERE purchase_id='pending1'").run();
+await startSubscriptionIfPurchased(db,{user_id:'unpaid',provider_pool:'primary',purchase_id:'pending1',booked_at:'2026-10-12T13:00:00.000Z'});
+assert.equal(sub('unpaid').status,'active');assert.equal(sub('unpaid').paid_through,'2026-11-11T13:00:00.000Z');
+console.log('PASS: original booking anchors existing+new, corrects prior unrenewed active rows, no clock reset on migration/settlement, 7-day grace, overdue status, paid renewal preservation, pending settlement, invalid-date quarantine, idempotence');

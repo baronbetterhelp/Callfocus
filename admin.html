@@ -531,7 +531,26 @@
           <label class="cf-clone-admin-toggle"><span><strong>Show booking announcement popup</strong><small>Show the announcement on every page refresh, for signed-in customers only. Never show it to visitors.</small></span><input id="cfSlot_popupEnabled" type="checkbox"></label>
           <label for="cfSlot_popupDelaySeconds" style="display:block;margin:16px 0"><strong>Announcement popup delay (seconds)</strong><small style="display:block;margin:6px 0 8px">Choose when the popup appears after the page is ready. Enter 0 to show immediately, 1 for one second, or 3 for three seconds. Signed-in customers only.</small><input id="cfSlot_popupDelaySeconds" type="number" min="0" max="60" step="1" inputmode="numeric" value="0"></label>
           <label class="cf-clone-admin-toggle"><span><strong>Manually mark slots as filled</strong><small>Temporarily stop new bookings and show the Telegram full-slots notice even before capacity is reached.</small></span><input id="cfSlot_forceFull" type="checkbox"></label>
-          <div class="cf-slot-admin-grid"><label>Total voice slots across all accounts<input id="cfSlot_slotLimit" type="number" min="1" max="1000" value="60"><small>One shared capacity. Actual available slots are checked against connected voice-storage capacity and the number you release.</small></label><label>Permanent voice slot purchase price<input id="cfSlot_minimumCredits" type="number" min="1000" max="1000" step="1" value="1000" readonly><small>Every NEW purchase deducts 1,000 credits once. Existing bookings remain paid-free; no retroactive debit.</small></label></div>
+          <section class="cf-monthly-admin" aria-label="Monthly cloned voice renewal subscriptions">
+            <h4>Monthly voice subscriptions</h4>
+            <p class="admin-panel-copy">New purchases include the first 30 days. Renewals are paid manually with CallFocus credits. Cloned voice use stops at expiry, with 7 days to renew before Admin may release the slot. Existing slot owners also renew monthly, starting 30 days after their original slot booking. No automatic wallet deductions.</p>
+            <label for="cfSlot_renewalCredits" class="cf-monthly-price">Monthly renewal price (credits per 30 days)
+              <input id="cfSlot_renewalCredits" type="number" min="100" max="100000" step="100" value="1000" inputmode="numeric" />
+              <small>Default 1,000 credits. Applies to newly issued renewals; previously confirmed payments remain unchanged.</small>
+            </label>
+            <p id="cfSlotMonthlyOverall" role="status" class="admin-panel-copy">Refresh bookings to load subscriber counts.</p>
+            <div id="cfSlotMonthlyAccounts" class="cf-monthly-accounts" aria-live="polite"></div><details class="cf-monthly-due-details"><summary>View customers with expired subscriptions</summary><div id="cfSlotMonthlyDue" class="cf-monthly-due" aria-live="polite">No overdue subscriptions yet.</div></details>
+            <div class="cf-monthly-release">
+             <h5>Manually release overdue subscriptions</h5>
+             <p>Only slots more than seven days past paid expiry can be released. This permanently deletes the saved voice from its assigned account, if present. Verify provider capacity before advertising newly freed slots.</p>
+             <label>Voice account<select id="cfSlotMonthlyPool"><option value="primary">Account 1</option><option value="secondary">Account 2</option><option value="tertiary">Account 3</option><option value="pool4">Account 4</option><option value="pool5">Account 5</option><option value="pool6">Account 6</option><option value="pool7">Account 7</option><option value="pool8">Account 8</option><option value="pool9">Account 9</option><option value="pool10">Account 10</option></select></label>
+             <label>Number to release<input id="cfSlotMonthlyCount" type="number" min="1" max="12" value="12" /></label>
+             <label>Confirmation phrase<input id="cfSlotMonthlyConfirm" type="text" placeholder="RELEASE EXPIRED VOICES" autocomplete="off" /></label>
+             <button id="cfSlotMonthlyReleaseBtn" class="btn btn-ghost" type="button">Release expired slots</button>
+             <p id="cfSlotMonthlyReleaseStatus" class="admin-panel-copy" role="status" aria-live="polite"></p>
+            </div>
+          </section>
+          <div class="cf-slot-admin-grid"><label>Total voice slots across all accounts<input id="cfSlot_slotLimit" type="number" min="1" max="1000" value="60"><small>One shared capacity. Actual available slots are checked against connected voice-storage capacity and the number you release.</small></label><label>Permanent voice slot purchase price<input id="cfSlot_minimumCredits" type="number" min="1000" max="1000" step="1" value="1000" readonly><small>Each new slot purchase deducts 1,000 credits for its first 30 days. Monthly renewals are separate; existing slot owners renew 30 days after their original booking date.</small></label></div>
           <div class="cf-slot-global-summary" style="margin:18px 0;padding:16px;border:1px solid #d7e8df;border-radius:18px">
             <strong style="display:block;margin-bottom:10px">Shared voice capacity</strong>
             <p class="admin-panel-copy">All connected voice accounts contribute to your one total. Bookings automatically go to the first account with verified available voice storage, then the next. Existing saved voices stay on their original account.</p>
@@ -557,7 +576,7 @@
             <p id="cfSlotAccount4Status" class="admin-panel-copy" role="status" aria-live="polite">Account 4 has not been checked.</p>
             <button class="btn btn-ghost" id="cfSlotAccount4Verify" type="button">Verify Account 4 connection</button>
           </div>
-          <div class="cf-slot-account-five" data-voice-admin-build="16.73" style="margin:18px 0;padding:16px;border:1px solid #d7e8df;border-radius:18px">
+          <div class="cf-slot-account-five" data-voice-admin-build="16.75" style="margin:18px 0;padding:16px;border:1px solid #d7e8df;border-radius:18px">
             <strong style="display:block;margin-bottom:6px">Account 5 setup</strong>
             <p class="admin-panel-copy">Add the new Account 5 API key and Agent ID as separate encrypted Cloudflare secrets. Verify its active subscription, available storage and agent before enabling purchases. Existing saved voices remain on their assigned accounts. Secrets never appear in this panel.</p>
             <label class="cf-clone-admin-toggle"><span><strong>Allow Account 5 to receive new purchases</strong><small>Initially OFF. Saves immediately after verification. New bookings use Accounts 1–4 before Account 5 when earlier accounts have no usable capacity.</small></span><input id="cfSlot_pool5AcceptNew" type="checkbox" disabled></label>
@@ -590,7 +609,7 @@
           <label>Announcement message<textarea id="cfSlot_message" maxlength="350" rows="3"></textarea></label>
           <label>Message when slots are filled<textarea id="cfSlot_fullMessage" maxlength="350" rows="3"></textarea></label>
           <label>Telegram channel URL<input id="cfSlot_telegramUrl" type="url" maxlength="300" placeholder="https://t.me/callfocus"></label>
-          <p class="admin-panel-copy"><strong>Slot release is controlled by Admin.</strong> Newly released slots are limited by verified connected account capacity. A booked customer remains assigned to their original provider unless an eligible uncreated booking can be automatically transferred to a later account. Every NEW slot purchase costs 1,000 unused CallFocus credits, deducted once after successful payment verification. Existing reservations are not charged. Purchased slots cannot be reclaimed by the older Admin release action without a refund; only legacy unpaid bookings are eligible. Enable voice cloning using the independent control above after your new provider account is configured.</p>
+          <p class="admin-panel-copy"><strong>Slot release is controlled by Admin.</strong> Newly released slots are limited by verified connected account capacity. A booked customer remains assigned to their original provider unless an eligible uncreated booking can be automatically transferred to a later account. Every NEW slot purchase costs 1,000 unused CallFocus credits, deducted once after successful payment verification. Existing reservations are not charged another initial purchase fee, but their first monthly renewal is due 30 days after the original booking date. Purchased slots cannot be reclaimed by the older Admin release action without a refund; only legacy unpaid bookings are eligible. Enable voice cloning using the independent control above after your new provider account is configured.</p>
           <div class="cf-clone-admin-actions"><button class="btn btn-primary" id="cfSlotSave" type="button">Save slot settings</button><button class="btn btn-ghost" id="cfSlotRefresh" type="button">Refresh bookings</button></div>
           <p class="admin-panel-copy" id="cfSlotStatus" role="status" aria-live="polite">Booking system disabled until D1 setup is completed.</p>
           <p class="admin-panel-copy" id="cfSlotProvider" role="status">Provider status is not checked yet.</p><pre class="cf-slot-admin-bookings" id="cfSlotBookings" aria-label="Recent permanent voice slot reservations"></pre>
@@ -707,7 +726,7 @@
   <div class="toast hidden" id="toast"></div>
   <script src="/admin.js?v=16.59-scroll-stability"></script><script src="/admin-video.js?v=16.51-price-persistence"></script><script src="/cf-controls-admin.js?v=16.24"></script>
 <script src="/cf-temp-voice-admin.js?v=16.34"></script>
-<script src="/cf-clone-availability-admin.js?v=16.44"></script><script src="/permanent-slots-admin.js?v=16.73" defer></script>
-<script>window.addEventListener('load',()=>{const panel=document.querySelector('[data-voice-admin-build="16.73"]');if(!panel)return;const status=document.getElementById('cfSlotAccount6Status');if(status&&!window.__cfVoiceAdmin1673Loaded){status.textContent='Account 6 controls did not load. Do not change voice-slot settings. Refresh this Admin page after confirming the V16.73 Cloudflare deployment is active.';}});</script>
+<script src="/cf-clone-availability-admin.js?v=16.44"></script><script src="/permanent-slots-admin.js?v=16.75" defer></script>
+<script>window.addEventListener('load',()=>{const panel=document.querySelector('[data-voice-admin-build="16.75"]');if(!panel)return;const status=document.getElementById('cfSlotAccount6Status');if(status&&!window.__cfVoiceAdmin1675Loaded){status.textContent='Account 6 controls did not load. Do not change voice-slot settings. Refresh this Admin page after confirming the V16.75 Cloudflare deployment is active.';}});</script>
 <script src="/affiliate-admin.js?v=16.37"></script></body>
 </html>
