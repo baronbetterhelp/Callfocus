@@ -1,6 +1,6 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id);if(!$('cfSlotSave'))return;
-const VOICE_ADMIN_BUILD='16.75';if(typeof window!=='undefined')window.__cfVoiceAdmin1675Loaded=true;
+const VOICE_ADMIN_BUILD='16.76';if(typeof window!=='undefined')window.__cfVoiceAdmin1676Loaded=true;
 const token=()=>localStorage.getItem('callfocus_admin_session_v158')||sessionStorage.getItem('callfocus_admin_key')||'';
 const status=$('cfSlotStatus');
 const fields=['enabled','popupEnabled','popupDelaySeconds','forceFull','slotLimit','minimumCredits','renewalCredits','pool4AcceptNew','pool5AcceptNew','pool6AcceptNew','eventDate','bookingOpensAt','bookingClosesAt','headline','message','fullMessage','telegramUrl'];
@@ -19,7 +19,7 @@ function render(d){
     if(button)button.disabled=true;if(verify)verify.disabled=true;
     const button6=$('cfSlot_pool6AcceptNew'),verify6=$('cfSlotAccount6Verify');
     if(button6)button6.disabled=true;if(verify6)verify6.disabled=true;
-    const warning=`Account 5 and 6 controls are unavailable because the Admin page and Worker versions do not match (expected ${VOICE_ADMIN_BUILD}, received ${d.voiceAdminBuild||'older version'}). Confirm V16.75 is active in Cloudflare, then refresh the Admin page.`;
+    const warning=`Account 5 and 6 controls are unavailable because the Admin page and Worker versions do not match (expected ${VOICE_ADMIN_BUILD}, received ${d.voiceAdminBuild||'older version'}). Confirm V16.76 is active in Cloudflare, then refresh the Admin page.`;
     if($('cfSlotAccount5Status'))$('cfSlotAccount5Status').textContent=warning;
     if($('cfSlotAccount6Status'))$('cfSlotAccount6Status').textContent=warning;
     status.textContent=warning;return;
@@ -40,7 +40,7 @@ function render(d){
  if(!account5Busy){confirmedToggle5=!!s.pool5AcceptNew;confirmedRevision=Math.max(confirmedRevision,Number(s.revision||0));}
  if(!account6Busy){confirmedToggle6=!!s.pool6AcceptNew;confirmedRevision=Math.max(confirmedRevision,Number(s.revision||0));}
  status.textContent=`${d.booked} reserved of ${d.total} total slots. ${d.remaining} currently open for new customers. Booking ${s.enabled?'ON':'OFF'}; popup ${s.popupEnabled?'ON':'OFF'}; delay ${Number(s.popupDelaySeconds||0)} second(s).`;
- const values={cfSlotGlobalTotal:`${d.booked} / ${d.total}`,cfSlotGlobalCreated:d.created,cfSlotGlobalPending:d.pending,cfSlotGlobalEligible:d.reclaimable,cfSlotGlobalRelease:`${d.remaining} available · ${d.paidPurchases||0} paid`};
+ const values={cfSlotGlobalTotal:`${d.booked} / ${d.total}`,cfSlotGlobalCreated:d.created,cfSlotGlobalPending:d.pending,cfSlotGlobalEligible:d.reclaimable,cfSlotGlobalRelease:`${d.remaining} live · ${d.requestedRemaining||0} requested · ${d.paidPurchases||0} paid`};
  for(const [id,value] of Object.entries(values))if($(id))$(id).textContent=value;
  const a4=d.account4||{},c4=d.pools?.pool4||{};
  const msg=`${a4.ready?'Verified':'Not yet ready'} · ${a4.message||'Not checked'} · ${c4.reserved||0} booked · ${c4.created||0} saved voices · ${c4.ok?c4.voiceSlotsUsed+'/'+c4.voiceSlotLimit+' storage used':'subscription not verified'}. ${s.pool4AcceptNew?'Accepting new purchases':'New purchases disabled'}.`;
@@ -53,7 +53,10 @@ function render(d){
  if($('cfSlotAccount6Status'))$('cfSlotAccount6Status').textContent=(toggleNotice6?toggleNotice6+' · ':'')+msg6;
  if($('cfSlotPools'))$('cfSlotPools').textContent=Object.values(d.pools||{}).filter(p=>p.apiKeyConfigured||p.reserved).map(p=>`Account ${p.index}: ${p.ok?'connected':'check connection'} · ${p.reserved} booked · ${p.created} saved · ${p.pending} idle pending · ${p.ok?p.voiceSlotsUsed+'/'+p.voiceSlotLimit+' used':''} · ${p.available} usable slots`).join(' | ');
  if($('cfSlotProvider'))$('cfSlotProvider').textContent=`Public release: ${d.releaseUsed||0} booked from current release of ${d.releaseQuota||0}. New accounts are detected when configured with their own API key and Agent ID.`;
- if(!publicAvailabilityBusy&&!publicAvailabilityEdited&&$('cfSlotPublicAvailableCount'))$('cfSlotPublicAvailableCount').value=String(d.remaining??0);
+ const requested=Math.max(0,Number(d.requestedRemaining||0));
+ if(!publicAvailabilityBusy&&!publicAvailabilityEdited&&$('cfSlotPublicAvailableCount'))$('cfSlotPublicAvailableCount').value=String(requested);
+ const info=$('cfSlotPublicAvailabilitySummary');
+ if(info)info.textContent=`Requested for sale: ${requested} · Live on website: ${d.remaining||0} · Waiting for capacity or booking window: ${d.waitingForCapacity||0}. ${(d.availabilityBlockers||[]).join(' ')}`;
  renderMonthly(d.monthly||{});
  if($('cfSlotBookings'))$('cfSlotBookings').textContent=(d.bookings||[]).map(r=>`${r.state.toUpperCase()} · ${r.user_id.slice(0,10)}… · ${r.voice_name||'Voice not created'} · ${r.booked_at.slice(0,10)}`).join('\n')||'No reservations yet.';
  loaded=true;
@@ -86,7 +89,7 @@ async function refresh(){
  catch(e){if(generation===fetchGeneration){
    status.textContent=e.message;
    if(!loaded)loaded=false;
-   if(!buildVerified){const message=`Account 5 and 6 controls could not be verified: ${e.message}. Confirm the V16.74 deployment is active and refresh.`;for(const id of ['cfSlotAccount5Status','cfSlotAccount6Status']){const el=$(id);if(el)el.textContent=message;}}
+   if(!buildVerified){const message=`Account 5 and 6 controls could not be verified: ${e.message}. Confirm the V16.76 deployment is active and refresh.`;for(const id of ['cfSlotAccount5Status','cfSlotAccount6Status']){const el=$(id);if(el)el.textContent=message;}}
   }}
 }
 // Do not throw away edits to other settings when a background refresh completes.
@@ -217,8 +220,8 @@ $('cfSlotPublicAvailableSave')?.addEventListener('click',async()=>{
   const d=await request('/api/admin/permanent-slots/public-availability','POST',{count});
   confirmedRevision=Math.max(confirmedRevision,Number(d.revision||0));
   publicAvailabilityEdited=false;
-  if($('cfSlotGlobalRelease'))$('cfSlotGlobalRelease').textContent=`${d.remaining} available · updating`;
-  message.textContent=`Saved: ${d.remaining} slots available on the website out of ${d.total} total. Existing ${d.booked} reservations were preserved.`;
+  if($('cfSlotGlobalRelease'))$('cfSlotGlobalRelease').textContent=`${d.remaining} live · ${d.requested} requested`;
+  message.textContent=d.message+((d.availabilityBlockers||[]).length?' '+d.availabilityBlockers.join(' '):'');
  }catch(e){message.textContent='Not saved: '+e.message}
  finally{button.disabled=false;publicAvailabilityBusy=false}
  await refresh();

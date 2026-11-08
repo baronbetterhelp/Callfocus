@@ -7564,7 +7564,7 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=16.75-all-slots-monthly', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=16.76-public-slot-release', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
       html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=16.07-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=16.07-test');
@@ -7577,28 +7577,28 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '16.75');
+      headers.set('X-CallFocus-Admin-Build', '16.76');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     // Serve the voice-admin controller through this exact Worker deployment, not an independently cached static route.
     if (url.pathname === '/permanent-slots-admin.js') {
-      const asset = await env.ASSETS.fetch(new Request(new URL('/permanent-slots-admin.js?cf_build=16.75-all-slots-monthly', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL('/permanent-slots-admin.js?cf_build=16.76-public-slot-release', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
       headers.set('Content-Type', 'application/javascript; charset=utf-8');
       headers.set('X-Content-Type-Options', 'nosniff');
-      headers.set('X-CallFocus-Voice-Admin-Build', '16.75');
+      headers.set('X-CallFocus-Voice-Admin-Build', '16.76');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=16.75-all-slots-monthly', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=16.76-public-slot-release', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '16.75');
+      headers.set('X-CallFocus-Admin-Build', '16.76');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {

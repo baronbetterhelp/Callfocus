@@ -1,4 +1,4 @@
-/* CallFocus V16.75: monthly subscriptions for new and existing slot owners; migration 0003 required. OpenAI unchanged. */
+/* CallFocus V16.76: monthly subscriptions for new and existing slot owners; migration 0003 required. OpenAI unchanged. */
 import {subscriptionForUser,startSubscriptionIfPurchased,renew as renewSubscription,adminReport,releaseExpired} from './cf-voice-subscriptions.js';
 const SLOT_KEY='callfocus:permanent-voice:settings:v1';
 const SLOT_PRICE_CREDITS=1000;
@@ -9,7 +9,56 @@ const DEF={enabled:false,popupEnabled:false,popupDelaySeconds:0,forceFull:false,
 const j=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const err=(text,status=400)=>j({ok:false,error:text},status);
 const sql=env=>{if(!env.CALLFOCUS_WALLET_DB?.prepare)throw Error('VOICE_SLOTS_D1_NOT_CONFIGURED');return env.CALLFOCUS_WALLET_DB};
-async function settings(env){if(!env.CALLFOCUS_CONFIG)throw Error('VOICE_SETTINGS_KV_UNAVAILABLE');const s=await env.CALLFOCUS_CONFIG.get(SLOT_KEY,{type:'json'});return {...DEF,...(s&&typeof s==='object'?s:{}),minimumCredits:SLOT_PRICE_CREDITS};}
+// V16.76: booking-critical public release settings live in D1, never only in
+// eventually-consistent KV. The table is created on the first admin write; old
+// installations keep their existing KV settings until that point.
+const PUBLIC_CONTROL_TABLE='cf_voice_public_release_control';
+const PUBLIC_CONTROL_SCHEMA=`CREATE TABLE IF NOT EXISTS cf_voice_public_release_control (
+ id INTEGER PRIMARY KEY CHECK(id=1),
+ slot_limit INTEGER NOT NULL CHECK(slot_limit BETWEEN 1 AND 1000),
+ enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
+ force_full INTEGER NOT NULL CHECK(force_full IN (0,1)),
+ pool4_accept_new INTEGER NOT NULL CHECK(pool4_accept_new IN (0,1)),
+ pool5_accept_new INTEGER NOT NULL CHECK(pool5_accept_new IN (0,1)),
+ pool6_accept_new INTEGER NOT NULL CHECK(pool6_accept_new IN (0,1)),
+ release_id TEXT NOT NULL,
+ release_quota INTEGER NOT NULL CHECK(release_quota>=0),
+ revision INTEGER NOT NULL DEFAULT 1,
+ updated_at TEXT NOT NULL
+)`;
+const publicControlColumns=new Set(['slot_limit','enabled','force_full','pool4_accept_new','pool5_accept_new','pool6_accept_new','release_id','release_quota']);
+async function publicControl(db){
+ try{return await db.prepare(`SELECT * FROM ${PUBLIC_CONTROL_TABLE} WHERE id=1`).first()}
+ catch(e){if(/no such table:\s*cf_voice_public_release_control/i.test(String(e?.message||e)))return null;throw e}
+}
+function overlayControl(s,c){
+ if(!c)return s;
+ return {...s,slotLimit:Number(c.slot_limit),enabled:c.enabled===1,forceFull:c.force_full===1,
+  pool4AcceptNew:c.pool4_accept_new===1,pool5AcceptNew:c.pool5_accept_new===1,pool6AcceptNew:c.pool6_accept_new===1,
+  releaseId:c.release_id,releaseQuota:Number(c.release_quota),revision:Math.max(Number(s.revision||0),Number(c.revision||0))};
+}
+async function ensurePublicControl(db,seed){
+ await db.prepare(PUBLIC_CONTROL_SCHEMA).run();
+ await db.prepare(`INSERT OR IGNORE INTO ${PUBLIC_CONTROL_TABLE}
+ (id,slot_limit,enabled,force_full,pool4_accept_new,pool5_accept_new,pool6_accept_new,release_id,release_quota,revision,updated_at)
+ VALUES(1,?,?,?,?,?,?,?,?,?,?)`).bind(seed.slotLimit,seed.enabled?1:0,seed.forceFull?1:0,
+  seed.pool4AcceptNew?1:0,seed.pool5AcceptNew?1:0,seed.pool6AcceptNew?1:0,
+  seed.releaseId||'',Math.max(0,Number(seed.releaseQuota)||0),Math.max(1,Number(seed.revision)||1),new Date().toISOString()).run();
+}
+async function setPublicControl(db,seed,patch){
+ await ensurePublicControl(db,seed);
+ const cols=Object.keys(patch);
+ if(!cols.length||cols.some(k=>!publicControlColumns.has(k)))throw Error('Invalid public release setting.');
+ const r=await db.prepare(`UPDATE ${PUBLIC_CONTROL_TABLE} SET ${cols.map(k=>k+'=?').join(',')},revision=revision+1,updated_at=? WHERE id=1 RETURNING *`).bind(...cols.map(k=>patch[k]),new Date().toISOString()).first();
+ if(!r)throw Error('Public release state was not saved.');
+ return r;
+}
+async function settings(env){
+ if(!env.CALLFOCUS_CONFIG)throw Error('VOICE_SETTINGS_KV_UNAVAILABLE');
+ const kv=await env.CALLFOCUS_CONFIG.get(SLOT_KEY,{type:'json'});
+ const base={...DEF,...(kv&&typeof kv==='object'?kv:{}),minimumCredits:SLOT_PRICE_CREDITS};
+ return overlayControl(base,await publicControl(sql(env)));
+}
 async function row(db,userId){return db.prepare('SELECT user_id,booked_at,state,voice_id,voice_name,created_at,provider_pool,purchase_id FROM cf_permanent_voice_slots WHERE user_id=?').bind(userId).first()}
 async function tally(db){const r=await db.prepare('SELECT COUNT(*) AS n FROM cf_permanent_voice_slots').first();return Number(r?.n||0)}
 // Internal account order is stable. Existing voice IDs never change provider.
@@ -90,7 +139,7 @@ async function capacities(env){
  return Object.fromEntries(results);
 }
 function freeInPool(cap,count){
- if(!cap?.ok||cap.canClone===false||!Number.isFinite(cap.voiceSlotLimit)||cap.voiceSlotLimit<1)return 0;
+ if(!cap?.ok||cap.canClone===false||(cap.status&&!['active','trialing'].includes(String(cap.status)))||!Number.isFinite(cap.voiceSlotLimit)||cap.voiceSlotLimit<1)return 0;
  const physical=Math.max(0,cap.voiceSlotLimit-Math.max(cap.voiceSlotsUsed,count.created)-(count.reserved-count.created));
  const ops=cap.monthlyCreationLimit===null||cap.monthlyCreationLimit===undefined?Infinity:Math.max(0,Number(cap.monthlyCreationLimit)-Number(cap.monthlyCreationUsed||0)-count.pending);
  return Math.max(0,Math.floor(Math.min(physical,ops)));
@@ -100,7 +149,21 @@ async function bookedInRelease(db,id){if(!id)return 0;const r=await db.prepare('
 async function available(db,s,counts,caps){
  const issued=await bookedInRelease(db,s.releaseId);
  const budget=Math.max(0,Number(s.releaseQuota||0)-issued);
- return {issued,budget,remaining:Math.max(0,Math.min(budget,s.slotLimit-totalReserved(counts),physicalFree(caps,counts,s)))};
+ const unreserved=Math.max(0,s.slotLimit-totalReserved(counts));
+ const verified=Math.max(0,physicalFree(caps,counts,s));
+ const capacityRemaining=Math.max(0,Math.min(budget,unreserved,verified));
+ const phase=bookingPhase(s);
+ const blockers=[];
+ if(!s.enabled)blockers.push('Voice-slot purchases are switched OFF.');
+ if(s.forceFull)blockers.push('Manually mark slots as filled is ON.');
+ if(phase!=='open')blockers.push(phase==='upcoming'?'Booking opening time has not arrived.':'Booking closing time has passed.');
+ if(!budget)blockers.push('No unsold slots are requested for this public release.');
+ if(!unreserved)blockers.push('All shared slots are already reserved. Increase total capacity before publishing more.');
+ if(!verified&&budget&&unreserved)blockers.push('No new cloning capacity is verified on enabled voice accounts. Check their API keys, Agent IDs, activation switches, storage and monthly voice-creation limits.');
+ else if(verified<budget&&unreserved)blockers.push(`Only ${verified} new voices are currently supported by verified enabled accounts; the remaining request will open automatically when capacity becomes available.`);
+ return {issued,budget,unreserved,verified,capacityRemaining,
+  remaining:s.enabled&&!s.forceFull&&phase==='open'?capacityRemaining:0,
+  blockers};
 }
 // Never blindly reassign READY, CREATING or VERIFICATION rows. Only an uncreated,
 // idle booking can move, and never to an account unable to honour its reservation.
@@ -266,7 +329,7 @@ async function customer(req,env,helpers){
  if(!['GET','POST'].includes(req.method))return err('Method not allowed.',405);
  const auth=await helpers.auth(req,env),u=auth?.user||null;
  if(!u)return err('Sign in to view permanent voice-cloning slots.',401);
- let db,s;try{db=sql(env);s=await settings(env)}catch{return err('Bookings are not configured yet.',503)}
+ let db,s;try{db=sql(env);s=await settings(env);if(req.method==='POST'){await ensurePublicControl(db,s);s=await settings(env)}}catch{return err('Bookings are not configured yet.',503)}
  let counts,record,caps,availability;
  try{
   counts=await poolCounts(db);record=await paidRecord(db,await row(db,u.id));
@@ -306,11 +369,13 @@ async function customer(req,env,helpers){
    const out=await db.batch([
     db.prepare(`INSERT INTO cf_permanent_voice_slots(user_id,booked_at,state,updated_at,provider_pool,release_id,purchase_id)
       SELECT ?,?,'booked',?,?,?,? WHERE
-      (SELECT COUNT(*) FROM cf_permanent_voice_slots) < ?
-      AND (SELECT COUNT(*) FROM cf_permanent_voice_slots WHERE release_id=?) < ?
+      EXISTS(SELECT 1 FROM cf_voice_public_release_control ctrl WHERE ctrl.id=1
+        AND ctrl.enabled=1 AND ctrl.force_full=0 AND ctrl.release_id=?
+        AND (SELECT COUNT(*) FROM cf_permanent_voice_slots) < ctrl.slot_limit
+        AND (SELECT COUNT(*) FROM cf_permanent_voice_slots WHERE release_id=?) < ctrl.release_quota)
       AND (SELECT COUNT(*) FROM cf_permanent_voice_slots WHERE provider_pool=?) < ?
       AND NOT EXISTS(SELECT 1 FROM cf_permanent_voice_release_audit WHERE user_id=? AND release_id=?)
-      ON CONFLICT(user_id) DO NOTHING`).bind(u.id,now,now,pool,s.releaseId,purchaseId,s.slotLimit,s.releaseId,s.releaseQuota,pool,
+      ON CONFLICT(user_id) DO NOTHING`).bind(u.id,now,now,pool,s.releaseId,purchaseId,s.releaseId,s.releaseId,pool,
        Math.floor(caps[pool].voiceSlotLimit-Math.max(0,caps[pool].voiceSlotsUsed-counts[pool].created)),u.id,s.releaseId),
     db.prepare(`INSERT INTO cf_permanent_voice_slot_purchases(purchase_id,user_id,price_credits,price_seconds,state,created_at)
       SELECT purchase_id,user_id,?,?, 'pending',? FROM cf_permanent_voice_slots WHERE user_id=? AND purchase_id=?`)
@@ -346,7 +411,8 @@ async function admin(req,env){
   const monthly=await adminReport(db);
   const purchaseStats=await db.prepare("SELECT COUNT(*) AS n FROM cf_permanent_voice_slot_purchases WHERE state='paid'").first();
   const eligibleLegacy=await db.prepare("SELECT COUNT(*) AS n FROM cf_permanent_voice_slots WHERE purchase_id IS NULL AND voice_id IS NULL AND state IN ('booked','failed')").first();
-  return j({ok:true,voiceAdminBuild:'16.75',monthly,paidPurchases:Number(purchaseStats?.n||0),settings:s,booked:totalReserved(counts),created:totalCreated(counts),pending:totalReserved(counts)-totalCreated(counts),reclaimable:Number(eligibleLegacy?.n||0),total:s.slotLimit,remaining:a.remaining,physicalAvailable:physicalFree(caps,counts,s),releaseQuota:s.releaseQuota||0,releaseUsed:a.issued,pools,account4,account5,account6,rebalanceCount:moved.length,bookings:rows.results||[]});
+  return j({ok:true,voiceAdminBuild:'16.76',monthly,paidPurchases:Number(purchaseStats?.n||0),settings:s,booked:totalReserved(counts),created:totalCreated(counts),pending:totalReserved(counts)-totalCreated(counts),reclaimable:Number(eligibleLegacy?.n||0),total:s.slotLimit,remaining:a.remaining,requestedRemaining:a.budget,waitingForCapacity:Math.max(0,a.budget-a.remaining),
+   availabilityBlockers:a.blockers,physicalAvailable:a.verified,globalUnreserved:a.unreserved,releaseQuota:s.releaseQuota||0,releaseUsed:a.issued,pools,account4,account5,account6,rebalanceCount:moved.length,bookings:rows.results||[]});
  }
  let body;try{body=await req.json()}catch{return err('Invalid settings JSON.')}
  let next;try{next=parseSettings(body,s)}catch(e){return err(e.message)}
@@ -363,7 +429,12 @@ async function admin(req,env){
   const verified=await verifyAccount6(env);
   if(!verified.ready)return err('Account 6 is not ready: '+verified.message,409);
  }
- try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next));return j({ok:true,settings:next})}catch{return err('Could not save settings.',503)}
+ try{
+  const c=await setPublicControl(db,s,{slot_limit:next.slotLimit,enabled:next.enabled?1:0,force_full:next.forceFull?1:0,
+   pool4_accept_new:next.pool4AcceptNew?1:0,pool5_accept_new:next.pool5AcceptNew?1:0,pool6_accept_new:next.pool6AcceptNew?1:0});
+  try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next))}catch(e){console.warn('Slot settings KV mirror deferred',String(e))}
+  return j({ok:true,settings:overlayControl(next,c)});
+ }catch{return err('Could not save booking controls to the database. Other settings may require review.',503)}
 }
 // Dedicated admin toggle: persist only Account 4 activation without overwriting
 // any other unsaved voice-slot settings in the admin form. This route is
@@ -379,9 +450,9 @@ async function toggleAccount4(req,env){
  }
  if(s.pool4AcceptNew===input.enabled)return j({ok:true,pool4AcceptNew:input.enabled,revision:s.revision,unchanged:true});
  const next={...s,pool4AcceptNew:input.enabled,revision:Number(s.revision||0)+1};
- try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next))}
- catch{return err('Account 4 setting could not be saved. Please retry.',503)}
- return j({ok:true,pool4AcceptNew:input.enabled,revision:next.revision});
+ let control;try{control=await setPublicControl(sql(env),s,{pool4_accept_new:input.enabled?1:0})}catch{return err('Account 4 setting could not be saved to D1.',503)}
+ try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next))}catch(e){console.warn('Account 4 KV mirror deferred',String(e))}
+ return j({ok:true,voiceAdminBuild:'16.76',pool4AcceptNew:input.enabled,revision:control.revision});
 }
 
 // Dedicated Account 5 activation. Keep it OFF until the new credentials, plan,
@@ -395,11 +466,11 @@ async function toggleAccount5(req,env){
   const verified=await verifyAccount5(env);
   if(!verified.ready)return err('Account 5 cannot be enabled: '+verified.message,409);
  }
- if(s.pool5AcceptNew===input.enabled)return j({ok:true,voiceAdminBuild:'16.75',pool5AcceptNew:input.enabled,revision:s.revision,unchanged:true});
+ if(s.pool5AcceptNew===input.enabled)return j({ok:true,voiceAdminBuild:'16.76',pool5AcceptNew:input.enabled,revision:s.revision,unchanged:true});
  const next={...s,pool5AcceptNew:input.enabled,revision:Number(s.revision||0)+1};
- try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next))}
- catch{return err('Account 5 setting could not be saved. Please retry.',503)}
- return j({ok:true,voiceAdminBuild:'16.75',pool5AcceptNew:input.enabled,revision:next.revision});
+ let control;try{control=await setPublicControl(sql(env),s,{pool5_accept_new:input.enabled?1:0})}catch{return err('Account 5 setting could not be saved to D1.',503)}
+ try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next))}catch(e){console.warn('Account 5 KV mirror deferred',String(e))}
+ return j({ok:true,voiceAdminBuild:'16.76',pool5AcceptNew:input.enabled,revision:control.revision});
 }
 
 
@@ -414,11 +485,11 @@ async function toggleAccount6(req,env){
   const verified=await verifyAccount6(env);
   if(!verified.ready)return err('Account 6 cannot be enabled: '+verified.message,409);
  }
- if(s.pool6AcceptNew===input.enabled)return j({ok:true,voiceAdminBuild:'16.75',pool6AcceptNew:input.enabled,revision:s.revision,unchanged:true});
+ if(s.pool6AcceptNew===input.enabled)return j({ok:true,voiceAdminBuild:'16.76',pool6AcceptNew:input.enabled,revision:s.revision,unchanged:true});
  const next={...s,pool6AcceptNew:input.enabled,revision:Number(s.revision||0)+1};
- try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next))}
- catch{return err('Account 6 setting could not be saved. Please retry.',503)}
- return j({ok:true,voiceAdminBuild:'16.75',pool6AcceptNew:input.enabled,revision:next.revision});
+ let control;try{control=await setPublicControl(sql(env),s,{pool6_accept_new:input.enabled?1:0})}catch{return err('Account 6 setting could not be saved to D1.',503)}
+ try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next))}catch(e){console.warn('Account 6 KV mirror deferred',String(e))}
+ return j({ok:true,voiceAdminBuild:'16.76',pool6AcceptNew:input.enabled,revision:control.revision});
 }
 
 // Admin-owned public availability, independent of the legacy reclaim/cancel action.
@@ -433,20 +504,24 @@ async function setPublicAvailability(req,env){
  if(!Number.isSafeInteger(wanted)||wanted<0||wanted>1000)return err('Enter a whole number from 0 to 1000.',400);
  let db,s;try{db=sql(env);s=await settings(env)}catch{return err('Slot settings unavailable.',503)}
  let counts,caps;try{[counts,caps]=await Promise.all([poolCounts(db),capacities(env)])}catch{return err('Unable to check the connected account capacity.',503)}
- const booked=totalReserved(counts);
- const totalFree=Math.max(0,s.slotLimit-booked);
- const verifiedFree=physicalFree(caps,counts,s);
- const allowed=Math.max(0,Math.min(totalFree,verifiedFree));
- if(wanted>allowed)return err(`Only ${allowed} slots can safely be offered right now (${totalFree} unreserved of ${s.slotLimit} total, ${verifiedFree} verified usable across enabled accounts). Check account activation and creation allowances if you expect more. No settings were changed.`,409);
- // Keep the current release ID, so customers who purchased in that release
- // continue counting toward its quota. Extend that quota by the desired number
- // of unpurchased slots, rather than inadvertently reopening paid slots.
+ const booked=totalReserved(counts),unreserved=Math.max(0,s.slotLimit-booked);
+ if(wanted>unreserved)return err(`Cannot release ${wanted} slots: ${unreserved} are unreserved of ${s.slotLimit} total. Increase total voice slots to at least ${booked+wanted} first. No settings were changed.`,409);
+ // Store the ADMIN'S REQUEST independently of transient provider limits. When a new
+ // verified account is enabled, its remaining safe slots appear automatically;
+ // no second click or KV propagation is required. Never expose unsupported slots.
+ let issued;try{issued=await bookedInRelease(db,s.releaseId)}catch{return err('Unable to verify existing reservations.',503)}
  const id=s.releaseId||crypto.randomUUID();
- let issued;try{issued=await bookedInRelease(db,s.releaseId)}catch{return err('Unable to verify the existing public release.',503)}
- const next={...s,releaseId:id,releaseQuota:issued+wanted,revision:Number(s.revision||0)+1};
- try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next))}
- catch{return err('Could not save the website slot availability. No reservations were changed.',503)}
- return j({ok:true,remaining:wanted,releaseUsed:issued,releaseQuota:next.releaseQuota,total:s.slotLimit,booked,revision:next.revision,message:`${wanted} slots are now configured for display on the website. All existing reservations are preserved.`});
+ let control;
+ try{control=await setPublicControl(db,s,{release_id:id,release_quota:issued+wanted,
+  ...(wanted>0?{enabled:1,force_full:0}:{})})}
+ catch(e){return err('Could not save public release in D1: '+String(e?.message||e).slice(0,150),503)}
+ const effective=overlayControl(s,control);
+ let status;try{status=await available(db,effective,counts,caps)}catch{return err('Release saved but the current display count could not be checked. Refresh Admin to verify.',503)}
+ return j({ok:true,requested:wanted,remaining:status.remaining,waitingForCapacity:Math.max(0,wanted-status.remaining),
+  releaseUsed:status.issued,releaseQuota:control.release_quota,total:effective.slotLimit,booked,
+  revision:control.revision,availabilityBlockers:status.blockers,
+  message:status.remaining===wanted?`${wanted} slots are now publicly available. Existing reservations remain untouched.`:
+   `Requested ${wanted} slots safely stored. ${status.remaining} are live; ${Math.max(0,wanted-status.remaining)} are waiting for enabled, verified provider capacity or booking-window availability.`});
 }
 
 // Admin-only explicit reclaim and release. Reservations are reclaimed only if needed
@@ -503,9 +578,10 @@ async function releasePending(req,env){
   reclaimed=Number(out?.[1]?.meta?.changes||0);
   if(reclaimed!==required)return err('The release was interrupted by changing reservations. Refresh before continuing.',503);
  }
- const next={...s,releaseId,releaseQuota:wanted,revision:Number(s.revision||0)+1};
- try{await env.CALLFOCUS_CONFIG.put(SLOT_KEY,JSON.stringify(next))}catch{return err(`Reclaimed ${reclaimed} bookings but could not publish slots. Keep bookings paused and retry the release.`,503)}
- return j({ok:true,requested:wanted,reclaimed,opened:wanted,message:`${wanted} slots released. ${reclaimed} idle bookings were reclaimed; no saved voices or active creations were removed.`});
+ let control;try{control=await setPublicControl(db,s,{release_id:releaseId,release_quota:wanted,enabled:1,force_full:0})}
+ catch{return err(`Reclaimed ${reclaimed} bookings but could not publish slots to D1. Retry public availability; do not reclaim more bookings.`,503)}
+ return j({ok:true,requested:wanted,reclaimed,opened:wanted,revision:control.revision,
+  message:`${wanted} slots released. ${reclaimed} eligible unpaid bookings were reclaimed; saved voices and paid slots were untouched.`});
 }
 
 // Admin-only repair for customers still waiting to create a voice. Never move an existing voice,
