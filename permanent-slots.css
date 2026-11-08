@@ -23,3 +23,7 @@
 .cf-default-voice-guide-actions button:focus-visible{outline:3px solid #77cbb1;outline-offset:2px}
 @media(max-height:720px){.cf-slot-layer.open{align-items:flex-start}.cf-slot-popup{margin:auto 0}}
 @media(max-width:520px){.cf-slot-default-offer{padding:13px}.cf-slot-default-offer>strong{font-size:16px}.cf-default-voice-guide{padding:12px}}
+
+/* V16.72: full-release message belongs next to its Telegram action, not under the heading. */
+.cf-slot-popup .cf-slot-telegram-description{margin:7px 0 6px;color:#61786c;font-size:14px;line-height:1.6}
+.cf-slot-popup .cf-slot-telegram-description+.cf-slot-telegram{margin-top:8px}
