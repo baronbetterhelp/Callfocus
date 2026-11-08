@@ -6784,19 +6784,99 @@ async function safeCustomerRoute(label, handler) {
 
 // V15.95 Image to Video: isolated KV keys and xAI provider. Existing voice/avatar/payments remain unchanged.
 const CF_VIDEO_PREFIX = 'image_video:job:';
+const CF_VIDEO_ACTIVE_PREFIX = 'image_video:active:'; // Active jobs only; no customer information is made public.
 const CF_VIDEO_DEFAULT = Object.freeze({enabled:false,cost10:300,cost15:450,dailyLimit:3,aspectRatios:['9:16','1:1','16:9','4:5'],motionStyles:['Natural','Cinematic','Subtle motion','Dynamic','Dramatic']});
 function cfVideoSettings(v={}) {const allowedRatio=['9:16','1:1','16:9','4:5'];const allowedStyle=['Natural','Cinematic','Subtle motion','Dynamic','Dramatic'];return {enabled:v.enabled===true,cost10:Math.max(1,Math.min(100000,Math.round(Number(v.cost10)||CF_VIDEO_DEFAULT.cost10))),cost15:Math.max(1,Math.min(100000,Math.round(Number(v.cost15)||CF_VIDEO_DEFAULT.cost15))),dailyLimit:Math.max(1,Math.min(20,Math.round(Number(v.dailyLimit)||3))),aspectRatios:allowedRatio.filter(x=>(Array.isArray(v.aspectRatios)?v.aspectRatios:CF_VIDEO_DEFAULT.aspectRatios).includes(x)),motionStyles:allowedStyle.filter(x=>(Array.isArray(v.motionStyles)?v.motionStyles:CF_VIDEO_DEFAULT.motionStyles).includes(x))};}
 async function cfGetVideoSettings(env){return cfVideoSettings(env.CALLFOCUS_CONFIG?await env.CALLFOCUS_CONFIG.get('image_video:settings',{type:'json'})||{}:{});}
 function cfVideoKey(userId,jobId){return CF_VIDEO_PREFIX+userId+':'+jobId;}
 function cfPublicVideo(job){return {id:job.id,createdAt:job.createdAt,updatedAt:job.updatedAt,duration:job.duration,cost:job.cost,charged:job.charged,refunded:job.refunded===true,status:job.status,aspectRatio:job.aspectRatio,motionStyle:job.motionStyle,prompt:job.prompt,thumbnail:job.thumbnail||'',stage:job.stage||'',videoReady:job.status==='completed',error:job.error||''};}
-async function cfPutVideoJob(env,job){job.updatedAt=new Date().toISOString();await env.CALLFOCUS_CONFIG.put(cfVideoKey(job.userId,job.id),JSON.stringify(job));}
+async function cfPutVideoJob(env,job){
+  job.updatedAt=new Date().toISOString();
+  await env.CALLFOCUS_CONFIG.put(cfVideoKey(job.userId,job.id),JSON.stringify(job));
+  // Keep a separate, lightweight index so scheduled settlement doesn't only see the
+  // first 60 customers in lexicographic KV order. The existing job is authoritative.
+  const key=CF_VIDEO_ACTIVE_PREFIX+job.id;
+  try{
+    if(['processing','accepted','submitting'].includes(job.status) || (job.status==='failed'&&job.charged&&!job.refunded)){
+      await env.CALLFOCUS_CONFIG.put(key,JSON.stringify({id:job.id,userId:job.userId}));
+    }else{
+      await env.CALLFOCUS_CONFIG.delete(key);
+    }
+  }catch(e){
+    // An index failure must never invalidate a successful, billable job write.
+    console.warn('Video background index update deferred',job.id,e?.message);
+  }
+}
 async function cfLoadVideoJob(env,userId,id){if(!/^[a-f0-9-]{36}$/.test(String(id)))return null;return env.CALLFOCUS_CONFIG.get(cfVideoKey(userId,id),{type:'json'});}
 async function cfListVideoJobs(env,prefix,limit=80){const rows=[];let cursor;for(let i=0;i<8&&rows.length<limit;i++){const opts={prefix,limit:Math.min(1000,limit*2)};if(cursor)opts.cursor=cursor;const page=await env.CALLFOCUS_CONFIG.list(opts);const keys=page.keys||[];for(const item of keys){const j=await env.CALLFOCUS_CONFIG.get(item.name,{type:'json'});if(j&&j.id)rows.push(j);if(rows.length>=limit)break;}if(page.list_complete||!page.cursor)break;cursor=page.cursor;}return rows.sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));}
 function cfVideoAllowedHost(url){try{const u=new URL(url);return u.protocol==='https:'&&(['vidgen.x.ai','files-cdn.x.ai'].includes(u.hostname));}catch{return false}}
 async function cfXaiFetch(env,url,options={}){return fetch(url,{...options,headers:{Authorization:'Bearer '+String(env.XAI_API_KEY||''),...(options.headers||{})}});}
 async function cfVideoWalletChange(env,user,job,action){const id='image-video:'+action+':'+job.id;const seconds=callFocusSecondsForCredits(job.cost);if(!seconds)return {ok:false};for(let i=0;i<3;i++){const data=await getCustomerDataForUpdate(env,user.id,user.name);const wallet=normalizeServerWallet(data.wallet);const existing=wallet.usage.find(row=>row.id===id);if(existing)return {ok:true,duplicate:true,wallet};const unlimitedEmails=(await getConfig(env)).unlimitedCreditEmails||[];const unlimited=action==='refund' ? job.unlimited===true : unlimitedEmails.map(normalizeCustomerEmail).includes(normalizeCustomerEmail(user.email));if(action==='charge'&&!unlimited&&wallet.balanceSeconds<seconds)return {ok:false,insufficient:true,wallet};const delta=unlimited?0:(action==='refund'?seconds:-seconds);wallet.balanceSeconds=Math.max(0,wallet.balanceSeconds+delta);wallet.revision+=1;wallet.usage.unshift({id,type:action==='refund'?'image_video_refund':'image_video',credits:unlimited?0:job.cost,seconds:Math.abs(delta),referenceId:job.id,createdAt:new Date().toISOString(),note:action==='refund'?'Refund — Image to Video failed':`Image to Video generation — ${job.duration}s`});wallet.usage=wallet.usage.slice(0,250);data.wallet=wallet;await env.CALLFOCUS_CONFIG.put(customerDataKey(user.id),JSON.stringify(data));const confirmed=normalizeServerWallet((await getCustomerDataForUpdate(env,user.id,user.name)).wallet);if(confirmed.usage.some(row=>row.id===id))return {ok:true,unlimited,wallet:confirmed};}return {ok:false};}
 async function cfVideoRefund(env,job){if(!job.charged||job.refunded)return job;const user=await env.CALLFOCUS_CONFIG.get(customerUserKey(job.userId),{type:'json'});if(!user){job.error='Refund needs account recovery';await cfPutVideoJob(env,job);return job;}const res=await cfVideoWalletChange(env,user,job,'refund');if(res.ok){job.refunded=true;job.status='refunded';job.stage='Credits refunded';await cfPutVideoJob(env,job);}return job;}
-async function cfVideoPoll(env,job){if(!job||!['processing','accepted','submitting'].includes(job.status))return job;if(job.status==='submitting'&&!job.requestId){if(Date.now()-Date.parse(job.createdAt)>120000){job.status='failed';job.error='Generation was not accepted. No credits were deducted.';await cfPutVideoJob(env,job);}return job;}if(!job.requestId)return job;let response;try{response=await cfXaiFetch(env,'https://api.x.ai/v1/videos/'+encodeURIComponent(job.requestId));}catch{return job;}if(!response.ok)return job;let raw;try{raw=await response.json()}catch{return job;}if(raw.status==='done'){const fileId=String(raw.video?.file_output?.file_id||'');const url=String(raw.video?.url||'');if(!/^file_[a-zA-Z0-9_-]+$/.test(fileId)&&!cfVideoAllowedHost(url)){job.status='failed';job.error='Provider did not return a usable video';if(job.charged)return cfVideoRefund(env,job);await cfPutVideoJob(env,job);return job;}job.fileId=fileId;job.ephemeralUrl=cfVideoAllowedHost(url)?url:'';job.status='completed';job.stage='Ready to download';await cfPutVideoJob(env,job);}else if(['failed','expired'].includes(raw.status)){job.status='failed';job.error='Video generation could not be completed.';if(job.charged)return cfVideoRefund(env,job);await cfPutVideoJob(env,job);return job;}return job;}
+async function cfVideoPoll(env,job){
+  if(!job)return job;
+  // A failed settlement can be retried idempotently if a wallet write was temporarily unavailable.
+  if(job.status==='failed'&&job.charged&&!job.refunded)return cfVideoRefund(env,job);
+  if(!['processing','accepted','submitting'].includes(job.status))return job;
+  if(job.status==='submitting'&&!job.requestId){
+    if(Date.now()-Date.parse(job.createdAt)>120000){
+      job.status='failed';job.error='Generation was not accepted. No credits were deducted.';
+      await cfPutVideoJob(env,job);
+    }
+    return job;
+  }
+  if(!job.requestId)return job;
+  const ageMs=Math.max(0,Date.now()-Date.parse(job.createdAt||new Date().toISOString()));
+  let response;
+  try{
+    response=await cfXaiFetch(env,'https://api.x.ai/v1/videos/'+encodeURIComponent(job.requestId));
+  }catch(e){
+    // Network failure does not mean the video failed. Never charge or refund here.
+    job.stage='Status check unavailable. Trying again automatically.';
+    job.lastStatusHttp=0;
+    return job;
+  }
+  if(!response.ok){
+    job.lastStatusHttp=response.status;
+    job.stage=response.status===429?'Video service is busy. Checking again shortly.'
+      :response.status===401||response.status===403?'Video status is temporarily unavailable. Retrying.'
+      :'Could not check generation status. Retrying automatically.';
+    console.warn('Image to Video polling status',job.id,response.status);
+    return job;
+  }
+  let raw;
+  try{raw=await response.json()}catch(e){
+    job.stage='Video status response could not be read. Retrying.';
+    return job;
+  }
+  if(raw.status==='done'){
+    const fileId=String(raw.video?.file_output?.file_id||'');
+    const url=String(raw.video?.url||'');
+    if(!/^file_[a-zA-Z0-9_-]+$/.test(fileId)&&!cfVideoAllowedHost(url)){
+      job.status='failed';job.error='The completed video could not be retrieved.';
+      if(job.charged)return cfVideoRefund(env,job);
+      await cfPutVideoJob(env,job);return job;
+    }
+    job.fileId=fileId;job.ephemeralUrl=cfVideoAllowedHost(url)?url:'';
+    job.status='completed';job.stage='Ready to download';
+    job.error='';job.lastStatusHttp=200;
+    await cfPutVideoJob(env,job);
+  }else if(['failed','expired'].includes(raw.status)){
+    job.status='failed';job.stage='Generation failed';
+    job.error='Video generation could not be completed.';
+    job.failureCode=String(raw.error?.code||raw.status).slice(0,50);
+    if(job.charged)return cfVideoRefund(env,job);
+    await cfPutVideoJob(env,job);
+  }else{
+    // REST status is normally pending; no actual percentage is supplied by the API.
+    const stage=ageMs>20*60000?'Taking longer than usual. We are still checking your video.'
+      :'Generating video. We will keep checking automatically.';
+    // Don't overwrite a concurrently completed job with a stale pending result.
+    // The next customer status check will recompute this user-facing message.
+    job.stage=stage;job.lastStatusHttp=200;
+  }
+  return job;
+}
 async function cfVideoGenerate(request,env){if(request.method!=='POST')return json({error:'Method not allowed'},405);const auth=await authenticatedCustomer(request,env);if(!auth)return json({error:'Sign in to generate videos'},401);const s=await cfGetVideoSettings(env);if(!s.enabled)return json({error:'Image to Video is currently unavailable.'},403);if(!env.XAI_API_KEY)return json({error:'Image to Video is not configured yet.'},503);let b;try{if(Number(request.headers.get('content-length')||0)>3000000)return json({error:'Image file is too large.'},413);b=await request.json()}catch{return json({error:'Invalid generation request'},400)}const duration=Number(b.duration);const cost=duration===10?s.cost10:duration===15?s.cost15:0;const prompt=String(b.prompt||'').trim().slice(0,1100);const aspectRatio=String(b.aspectRatio||'9:16');const motionStyle=String(b.motionStyle||'Natural');const image=String(b.image||'');const thumbnail=String(b.thumbnail||'');if(!cost||!s.aspectRatios.includes(aspectRatio)||!s.motionStyles.includes(motionStyle)||!prompt||prompt.length<5)return json({error:'Choose valid video settings and describe the motion.'},400);if(!/^data:image\/(?:jpeg|png|webp);base64,[a-zA-Z0-9+/=]+$/.test(image)||image.length>2100000)return json({error:'Upload a valid JPEG, PNG, or WebP image (max 1.5 MB compressed).'},400);const jobs=await cfListVideoJobs(env,CF_VIDEO_PREFIX+auth.user.id+':',100);if(jobs.some(j=>['submitting','processing','accepted'].includes(j.status)))return json({error:'Finish your current generation before starting another.'},409);const today=new Date().toISOString().slice(0,10);if(jobs.filter(j=>j.createdAt?.startsWith(today)&&['submitting','accepted','processing','completed'].includes(j.status)).length>=s.dailyLimit)return json({error:'Daily Image to Video limit reached.'},429);const wallet=normalizeServerWallet((await getCustomerDataForUpdate(env,auth.user.id,auth.user.name)).wallet);const unlimited=(await getConfig(env)).unlimitedCreditEmails.map(normalizeCustomerEmail).includes(normalizeCustomerEmail(auth.user.email));if(!unlimited&&wallet.balanceSeconds<callFocusSecondsForCredits(cost))return json({error:'Not enough CallFocus credits. Deposit to continue.',code:'insufficient_credit',required:cost},402);const inFlightKey='image_video:busy:'+auth.user.id;if(await env.CALLFOCUS_CONFIG.get(inFlightKey))return json({error:'A generation request is already starting. Please wait before trying again.'},409);await env.CALLFOCUS_CONFIG.put(inFlightKey,'1',{expirationTtl:120});const id=crypto.randomUUID();const job={id,userId:auth.user.id,userEmail:auth.user.email,prompt,duration,cost,aspectRatio,motionStyle,thumbnail:/^data:image\/jpeg;base64,[\w+/=]+$/.test(thumbnail)&&thumbnail.length<46000?thumbnail:'',status:'submitting',charged:false,refunded:false,stage:'Preparing',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
 // V15.97: realism-focused image-to-video direction. Preserve the user's prompt and selected motion style.
 const motions={'Natural':'Natural documentary-like camera behavior and lifelike movement at an unhurried pace.','Cinematic':'A gentle, physically plausible cinematic camera move with realistic depth of field.','Subtle motion':'Mostly steady framing with tiny believable movements, such as breathing, blinking, fabric or environmental motion where appropriate.','Dynamic':'Energetic but physically coherent movement, natural inertia and stable scene continuity.','Dramatic':'Expressive but believable camera movement and authentic lighting transitions, without unnatural morphing.'};
@@ -6806,7 +6886,41 @@ async function cfVideoStatus(request,env){const auth=await authenticatedCustomer
 async function cfVideoHistory(request,env){const auth=await authenticatedCustomer(request,env);if(!auth)return json({error:'Sign in required'},401);const jobs=await cfListVideoJobs(env,CF_VIDEO_PREFIX+auth.user.id+':',80);const refreshed=[];for(const j of jobs.slice(0,3))refreshed.push(await cfVideoPoll(env,j));return json({ok:true,jobs:jobs.map(j=>cfPublicVideo(refreshed.find(x=>x.id===j.id)||j))});}
 async function cfVideoFile(request,env,id){const auth=await authenticatedCustomer(request,env);const suppliedToken=new URL(request.url).searchParams.get('access')||'';const access=!auth&&/^[a-f0-9-]{36}$/.test(suppliedToken)?await env.CALLFOCUS_CONFIG.get('image_video:access:'+suppliedToken,{type:'json'}):null;if(!auth&&(!access||access.id!==id))return json({error:'Sign in required'},401);const job=await cfLoadVideoJob(env,auth?.user?.id||access.userId,id);if(!job||job.status!=='completed')return json({error:'Video not available'},404);let res;if(job.fileId){res=await cfXaiFetch(env,'https://api.x.ai/v1/files/'+encodeURIComponent(job.fileId)+'/content',{headers:request.headers.get('range')?{'Range':request.headers.get('range')}: {}});}else if(cfVideoAllowedHost(job.ephemeralUrl)){res=await fetch(job.ephemeralUrl,{headers:request.headers.get('range')?{'Range':request.headers.get('range')}:{}});}else return json({error:'Stored video not available. Contact support.'},404);if(!res.ok)return json({error:'Video storage temporarily unavailable'},502);const headers=new Headers({'Content-Type':'video/mp4','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Disposition':new URL(request.url).searchParams.get('download')==='1'?`attachment; filename="CallFocus-${job.duration}s-${job.id.slice(0,8)}.mp4"`:'inline'});for(const k of ['Content-Length','Content-Range','Accept-Ranges']){if(res.headers.has(k))headers.set(k,res.headers.get(k));}return new Response(res.body,{status:res.status,headers});}
 async function cfAdminVideo(request,env){if(!await adminAuthorized(request,env))return json({error:'Admin sign-in required'},401);if(request.method==='POST'){let b;try{b=await request.json()}catch{return json({error:'Invalid settings'},400)}const s=cfVideoSettings(b);if(!s.aspectRatios.length||!s.motionStyles.length)return json({error:'Keep at least one aspect ratio and motion style.'},400);await env.CALLFOCUS_CONFIG.put('image_video:settings',JSON.stringify(s));return json({ok:true,settings:s});}const settings=await cfGetVideoSettings(env);const jobs=await cfListVideoJobs(env,CF_VIDEO_PREFIX,150);const stats={total:jobs.length,completed:0,failed:0,refunded:0,creditsCharged:0,creditsRefunded:0,duration10:0,duration15:0};for(const j of jobs){if(j.status==='completed')stats.completed++;if(['failed','refunded'].includes(j.status))stats.failed++;if(j.refunded)stats.refunded++;if(j.charged)stats.creditsCharged+=j.cost;if(j.refunded)stats.creditsRefunded+=j.cost;if(j.duration===10)stats.duration10++;else stats.duration15++;}return json({ok:true,settings,configured:!!env.XAI_API_KEY,stats,recent:jobs.slice(0,30).map(j=>({...cfPublicVideo(j),userEmail:j.userEmail}))});}
-async function cfVideoCron(env){if(!env.CALLFOCUS_CONFIG||!env.XAI_API_KEY)return;const jobs=await cfListVideoJobs(env,CF_VIDEO_PREFIX,60);for(const j of jobs){if(['processing','accepted','submitting'].includes(j.status)){try{await cfVideoPoll(env,j)}catch(e){console.warn('Image to Video settlement deferred',j.id,e?.message)}}}}
+async function cfVideoCronPage(env,prefix,cursorKey,size){
+  const kv=env.CALLFOCUS_CONFIG;
+  let cursor=await kv.get(cursorKey);
+  let page;
+  try{page=await kv.list({...{prefix,limit:size},...(cursor?{cursor}:{})});}
+  catch{page=await kv.list({prefix,limit:size});}
+  await kv.put(cursorKey,page.list_complete?'':String(page.cursor||''));
+  return page.keys||[];
+}
+async function cfVideoCron(env){
+  if(!env.CALLFOCUS_CONFIG||!env.XAI_API_KEY)return;
+  // Active-index sweep prioritizes currently generating jobs, regardless of user ID.
+  const active=await cfVideoCronPage(env,CF_VIDEO_ACTIVE_PREFIX,'image_video:cron:active_cursor',25);
+  for(const item of active){
+    try{
+      const entry=await env.CALLFOCUS_CONFIG.get(item.name,{type:'json'});
+      if(!entry?.id||!entry?.userId){await env.CALLFOCUS_CONFIG.delete(item.name);continue;}
+      const job=await cfLoadVideoJob(env,entry.userId,entry.id);
+      if(!job){await env.CALLFOCUS_CONFIG.delete(item.name);continue;}
+      await cfVideoPoll(env,job);
+      if(!['processing','accepted','submitting'].includes(job.status)&&!(job.status==='failed'&&job.charged&&!job.refunded))await env.CALLFOCUS_CONFIG.delete(item.name);
+    }catch(e){console.warn('Image to Video active settlement deferred',e?.message);}
+  }
+  // Backfill jobs created by older versions. Rotate the KV cursor rather than
+  // repeatedly scanning the same first 60 lexicographically sorted keys.
+  const legacy=await cfVideoCronPage(env,CF_VIDEO_PREFIX,'image_video:cron:legacy_cursor',70);
+  for(const item of legacy){
+    try{
+      const job=await env.CALLFOCUS_CONFIG.get(item.name,{type:'json'});
+      if(job&&(['processing','accepted','submitting'].includes(job.status)||(job.status==='failed'&&job.charged&&!job.refunded))){
+        await cfVideoPoll(env,job);
+      }
+    }catch(e){console.warn('Image to Video legacy settlement deferred',e?.message);}
+  }
+}
 
 async function cfVideoFileLink(request,env){const auth=await authenticatedCustomer(request,env);if(!auth)return json({error:'Sign in required'},401);const id=new URL(request.url).searchParams.get('id')||'';const job=await cfLoadVideoJob(env,auth.user.id,id);if(!job||job.status!=='completed')return json({error:'Video is not ready.'},404);const token=crypto.randomUUID();await env.CALLFOCUS_CONFIG.put('image_video:access:'+token,JSON.stringify({id,userId:auth.user.id}),{expirationTtl:300});return json({ok:true,url:'/api/image-to-video/file/'+id+'?access='+token});}
 
