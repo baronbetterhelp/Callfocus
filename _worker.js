@@ -1,4 +1,4 @@
-import {slotCustomer,slotPopupConfig,slotAdmin,createSavedVoice,reassignPending,releasePending,toggleAccount4,toggleAccount5,setPublicAvailability} from './permanent-voice-slots-worker.js';
+import {slotCustomer,slotPopupConfig,slotAdmin,createSavedVoice,reassignPending,releasePending,toggleAccount4,toggleAccount5,toggleAccount6,setPublicAvailability} from './permanent-voice-slots-worker.js';
 import { elRequest, elCleanup, elAdminPurge, elAdminAvailability, elGetAvailability } from './elevenlabs-worker.js';
 import {resolveEarnReferral,affiliateLinkSignup,affiliateRecordPurchase,affiliateCustomerApi,affiliateAdminApi,affiliateEmailReview} from './affiliate-worker.js';
 const LIVE_VOICES = ['alloy','ash','ballad','coral','echo','sage','shimmer','verse','marin','cedar','ripple','vesper','stone','meridian','beacon','cinder','tempo','quartz','willow','gleam','bossa','delta'];
@@ -7408,6 +7408,10 @@ export default {
       if(!await adminAuthorized(request,env))return json({error:'Admin access required.'},401);
       return safeCustomerRoute('permanent-slots-account5',()=>toggleAccount5(request,env));
     }
+    if(url.pathname==='/api/admin/permanent-slots/account6'){
+      if(!await adminAuthorized(request,env))return json({error:'Admin access required.'},401);
+      return safeCustomerRoute('permanent-slots-account6',()=>toggleAccount6(request,env));
+    }
     if(url.pathname==='/api/admin/permanent-slots/public-availability'){
       if(!await adminAuthorized(request,env))return json({error:'Admin access required.'},401);
       return safeCustomerRoute('permanent-slots-public-availability',()=>setPublicAvailability(request,env));
@@ -7552,7 +7556,7 @@ export default {
       return handleSession(request, env);
     }
     if (url.pathname === '/admin' || url.pathname === '/admin/' || url.pathname === '/admin.html') {
-      const adminAssetUrl = new URL('/admin.html?cf_build=16.66-account5-consistency', url.origin);
+      const adminAssetUrl = new URL('/admin.html?cf_build=16.73-account6-onboarding', url.origin);
       const asset = await env.ASSETS.fetch(new Request(adminAssetUrl, request));
       let html = await asset.text();
       html = html.replace(/\/admin\.css\?v=[^"']+/g, '/admin.css?v=16.07-test').replace(/\/admin\.js\?v=[^"']+/g, '/admin.js?v=16.07-test');
@@ -7565,28 +7569,28 @@ export default {
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '16.66');
+      headers.set('X-CallFocus-Admin-Build', '16.73');
       return new Response(html, { status: asset.status, statusText: asset.statusText, headers });
     }
     // Serve the voice-admin controller through this exact Worker deployment, not an independently cached static route.
     if (url.pathname === '/permanent-slots-admin.js') {
-      const asset = await env.ASSETS.fetch(new Request(new URL('/permanent-slots-admin.js?cf_build=16.66-account5-consistency', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL('/permanent-slots-admin.js?cf_build=16.73-account6-onboarding', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
       headers.set('Content-Type', 'application/javascript; charset=utf-8');
       headers.set('X-Content-Type-Options', 'nosniff');
-      headers.set('X-CallFocus-Voice-Admin-Build', '16.66');
+      headers.set('X-CallFocus-Voice-Admin-Build', '16.73');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     if (url.pathname === '/admin.js' || url.pathname === '/admin.css') {
-      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=16.66-account5-consistency', url.origin), request));
+      const asset = await env.ASSETS.fetch(new Request(new URL(url.pathname + '?cf_build=16.73-account6-onboarding', url.origin), request));
       const headers = new Headers(asset.headers);
       headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       headers.set('Pragma', 'no-cache');
       headers.set('Expires', '0');
-      headers.set('X-CallFocus-Admin-Build', '16.66');
+      headers.set('X-CallFocus-Admin-Build', '16.73');
       return new Response(asset.body, { status: asset.status, statusText: asset.statusText, headers });
     }
     const pageMap = {

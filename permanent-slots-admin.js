@@ -1,11 +1,11 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id);if(!$('cfSlotSave'))return;
-const VOICE_ADMIN_BUILD='16.66';if(typeof window!=='undefined')window.__cfVoiceAdmin1666Loaded=true;
+const VOICE_ADMIN_BUILD='16.73';if(typeof window!=='undefined')window.__cfVoiceAdmin1673Loaded=true;
 const token=()=>localStorage.getItem('callfocus_admin_session_v158')||sessionStorage.getItem('callfocus_admin_key')||'';
 const status=$('cfSlotStatus');
-const fields=['enabled','popupEnabled','popupDelaySeconds','forceFull','slotLimit','minimumCredits','pool4AcceptNew','pool5AcceptNew','eventDate','bookingOpensAt','bookingClosesAt','headline','message','fullMessage','telegramUrl'];
+const fields=['enabled','popupEnabled','popupDelaySeconds','forceFull','slotLimit','minimumCredits','pool4AcceptNew','pool5AcceptNew','pool6AcceptNew','eventDate','bookingOpensAt','bookingClosesAt','headline','message','fullMessage','telegramUrl'];
 const dirty=new Set();
-let loaded=false,buildVerified=false,fetchGeneration=0,toggleBusy=false,confirmedToggle=false,confirmedRevision=0,toggleNotice='',account5Busy=false,confirmedToggle5=false,toggleNotice5='',publicAvailabilityBusy=false,publicAvailabilityEdited=false;
+let loaded=false,buildVerified=false,fetchGeneration=0,toggleBusy=false,confirmedToggle=false,confirmedRevision=0,toggleNotice='',account5Busy=false,confirmedToggle5=false,toggleNotice5='',account6Busy=false,confirmedToggle6=false,toggleNotice6='',publicAvailabilityBusy=false,publicAvailabilityEdited=false;
 async function request(path='/api/admin/permanent-slots',method='GET',body){
  const r=await fetch(path,{method,headers:{'X-CallFocus-Admin-Key':token(),...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,cache:'no-store'});
  const d=await r.json().catch(()=>({}));if(!r.ok||!d.ok)throw Error(d.error||'Slot request failed.');return d;
@@ -17,22 +17,28 @@ function render(d){
     buildVerified=false;
     const button=$('cfSlot_pool5AcceptNew'),verify=$('cfSlotAccount5Verify');
     if(button)button.disabled=true;if(verify)verify.disabled=true;
-    const warning=`Account 5 is unavailable because the Admin page and Worker versions do not match (expected ${VOICE_ADMIN_BUILD}, received ${d.voiceAdminBuild||'older version'}). Confirm V16.66 is active in Cloudflare, then refresh the Admin page.`;
+    const button6=$('cfSlot_pool6AcceptNew'),verify6=$('cfSlotAccount6Verify');
+    if(button6)button6.disabled=true;if(verify6)verify6.disabled=true;
+    const warning=`Account 5 and 6 controls are unavailable because the Admin page and Worker versions do not match (expected ${VOICE_ADMIN_BUILD}, received ${d.voiceAdminBuild||'older version'}). Confirm V16.73 is active in Cloudflare, then refresh the Admin page.`;
     if($('cfSlotAccount5Status'))$('cfSlotAccount5Status').textContent=warning;
+    if($('cfSlotAccount6Status'))$('cfSlotAccount6Status').textContent=warning;
     status.textContent=warning;return;
   }
   buildVerified=true;
   const verify=$('cfSlotAccount5Verify');if(verify)verify.disabled=false;
-  const account=$('cfSlot_pool5AcceptNew');if(account&&!account5Busy)account.disabled=false;
+  const account=$('cfSlot_pool5AcceptNew');if(account&&!account5Busy&&!account6Busy)account.disabled=false;
+  const verify6=$('cfSlotAccount6Verify');if(verify6)verify6.disabled=false;
+  const account6=$('cfSlot_pool6AcceptNew');if(account6&&!account6Busy&&!account5Busy)account6.disabled=false;
  // A KV read made immediately after a successful write may return older data.
  // Never let it undo the admin's newly saved Account 4 selection.
  if(Number(s.revision||0)<confirmedRevision)return;
  for(const k of fields){
-  const el=$('cfSlot_'+k);if(!el||dirty.has(k)||(k==='pool4AcceptNew'&&toggleBusy)||(k==='pool5AcceptNew'&&account5Busy))continue;
+  const el=$('cfSlot_'+k);if(!el||dirty.has(k)||(k==='pool4AcceptNew'&&toggleBusy)||(k==='pool5AcceptNew'&&account5Busy)||(k==='pool6AcceptNew'&&account6Busy))continue;
   if(el.type==='checkbox')el.checked=!!s[k];else el.value=s[k]??'';
  }
  if(!toggleBusy){confirmedToggle=!!s.pool4AcceptNew;confirmedRevision=Math.max(confirmedRevision,Number(s.revision||0));}
  if(!account5Busy){confirmedToggle5=!!s.pool5AcceptNew;confirmedRevision=Math.max(confirmedRevision,Number(s.revision||0));}
+ if(!account6Busy){confirmedToggle6=!!s.pool6AcceptNew;confirmedRevision=Math.max(confirmedRevision,Number(s.revision||0));}
  status.textContent=`${d.booked} reserved of ${d.total} total slots. ${d.remaining} currently open for new customers. Booking ${s.enabled?'ON':'OFF'}; popup ${s.popupEnabled?'ON':'OFF'}; delay ${Number(s.popupDelaySeconds||0)} second(s).`;
  const values={cfSlotGlobalTotal:`${d.booked} / ${d.total}`,cfSlotGlobalCreated:d.created,cfSlotGlobalPending:d.pending,cfSlotGlobalEligible:d.reclaimable,cfSlotGlobalRelease:`${d.remaining} available · ${d.paidPurchases||0} paid`};
  for(const [id,value] of Object.entries(values))if($(id))$(id).textContent=value;
@@ -42,6 +48,9 @@ function render(d){
  const a5=d.account5||{},c5=d.pools?.pool5||{};
  const msg5=`${a5.ready?'Verified':'Not yet ready'} · ${a5.message||'Not checked'} · ${c5.reserved||0} booked · ${c5.created||0} saved voices · ${c5.ok?c5.voiceSlotsUsed+'/'+c5.voiceSlotLimit+' storage used':'subscription not verified'}. ${s.pool5AcceptNew?'Accepting new purchases':'New purchases disabled'}.`;
  if($('cfSlotAccount5Status'))$('cfSlotAccount5Status').textContent=(toggleNotice5?toggleNotice5+' · ':'')+msg5;
+ const a6=d.account6||{},c6=d.pools?.pool6||{};
+ const msg6=`${a6.ready?'Verified':'Not yet ready'} · ${a6.message||'Not checked'} · ${c6.reserved||0} booked · ${c6.created||0} saved voices · ${c6.ok?c6.voiceSlotsUsed+'/'+c6.voiceSlotLimit+' storage used':'subscription not verified'} · ${c6.monthlyCreationLimit!=null?`${c6.monthlyCreationUsed||0}/${c6.monthlyCreationLimit} monthly voice operations`:'operations not reported'}. ${s.pool6AcceptNew?'Accepting new purchases':'New purchases disabled'}.`;
+ if($('cfSlotAccount6Status'))$('cfSlotAccount6Status').textContent=(toggleNotice6?toggleNotice6+' · ':'')+msg6;
  if($('cfSlotPools'))$('cfSlotPools').textContent=Object.values(d.pools||{}).filter(p=>p.apiKeyConfigured||p.reserved).map(p=>`Account ${p.index}: ${p.ok?'connected':'check connection'} · ${p.reserved} booked · ${p.created} saved · ${p.pending} idle pending · ${p.ok?p.voiceSlotsUsed+'/'+p.voiceSlotLimit+' used':''} · ${p.available} usable slots`).join(' | ');
  if($('cfSlotProvider'))$('cfSlotProvider').textContent=`Public release: ${d.releaseUsed||0} booked from current release of ${d.releaseQuota||0}. New accounts are detected when configured with their own API key and Agent ID.`;
  if(!publicAvailabilityBusy&&!publicAvailabilityEdited&&$('cfSlotPublicAvailableCount'))$('cfSlotPublicAvailableCount').value=String(d.remaining??0);
@@ -55,16 +64,16 @@ async function refresh(){
  catch(e){if(generation===fetchGeneration){
    status.textContent=e.message;
    if(!loaded)loaded=false;
-   if(!buildVerified){const a5=$('cfSlotAccount5Status');if(a5)a5.textContent=`Account 5 could not be verified: ${e.message}. Confirm the V16.66 deployment is active and refresh.`;}
+   if(!buildVerified){const message=`Account 5 and 6 controls could not be verified: ${e.message}. Confirm the V16.73 deployment is active and refresh.`;for(const id of ['cfSlotAccount5Status','cfSlotAccount6Status']){const el=$(id);if(el)el.textContent=message;}}
   }}
 }
 // Do not throw away edits to other settings when a background refresh completes.
-for(const k of fields){const el=$('cfSlot_'+k);if(!el||k==='pool4AcceptNew'||k==='pool5AcceptNew')continue;
+for(const k of fields){const el=$('cfSlot_'+k);if(!el||k==='pool4AcceptNew'||k==='pool5AcceptNew'||k==='pool6AcceptNew')continue;
  const changed=()=>dirty.add(k);el.addEventListener('input',changed);el.addEventListener('change',changed);
 }
 const account4=$('cfSlot_pool4AcceptNew');
 if(account4)account4.addEventListener('change',async()=>{
- if(toggleBusy||account5Busy){account4.checked=confirmedToggle;return;}
+ if(toggleBusy||account5Busy||account6Busy){account4.checked=confirmedToggle;return;}
  const desired=account4.checked;
  toggleBusy=true;account4.disabled=true;++fetchGeneration;
  toggleNotice=`Saving Account 4 ${desired?'activation':'deactivation'}…`;
@@ -88,12 +97,13 @@ if(account4)account4.addEventListener('change',async()=>{
 });
 const account5=$('cfSlot_pool5AcceptNew');
 if(account5)account5.addEventListener('change',async()=>{
- if(toggleBusy||account5Busy||!buildVerified){account5.checked=confirmedToggle5;
+ if(toggleBusy||account5Busy||account6Busy||!buildVerified){account5.checked=confirmedToggle5;
    if($('cfSlotAccount5Status'))$('cfSlotAccount5Status').textContent='Wait for the verified Account 5 Admin controls to load before changing this setting.';
    return;}
  const desired=account5.checked;
  account5Busy=true;account5.disabled=true;++fetchGeneration;
  if(account4)account4.disabled=true;
+ if(account6)account6.disabled=true;
  toggleNotice5=`Saving Account 5 ${desired?'activation':'deactivation'}…`;
  if($('cfSlotAccount5Status'))$('cfSlotAccount5Status').textContent=toggleNotice5;
  try{
@@ -110,22 +120,58 @@ if(account5)account5.addEventListener('change',async()=>{
  }finally{
   account5.disabled=false;account5Busy=false;
   if(account4)account4.disabled=false;
+  if(account6)account6.disabled=false;
   if($('cfSlotAccount5Status'))$('cfSlotAccount5Status').textContent=toggleNotice5;
+ }
+ await refresh();
+});
+const account6=$('cfSlot_pool6AcceptNew');
+if(account6)account6.addEventListener('change',async()=>{
+ if(toggleBusy||account5Busy||account6Busy||!buildVerified){account6.checked=confirmedToggle6;
+   if($('cfSlotAccount6Status'))$('cfSlotAccount6Status').textContent='Wait for the verified Account 6 controls to load before changing this setting.';
+   return;}
+ const desired=account6.checked;
+ account6Busy=true;account6.disabled=true;++fetchGeneration;
+ if(account4)account4.disabled=true;
+ if(account5)account5.disabled=true;
+ toggleNotice6=`Saving Account 6 ${desired?'activation':'deactivation'}…`;
+ if($('cfSlotAccount6Status'))$('cfSlotAccount6Status').textContent=toggleNotice6;
+ try{
+  const d=await request('/api/admin/permanent-slots/account6','POST',{enabled:desired});
+  if(d.voiceAdminBuild!==VOICE_ADMIN_BUILD)throw Error('The Worker changed during saving. Check the deployment and refresh before continuing.');
+  confirmedToggle6=!!d.pool6AcceptNew;
+  confirmedRevision=Math.max(confirmedRevision,Number(d.revision||0));
+  account6.checked=confirmedToggle6;
+  toggleNotice6=`Account 6 ${confirmedToggle6?'enabled':'disabled'} and saved successfully`;
+ }catch(e){
+  account6.checked=confirmedToggle6;
+  toggleNotice6=`Account 6 setting NOT saved: ${e.message}`;
+  status.textContent=toggleNotice6;
+ }finally{
+  account6.disabled=false;account6Busy=false;
+  if(account4)account4.disabled=false;
+  if(account5)account5.disabled=false;
+  if($('cfSlotAccount6Status'))$('cfSlotAccount6Status').textContent=toggleNotice6;
  }
  await refresh();
 });
 $('cfSlotRefresh').onclick=refresh;
 $('cfSlotAccount4Verify')?.addEventListener('click',refresh);
+$('cfSlotAccount6Verify')?.addEventListener('click',async()=>{
+   if(!buildVerified){await refresh();return;}
+   if($('cfSlotAccount6Status'))$('cfSlotAccount6Status').textContent='Verifying Account 6 subscription, storage, monthly operations and Agent ID…';
+   await refresh();
+ });
 $('cfSlotAccount5Verify')?.addEventListener('click',async()=>{
    if(!buildVerified){await refresh();return;}
    if($('cfSlotAccount5Status'))$('cfSlotAccount5Status').textContent='Verifying Account 5 subscription and Agent ID…';
    await refresh();
  });
 $('cfSlotSave').onclick=async()=>{
- if(!loaded)return refresh();if(toggleBusy||account5Busy){status.textContent='Finish saving the account activation switch before saving other settings.';return}
+ if(!loaded)return refresh();if(toggleBusy||account5Busy||account6Busy){status.textContent='Finish saving the account activation switch before saving other settings.';return}
  const body={};for(const k of fields){const el=$('cfSlot_'+k);body[k]=el.type==='checkbox'?el.checked:el.type==='number'?Number(el.value):el.value.trim()}
  const btn=$('cfSlotSave');btn.disabled=true;++fetchGeneration;status.textContent='Saving…';
- try{const d=await request('/api/admin/permanent-slots','POST',body);confirmedRevision=Math.max(confirmedRevision,Number(d.settings?.revision||0));confirmedToggle=!!d.settings?.pool4AcceptNew;confirmedToggle5=!!d.settings?.pool5AcceptNew;dirty.clear();status.textContent=`Settings saved successfully. Popup delay: ${Number(d.settings?.popupDelaySeconds||0)} second(s).`;await refresh()}
+ try{const d=await request('/api/admin/permanent-slots','POST',body);confirmedRevision=Math.max(confirmedRevision,Number(d.settings?.revision||0));confirmedToggle=!!d.settings?.pool4AcceptNew;confirmedToggle5=!!d.settings?.pool5AcceptNew;confirmedToggle6=!!d.settings?.pool6AcceptNew;dirty.clear();status.textContent=`Settings saved successfully. Popup delay: ${Number(d.settings?.popupDelaySeconds||0)} second(s).`;await refresh()}
  catch(e){status.textContent='Settings NOT saved: '+e.message}finally{btn.disabled=false}
 };
 $('cfSlotPublicAvailableCount')?.addEventListener('input',()=>{publicAvailabilityEdited=true});
