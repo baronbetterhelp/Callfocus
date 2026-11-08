@@ -5,12 +5,61 @@ let current=null,pending=false,autoDismissed=false;
 const $=id=>document.getElementById(id);
 const creditNumber=n=>Number(n||0).toLocaleString('en-NG');
 async function load(){if(!auth())throw Error('Sign in to see the limited voice-cloning slots.');const r=await fetch('/api/permanent-slots/status',{cache:'no-store',headers:auth()?{Authorization:'Bearer '+auth()}:{}}),v=await r.json();if(!r.ok)throw Error(v.error||'Booking status unavailable.');current=v;return v}
-function ensure(){if($('cf-slot-layer'))return;const layer=document.createElement('div');layer.id='cf-slot-layer';layer.className='cf-slot-layer';layer.innerHTML=`<section class="cf-slot-popup" role="dialog" aria-modal="true" aria-labelledby="cf-slot-title"><button type="button" class="cf-slot-close" aria-label="Close">×</button><small class="cf-slot-eyebrow">CALLFOCUS · LIMITED RELEASE</small><h2 id="cf-slot-title"></h2><p class="cf-slot-description"></p><div class="cf-slot-stats"><div><small>Slots remaining</small><strong class="cf-slot-remaining"></strong></div><div><small>Voice cloning date</small><strong class="cf-slot-date"></strong></div></div><p class="cf-slot-window"></p><p class="cf-slot-minimum"></p><p class="cf-slot-balance" aria-live="polite"></p><p class="cf-slot-response" role="status" aria-live="polite"></p><button class="cf-slot-book" type="button">Buy slot · 1,000 credits</button><a class="cf-slot-telegram" target="_blank" rel="noopener noreferrer">Join our Telegram channel</a></section>`;document.body.append(layer);
-layer.querySelector('.cf-slot-close').onclick=close;layer.addEventListener('click',e=>{if(e.target===layer)close()});layer.querySelector('.cf-slot-book').onclick=book;window.addEventListener('keydown',e=>{if(e.key==='Escape')close()});}
+function ensure(){if($('cf-slot-layer'))return;const layer=document.createElement('div');layer.id='cf-slot-layer';layer.className='cf-slot-layer';layer.innerHTML=`<section class="cf-slot-popup" role="dialog" aria-modal="true" aria-labelledby="cf-slot-title"><button type="button" class="cf-slot-close" aria-label="Close">×</button><small class="cf-slot-eyebrow">CALLFOCUS · LIMITED RELEASE</small><h2 id="cf-slot-title"></h2><p class="cf-slot-description"></p><div class="cf-slot-default-offer" hidden><span class="cf-slot-default-eyebrow">CALLS ARE STILL AVAILABLE</span><strong>Voice cloning is full, but you can still make calls.</strong><p>Choose our standard Male or Female voice and start a regular CallFocus call.</p><button class="cf-slot-default-btn" type="button">Use our default voice <span aria-hidden="true">→</span></button></div><div class="cf-slot-stats"><div><small>Slots remaining</small><strong class="cf-slot-remaining"></strong></div><div><small>Voice cloning date</small><strong class="cf-slot-date"></strong></div></div><p class="cf-slot-window"></p><p class="cf-slot-minimum"></p><p class="cf-slot-balance" aria-live="polite"></p><p class="cf-slot-response" role="status" aria-live="polite"></p><button class="cf-slot-book" type="button">Buy slot · 1,000 credits</button><a class="cf-slot-telegram" target="_blank" rel="noopener noreferrer">Join our Telegram channel</a></section>`;document.body.append(layer);
+layer.querySelector('.cf-slot-close').onclick=close;layer.addEventListener('click',e=>{if(e.target===layer)close()});layer.querySelector('.cf-slot-book').onclick=book;layer.querySelector('.cf-slot-default-btn').onclick=openDefaultVoiceCall;window.addEventListener('keydown',e=>{if(e.key==='Escape')close()});}
+// Guided entry only: the ordinary New Call button still owns the call form,
+// validation, profile-prefill and provider/voice behavior. No call is started here.
+let defaultVoiceGuideWatcher=null;
+function openDefaultVoiceCall(){
+ const modal=$('newCallModal'),newCallButton=$('heroNewCallBtn');
+ if(!modal||!newCallButton){window.toast?.('The call form is unavailable. Open Start a Call from the home page.');return;}
+ close();
+ // The current signed-in user's existing Start a Call flow resets and
+ // pre-fills the form from My Profile. Do not manufacture caller details.
+ newCallButton.click();
+ if(modal.classList.contains('hidden'))return;
+ const section=$('newCallVoiceGender')?.closest('.field-section');
+ const content=section?.querySelector('.field-content');
+ const choices=content?.querySelector('.voice-choice');
+ const scroller=modal.querySelector('.call-form-modal');
+ if(!content||!choices||!scroller)return;
+ defaultVoiceGuideWatcher?.disconnect();
+ modal.querySelector('.cf-default-voice-guide')?.remove();
+ // Use the original built-in voice control; never change OpenAI call settings.
+ modal.querySelector('.voice-option[data-voice="male"]')?.click();
+ const guide=document.createElement('div');
+ guide.className='cf-default-voice-guide';
+ guide.setAttribute('role','status');
+ guide.innerHTML=`<strong>You're ready to use the standard CallFocus voice.</strong><p>Choose Male or Female here. Then scroll up to complete the other call details. For an easier setup, you can use <b>Fill in all information automatically</b> at the top and review the results before starting your call.</p><div class="cf-default-voice-guide-actions"><button type="button" class="cf-default-guide-up">↑ Scroll up to fill in details</button><button type="button" class="cf-default-guide-autofill">Fill in information automatically</button></div>`;
+ choices.insertAdjacentElement('afterend',guide);
+ guide.querySelector('.cf-default-guide-up').addEventListener('click',()=>{
+  try{scroller.scrollTo({top:0,behavior:'smooth'})}catch{scroller.scrollTop=0}
+ });
+ guide.querySelector('.cf-default-guide-autofill').addEventListener('click',()=>{
+  const autoFill=$('cfAutoFillAllBtn');
+  if(autoFill){autoFill.click();return}
+  scroller.scrollTop=0;
+  window.toast?.('Use Fill in all information automatically at the top of this form.');
+ });
+ defaultVoiceGuideWatcher=new MutationObserver(()=>{
+  if(modal.classList.contains('hidden')){
+   guide.remove();defaultVoiceGuideWatcher?.disconnect();defaultVoiceGuideWatcher=null;
+  }
+ });
+ defaultVoiceGuideWatcher.observe(modal,{attributes:true,attributeFilter:['class']});
+ // Keep the user within the existing scrollable modal, aligned on section 08.
+ // This is deliberate navigation only for the filled-slot CTA.
+ requestAnimationFrame(()=>requestAnimationFrame(()=>{
+  if(modal.classList.contains('hidden'))return;
+  const y=scroller.scrollTop+section.getBoundingClientRect().top-scroller.getBoundingClientRect().top-12;
+  scroller.scrollTop=Math.max(0,y);
+ }));
+}
 function close(){const layer=$('cf-slot-layer');if(layer?.classList.contains('open'))autoDismissed=true;layer?.classList.remove('open');document.body.classList.remove('cf-slot-modal-open')}
 async function show(force=false,provided=null){if(force)autoDismissed=false;if(!auth()){close();if(force)window.showAuth?.('signin',null,'Sign in to view voice-cloning slots.');return;}ensure();let s;try{s=provided||await load()}catch(e){if(force&&auth())window.toast?.(e.message);return}if(!s.signedIn||!auth()){close();return}
 const layer=$('cf-slot-layer'),book=layer.querySelector('.cf-slot-book'),msg=layer.querySelector('.cf-slot-response'),isFull=s.full&&!s.me,hasSlot=!!s.me,phase=s.bookingPhase||'open',upcoming=phase==='upcoming',ended=phase==='ended';
 layer.querySelector('#cf-slot-title').textContent=isFull?'All voice cloning slots are filled':s.headline;
+layer.querySelector('.cf-slot-default-offer').hidden=!isFull;
 layer.querySelector('.cf-slot-description').textContent=isFull?s.fullMessage:hasSlot?(s.me.purchasePending?'Your 1,000-credit slot purchase has not been confirmed yet. Tap Complete purchase to verify it.':s.me.hasSavedVoice?'Your permanent cloned voice is ready. You can reuse it for cloned calls and voice notes.':'Your permanent voice slot is yours. You can prepare your permanent voice when cloning is enabled on the announced date.'):s.message;
 layer.querySelector('.cf-slot-remaining').textContent=`${s.remaining} of ${s.slotLimit}`;
 layer.querySelector('.cf-slot-date').textContent=s.eventDate?new Date(s.eventDate+'T12:00:00').toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'}):'To be announced';
@@ -59,6 +108,7 @@ function preview(cfg){
  ensure();const layer=$('cf-slot-layer');
  layer.querySelector('#cf-slot-title').textContent=cfg.headline||'Limited permanent voice cloning slots';
  layer.querySelector('.cf-slot-description').textContent=cfg.message||'Permanent voice cloning slots are available in limited releases.';
+ layer.querySelector('.cf-slot-default-offer').hidden=true;
  layer.querySelector('.cf-slot-remaining').textContent='Checking availability…';
  layer.querySelector('.cf-slot-date').textContent=cfg.eventDate?new Date(cfg.eventDate+'T12:00:00').toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'}):'To be announced';
  layer.querySelector('.cf-slot-window').hidden=true;
