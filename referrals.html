@@ -22,7 +22,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=16.59-scroll-stability" />
+  <link rel="stylesheet" href="/callfocus.css?v=16.78-opay-slovenian" />
   <link rel="stylesheet" href="/elevenlabs.css?v=16.34">
   <link rel="stylesheet" href="/cf-controls.css?v=16.27" />
 <link rel="stylesheet" href="/affiliate.css?v=16.38">
@@ -628,6 +628,10 @@
               <div class="credit-custom-summary"><span id="customCreditMinutes">3 minutes</span><strong id="customCreditNaira">₦3,000</strong></div>
             </div>
             <button class="credit-checkout-btn" id="creditCheckoutBtn" type="button" disabled aria-disabled="true"><span id="creditCheckoutLabel">Continue to payment</span><small id="creditCheckoutSummary">300 credits · ₦3,000</small></button>
+            <aside class="cf-opay-advisory" role="note" aria-label="KoraPay bank transfer notice">
+              <span class="cf-opay-advisory-mark" aria-hidden="true">!</span>
+              <span class="cf-opay-advisory-copy"><strong>Paying with a bank transfer?</strong><span>OPay transfers are currently unavailable for KoraPay payments. Please use another bank to avoid unsuccessful transfers.</span></span>
+            </aside>
             <button class="korapay-checkout-btn hidden" id="korapayCheckoutBtn" type="button" disabled>Pay with KoraPay</button>
             <button class="korapay-checkout-btn hidden" id="pocketfiCheckoutBtn" type="button" disabled>Pay with PocketFi</button>
             <div class="pocketfi-recovery" id="pocketfiRecoveryPanel">
@@ -870,6 +874,7 @@
           <option value="Norwegian">Norwegian / Norsk</option>
           <option value="Danish">Danish / Dansk</option>
           <option value="Finnish">Finnish / Suomi</option>
+          <option value="Slovenian">Slovenian / Slovenščina</option>
         </select></label><div class="opening-preview">CallFocus will keep the entire call in the language you select here. An accent, isolated foreign words, or the other person changing languages will not make the voice switch languages.</div></div></div>
         <div class="field-section"><span class="field-number">08</span><div class="field-content"><div class="field-heading"><strong>Voice selection</strong><small>Use the standard Male/Female voice or select one of your own saved AI voice profiles below.</small></div><div class="voice-choice"><button type="button" class="voice-option active" data-voice="male"><span>Male</span><small id="maleVoiceLabel">Default male voice</small></button><button type="button" class="voice-option" data-voice="female"><span>Female</span><small id="femaleVoiceLabel">Default female voice</small></button></div><input type="hidden" id="newCallVoiceGender" value="male" />
           <div class="call-opening-box">
@@ -979,7 +984,7 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=16.70-secure-billing"></script>
+  <script src="/callfocus.js?v=16.78-opay-slovenian"></script>
   <script src="/cf-audio-convert.js?v=16.33"></script>
   <link rel="stylesheet" href="/permanent-slots.css?v=16.75-all-slots-monthly"><script src="/permanent-slots-client.js?v=16.75-all-slots-monthly"></script><script src="/elevenlabs.js?v=16.75-all-slots-monthly"></script>
   <script src="/cf-controls-client.js?v=16.28"></script>

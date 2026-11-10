@@ -4040,3 +4040,58 @@ html[data-theme="dark"] #page-history .history-close-btn{background:#19302b;bord
 .referral-row-status small{font-size:10px}
 @media(max-width:960px){#page-referrals.app-page{padding-top:28px}.referrals-shell .ea-cta{padding:17px 18px}}
 @media(max-width:560px){#page-referrals.app-page{padding-top:24px}.referrals-shell .ea-cta{padding:16px 16px 18px;border-radius:20px}.referrals-shell .ea-cta p{font-size:13px}.referrals-code-panel,.referrals-list-card{padding:18px}.referrals-code-panel>small{font-size:11px}.referrals-share-actions{grid-template-columns:1fr}.referrals-share-actions .btn{width:100%}}
+
+/* V16.77: Customer voice subscription status (also works in pearl mode). */
+.cf-subscription-page .cf-subscription-shell{display:grid;gap:18px;max-width:760px;margin:12px auto 32px}
+.cf-subscription-page .cf-subscription-baseline,.cf-subscription-page .cf-subscription-details{border:1px solid #d7e6df;border-radius:25px;background:#fff;padding:25px;color:#183e36;box-shadow:0 9px 34px rgba(25,84,67,.045)}
+.cf-subscription-page .cf-subscription-baseline{background:linear-gradient(120deg,#e9f6ef,#f7faf8)}
+.cf-subscription-mini-label{display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:800;color:#19826b}
+.cf-subscription-baseline strong{display:block;font-family:Manrope,'DM Sans',sans-serif;font-size:19px;margin:10px 0 8px}
+.cf-subscription-baseline p,.cf-subscription-description{font-size:14px;line-height:1.6;color:#677f76;margin:0}
+.cf-subscription-card-head{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.cf-subscription-pill{border-radius:100px;padding:6px 13px;background:#e9f1ee;color:#37675c;font-size:12px;font-weight:800}
+.cf-subscription-pill[data-state="active"]{background:#e1f5e9;color:#0c7850}
+.cf-subscription-pill[data-state="grace"],.cf-subscription-pill[data-state="overdue"]{background:#fff0dc;color:#905614}
+.cf-subscription-pill[data-state="released"],.cf-subscription-pill[data-state="releasing"]{background:#fae8e8;color:#9b3737}
+.cf-subscription-details h2{font:800 clamp(23px,4vw,32px)/1.16 Manrope,'DM Sans',sans-serif;margin:17px 0 9px;letter-spacing:-.7px;color:#113d33}
+.cf-subscription-countdown{display:flex;gap:15px;align-items:center;padding:17px 20px;margin:20px 0;border:1px solid #cce4d7;border-radius:18px;background:#f2faf5}
+.cf-subscription-counter-number{font:800 42px/1 Manrope,'DM Sans',sans-serif;letter-spacing:-1px;color:#11684f}
+.cf-subscription-counter-copy{font-size:13px;font-weight:700;color:#507467}
+.cf-subscription-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:20px 0}
+.cf-subscription-fields>div{min-width:0;display:flex;flex-direction:column;gap:7px;padding:14px;border:1px solid #e0eae5;border-radius:16px;background:#fbfdfc}
+.cf-subscription-fields span{font-size:12px;color:#658176}
+.cf-subscription-fields strong{font-size:14px;line-height:1.4;color:#173e34;overflow-wrap:anywhere}
+.cf-subscription-actions{display:flex;gap:10px;flex-wrap:wrap}
+.cf-subscription-actions button{font-size:13px;min-height:44px}
+.cf-subscription-actions button[hidden],.cf-subscription-countdown[hidden]{display:none!important}
+.cf-subscription-feedback{min-height:16px;margin:10px 0 0;color:#176f57;font-size:13px;line-height:1.5}
+.cf-subscription-footnote{font-size:12px;line-height:1.55;color:#71867d;margin:16px 0 0}
+@media(max-width:600px){.cf-subscription-page .cf-subscription-baseline,.cf-subscription-page .cf-subscription-details{padding:20px;border-radius:20px}.cf-subscription-fields{grid-template-columns:1fr 1fr;gap:8px}.cf-subscription-fields>div{padding:12px}.cf-subscription-actions .btn{width:100%}}
+
+
+/* CallFocus V16.78: contextual KoraPay/OPay bank transfer guidance. */
+.cf-opay-advisory{display:none;align-items:flex-start;gap:12px;margin:15px 0 4px;padding:15px 16px;border:1px solid #e8d8ab;border-radius:17px;background:linear-gradient(125deg,#fffbf1 0%,#f6fbf8 100%);box-shadow:0 9px 22px rgba(83,71,36,.05)}
+html.korapay-enabled #creditPurchaseSection .cf-opay-advisory{display:flex}
+.cf-opay-advisory-mark{display:grid;place-items:center;flex:none;width:31px;height:31px;border:1px solid #ecd8a4;border-radius:10px;background:#fff0c7;color:#85601c;font:900 18px/1 'Manrope',system-ui,sans-serif}
+.cf-opay-advisory-copy{display:flex;flex-direction:column;gap:5px;min-width:0}
+.cf-opay-advisory-copy strong{font:800 13px/1.4 'Manrope',system-ui,sans-serif;color:#554518}
+.cf-opay-advisory-copy span{font:500 12px/1.6 'DM Sans',system-ui,sans-serif;color:#696755}
+html:not([data-theme="pearl"]) .cf-opay-advisory{background:linear-gradient(130deg,#29251b,#1b2b29);border-color:#78643b}
+html:not([data-theme="pearl"]) .cf-opay-advisory-copy strong{color:#f8e0a8}
+html:not([data-theme="pearl"]) .cf-opay-advisory-copy span{color:#e0d5bb}
+.cf-opay-dialog-backdrop{position:fixed;inset:0;z-index:110000;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(6,27,24,.70);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
+.cf-opay-dialog{box-sizing:border-box;position:relative;width:min(100%,460px);max-height:calc(100dvh - 28px);overflow:auto;padding:34px 30px 28px;border:1px solid #e6e6da;border-radius:26px;background:#fff;box-shadow:0 25px 100px rgba(0,36,31,.25);color:#193d35;font-family:'DM Sans',system-ui,sans-serif;text-align:left}
+.cf-opay-dialog-close{position:absolute;right:20px;top:18px;display:grid;place-items:center;width:35px;height:35px;border:1px solid #dce5df;border-radius:50%;background:#fff;color:#4e6861;font:400 25px/1 system-ui,sans-serif;cursor:pointer}
+.cf-opay-dialog-symbol{display:grid;place-items:center;width:55px;height:55px;margin-bottom:18px;border:1px solid #ead09a;border-radius:17px;background:linear-gradient(145deg,#fff4d5,#f7e5b6);color:#805b16;font:900 28px/1 'Manrope',system-ui,sans-serif}
+.cf-opay-dialog-kicker{margin-bottom:8px;color:#927039;font:800 11px/1.3 'Manrope',system-ui,sans-serif;letter-spacing:.15em}
+.cf-opay-dialog h2{max-width:340px;margin:0 0 13px;color:#173b32;font:800 clamp(23px,5vw,29px)/1.19 'Manrope',system-ui,sans-serif;letter-spacing:-.035em}
+.cf-opay-dialog p{margin:0;color:#62776e;font:500 15px/1.7 'DM Sans',system-ui,sans-serif}
+.cf-opay-dialog p strong{color:#173d34;font-weight:800}
+.cf-opay-dialog-detail{margin:19px 0 23px;padding:12px 14px;border:1px solid #d5e8df;border-radius:13px;background:#eff7f2;color:#3a7160;font:600 13px/1.6 'DM Sans',system-ui,sans-serif}
+.cf-opay-dialog-actions{display:grid;grid-template-columns:1fr 1.7fr;gap:10px}
+.cf-opay-dialog-actions button{min-height:52px;padding:13px;border-radius:13px;font:800 12px/1.35 'Manrope',system-ui,sans-serif;cursor:pointer}
+.cf-opay-dialog-secondary{border:1px solid #cfded6;background:#f7fbf9;color:#315b51}
+.cf-opay-dialog-primary{border:1px solid #0d6e56;background:linear-gradient(120deg,#0d6c56,#148971);color:#fff}
+.cf-opay-dialog-primary span{font-size:16px;margin-left:3px}
+.cf-opay-dialog-actions button:focus-visible,.cf-opay-dialog-close:focus-visible{outline:3px solid #71cbbb;outline-offset:3px}
+@media(max-width:600px){.cf-opay-dialog-backdrop{align-items:end;padding:0}.cf-opay-dialog{width:100%;max-height:calc(100dvh - 8px);padding:30px 23px calc(24px + env(safe-area-inset-bottom));border-radius:26px 26px 0 0}.cf-opay-dialog h2{font-size:24px}.cf-opay-dialog-actions{grid-template-columns:1fr}.cf-opay-dialog-primary{grid-row:1}.cf-opay-advisory{padding:13px 12px}.cf-opay-advisory-copy span{font-size:12px}}

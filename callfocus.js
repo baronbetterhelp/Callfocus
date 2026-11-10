@@ -514,11 +514,11 @@ function setRecentCallsListMode(showList){
 }
 
 function showView(view, scroll=true){
-  if(['avatar','callers','recent','profile','settings','referrals','history'].includes(view) && !account){ requireAccount({type:'route',route:view},'Create an account or sign in to open your saved CallFocus workspace.'); return; }
+  if(['avatar','callers','recent','profile','settings','referrals','history','subscription'].includes(view) && !account){ requireAccount({type:'route',route:view},'Create an account or sign in to open your saved CallFocus workspace.'); return; }
   if(view==='recent') setRecentCallsListMode(true);
   activeView=view; qsa('.page-view').forEach(p=>p.classList.toggle('active',p.dataset.view===view)); qsa('.nav-anchor').forEach(n=>n.classList.toggle('active',n.dataset.route===view));
   closeMobileMenu(); $('headerAccountDropdown').classList.add('hidden');
-  if(view==='recent') renderRecentThreads(); if(view==='profile')renderProfile(); if(view==='settings')renderSettings(); if(view==='referrals'||view==='credits')window.CallFocusRenderReferrals?.(); if(view==='history')window.CallFocusHistory?.refresh?.();
+  if(view==='recent') renderRecentThreads(); if(view==='profile')renderProfile(); if(view==='settings')renderSettings(); if(view==='referrals'||view==='credits')window.CallFocusRenderReferrals?.(); if(view==='history')window.CallFocusHistory?.refresh?.(); if(view==='subscription')window.CallFocusSubscriptionPanel?.refresh?.();
   // V16.59: a view render must never reposition the user's viewport.
 }
 function openMobileMenu(){ $('mobileMenuWrap').classList.remove('hidden'); $('mobileMenuBtn').setAttribute('aria-expanded','true'); $('mobileMenuBtn').querySelector('.menu-glyph').textContent='×'; renderMobileAccount(); renderMobileRecents(); }
@@ -1748,7 +1748,7 @@ initOptions(); bindLocationAutocomplete(); bind(); restoreSession(); applyAdminL
 /* ===== v10.5-patch.js ===== */
 /* CallFocus V10.5 — composer-first Recent Calls + per-call copy details */
 (()=>{
-  const CF_CALL_LANGUAGES_V114=[['English','English'],['Spanish','Spanish / Español'],['French','French / Français'],['Italian','Italian / Italiano'],['German','German / Deutsch'],['Portuguese','Portuguese / Português'],['Dutch','Dutch / Nederlands'],['Arabic','Arabic / العربية'],['Hindi','Hindi / हिन्दी'],['Mandarin Chinese','Mandarin Chinese / 中文'],['Cantonese','Cantonese / 粵語'],['Japanese','Japanese / 日本語'],['Korean','Korean / 한국어'],['Russian','Russian / Русский'],['Turkish','Turkish / Türkçe'],['Vietnamese','Vietnamese / Tiếng Việt'],['Polish','Polish / Polski'],['Ukrainian','Ukrainian / Українська'],['Greek','Greek / Ελληνικά'],['Hebrew','Hebrew / עברית'],['Indonesian','Indonesian / Bahasa Indonesia'],['Malay','Malay / Bahasa Melayu'],['Thai','Thai / ไทย'],['Swahili','Swahili / Kiswahili'],['Filipino','Filipino / Tagalog'],['Romanian','Romanian / Română'],['Czech','Czech / Čeština'],['Hungarian','Hungarian / Magyar'],['Swedish','Swedish / Svenska'],['Norwegian','Norwegian / Norsk'],['Danish','Danish / Dansk'],['Finnish','Finnish / Suomi']];
+  const CF_CALL_LANGUAGES_V114=[['English','English'],['Spanish','Spanish / Español'],['French','French / Français'],['Italian','Italian / Italiano'],['German','German / Deutsch'],['Portuguese','Portuguese / Português'],['Dutch','Dutch / Nederlands'],['Arabic','Arabic / العربية'],['Hindi','Hindi / हिन्दी'],['Mandarin Chinese','Mandarin Chinese / 中文'],['Cantonese','Cantonese / 粵語'],['Japanese','Japanese / 日本語'],['Korean','Korean / 한국어'],['Russian','Russian / Русский'],['Turkish','Turkish / Türkçe'],['Vietnamese','Vietnamese / Tiếng Việt'],['Polish','Polish / Polski'],['Ukrainian','Ukrainian / Українська'],['Greek','Greek / Ελληνικά'],['Hebrew','Hebrew / עברית'],['Indonesian','Indonesian / Bahasa Indonesia'],['Malay','Malay / Bahasa Melayu'],['Thai','Thai / ไทย'],['Swahili','Swahili / Kiswahili'],['Filipino','Filipino / Tagalog'],['Romanian','Romanian / Română'],['Czech','Czech / Čeština'],['Hungarian','Hungarian / Magyar'],['Swedish','Swedish / Svenska'],['Norwegian','Norwegian / Norsk'],['Danish','Danish / Dansk'],['Finnish','Finnish / Suomi'],['Slovenian','Slovenian / Slovenščina']];
   function languageOptionsV114(selected){return CF_CALL_LANGUAGES_V114.map(([v,l])=>`<option value="${esc(v)}" ${v===(selected||'English')?'selected':''}>${esc(l)}</option>`).join('')}
   function localHourV105(tz){
     try{
@@ -7680,13 +7680,64 @@ ${approvedPatterns}
   const cfFetch=(path,opts={})=>{const h=new Headers(opts.headers||{});if(token())h.set('Authorization',`Bearer ${token()}`);if(opts.body&&!h.has('Content-Type'))h.set('Content-Type','application/json');return fetch(path,{...opts,headers:h,cache:'no-store'})};
   const readJson=async res=>{try{return await res.json()}catch{return {}}};
   let busy=false;
+  // V16.78: Show a clear advisory BEFORE initializing KoraPay, not after a customer
+  // has already been redirected to a bank transfer account. It never affects
+  // Paystack, PocketFi, Flutterwave, manual transfers, or verification callbacks.
+  function confirmKoraBankChoice(){
+    return new Promise(resolve=>{
+      const overlay=document.createElement('div');
+      overlay.className='cf-opay-dialog-backdrop';
+      overlay.innerHTML=`
+        <section class="cf-opay-dialog" role="dialog" aria-modal="true" aria-labelledby="cfOpayHeading" aria-describedby="cfOpayDescription">
+          <button type="button" class="cf-opay-dialog-close" data-cf-opay-cancel aria-label="Close payment notice">&times;</button>
+          <div class="cf-opay-dialog-symbol" aria-hidden="true">!</div>
+          <div class="cf-opay-dialog-kicker">PAYMENT NOTICE</div>
+          <h2 id="cfOpayHeading">Before you pay with KoraPay</h2>
+          <p id="cfOpayDescription">OPay bank transfers are currently unavailable for this checkout. <strong>Please choose a different bank</strong> when making your transfer.</p>
+          <div class="cf-opay-dialog-detail">You can still continue to KoraPay and pay using another supported bank.</div>
+          <div class="cf-opay-dialog-actions">
+            <button type="button" class="cf-opay-dialog-secondary" data-cf-opay-cancel>Not now</button>
+            <button type="button" class="cf-opay-dialog-primary" data-cf-opay-continue>Continue to KoraPay <span aria-hidden="true">&rarr;</span></button>
+          </div>
+        </section>`;
+      const previousFocus=document.activeElement,previousOverflow=document.body.style.overflow;
+      let settled=false;
+      function finish(confirmed){
+        if(settled)return;
+        settled=true;
+        document.removeEventListener('keydown',onKeyDown,true);
+        overlay.remove();document.body.style.overflow=previousOverflow;
+        try{previousFocus?.focus({preventScroll:true})}catch{}
+        resolve(confirmed);
+      }
+      function onKeyDown(event){
+        if(event.key==='Escape'){event.preventDefault();finish(false);return}
+        if(event.key!=='Tab')return;
+        const controls=[...overlay.querySelectorAll('button:not(:disabled)')];
+        if(!controls.length)return;
+        if(event.shiftKey&&document.activeElement===controls[0]){event.preventDefault();controls[controls.length-1].focus()}
+        else if(!event.shiftKey&&document.activeElement===controls[controls.length-1]){event.preventDefault();controls[0].focus()}
+      }
+      overlay.querySelectorAll('[data-cf-opay-cancel]').forEach(el=>el.addEventListener('click',()=>finish(false)));
+      overlay.querySelector('[data-cf-opay-continue]')?.addEventListener('click',()=>finish(true));
+      overlay.addEventListener('click',event=>{if(event.target===overlay)finish(false)});
+      document.addEventListener('keydown',onKeyDown,true);
+      document.body.appendChild(overlay);document.body.style.overflow='hidden';
+      overlay.querySelector('.cf-opay-dialog-secondary')?.focus({preventScroll:true});
+    });
+  }
   async function checkout(){
     if(busy)return;
     const amount=Math.floor(Number(document.getElementById('customCreditAmount')?.value||0));
     if(!Number.isFinite(amount)||amount<300){window.toast?.('Minimum purchase is 300 credits.');return}
     if(!token()){try{window.showAuth?.('signin',null,'Sign in before purchasing credits.')}catch{}return}
     if(window.CallFocusPaymentAvailability?.korapay!==true){window.toast?.('KoraPay is not available yet.');return}
-    busy=true;const button=btn(),old=button?.textContent;
+    busy=true;
+    // No KoraPay transaction is initialized until the customer has read this notice.
+    const acknowledged=await confirmKoraBankChoice();
+    if(!acknowledged){busy=false;return}
+    if(window.CallFocusPaymentAvailability?.korapay!==true){busy=false;window.toast?.('KoraPay is not available yet.');return}
+    const button=btn(),old=button?.textContent;
     if(button){button.disabled=true;button.textContent='Opening KoraPay…'}
     try{
       const res=await cfFetch('/api/korapay/initialize',{method:'POST',body:JSON.stringify({credits:amount})});
@@ -8100,4 +8151,144 @@ ${approvedPatterns}
     }
     return result;
   };
+})();
+
+/* CallFocus V16.77: customer subscription page. Read-only except an explicit
+ * click on the EXISTING monthly renewal endpoint. Does not alter voice routing. */
+(()=>{'use strict';
+ const $=id=>document.getElementById(id);
+ const DAY=86400000;
+ const token=()=>{try{return localStorage.getItem('callfocus_server_session_v1')||''}catch{return ''}};
+ let sequence=0, renewing=false, last=null;
+ const dateLabel=value=>{
+   const t=Date.parse(value||'');
+   if(!Number.isFinite(t))return '—';
+   return new Intl.DateTimeFormat('en-NG',{timeZone:'Africa/Lagos',day:'numeric',month:'short',year:'numeric'}).format(new Date(t));
+ };
+ const creditLabel=n=>`${Number(n||0).toLocaleString('en-NG')} credits`;
+ const setText=(id,text)=>{const node=$(id);if(node)node.textContent=text};
+ const show=(id,visible)=>{const node=$(id);if(node)node.hidden=!visible};
+ const feedback=message=>setText('cfSubscriptionFeedback',message||'');
+ const stateLabel={active:'Active',grace:'Renewal overdue',overdue:'Past grace period',grandfathered:'Transition pending',released:'Released',releasing:'Release in progress',unavailable:'Unavailable'};
+ function reset(){
+   const panel=$('cfSubscriptionState');if(!panel)return;
+   panel.textContent='Checking…';panel.dataset.state='';
+   $('page-subscription')?.querySelector('.cf-subscription-details')?.setAttribute('aria-busy','true');
+   setText('cfSubscriptionPlan','Checking your subscription');
+   setText('cfSubscriptionMessage','Fetching the latest status securely from CallFocus.');
+   for(const id of ['cfSubscriptionBooked','cfSubscriptionExpires','cfSubscriptionPrice','cfSubscriptionGrace'])setText(id,'—');
+   show('cfSubscriptionCountdown',false);show('cfSubscriptionRenew',false);show('cfSubscriptionExplore',false);feedback('');
+ }
+ function render(data){
+   const panel=$('cfSubscriptionState');if(!panel)return;
+   const mySlot=data?.me||null;
+   const sub=data?.subscription||null;
+   const now=Date.now();
+   $('page-subscription')?.querySelector('.cf-subscription-details')?.setAttribute('aria-busy','false');
+   setText('cfSubscriptionBooked',dateLabel(mySlot?.bookedAt));
+   setText('cfSubscriptionPrice',creditLabel(data?.renewalCredits||1000)+' / 30 days');
+   setText('cfSubscriptionExpires',dateLabel(sub?.paidThrough));
+   setText('cfSubscriptionGrace',dateLabel(sub?.graceUntil));
+   show('cfSubscriptionExplore',!mySlot);
+   show('cfSubscriptionRenew',!!mySlot&&!!sub?.mayRenew&&!renewing&&['active','grace','overdue'].includes(sub?.state));
+   setText('cfSubscriptionRenew',`Renew for 30 days · ${creditLabel(data?.renewalCredits||1000)}`);
+   if(!mySlot){
+     panel.textContent='No voice subscription';panel.dataset.state='';
+     setText('cfSubscriptionPlan','No cloned-voice subscription');
+     setText('cfSubscriptionMessage','You can still make normal CallFocus calls using your wallet credits. A monthly plan is only required if you own a saved cloned voice.');
+     show('cfSubscriptionCountdown',false);
+     setText('cfSubscriptionBooked','Not applicable');setText('cfSubscriptionExpires','Not applicable');setText('cfSubscriptionGrace','Not applicable');
+     return;
+   }
+   if(!sub||!sub.state){
+     panel.textContent='Status unavailable';panel.dataset.state='unavailable';
+     setText('cfSubscriptionPlan','Monthly cloned voice');
+     setText('cfSubscriptionMessage','We could not confirm your renewal status. Try Refresh status before using a cloned voice.');
+     show('cfSubscriptionCountdown',false);return;
+   }
+   const state=sub.state;
+   panel.textContent=stateLabel[state]||'Unavailable';panel.dataset.state=state;
+   setText('cfSubscriptionPlan','Monthly cloned voice · 30 days');
+   setText('cfSubscriptionMessage',sub.message||'Your renewal information is shown below.');
+   if(state==='active'){
+     const ms=Date.parse(sub.paidThrough)-now;
+     if(Number.isFinite(ms)&&ms>0){
+       setText('cfSubscriptionDays',String(Math.ceil(ms/DAY)));
+       setText('cfSubscriptionDaysLabel',Math.ceil(ms/DAY)===1?'Day remaining until expiry':'Days remaining until expiry');
+       show('cfSubscriptionCountdown',true);return;
+     }
+   }
+   if(state==='grace'){
+     const left=Date.parse(sub.graceUntil)-now;
+     if(Number.isFinite(left)&&left>0){
+       setText('cfSubscriptionDays',String(Math.ceil(left/DAY)));
+       setText('cfSubscriptionDaysLabel',Math.ceil(left/DAY)===1?'Day left to renew before release eligibility':'Days left to renew before release eligibility');
+       show('cfSubscriptionCountdown',true);return;
+     }
+   }
+   if(state==='overdue'){
+     setText('cfSubscriptionDays','0');setText('cfSubscriptionDaysLabel','Grace days remaining · eligible for admin review');show('cfSubscriptionCountdown',true);return;
+   }
+   show('cfSubscriptionCountdown',false);
+ }
+ async function refresh(){
+   const page=$('page-subscription');if(!page)return;
+   const seq=++sequence,session=token();last=null;reset();
+   if(!session){
+     setText('cfSubscriptionState','Sign in required');
+     setText('cfSubscriptionPlan','Sign in to see your plan');
+     setText('cfSubscriptionMessage','Your subscription details are private to your CallFocus account.');
+     page.querySelector('.cf-subscription-details')?.setAttribute('aria-busy','false');
+     return;
+   }
+   try{
+     const response=await fetch('/api/permanent-slots/status',{method:'GET',headers:{Authorization:`Bearer ${session}`},cache:'no-store'});
+     const data=await response.json().catch(()=>({}));
+     if(seq!==sequence||session!==token())return;
+     if(!response.ok||!data?.ok||!data?.signedIn)throw Error(data?.error||'Could not fetch subscription details.');
+     last=data;render(data);
+   }catch(error){
+     if(seq!==sequence||session!==token())return;
+     $('cfSubscriptionState').textContent='Unavailable';$('cfSubscriptionState').dataset.state='unavailable';
+     $('page-subscription')?.querySelector('.cf-subscription-details')?.setAttribute('aria-busy','false');
+     setText('cfSubscriptionPlan','Subscription status unavailable');
+     setText('cfSubscriptionMessage','Your saved voice and wallet have not been changed. Refresh to try again.');
+     feedback(error?.message||'Could not check your subscription.');
+   }
+ }
+ async function renew(){
+   if(renewing||!last?.me||!last.subscription?.mayRenew||!token())return;
+   const price=Number(last.renewalCredits||1000);
+   if(!window.confirm(`Renew your cloned-voice subscription for 30 days using ${creditLabel(price)} from your CallFocus wallet?`))return;
+   renewing=true;
+   const btn=$('cfSubscriptionRenew');if(btn)btn.disabled=true;
+   feedback('Confirming your renewal securely…');
+   const session=token();
+   try{
+     const response=await fetch('/api/permanent-slots/renew',{method:'POST',headers:{Authorization:`Bearer ${session}`},cache:'no-store'});
+     const data=await response.json().catch(()=>({}));
+     if(session!==token())return;
+     if(!response.ok||!data?.ok)throw Error(data?.error||'Renewal could not be confirmed.');
+     await refresh();
+     if(session!==token())return;
+     feedback(data.chargedCredits?`Renewal confirmed. ${creditLabel(data.chargedCredits)} deducted once.`:'Existing renewal payment confirmed. No duplicate charge.');
+     document.dispatchEvent(new Event('cf-permanent-slots-changed'));
+     try{
+       const balance=await fetch('/api/account/data',{cache:'no-store',headers:{Authorization:`Bearer ${session}`}});
+       const payload=await balance.json().catch(()=>({}));
+       if(session===token()&&balance.ok&&payload?.data?.wallet)window.CallFocusCredits?.applyAuthoritativeWallet?.(payload.data.wallet);
+     }catch{}
+   }catch(error){if(session===token())feedback(error?.message||'Renewal could not be verified.');}
+   finally{renewing=false;if(btn)btn.disabled=false;}
+ }
+ function init(){
+   $('cfSubscriptionRefresh')?.addEventListener('click',refresh);
+   $('cfSubscriptionRenew')?.addEventListener('click',renew);
+   $('cfSubscriptionCredits')?.addEventListener('click',()=>showView('credits'));
+   $('cfSubscriptionExplore')?.addEventListener('click',()=>window.CallFocusPermanentSlots?.show?.(true));
+   document.addEventListener('cf-permanent-slots-changed',()=>{if(!renewing&&$('page-subscription')?.classList.contains('active'))refresh()});
+   window.addEventListener('storage',event=>{if(event.key==='callfocus_server_session_v1'){sequence++;last=null;if($('page-subscription')?.classList.contains('active'))refresh()}});
+ }
+ window.CallFocusSubscriptionPanel={refresh};
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();

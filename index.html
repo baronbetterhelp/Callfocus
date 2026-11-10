@@ -129,7 +129,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=16.59-scroll-stability" />
+  <link rel="stylesheet" href="/callfocus.css?v=16.78-opay-slovenian" />
   <link rel="stylesheet" href="/features.css?v=16.55" />
   <link rel="stylesheet" href="/elevenlabs.css?v=16.40">
   <link rel="stylesheet" href="/cf-controls.css?v=16.27" />
@@ -187,6 +187,7 @@
                 <small id="dropdownEmail">user@example.com</small>
               </div>
               <button data-account-route="credits">Call & voice credits</button>
+              <button data-account-route="subscription">My subscription</button>
               <button data-account-route="referrals">My referrals</button>
               <button data-account-route="settings">Account settings</button>
               <button data-account-route="profile">My profile</button>
@@ -205,6 +206,7 @@
             <button data-mobile-route="callers"><span class="menu-icon">◉</span><span>My Callers<small>Saved people and caller context</small></span></button>
             <button data-mobile-route="recent"><span class="menu-icon">◷</span><span>Recent Calls<small>Continue previous call threads</small></span></button>
             <button data-mobile-route="credits"><span class="menu-icon">◌</span><span>Call & Voice Credits<small>Shared balance, pricing and top-ups</small></span></button>
+            <button data-mobile-route="subscription"><span class="menu-icon" aria-hidden="true">◷</span><span>My Subscription<small>Plan, renewal date and time remaining</small></span></button>
             <button data-mobile-route="history"><span class="menu-icon">≡</span><span>Transactions & Usage<small>Payments and credit usage history</small></span></button>
             <button data-mobile-route="referrals"><span class="menu-icon">R</span><span>My Referrals<small>Share your code and track earned credits</small></span></button>
             <button data-mobile-route="profile"><span class="menu-icon">◎</span><span>My Profile<small>Your reusable information</small></span></button>
@@ -772,6 +774,10 @@
               <div class="credit-custom-summary"><span id="customCreditMinutes">3 minutes</span><strong id="customCreditNaira">₦3,000</strong></div>
             </div>
             <button class="credit-checkout-btn" id="creditCheckoutBtn" type="button" disabled aria-disabled="true"><span id="creditCheckoutLabel">Continue to payment</span><small id="creditCheckoutSummary">300 credits · ₦3,000</small></button>
+            <aside class="cf-opay-advisory" role="note" aria-label="KoraPay bank transfer notice">
+              <span class="cf-opay-advisory-mark" aria-hidden="true">!</span>
+              <span class="cf-opay-advisory-copy"><strong>Paying with a bank transfer?</strong><span>OPay transfers are currently unavailable for KoraPay payments. Please use another bank to avoid unsuccessful transfers.</span></span>
+            </aside>
             <button class="korapay-checkout-btn hidden" id="korapayCheckoutBtn" type="button" disabled>Pay with KoraPay</button>
             <button class="korapay-checkout-btn hidden" id="pocketfiCheckoutBtn" type="button" disabled>Pay with PocketFi</button>
             <div class="pocketfi-recovery" id="pocketfiRecoveryPanel">
@@ -888,6 +894,30 @@
             <label>Default call rules <span class="optional">Optional</span><textarea id="profileRules" rows="6" placeholder="Personal rules the voice assistant should normally follow"></textarea></label>
             <div class="info-note">Location and time zone are intentionally not stored on your profile. They belong to individual call threads.</div>
             <div class="form-actions"><button class="btn btn-primary" id="saveProfileBtn">Save profile</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-view app-page cf-subscription-page" id="page-subscription" data-view="subscription">
+        <div class="container app-page-inner narrow-app-page">
+          <div class="app-page-head"><div><span class="section-eyebrow">MY ACCOUNT</span><h1>My Subscription</h1><p>See your CallFocus call plan, cloned-voice subscription and the exact time remaining.</p></div></div>
+          <div class="cf-subscription-shell">
+            <div class="cf-subscription-baseline"><span class="cf-subscription-mini-label">CALLFOCUS CALL PLAN</span><strong>Standard calls · Pay as you go</strong><p>Use our normal Male/Female voices with your CallFocus credits. No monthly subscription is required for standard calls.</p></div>
+            <div class="cf-subscription-details" aria-live="polite" aria-busy="true">
+              <div class="cf-subscription-card-head"><span class="cf-subscription-mini-label">VOICE CLONING PLAN</span><span class="cf-subscription-pill" id="cfSubscriptionState">Checking…</span></div>
+              <h2 id="cfSubscriptionPlan">Checking your subscription</h2>
+              <p class="cf-subscription-description" id="cfSubscriptionMessage">Fetching the latest status securely from CallFocus.</p>
+              <div class="cf-subscription-countdown" id="cfSubscriptionCountdown" hidden><span class="cf-subscription-counter-number" id="cfSubscriptionDays">—</span><span class="cf-subscription-counter-copy" id="cfSubscriptionDaysLabel">Days until expiry</span></div>
+              <div class="cf-subscription-fields">
+                <div><span>Original slot booking</span><strong id="cfSubscriptionBooked">—</strong></div>
+                <div><span>Next renewal date</span><strong id="cfSubscriptionExpires">—</strong></div>
+                <div><span>Renewal price</span><strong id="cfSubscriptionPrice">—</strong></div>
+                <div><span>Grace period ends</span><strong id="cfSubscriptionGrace">—</strong></div>
+              </div>
+              <div class="cf-subscription-actions"><button type="button" class="btn btn-primary" id="cfSubscriptionRenew" hidden>Renew for 30 days</button><button type="button" class="btn btn-ghost" id="cfSubscriptionExplore" hidden>View voice slots</button><button type="button" class="btn btn-ghost" id="cfSubscriptionRefresh">Refresh status</button><button type="button" class="btn btn-ghost" id="cfSubscriptionCredits">View credits</button></div>
+              <p class="cf-subscription-feedback" id="cfSubscriptionFeedback" role="status" aria-live="polite"></p>
+              <p class="cf-subscription-footnote">A cloned voice is usable only while its monthly plan is paid. After expiry, access pauses; the saved voice remains reserved for seven more days unless released by Admin. Renewals deduct credits only after you confirm.</p>
+            </div>
           </div>
         </div>
       </section>
@@ -1014,6 +1044,7 @@
           <option value="Norwegian">Norwegian / Norsk</option>
           <option value="Danish">Danish / Dansk</option>
           <option value="Finnish">Finnish / Suomi</option>
+          <option value="Slovenian">Slovenian / Slovenščina</option>
         </select></label><div class="opening-preview">CallFocus will keep the entire call in the language you select here. An accent, isolated foreign words, or the other person changing languages will not make the voice switch languages.</div></div></div>
         <div class="field-section"><span class="field-number">08</span><div class="field-content"><div class="field-heading"><strong>Voice selection</strong><small>Use the standard Male/Female voice or select one of your own saved AI voice profiles below.</small></div><div class="voice-choice"><button type="button" class="voice-option active" data-voice="male"><span>Male</span><small id="maleVoiceLabel">Default male voice</small></button><button type="button" class="voice-option" data-voice="female"><span>Female</span><small id="femaleVoiceLabel">Default female voice</small></button></div><input type="hidden" id="newCallVoiceGender" value="male" />
           <div class="call-opening-box">
@@ -1123,7 +1154,7 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=16.70-secure-billing"></script>
+  <script src="/callfocus.js?v=16.78-opay-slovenian"></script>
   <script src="/cf-audio-convert.js?v=16.33"></script>
   <link rel="stylesheet" href="/permanent-slots.css?v=16.75-all-slots-monthly"><script src="/permanent-slots-client.js?v=16.75-all-slots-monthly"></script><script src="/elevenlabs.js?v=16.75-all-slots-monthly"></script>
   <script src="/cf-controls-client.js?v=16.28"></script>

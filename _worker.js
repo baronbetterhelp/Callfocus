@@ -19,7 +19,7 @@ function callFocusSecondsForCredits(credits) {
   return Math.round(Math.max(0, Number(credits) || 0) * CALLFOCUS_SECONDS_PER_CREDIT);
 }
 
-const CALL_LANGUAGES = ['English','Spanish','French','Italian','German','Portuguese','Dutch','Arabic','Hindi','Mandarin Chinese','Cantonese','Japanese','Korean','Russian','Turkish','Vietnamese','Polish','Ukrainian','Greek','Hebrew','Indonesian','Malay','Thai','Swahili','Filipino','Romanian','Czech','Hungarian','Swedish','Norwegian','Danish','Finnish'];
+const CALL_LANGUAGES = ['English','Spanish','French','Italian','German','Portuguese','Dutch','Arabic','Hindi','Mandarin Chinese','Cantonese','Japanese','Korean','Russian','Turkish','Vietnamese','Polish','Ukrainian','Greek','Hebrew','Indonesian','Malay','Thai','Swahili','Filipino','Romanian','Czech','Hungarian','Swedish','Norwegian','Danish','Finnish','Slovenian'];
 function normalizeCallLanguage(value){ const raw=String(value||'').trim(); return CALL_LANGUAGES.includes(raw)?raw:'English'; }
 
 const CORE_LIVE_PROMPT = `# Role
