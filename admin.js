@@ -1391,3 +1391,21 @@ $('saveSignupEmailVerificationBtn')?.addEventListener('click', async () => {
  };
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
 })();
+
+
+/* V16.79 — KoraPay currency controls, independent from global checkout switches. */
+(()=>{'use strict';
+  const $=id=>document.getElementById(id);
+  const adminToken=()=>localStorage.getItem('callfocus_admin_session_v158')||sessionStorage.getItem('callfocus_admin_key')||'';
+  const codes=['GHS','XOF','USD'];let busy=false;
+  function status(message,ok){const el=$('cfKoraCurrencyAdminStatus');if(el){el.textContent=message;el.className='admin-availability-feedback '+(ok?'ok':'error')}}
+  async function call(options={}){const r=await fetch('/api/admin/korapay-currencies',{...options,headers:{'X-CallFocus-Admin-Key':adminToken(),...(options.body?{'Content-Type':'application/json'}:{})},cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok||!d.ok)throw Error(d.error||'Unable to manage KoraPay currencies.');return d}
+  async function load(){if(!adminToken()||busy)return;busy=true;try{const d=await call();for(const c of codes){$('cfKoraRate'+c).value=d.currencies?.[c]?.ngnPerUnit||'';$('cfKoraEnabled'+c).checked=d.currencies?.[c]?.enabled===true}status('Currency settings loaded. Only enabled currencies appear for customers.',true)}catch(e){status(e.message,false)}finally{busy=false}}
+  async function save(){if(busy)return;const currencies={};for(const c of codes){currencies[c]={enabled:$('cfKoraEnabled'+c).checked,ngnPerUnit:Number($('cfKoraRate'+c).value)||0};if(currencies[c].enabled&&!(currencies[c].ngnPerUnit>0)){status('Enter a valid rate before enabling '+c+'.',false);return}}
+    busy=true;const b=$('cfKoraSaveCurrencies');b.disabled=true;const before=b.textContent;b.textContent='Saving…';try{await call({method:'POST',body:JSON.stringify({currencies})});status('Currency pricing saved. Enabled currencies are available for new KoraPay purchases.',true)}catch(e){status(e.message,false)}finally{busy=false;b.disabled=false;b.textContent=before}}
+  $('cfKoraSaveCurrencies')?.addEventListener('click',save);
+  document.querySelector('[data-admin-tab="payments"]')?.addEventListener('click',()=>{if(adminToken())load()});
+  $('adminManualPaymentsRefreshBtn')?.addEventListener('click',()=>{if(adminToken())load()});
+  const gate=$('adminGate');if(gate){new MutationObserver(()=>{if(gate.classList.contains('hidden')||!adminToken())return;load()}).observe(gate,{attributes:true,attributeFilter:['class']})}
+  if(adminToken()&&gate?.classList.contains('hidden'))load();
+})();

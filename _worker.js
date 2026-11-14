@@ -193,6 +193,7 @@ const DEFAULT_CONFIG = {
   unlimitedCreditEmails: [],
   manualPaymentsEnabled: false,
   korapayPaymentsEnabled: true,
+  korapayForeignCurrencies: {GHS:{enabled:false,ngnPerUnit:0}, XOF:{enabled:false,ngnPerUnit:0}, USD:{enabled:false,ngnPerUnit:0}},
   pocketfiPaymentsEnabled: false,
   flutterwavePaymentsEnabled: false,
   pocketfiVirtualAccountsEnabled: false,
@@ -1987,6 +1988,33 @@ function openAiVoiceValue(config, id) {
   return custom ? { id: custom.id } : String(id || 'marin');
 }
 
+// V16.79: Admin-set NGN equivalents for each unit of the customer's payment currency.
+// Never invent a foreign exchange rate or accept one submitted by the customer.
+const KORAPAY_EXTRA_CURRENCIES = Object.freeze(['GHS','XOF','USD']);
+function cleanKorapayForeignCurrencies(input){
+  const out={};
+  for(const currency of KORAPAY_EXTRA_CURRENCIES){
+    const v=input&&typeof input==='object'&&input[currency]&&typeof input[currency]==='object'?input[currency]:{};
+    const rate=Number(v.ngnPerUnit);
+    const safeRate=Number.isFinite(rate)&&rate>=.001&&rate<=1000000?Math.round(rate*10000)/10000:0;
+    out[currency]={enabled:v.enabled===true&&safeRate>0,ngnPerUnit:safeRate};
+  }
+  return out;
+}
+function korapayCurrencyQuote(config,credits,currency){
+  const offer=quotePurchase(config,credits);
+  if(!offer)return null;
+  const code=String(currency||'NGN').trim().toUpperCase();
+  if(code==='NGN')return {...offer,currency:'NGN',paymentAmount:Number(offer.amountNaira),ngnPerUnit:1};
+  if(!KORAPAY_EXTRA_CURRENCIES.includes(code))return null;
+  const setting=cleanKorapayForeignCurrencies(config?.korapayForeignCurrencies)[code];
+  if(!setting.enabled)return null;
+  // Kora Checkout Redirect documents an integer charge amount. Round UP to a whole unit,
+  // show the exact amount before redirect, and snapshot the price for verification.
+  const paymentAmount=Math.ceil(offer.amountNaira/setting.ngnPerUnit-0.000000001);
+  if(!Number.isSafeInteger(paymentAmount)||paymentAmount<1||paymentAmount>100000000)return null;
+  return {...offer,currency:code,paymentAmount,ngnPerUnit:setting.ngnPerUnit};
+}
 async function getConfig(env) {
   if (!env.CALLFOCUS_CONFIG || typeof env.CALLFOCUS_CONFIG.get !== 'function') return { ...DEFAULT_CONFIG };
   try {
@@ -1999,6 +2027,7 @@ async function getConfig(env) {
     merged.customVoices = normalizeCustomVoices(merged.customVoices);
     merged.quickStart = sanitizeQuickStartConfig(merged.quickStart);
     Object.assign(merged, cleanPurchaseOffers(merged));
+    merged.korapayForeignCurrencies=cleanKorapayForeignCurrencies(merged.korapayForeignCurrencies);
     return merged;
   } catch {
     return { ...DEFAULT_CONFIG, customVoices: [], quickStart: sanitizeQuickStartConfig(DEFAULT_QUICK_START) };
@@ -2035,6 +2064,7 @@ function sanitizeConfig(input = {}) {
     unlimitedCreditEmails,
     manualPaymentsEnabled: input.manualPaymentsEnabled === true,
     korapayPaymentsEnabled: input.korapayPaymentsEnabled !== false,
+    korapayForeignCurrencies: cleanKorapayForeignCurrencies(input.korapayForeignCurrencies),
     pocketfiPaymentsEnabled: input.pocketfiPaymentsEnabled === true,
     flutterwavePaymentsEnabled: input.flutterwavePaymentsEnabled === true,
     pocketfiVirtualAccountsEnabled: input.pocketfiVirtualAccountsEnabled === true,
@@ -2378,6 +2408,7 @@ async function handlePublicConfig(env) {
     engine: 'GPT-Live 1',
     paymentsEnabled: callFocusPaymentsEnabled(env),
     korapayEnabled: korapayConfigured(env) && c.korapayPaymentsEnabled !== false,
+    korapayCurrencies: ['NGN',...KORAPAY_EXTRA_CURRENCIES.filter(code=>cleanKorapayForeignCurrencies(c.korapayForeignCurrencies)[code].enabled)],
     pocketfiEnabled: pocketfiConfigured(env) && c.pocketfiPaymentsEnabled === true,
     flutterwaveEnabled: flutterwaveConfigured(env) && c.flutterwavePaymentsEnabled === true,
     pocketfiBankEnabled: false, // Hosted checkout only; legacy static transfers remain reconcilable.
@@ -3122,6 +3153,28 @@ async function handleAdminAvailability(request, env) {
     flutterwavePaymentsEnabled: config.flutterwavePaymentsEnabled,
     pocketfiVirtualAccountsEnabled: config.pocketfiVirtualAccountsEnabled,
     websiteMaintenanceEnabled: config.websiteMaintenanceEnabled });
+}
+
+// V16.79: distinct admin-only KoraPay currency-pricing endpoint.
+async function handleAdminKorapayCurrencies(request,env){
+  if(!await adminAuthorized(request,env))return json({error:'Administrator sign-in required.'},401);
+  if(request.method==='GET'){
+    const c=await getConfig(env);
+    return json({ok:true,currencies:cleanKorapayForeignCurrencies(c.korapayForeignCurrencies)});
+  }
+  if(request.method!=='POST')return new Response('Method not allowed.',{status:405,headers:{Allow:'GET, POST'}});
+  if(!env.CALLFOCUS_CONFIG?.put)return json({error:'Global settings storage is unavailable.'},503);
+  let body;try{body=await request.json()}catch{return json({error:'Invalid request.'},400)}
+  const values=body?.currencies;
+  if(!values||typeof values!=='object'||Array.isArray(values))return json({error:'Currency settings are required.'},400);
+  for(const code of KORAPAY_EXTRA_CURRENCIES){
+    const v=values[code];if(!v||typeof v!=='object'||typeof v.enabled!=='boolean')return json({error:`Invalid ${code} configuration.`},400);
+    if(v.enabled&&(!Number.isFinite(Number(v.ngnPerUnit))||Number(v.ngnPerUnit)<.001||Number(v.ngnPerUnit)>1000000))return json({error:`Set a valid NGN-per-${code} rate before enabling ${code}.`},400);
+  }
+  const next=cleanKorapayForeignCurrencies(values);
+  const c=await getConfig(env);const saved=sanitizeConfig({...c,korapayForeignCurrencies:next});
+  await env.CALLFOCUS_CONFIG.put('global_config',JSON.stringify(saved));
+  return json({ok:true,currencies:saved.korapayForeignCurrencies});
 }
 
 // Render maintenance directly in the Worker, without loading any homepage JS or CSS.
@@ -5098,12 +5151,28 @@ async function recoverProcessedProviderCredit(env, user, reference, prior, payme
   const commit = await commitWalletPurchaseCredit(env, user, {
     reference, provider: payment.provider, channel: payment.channel || payment.provider,
     amountNaira: payment.amountNaira, credits: payment.credits,
+    paymentCurrency: String(prior.paymentCurrency||payment.paymentCurrency||'NGN'),
+    paymentAmount: Number(prior.paymentAmount??payment.paymentAmount??payment.amountNaira),
     baseCredits: payment.baseCredits, bonusCredits: payment.bonusCredits,
     bonusPercent: payment.bonusPercent, seconds, createdAt: prior.at || new Date().toISOString()
   });
   if (!commit.verified) return { credited: false, reason: 'wallet_not_verified' };
   if (commit.ledgerPruned) return { credited: false, reason: 'ledger_pruned_review' };
   return { credited: !commit.duplicate, duplicate: !!commit.duplicate, reconciled: !commit.duplicate, record: prior, wallet: commit.wallet };
+}
+
+// Customer-visible foreign currency quote from server-admin rates, not browser arithmetic.
+async function handleKorapayQuote(request,env){
+  if(request.method!=='GET')return new Response('Method not allowed.',{status:405,headers:{Allow:'GET'}});
+  if(!korapayConfigured(env))return json({error:'KoraPay is unavailable.'},503);
+  const config=await getConfig(env);
+  if(config.korapayPaymentsEnabled===false)return json({error:'KoraPay is temporarily disabled.'},503);
+  const u=new URL(request.url);
+  const credits=Number(u.searchParams.get('credits'));
+  const code=String(u.searchParams.get('currency')||'NGN').toUpperCase();
+  const quote=korapayCurrencyQuote(config,credits,code);
+  if(!quote)return json({error:'This payment currency is not enabled or its pricing is not configured.'},400);
+  return json({ok:true,currency:quote.currency,paymentAmount:quote.paymentAmount,amountNaira:quote.amountNaira,baseCredits:quote.baseCredits,bonusCredits:quote.bonusCredits,credits:quote.credits},200,{'Cache-Control':'no-store'});
 }
 
 async function handleKorapayInitialize(request,env){
@@ -5114,7 +5183,11 @@ async function handleKorapayInitialize(request,env){
   let body={};try{body=await request.json()}catch{}
   const credits=Number(body?.credits);
   if(!Number.isInteger(credits)||credits<PAYSTACK_MIN_CREDITS||credits>1000000)return json({error:`Minimum purchase is ${PAYSTACK_MIN_CREDITS} credits.`},400);
-  const offer=quotePurchase(await getConfig(env),credits);if(!offer)return json({error:'Invalid credit package.'},400);
+  const config=await getConfig(env);
+  const currency=String(body?.currency||'NGN').trim().toUpperCase();
+  const offer=korapayCurrencyQuote(config,credits,currency);
+  if(!offer)return json({error:'Selected payment currency is unavailable or has no configured price.'},400);
+  if(currency!=='NGN'&&Number(body?.expectedAmount)!==Number(offer.paymentAmount))return json({error:'The currency price changed. Refresh the quote before paying.'},409);
   const amountNaira=offer.amountNaira;
   const reference=`CFK-${Date.now()}-${crypto.randomUUID().replace(/-/g,'').slice(0,18)}`;
   const origin=new URL(request.url).origin;
@@ -5122,7 +5195,7 @@ async function handleKorapayInitialize(request,env){
   await env.CALLFOCUS_CONFIG.put(korapayPendingKey(reference),JSON.stringify(pending),{expirationTtl:KORAPAY_PENDING_TTL});
   try{
     const result=await korapayRequest(env,'/charges/initialize',{method:'POST',body:{
-      amount:amountNaira,currency:'NGN',reference,
+      amount:offer.paymentAmount,currency:offer.currency,reference,
       redirect_url:`${origin}/?korapay=return`,
       notification_url:`${origin}/api/korapay/webhook`,
       narration:'CallFocus shared calling and voice-note credits',
@@ -5136,7 +5209,7 @@ async function handleKorapayInitialize(request,env){
     // Recoverable across browser changes or a lost sessionStorage tab.
     try{await env.CALLFOCUS_CONFIG.put(korapayLastKey(auth.user.id), reference, { expirationTtl: KORAPAY_PENDING_TTL });}
     catch(e){console.warn('KoraPay optional return reference unavailable',String(e?.message||e));}
-    return json({ok:true,reference,credits,amountNaira,checkoutUrl});
+    return json({ok:true,reference,credits,amountNaira,paymentAmount:offer.paymentAmount,currency:offer.currency,checkoutUrl});
   }catch(error){
     // Do not discard a reference if the provider may have initialized it before a network timeout.
     console.error('KoraPay initialize failed:',error?.message||error);
@@ -5157,12 +5230,17 @@ async function creditVerifiedKorapayTransaction(env,reference){
   const payment=verify?.data||{};
   const refs=[payment.reference,payment.payment_reference,payment.transaction_reference].map(v=>String(v||'').trim()).filter(Boolean);
   if(!refs.includes(ref))return {credited:false,reason:'reference_mismatch'};
-  if(String(payment.status||'').toLowerCase()!=='success' || String(payment.currency||'').toUpperCase()!=='NGN')return {credited:false,reason:'not_successful',status:payment.status||'pending'};
+  if(String(payment.status||'').toLowerCase()!=='success')return {credited:false,reason:'not_successful',status:payment.status||'pending'};
+  const currency=String(expected.currency||'NGN').toUpperCase();
+  const paidCurrency=String(payment.currency||'').toUpperCase();
+  if(paidCurrency!==currency)return {credited:false,reason:'currency_mismatch'};
   if(payment.transaction_status && String(payment.transaction_status).toLowerCase()!=='success')return {credited:false,reason:'payment_not_fully_paid'};
   const amount=Number(payment.amount);
   const paid=payment.amount_paid==null?amount:Number(payment.amount_paid);
-  if(!Number.isFinite(amount)||!Number.isFinite(paid)||Math.abs(amount-Number(expected.amountNaira))>0.01||paid+0.01<Number(expected.amountNaira))return {credited:false,reason:'amount_mismatch'};
-  const breakdown=paymentPurchaseBreakdown(expected,amount);
+  const expectedAmount=Number(expected.paymentAmount??expected.amountNaira);
+  if(!Number.isFinite(amount)||!Number.isFinite(paid)||!Number.isFinite(expectedAmount)||Math.abs(amount-expectedAmount)>0.01||paid+0.01<expectedAmount)return {credited:false,reason:'amount_mismatch'};
+  // Wallet's pricing ledger is NGN-denominated; the foreign amount is verified separately.
+  const breakdown=paymentPurchaseBreakdown(expected,Number(expected.amountNaira));
   if(!breakdown)return {credited:false,reason:'credits_mismatch'};
   const {credits,baseCredits,bonusCredits,bonusPercent}=breakdown;
   const user=await env.CALLFOCUS_CONFIG.get(customerUserKey(expected.userId),{type:'json'});
@@ -5171,17 +5249,19 @@ async function creditVerifiedKorapayTransaction(env,reference){
   if(prior?.userId){
     return recoverProcessedProviderCredit(env, user, ref, prior, {
       provider: 'korapay', channel: String(payment.payment_method || payment.channel || 'korapay'),
-      amountNaira: Number(expected.amountNaira), credits, baseCredits, bonusCredits, bonusPercent
+      amountNaira: Number(expected.amountNaira), paymentCurrency:currency,paymentAmount:expectedAmount,
+      credits, baseCredits, bonusCredits, bonusPercent
     });
   }
   const seconds=purchaseSecondsForCredits(credits);
   const committed=await commitWalletPurchaseCredit(env,user,{
     reference:ref,provider:'korapay',channel:String(payment.payment_method||payment.channel||'korapay'),
-    amountNaira:Number(expected.amountNaira),credits,baseCredits,bonusCredits,bonusPercent,seconds,createdAt:new Date().toISOString()
+    amountNaira:Number(expected.amountNaira),paymentCurrency:currency,paymentAmount:expectedAmount,
+    credits,baseCredits,bonusCredits,bonusPercent,seconds,createdAt:new Date().toISOString()
   });
   if(!committed.verified)return {credited:false,reason:'wallet_not_verified'};
   if(committed.ledgerPruned)return {credited:false,duplicate:true,reason:'ledger_pruned'};
-  const record={userId:user.id,reference:ref,credits,baseCredits,bonusCredits,bonusPercent,secondsAdded:seconds,amountNaira:Number(expected.amountNaira),at:new Date().toISOString()};
+  const record={userId:user.id,reference:ref,credits,baseCredits,bonusCredits,bonusPercent,secondsAdded:seconds,amountNaira:Number(expected.amountNaira),paymentCurrency:currency,paymentAmount:expectedAmount,at:new Date().toISOString()};
   await env.CALLFOCUS_CONFIG.put(korapayProcessedKey(ref),JSON.stringify(record),{expirationTtl:KORAPAY_PROCESSED_TTL});
   await env.CALLFOCUS_CONFIG.delete(korapayPendingKey(ref));
   const referralReward=await safeAwardReferralAfterDeposit(env,user.id,{provider:'korapay',reference:ref,at:record.at});
@@ -5201,7 +5281,7 @@ async function handleKorapayVerify(request,env){
   if(String(expected.userId)!==String(auth.user.id))return json({error:'This payment belongs to another account.'},403);
   try{
     const result=await creditVerifiedKorapayTransaction(env,ref);
-    if(['reference_mismatch','amount_mismatch','credits_mismatch','ledger_pruned_review','receipt_invalid','receipt_mismatch','wallet_not_verified'].includes(result.reason)) return json({error:'This payment requires credit reconciliation. Please contact CallFocus support with your KoraPay reference.',code:result.reason},409);
+    if(['reference_mismatch','currency_mismatch','amount_mismatch','credits_mismatch','ledger_pruned_review','receipt_invalid','receipt_mismatch','wallet_not_verified'].includes(result.reason)) return json({error:'This payment requires credit reconciliation. Please contact CallFocus support with your KoraPay reference.',code:result.reason},409);
     const updated=await getCustomerDataForUpdate(env,auth.user.id,auth.user.name);
     return json({ok:true,credited:!!result.credited,duplicate:!!result.duplicate,transactionStatus:result.status||(result.credited||result.duplicate?'success':'pending'),reason:result.reason||'',wallet:updated.wallet,record:result.record||null});
   }catch(error){return json({error:error?.message||'KoraPay verification is temporarily unavailable.'},error?.status||502);}
@@ -7469,6 +7549,7 @@ export default {
     if (url.pathname === '/api/paystack/recover') return safeCustomerRoute('paystack-recover', () => handlePaystackRecover(request, env));
     if (url.pathname === '/api/paystack/dva') return safeCustomerRoute('paystack-dva', () => handlePaystackDva(request, env));
     if (url.pathname === '/api/paystack/webhook') return handlePaystackWebhook(request, env);
+    if (url.pathname === '/api/korapay/quote') return safeCustomerRoute('korapay-quote', () => handleKorapayQuote(request, env));
     if (url.pathname === '/api/korapay/initialize') return safeCustomerRoute('korapay-initialize', () => handleKorapayInitialize(request, env));
     if (url.pathname === '/api/korapay/verify') return safeCustomerRoute('korapay-verify', () => handleKorapayVerify(request, env));
     if (url.pathname === '/api/flutterwave/webhook') return handleFlutterwaveWebhook(request,env);
@@ -7512,6 +7593,7 @@ export default {
     if (url.pathname === '/api/admin/config') return handleAdminConfig(request, env);
     if (url.pathname === '/api/admin/purchase-offers') return handleAdminPurchaseOffers(request,env);
     if (url.pathname === '/api/admin/signup-email-verification') return handleAdminSignupEmailVerification(request, env);
+    if (url.pathname === '/api/admin/korapay-currencies') return handleAdminKorapayCurrencies(request, env);
     if (url.pathname === '/api/admin/availability') return handleAdminAvailability(request, env);
     if (url.pathname === '/api/admin/screenshot-limits') return handleAdminScreenshotLimits(request, env);
     if (url.pathname === '/api/admin/quick-start') return handleAdminQuickStart(request, env);

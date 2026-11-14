@@ -11,7 +11,21 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=16.59-scroll-stability" />
+  <link rel="stylesheet" href="/admin.css?v=16.79-kora-currencies" />
+  <style>
+/* V16.79 foreign KoraPay pricing controls */
+.cf-kora-currency-admin{margin:18px 0;padding:20px;background:linear-gradient(150deg,#f0f8f5,#fff);border:1px solid #c9e1d9;border-radius:19px;color:#25443e}
+.cf-kora-currency-admin h3{margin:0 0 7px;font-size:18px;color:#18463d}
+.cf-kora-currency-admin p{margin:0 0 16px;font-size:13px;line-height:1.6;color:#5b7770}
+.cf-kora-admin-table{display:grid;gap:8px;margin:0 0 14px}
+.cf-kora-admin-column-labels,.cf-kora-admin-row{display:grid;grid-template-columns:minmax(62px,.8fr) minmax(105px,1.4fr) minmax(75px,.65fr);align-items:center;gap:9px}
+.cf-kora-admin-column-labels{font-size:10px;font-weight:800;letter-spacing:.025em;color:#72827c}
+.cf-kora-admin-row{background:#fff;border:1px solid #dae7e1;border-radius:12px;padding:10px}
+.cf-kora-admin-row strong{font-size:13px;color:#234e44}
+.cf-kora-admin-row input[type=number]{min-width:0;width:100%;padding:12px;border:1px solid #c8dcd2;border-radius:9px;color:#173b33;background:#fff;font-size:14px}
+.cf-kora-admin-row label{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:750;color:#204d40}
+@media(max-width:430px){.cf-kora-currency-admin{padding:15px}.cf-kora-admin-column-labels,.cf-kora-admin-row{grid-template-columns:51px minmax(100px,1fr) 55px;gap:6px}.cf-kora-admin-row{padding:8px}.cf-kora-admin-row strong{font-size:11px}}
+  </style>
 <link rel="stylesheet" href="/affiliate.css?v=16.38"><style>.cf-slot-admin-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.cf-slot-admin-bookings{font:12px/1.65 ui-monospace,monospace;white-space:pre-wrap;overflow-wrap:anywhere;background:rgba(100,150,120,.06);padding:14px;border-radius:12px;max-height:260px;overflow:auto}.cf-slot-admin-card small{display:block}@media(max-width:620px){.cf-slot-admin-grid{grid-template-columns:1fr}}</style><style>
 .cf-slot-stats-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}
 .cf-slot-stats-grid>div{background:#f6faf8;border:1px solid #d7e8df;border-radius:14px;padding:12px;min-width:0}
@@ -429,6 +443,18 @@
           <label class="toggle-row admin-availability-toggle" style="display:none"><span>PocketFi fixed bank account (legacy disabled)</span><input id="adminPocketfiBankEnabled" type="checkbox" /><small>Off by default. Requires valid PocketFi Public and Secret keys. Customers receive dedicated Kuda accounts. Only signed, exact-amount deposits are eligible for credits.</small></label>
           <label class="toggle-row admin-availability-toggle"><span>PocketFi checkout</span><input id="adminPocketfiPaymentsEnabled" type="checkbox" /><small>Requires POCKETFI_SECRET_KEY and POCKETFI_BUSINESS_ID in Cloudflare. Starts off.</small></label>
           <p class="admin-availability-note">Each switch controls visibility and new checkout requests. Previously received payment confirmations and pending transfers can still be processed. Paystack is not changed.</p>
+          <section class="cf-kora-currency-admin" aria-label="KoraPay international currencies">
+            <h3>International KoraPay payments</h3>
+            <p>Let customers pay directly in GHS, XOF, or USD and receive CallFocus credits after verification. Set how many naira one unit of each currency is worth for pricing. KoraPay's checkout expects a whole currency amount, and the customer sees the final price before checkout. Do not enable a currency until its rate and your KoraPay collection access are confirmed.</p>
+            <div class="cf-kora-admin-table">
+              <div class="cf-kora-admin-column-labels"><span>Currency</span><span>₦ per 1 currency unit</span><span>Enabled</span></div>
+              <div class="cf-kora-admin-row"><strong>🇬🇭 GHS</strong><input id="cfKoraRateGHS" type="number" min="0" max="1000000" step="0.0001" inputmode="decimal" placeholder="Set rate" aria-label="Naira value per 1 GHS" /><label><input id="cfKoraEnabledGHS" type="checkbox" aria-label="Enable GHS" /> On</label></div>
+              <div class="cf-kora-admin-row"><strong>🌍 XOF</strong><input id="cfKoraRateXOF" type="number" min="0" max="1000000" step="0.0001" inputmode="decimal" placeholder="Set rate" aria-label="Naira value per 1 XOF" /><label><input id="cfKoraEnabledXOF" type="checkbox" aria-label="Enable XOF" /> On</label></div>
+              <div class="cf-kora-admin-row"><strong>🇺🇸 USD</strong><input id="cfKoraRateUSD" type="number" min="0" max="1000000" step="0.0001" inputmode="decimal" placeholder="Set rate" aria-label="Naira value per 1 USD" /><label><input id="cfKoraEnabledUSD" type="checkbox" aria-label="Enable USD" /> On</label></div>
+            </div>
+            <button class="btn btn-primary" type="button" id="cfKoraSaveCurrencies">Save currency pricing</button>
+            <div class="admin-availability-feedback" id="cfKoraCurrencyAdminStatus" role="status" aria-live="polite">Foreign currencies are disabled until you configure and save their rates.</div>
+          </section>
           <button type="button" class="btn btn-primary admin-availability-save" id="savePaymentAvailabilityBtn">Apply payment availability</button>
           <div class="admin-availability-feedback" id="adminPaymentAvailabilityFeedback" aria-live="polite"></div>
           <div class="form-grid two">
@@ -725,7 +751,7 @@
     </section>
   </main>
   <div class="toast hidden" id="toast"></div>
-  <script src="/admin.js?v=16.59-scroll-stability"></script><script src="/admin-video.js?v=16.51-price-persistence"></script><script src="/cf-controls-admin.js?v=16.24"></script>
+  <script src="/admin.js?v=16.79-kora-currencies"></script><script src="/admin-video.js?v=16.51-price-persistence"></script><script src="/cf-controls-admin.js?v=16.24"></script>
 <script src="/cf-temp-voice-admin.js?v=16.34"></script>
 <script src="/cf-clone-availability-admin.js?v=16.44"></script><script src="/permanent-slots-admin.js?v=16.76" defer></script>
 <script>window.addEventListener('load',()=>{const panel=document.querySelector('[data-voice-admin-build="16.76"]');if(!panel)return;const status=document.getElementById('cfSlotAccount6Status');if(status&&!window.__cfVoiceAdmin1676Loaded){status.textContent='Account 6 controls did not load. Do not change voice-slot settings. Refresh this Admin page after confirming the V16.76 Cloudflare deployment is active.';}});</script>

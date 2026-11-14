@@ -5228,6 +5228,7 @@ ${approvedPatterns}
     const paystack=state.paystack===true, manual=state.manual===true, flutterwave=state.flutterwave===true, korapay=state.korapay===true, pocketfi=state.pocketfi===true, pocketfiBank=state.pocketfiBank===true, known=state.known===true;
     const available=known&&(paystack||manual);
     window.CallFocusPaymentAvailability={paystack,manual,flutterwave,korapay,pocketfi,pocketfiBank,available,known,error:state.error||''};
+    window.dispatchEvent(new CustomEvent('callfocus:paymentAvailability',{detail:{korapay}}));
     document.documentElement.classList.toggle('korapay-enabled',korapay);
     const flwButton=document.getElementById('flutterwaveCheckoutBtn');if(flwButton){flwButton.classList.toggle('hidden',!flutterwave);flwButton.disabled=!flutterwave||Number(document.getElementById('customCreditAmount')?.value)<300;}
     document.documentElement.classList.toggle('pocketfi-enabled',pocketfi||pocketfiBank);
@@ -7640,7 +7641,9 @@ ${approvedPatterns}
   const usageLabel=row=>{const type=String(row?.type||'').toLowerCase();if(type==='live_call')return 'Live call';if(type==='voice_note')return 'Voice note';if(type==='admin_credit_grant')return 'Credit added by CallFocus';if(type==='admin_bulk_credit_gift')return 'CallFocus credit gift';if(type==='admin_balance_reset')return 'Balance removed';if(type==='usage')return 'Credit usage';return type?type.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()):'Account adjustment';};
   const isAdjustment=row=>['admin_credit_grant','admin_bulk_credit_gift','admin_balance_reset'].includes(String(row?.type||'').toLowerCase());
   const isConsumption=row=>!isAdjustment(row);
-  const transactionHtml=(row,kind='purchase')=>{const isPurchase=kind==='purchase';const isRemoval=!isPurchase&&String(row?.type||'').toLowerCase()==='admin_balance_reset';const title=isPurchase?providerLabel(row):usageLabel(row);const creditValue=Math.max(0,Number(row?.credits)||balanceCredits(Math.abs(Number(row?.seconds)||0)));const amount=isPurchase&&Number(row?.amountNaira)>0?money(row.amountNaira):credits(creditValue);const meta=[];if(isPurchase&&Number(row?.credits)>0)meta.push(credits(row.credits));if(row?.reference)meta.push(String(row.reference));if(row?.note&&!isPurchase)meta.push(String(row.note));const sign=isRemoval?'−':'+';const iconClass=isRemoval?'history-row-out':'history-row-in';const amountClass=isRemoval?'history-negative':'history-positive';return `<article class="history-row"><div class="history-row-main"><span class="history-row-icon ${iconClass}">${sign}</span><div><strong>${escHistory(title)}</strong><span>${escHistory(when(row?.createdAt||row?.updatedAt))}</span>${meta.length?`<small>${escHistory(meta.join(' · '))}</small>`:''}</div></div><b class="history-row-amount ${amountClass}">${sign}${escHistory(amount)}</b></article>`;};
+  const transactionHtml=(row,kind='purchase')=>{const isPurchase=kind==='purchase';const isRemoval=!isPurchase&&String(row?.type||'').toLowerCase()==='admin_balance_reset';const title=isPurchase?providerLabel(row):usageLabel(row);const creditValue=Math.max(0,Number(row?.credits)||balanceCredits(Math.abs(Number(row?.seconds)||0)));const foreign=isPurchase&&row?.provider==='korapay'&&['GHS','XOF','USD'].includes(row.paymentCurrency)&&Number(row.paymentAmount)>0;
+    const amount=foreign?`${row.paymentCurrency} ${Number(row.paymentAmount).toLocaleString(undefined,{maximumFractionDigits:2})}`:isPurchase&&Number(row?.amountNaira)>0?money(row.amountNaira):credits(creditValue);const meta=[];
+    if(foreign)meta.push('Reference value: '+money(row.amountNaira));if(isPurchase&&Number(row?.credits)>0)meta.push(credits(row.credits));if(row?.reference)meta.push(String(row.reference));if(row?.note&&!isPurchase)meta.push(String(row.note));const sign=isRemoval?'−':'+';const iconClass=isRemoval?'history-row-out':'history-row-in';const amountClass=isRemoval?'history-negative':'history-positive';return `<article class="history-row"><div class="history-row-main"><span class="history-row-icon ${iconClass}">${sign}</span><div><strong>${escHistory(title)}</strong><span>${escHistory(when(row?.createdAt||row?.updatedAt))}</span>${meta.length?`<small>${escHistory(meta.join(' · '))}</small>`:''}</div></div><b class="history-row-amount ${amountClass}">${sign}${escHistory(amount)}</b></article>`;};
   const usageHtml=row=>{const used=Math.max(0,Number(row?.credits)||balanceCredits(row?.seconds||0));const meta=[];if(Number(row?.seconds)>0)meta.push(`${Math.round(Number(row.seconds))} sec`);if(row?.note)meta.push(String(row.note));return `<article class="history-row"><div class="history-row-main"><span class="history-row-icon history-row-out">−</span><div><strong>${escHistory(usageLabel(row))}</strong><span>${escHistory(when(row?.updatedAt||row?.createdAt))}</span>${meta.length?`<small>${escHistory(meta.join(' · '))}</small>`:''}</div></div><b class="history-row-amount history-negative">−${escHistory(credits(used))}</b></article>`;};
   function render(){
     if(!root())return;
@@ -7680,6 +7683,40 @@ ${approvedPatterns}
   const cfFetch=(path,opts={})=>{const h=new Headers(opts.headers||{});if(token())h.set('Authorization',`Bearer ${token()}`);if(opts.body&&!h.has('Content-Type'))h.set('Content-Type','application/json');return fetch(path,{...opts,headers:h,cache:'no-store'})};
   const readJson=async res=>{try{return await res.json()}catch{return {}}};
   let busy=false;
+  const currencySel=()=>document.getElementById('cfKoraCurrencySelect');
+  let pendingQuote=null,quoteCounter=0,quoteTimer=null;
+  const currencySymbols={NGN:'₦',GHS:'GH₵',XOF:'CFA ',USD:'$'};
+  const money=(value,code)=>`${currencySymbols[code]||code+' '}${Number(value).toLocaleString('en',{maximumFractionDigits:0})}`;
+  async function refreshQuote(){
+    const panel=document.getElementById('cfKoraCurrencyPanel'),line=document.getElementById('cfKoraCurrencyQuote');
+    if(!panel||!line)return;
+    const mine=++quoteCounter;pendingQuote=null;
+    const credits=Number(document.getElementById('customCreditAmount')?.value||0),currency=currencySel()?.value||'NGN';
+    document.querySelectorAll('#creditPurchaseSection .cf-opay-advisory').forEach(el=>el.classList.toggle('hidden',currency!=='NGN'));
+    if(!(credits>=300)||!Number.isInteger(credits)){line.textContent='Choose a valid credit amount first.';return}
+    line.textContent='Checking your payment amount…';
+    try{const res=await cfFetch(`/api/korapay/quote?credits=${encodeURIComponent(credits)}&currency=${encodeURIComponent(currency)}`);const result=await readJson(res);
+      if(mine!==quoteCounter)return;
+      if(!res.ok||!result.ok)throw Error(result.error||'Currency price unavailable.');
+      pendingQuote={...result,requestedCredits:credits};
+      line.textContent=`Pay ${money(result.paymentAmount,result.currency)} for ${Number(result.credits).toLocaleString()} credits. NGN price equivalent: ${money(result.amountNaira,'NGN')}.`;
+    }catch(error){if(mine===quoteCounter)line.textContent=error.message||'Unable to calculate this currency price.'}
+  }
+  async function currencyChoices(){
+    const panel=document.getElementById('cfKoraCurrencyPanel'),selector=currencySel();if(!panel||!selector)return;
+    try{const r=await fetch('/api/public-config',{cache:'no-store'});const cfg=await readJson(r);
+      const enabled=Array.isArray(cfg?.korapayCurrencies)?cfg.korapayCurrencies:['NGN'];
+      const options={NGN:'🇳🇬 Nigerian naira (NGN)',GHS:'🇬🇭 Ghana cedi (GHS)',XOF:'🌍 West African CFA franc (XOF)',USD:'🇺🇸 US dollar (USD)'};
+      const selected=selector.value;selector.innerHTML=enabled.filter(c=>options[c]).map(c=>`<option value="${c}">${options[c]}</option>`).join('');
+      if(enabled.includes(selected))selector.value=selected;
+      panel.classList.toggle('hidden',window.CallFocusPaymentAvailability?.korapay!==true);
+      await refreshQuote();
+    }catch{panel.classList.add('hidden')}
+  }
+  // Keep non-Kora payment methods unchanged: they continue showing their NGN prices.
+  currencySel()?.addEventListener('change',refreshQuote);
+  document.getElementById('customCreditAmount')?.addEventListener('input',()=>{clearTimeout(quoteTimer);quoteTimer=setTimeout(refreshQuote,250)});
+  document.querySelectorAll('[data-credit-package]')?.forEach(b=>b.addEventListener('click',()=>{clearTimeout(quoteTimer);quoteTimer=setTimeout(refreshQuote,100)}));
   // V16.78: Show a clear advisory BEFORE initializing KoraPay, not after a customer
   // has already been redirected to a bank transfer account. It never affects
   // Paystack, PocketFi, Flutterwave, manual transfers, or verification callbacks.
@@ -7693,8 +7730,8 @@ ${approvedPatterns}
           <div class="cf-opay-dialog-symbol" aria-hidden="true">!</div>
           <div class="cf-opay-dialog-kicker">PAYMENT NOTICE</div>
           <h2 id="cfOpayHeading">Before you pay with KoraPay</h2>
-          <p id="cfOpayDescription">OPay bank transfers are currently unavailable for this checkout. <strong>Please choose a different bank</strong> when making your transfer.</p>
-          <div class="cf-opay-dialog-detail">You can still continue to KoraPay and pay using another supported bank.</div>
+          <p id="cfOpayDescription">${pendingQuote?`You are about to pay <strong>${money(pendingQuote.paymentAmount,pendingQuote.currency)}</strong> for ${Number(pendingQuote.credits).toLocaleString()} CallFocus credits.`:'Review your payment before continuing.'}</p>
+          <div class="cf-opay-dialog-detail">${pendingQuote?.currency==='NGN'?'OPay bank transfers are currently unavailable. Please choose another bank when paying.':'Choose a supported payment method shown by KoraPay for your currency.'}</div>
           <div class="cf-opay-dialog-actions">
             <button type="button" class="cf-opay-dialog-secondary" data-cf-opay-cancel>Not now</button>
             <button type="button" class="cf-opay-dialog-primary" data-cf-opay-continue>Continue to KoraPay <span aria-hidden="true">&rarr;</span></button>
@@ -7733,14 +7770,17 @@ ${approvedPatterns}
     if(!token()){try{window.showAuth?.('signin',null,'Sign in before purchasing credits.')}catch{}return}
     if(window.CallFocusPaymentAvailability?.korapay!==true){window.toast?.('KoraPay is not available yet.');return}
     busy=true;
-    // No KoraPay transaction is initialized until the customer has read this notice.
+    const currency=currencySel()?.value||'NGN';
+    if(!pendingQuote||pendingQuote.currency!==currency||pendingQuote.requestedCredits!==amount)await refreshQuote();
+    if(!pendingQuote){busy=false;window.toast?.('Please check the KoraPay currency price before paying.');return}
+    // No KoraPay transaction is initialized until the customer has seen the exact charge.
     const acknowledged=await confirmKoraBankChoice();
     if(!acknowledged){busy=false;return}
     if(window.CallFocusPaymentAvailability?.korapay!==true){busy=false;window.toast?.('KoraPay is not available yet.');return}
     const button=btn(),old=button?.textContent;
     if(button){button.disabled=true;button.textContent='Opening KoraPay…'}
     try{
-      const res=await cfFetch('/api/korapay/initialize',{method:'POST',body:JSON.stringify({credits:amount})});
+      const res=await cfFetch('/api/korapay/initialize',{method:'POST',body:JSON.stringify({credits:amount,currency,expectedAmount:pendingQuote.paymentAmount})});
       const json=await readJson(res);if(!res.ok)throw new Error(json?.error||'Could not start KoraPay checkout.');
       if(!json?.checkoutUrl||!json?.reference)throw new Error('KoraPay checkout did not initialize.');
       sessionStorage.setItem('callfocus_korapay_reference',json.reference);
@@ -7779,7 +7819,10 @@ ${approvedPatterns}
       try{window.showView?.('credits',false)}catch{}
     }catch(error){window.toast?.(error?.message||'Could not verify KoraPay payment. Please contact support if charged.')}
   }
-  const init=()=>{btn()?.addEventListener('click',checkout);setTimeout(verifyReturn,650)};
+  const init=()=>{btn()?.addEventListener('click',checkout);setTimeout(verifyReturn,650);currencyChoices();
+    document.querySelector('[data-route="credits"]')?.addEventListener('click',()=>{currencyChoices()});
+    window.addEventListener('callfocus:paymentAvailability',event=>{if(event.detail?.korapay)currencyChoices();else document.getElementById('cfKoraCurrencyPanel')?.classList.add('hidden')});
+  };
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
 

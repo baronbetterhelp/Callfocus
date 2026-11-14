@@ -129,7 +129,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/callfocus.css?v=16.78-opay-slovenian" />
+  <link rel="stylesheet" href="/callfocus.css?v=16.79-multicurrency-kora" />
   <link rel="stylesheet" href="/features.css?v=16.55" />
   <link rel="stylesheet" href="/elevenlabs.css?v=16.40">
   <link rel="stylesheet" href="/cf-controls.css?v=16.27" />
@@ -778,6 +778,12 @@
               <span class="cf-opay-advisory-mark" aria-hidden="true">!</span>
               <span class="cf-opay-advisory-copy"><strong>Paying with a bank transfer?</strong><span>OPay transfers are currently unavailable for KoraPay payments. Please use another bank to avoid unsuccessful transfers.</span></span>
             </aside>
+            <section class="cf-kora-currency hidden" id="cfKoraCurrencyPanel" aria-label="KoraPay payment currency">
+              <div class="cf-kora-currency-head"><div><strong>Pay in your currency</strong><small>Choose the currency you will pay KoraPay with.</small></div><span>Secure checkout</span></div>
+              <label for="cfKoraCurrencySelect">Payment currency</label>
+              <select id="cfKoraCurrencySelect" autocomplete="off"><option value="NGN">🇳🇬 Nigerian naira (NGN)</option></select>
+              <div class="cf-kora-quote" id="cfKoraCurrencyQuote" aria-live="polite">Payment amount is calculated from your selected credits.</div>
+            </section>
             <button class="korapay-checkout-btn hidden" id="korapayCheckoutBtn" type="button" disabled>Pay with KoraPay</button>
             <button class="korapay-checkout-btn hidden" id="pocketfiCheckoutBtn" type="button" disabled>Pay with PocketFi</button>
             <div class="pocketfi-recovery" id="pocketfiRecoveryPanel">
@@ -1154,7 +1160,7 @@
 
   <div class="active-call-bar hidden" id="activeCallBar"><button id="restoreCallBtn"><span class="active-call-dot"></span><strong id="activeCallName">Call</strong><small id="activeCallTime">00:00</small></button><button class="active-call-end" id="activeCallEndBtn">End</button></div>
   <div class="toast hidden" id="toast"></div>
-  <script src="/callfocus.js?v=16.78-opay-slovenian"></script>
+  <script src="/callfocus.js?v=16.79-multicurrency-kora"></script>
   <script src="/cf-audio-convert.js?v=16.33"></script>
   <link rel="stylesheet" href="/permanent-slots.css?v=16.75-all-slots-monthly"><script src="/permanent-slots-client.js?v=16.75-all-slots-monthly"></script><script src="/elevenlabs.js?v=16.75-all-slots-monthly"></script>
   <script src="/cf-controls-client.js?v=16.28"></script>

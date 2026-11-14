@@ -4095,3 +4095,15 @@ html:not([data-theme="pearl"]) .cf-opay-advisory-copy span{color:#e0d5bb}
 .cf-opay-dialog-primary span{font-size:16px;margin-left:3px}
 .cf-opay-dialog-actions button:focus-visible,.cf-opay-dialog-close:focus-visible{outline:3px solid #71cbbb;outline-offset:3px}
 @media(max-width:600px){.cf-opay-dialog-backdrop{align-items:end;padding:0}.cf-opay-dialog{width:100%;max-height:calc(100dvh - 8px);padding:30px 23px calc(24px + env(safe-area-inset-bottom));border-radius:26px 26px 0 0}.cf-opay-dialog h2{font-size:24px}.cf-opay-dialog-actions{grid-template-columns:1fr}.cf-opay-dialog-primary{grid-row:1}.cf-opay-advisory{padding:13px 12px}.cf-opay-advisory-copy span{font-size:12px}}
+
+/* V16.79 -- multi-currency KoraPay chooser: only shown for that payment provider. */
+.cf-kora-currency{margin:14px 0 0;padding:16px;background:linear-gradient(140deg,#f4faf8,#fff);border:1px solid #c6ddd4;border-radius:19px;color:#153f37}
+.cf-kora-currency.hidden{display:none!important}
+.cf-kora-currency-head{display:flex;gap:12px;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+.cf-kora-currency-head strong{display:block;font-size:16px;line-height:1.3;color:#123b32}
+.cf-kora-currency-head small{display:block;font-size:12px;color:#628278;margin-top:4px}
+.cf-kora-currency-head>span{flex-shrink:0;background:#e4f2ec;border-radius:100px;padding:5px 9px;color:#146c57;font-size:10px;font-weight:800}
+.cf-kora-currency label{display:block;font-size:12px;font-weight:750;margin-bottom:7px}
+.cf-kora-currency select{width:100%;padding:14px 12px;background:white;color:#153b33;border:1px solid #bfd9cd;border-radius:13px;font-family:inherit;font-size:15px;font-weight:700;line-height:1.4;min-height:48px}
+.cf-kora-quote{padding:12px 13px;border:1px solid #d4e4dd;border-radius:12px;background:#e8f4ee;color:#165f4e;font-size:13px;line-height:1.55;margin-top:11px;font-weight:600}
+@media(max-width:480px){.cf-kora-currency{padding:14px}.cf-kora-currency-head>span{font-size:9px}}
