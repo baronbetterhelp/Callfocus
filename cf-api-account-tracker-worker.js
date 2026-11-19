@@ -1,4 +1,4 @@
-// CallFocus V16.83 — admin-only subscription calendar and provider usage monitor.
+// CallFocus V16.84 — admin-only subscription calendar and provider usage monitor.
 // Read-only provider requests. Never exposes, stores, or changes provider credentials.
 const ELEVEN_IDS = Array.from({length:6}, (_,i)=>`el-${i+1}`);
 const API_ACCOUNT_IDS = [...ELEVEN_IDS,'openai-api','xai-api'];
@@ -116,15 +116,16 @@ async function openaiUsage(env){
     return {ok:true,kind:'openai',configured:true,checkedAt,scope:projectId?'project':'organization',spend30dUsd:total,spendTodayUsd:today,periodStart:new Date(start*1000).toISOString(),partial,prepaidBalanceAvailable:false};
   }catch{return {ok:false,kind:'openai',configured:true,failureKind:'network',error:'OpenAI cost API could not be reached. Try Refresh All later.',checkedAt};}
 }
-// xAI has two different billing views: a posted prepaid ledger and a current-period
-// invoice preview. A posted ledger may NOT reflect the Console's live credit remaining.
-// No credentials are sent to clients. Both requests are strictly read-only.
+// xAI has different accounting surfaces: the posted prepaid ledger, a current-period
+// invoice preview, and a USD usage-analytics feed. None is guaranteed to reproduce
+// the Console's spendable balance. Never mislabel the posted ledger as spendable.
 function xaiCents(raw, allowNegative=true){
   if(typeof raw!=='string'&&!Number.isSafeInteger(raw))return null;
   if(!/^-?\d+$/.test(String(raw)))return null;
   const n=Number(raw);
   return Number.isSafeInteger(n)&&(allowNegative||n>=0)?n:null;
 }
+const xaiIsoUtc=d=>d.toISOString().slice(0,19).replace('T',' ');
 async function xaiUsage(env){
   const checkedAt=nowISO();
   const key=String(env.XAI_MANAGEMENT_KEY||'').trim(),teamId=String(env.XAI_TEAM_ID||'').trim();
@@ -143,10 +144,9 @@ async function xaiUsage(env){
     const result={ok:true,kind:'xai',checkedAt,currency:'USD',
       prepaidBalanceUsd:posted,postedLedgerBalanceUsd:posted,
       liveRemainingEstimateUsd:null,currentPeriodUsedUsd:null,estimateAvailable:false,
-      estimateNote:'xAI invoice preview unavailable. Posted ledger may overstate credits available during this billing period.'};
-    // The preview reports this billing period's prepaid credit allotment and credits used.
-    // -prepaidCredits.val - prepaidCreditsUsed.val is a BEST-EFFORT estimate, not an
-    // authoritative console balance. An unavailable/invalid response is never zero.
+      estimateSource:null,estimatePeriodStart:null,previewStatus:'unavailable',usageStatus:'not_checked',
+      estimateNote:'The posted ledger may overstate currently spendable credits. Check xAI Console.'};
+    // Preferred: xAI's documented invoice preview; use its billing-cycle-specific figures.
     try{
       const preview=await fetch(root+'/postpaid/invoice/preview',{
         headers,cache:'no-store',signal:AbortSignal.timeout(12000)
@@ -155,14 +155,53 @@ async function xaiUsage(env){
         const detail=await preview.json();
         const allotted=xaiCents(detail?.coreInvoice?.prepaidCredits?.val);
         const used=xaiCents(detail?.coreInvoice?.prepaidCreditsUsed?.val,false);
-        if(allotted!==null&&allotted<=0&&used!==null){
+        if(allotted!==null&&allotted<=0&&used!==null&&used<=-allotted){
           result.liveRemainingEstimateUsd=(-allotted-used)/100;
           result.currentPeriodUsedUsd=used/100;
           result.estimateAvailable=true;
-          result.estimateNote='Estimated from xAI current-period prepaid credits minus credits used; xAI Console remains authoritative.';
+          result.estimateSource='invoice_preview';
+          result.previewStatus='available';
+          result.estimateNote='Estimated from xAI current-period invoice preview. Check xAI Console for the actual available amount.';
+          return result;
         }
+        result.previewStatus='incomplete';
+      }else result.previewStatus='HTTP '+preview.status;
+    }catch{result.previewStatus='unavailable';}
+    // Fallback: xAI's read-only usage analytics (a POST query, not a billing action).
+    // An approximate period-to-date ledger minus spend can drift when a team has
+    // non-calendar billing periods, mid-period settlements, or delayed usage updates.
+    const now=new Date(),periodStart=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),1));
+    const analyticsRequest={timeRange:{startTime:xaiIsoUtc(periodStart),endTime:xaiIsoUtc(now),timezone:'Etc/GMT'},
+      timeUnit:'TIME_UNIT_DAY',values:[{name:'usd',aggregation:'AGGREGATION_SUM'}],groupBy:[],filters:[]};
+    try{
+      const usage=await fetch(root+'/usage',{method:'POST',headers:{...headers,'Content-Type':'application/json'},
+        body:JSON.stringify({analyticsRequest}),cache:'no-store',signal:AbortSignal.timeout(12000)});
+      if(!usage.ok){result.usageStatus='HTTP '+usage.status;return result;}
+      const report=await usage.json();
+      if(!Array.isArray(report?.timeSeries)||report.limitReached===true||!report.timeSeries.length){
+        result.usageStatus=report?.limitReached===true?'truncated':'incomplete';return result;
       }
-    }catch{} // Keep accurately labeled posted balance if the optional preview fails.
+      let count=0,total=0,invalid=false;
+      for(const series of report.timeSeries){
+        if(!Array.isArray(series?.dataPoints)){invalid=true;break;}
+        for(const point of series.dataPoints){
+          const cost=point?.values?.[0];
+          if(typeof cost!=='number'||!Number.isFinite(cost)||cost<0){invalid=true;break;}
+          total+=cost;count++;
+        }
+        if(invalid)break;
+      }
+      if(invalid||count===0||!Number.isFinite(total)||total>10000000){result.usageStatus='incomplete';return result;}
+      // If the deduction exceeds the ledger, the month and ledger can't reliably
+      // be reconciled; never show an invented negative spendable balance.
+      if(total>posted+0.005||posted<0){result.usageStatus='period_mismatch';return result;}
+      const estimate=posted-total;
+      result.liveRemainingEstimateUsd=Math.max(0,Math.round(estimate*100)/100);
+      result.currentPeriodUsedUsd=Math.round(total*100)/100;
+      result.estimateAvailable=true;result.estimateSource='usage_analytics';
+      result.estimatePeriodStart=periodStart.toISOString();result.usageStatus='available';
+      result.estimateNote='Approximate: posted ledger minus xAI usage since '+periodStart.toISOString().slice(0,10)+' (UTC). Mid-period ledger postings or reporting delays can change this estimate. The xAI Console balance is authoritative.';
+    }catch{result.usageStatus='unavailable';}
     return result;
   }catch{return {ok:false,kind:'xai',error:'xAI prepaid billing could not be refreshed. Try again.',checkedAt};}
 }
