@@ -1,4 +1,4 @@
-// CallFocus V16.82 — admin-only subscription calendar and provider usage monitor.
+// CallFocus V16.83 — admin-only subscription calendar and provider usage monitor.
 // Read-only provider requests. Never exposes, stores, or changes provider credentials.
 const ELEVEN_IDS = Array.from({length:6}, (_,i)=>`el-${i+1}`);
 const API_ACCOUNT_IDS = [...ELEVEN_IDS,'openai-api','xai-api'];
@@ -116,24 +116,55 @@ async function openaiUsage(env){
     return {ok:true,kind:'openai',configured:true,checkedAt,scope:projectId?'project':'organization',spend30dUsd:total,spendTodayUsd:today,periodStart:new Date(start*1000).toISOString(),partial,prepaidBalanceAvailable:false};
   }catch{return {ok:false,kind:'openai',configured:true,failureKind:'network',error:'OpenAI cost API could not be reached. Try Refresh All later.',checkedAt};}
 }
-// xAI balance requires its management key, not the inference XAI_API_KEY.
+// xAI has two different billing views: a posted prepaid ledger and a current-period
+// invoice preview. A posted ledger may NOT reflect the Console's live credit remaining.
+// No credentials are sent to clients. Both requests are strictly read-only.
+function xaiCents(raw, allowNegative=true){
+  if(typeof raw!=='string'&&!Number.isSafeInteger(raw))return null;
+  if(!/^-?\d+$/.test(String(raw)))return null;
+  const n=Number(raw);
+  return Number.isSafeInteger(n)&&(allowNegative||n>=0)?n:null;
+}
 async function xaiUsage(env){
   const checkedAt=nowISO();
   const key=String(env.XAI_MANAGEMENT_KEY||'').trim(),teamId=String(env.XAI_TEAM_ID||'').trim();
   if(!key||!teamId)return {ok:false,kind:'xai',error:'Live balance not connected. Add XAI_MANAGEMENT_KEY and XAI_TEAM_ID as Cloudflare secrets.',checkedAt};
   if(!/^[a-zA-Z0-9_-]{8,100}$/.test(teamId))return {ok:false,kind:'xai',error:'Invalid xAI team ID configuration.',checkedAt};
+  const root=`https://management-api.x.ai/v1/billing/teams/${encodeURIComponent(teamId)}`;
+  const headers={Authorization:'Bearer '+key,Accept:'application/json'};
   try{
-    const response=await fetch(`https://management-api.x.ai/v1/billing/teams/${encodeURIComponent(teamId)}/prepaid/balance`,{
-      headers:{Authorization:'Bearer '+key,Accept:'application/json'},cache:'no-store',signal:AbortSignal.timeout(12000)
+    const response=await fetch(root+'/prepaid/balance',{
+      headers,cache:'no-store',signal:AbortSignal.timeout(12000)
     });
     if(!response.ok)return {ok:false,kind:'xai',error:response.status===401||response.status===403?'xAI Management API key does not have billing access.':'xAI balance API returned HTTP '+response.status,checkedAt};
-    const data=await response.json();const raw=data?.total?.val;
-    if(typeof raw!=='string'&&!Number.isSafeInteger(raw))throw Error('Missing xAI prepaid balance');
-    if(!/^-?\d+$/.test(String(raw)))throw Error('Invalid xAI cents balance');
-    const cents=Number(raw);if(!Number.isSafeInteger(cents))throw Error('Unsafe xAI cents balance');
-    // xAI's prepaid-balance total is an inverted ledger: -2200 cents means $22 remaining.
-    return {ok:true,kind:'xai',checkedAt,prepaidBalanceUsd:-cents/100,currency:'USD'};
-  }catch{return {ok:false,kind:'xai',error:'xAI prepaid balance could not be refreshed. Try again.',checkedAt};}
+    const data=await response.json(),cents=xaiCents(data?.total?.val);
+    if(cents===null)throw Error('Invalid ledger cents amount');
+    const posted=-cents/100;
+    const result={ok:true,kind:'xai',checkedAt,currency:'USD',
+      prepaidBalanceUsd:posted,postedLedgerBalanceUsd:posted,
+      liveRemainingEstimateUsd:null,currentPeriodUsedUsd:null,estimateAvailable:false,
+      estimateNote:'xAI invoice preview unavailable. Posted ledger may overstate credits available during this billing period.'};
+    // The preview reports this billing period's prepaid credit allotment and credits used.
+    // -prepaidCredits.val - prepaidCreditsUsed.val is a BEST-EFFORT estimate, not an
+    // authoritative console balance. An unavailable/invalid response is never zero.
+    try{
+      const preview=await fetch(root+'/postpaid/invoice/preview',{
+        headers,cache:'no-store',signal:AbortSignal.timeout(12000)
+      });
+      if(preview.ok){
+        const detail=await preview.json();
+        const allotted=xaiCents(detail?.coreInvoice?.prepaidCredits?.val);
+        const used=xaiCents(detail?.coreInvoice?.prepaidCreditsUsed?.val,false);
+        if(allotted!==null&&allotted<=0&&used!==null){
+          result.liveRemainingEstimateUsd=(-allotted-used)/100;
+          result.currentPeriodUsedUsd=used/100;
+          result.estimateAvailable=true;
+          result.estimateNote='Estimated from xAI current-period prepaid credits minus credits used; xAI Console remains authoritative.';
+        }
+      }
+    }catch{} // Keep accurately labeled posted balance if the optional preview fails.
+    return result;
+  }catch{return {ok:false,kind:'xai',error:'xAI prepaid billing could not be refreshed. Try again.',checkedAt};}
 }
 function out(row){return {id:row.id,provider:row.provider,label:row.label,billingAmount:Number(row.billing_amount)||0,billingCurrency:row.billing_currency,billingCycle:row.billing_cycle,
   nextRenewal:row.next_renewal||'',autoRenew:row.auto_renew===1,manualBalance:row.manual_balance==null?null:Number(row.manual_balance),balanceUnit:row.balance_unit||'',notes:row.notes||'',updatedAt:row.updated_at};}
