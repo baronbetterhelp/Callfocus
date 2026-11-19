@@ -79,12 +79,12 @@
         </div>
       </nav>
 
-      <!-- V16.80: Independent admin-only provider accounts / subscription tracker -->
+      <!-- V16.81: Provider accounts / subscription tracker including OpenAI and xAI -->
       <section class="admin-tab-panel cf-api-tracker" data-admin-panel="api-accounts" id="cfApiAccountsPanel">
         <div class="admin-section-heading cf-api-page-heading">
           <span class="kicker">Account operations</span>
           <h2>API Accounts &amp; Subscriptions</h2>
-          <p>Manage renewal dates and costs across your services. Refresh all six connected ElevenLabs accounts for live provider-reported balances, quotas and voice capacity.</p>
+          <p>Manage renewal dates and costs across your services. Refresh all six ElevenLabs accounts and read the latest available OpenAI spending and xAI prepaid balance from their billing APIs.</p>
           <div class="cf-api-head-actions"><button class="btn btn-primary" type="button" id="cfApiRefreshAll">↻ Refresh all accounts</button><button class="btn btn-ghost" type="button" id="cfApiAddAccount">+ Track another subscription</button></div>
           <small id="cfApiRefreshedAt" class="cf-api-last-refresh" aria-live="polite">Select this tab to load your accounts.</small>
         </div>
@@ -95,9 +95,11 @@
         </div>
         <div class="cf-api-section-head"><div><h3>ElevenLabs accounts</h3><p>Balances are read directly from each account. Dates and prices are independently managed; a credit reset is not necessarily a payment date.</p></div></div>
         <div id="cfApiElevenCards" class="cf-api-account-grid"><p class="cf-api-empty">Open this section to load the six accounts.</p></div>
-        <div class="cf-api-section-head"><div><h3>Other API services &amp; subscriptions</h3><p>Add OpenAI, Grok, Resend, hosting, or any other recurring service. Until a provider API connection exists, balances here are manually recorded, never represented as live.</p></div></div>
+        <div class="cf-api-section-head"><div><h3>OpenAI &amp; xAI accounts</h3><p>OpenAI reports recent billed spending, not a prepaid balance. xAI reports your team's prepaid balance with a separate management key. Both refresh with the ElevenLabs accounts.</p></div></div>
+        <div id="cfApiPlatformCards" class="cf-api-account-grid"><p class="cf-api-empty">Open this section to load OpenAI and xAI.</p></div>
+        <div class="cf-api-section-head"><div><h3>Other API services &amp; subscriptions</h3><p>Track Resend, hosting, and other services. Until a provider API connection exists, these balances are manually recorded and never represented as live.</p></div></div>
         <div id="cfApiOtherCards" class="cf-api-account-grid"><p class="cf-api-empty">No other services tracked yet.</p></div>
-        <div class="cf-api-help-note"><strong>Security:</strong> API keys remain in Cloudflare secrets. Do not enter passwords or API keys in the notes field. This page tracks renewals; it does not buy subscriptions, move money, or change voice provider assignments.</div>
+        <div class="cf-api-help-note"><strong>Security:</strong> API keys remain in Cloudflare secrets. For OpenAI live spend set OPENAI_ADMIN_KEY; for xAI prepaid balance set XAI_MANAGEMENT_KEY and XAI_TEAM_ID. Do not enter credentials in the notes field. This page tracks renewals; it does not buy subscriptions, move money, or change voice provider assignments.</div>
       </section>
       <div class="cf-api-modal" id="cfApiModal" hidden>
         <div class="cf-api-modal-backdrop" data-cf-api-close="1"></div>
@@ -798,6 +800,6 @@
 <script src="/cf-temp-voice-admin.js?v=16.34"></script>
 <script src="/cf-clone-availability-admin.js?v=16.44"></script><script src="/permanent-slots-admin.js?v=16.76" defer></script>
 <script>window.addEventListener('load',()=>{const panel=document.querySelector('[data-voice-admin-build="16.76"]');if(!panel)return;const status=document.getElementById('cfSlotAccount6Status');if(status&&!window.__cfVoiceAdmin1676Loaded){status.textContent='Account 6 controls did not load. Do not change voice-slot settings. Refresh this Admin page after confirming the V16.76 Cloudflare deployment is active.';}});</script>
-<script src="/cf-api-accounts-admin.js?v=16.80" defer></script>
+<script src="/cf-api-accounts-admin.js?v=16.81" defer></script>
 <script src="/affiliate-admin.js?v=16.37"></script></body>
 </html>

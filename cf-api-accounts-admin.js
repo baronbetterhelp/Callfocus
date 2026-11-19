@@ -1,4 +1,4 @@
-/* CallFocus V16.80 — independent client for the private API accounts tab. */
+/* CallFocus V16.81 — independent client for the private API accounts tab. */
 (()=>{'use strict';
   const root=document.getElementById('cfApiAccountsPanel');if(!root)return;
   const $=id=>document.getElementById(id);
@@ -16,52 +16,70 @@
       d===0?{text:'Due today',tone:'soon'}:d<=7?{text:`Due in ${d} day${d===1?'':'s'}`,tone:'soon'}:{text:`${d} days left`,tone:''};
   }
   function moneyLabel(a){return Number(a.billingAmount)>0?cash(a.billingAmount,a.billingCurrency):'Price not recorded';}
-  function oneCard(a){const isLive=a.id.startsWith('el-'),u=usage[a.id]||{},due=dueInfo(a),ok=u.ok===true;
-    const badge=isLive?(ok?'<span class="cf-api-chip">LIVE</span>':'<span class="cf-api-chip error">UNAVAILABLE</span>'):'<span class="cf-api-chip manual">MANUAL</span>';
-    const stats=isLive?(!ok?`<p class="cf-api-account-error">${esc(u.error||'Provider data is currently unavailable.')} No balance is being estimated.</p>`:`
+  const isEleven=a=>/^el-[1-6]$/.test(a.id);
+  const isPlatform=a=>a.id==='openai-api'||a.id==='xai-api';
+  function oneCard(a){
+    const eleven=isEleven(a),platform=isPlatform(a),live=eleven||platform,u=usage[a.id]||{},due=dueInfo(a),ok=u.ok===true;
+    const badge=live?(ok?`<span class="cf-api-chip">${a.id==='openai-api'?'LIVE SPEND':a.id==='xai-api'?'LIVE BALANCE':'LIVE'}</span>`:'<span class="cf-api-chip error">NOT CONNECTED</span>'):'<span class="cf-api-chip manual">MANUAL</span>';
+    let stats;
+    if(eleven){
+      stats=!ok?`<p class="cf-api-account-error">${esc(u.error||'Provider data is currently unavailable.')} No balance is being estimated.</p>`:`
       <div class="cf-api-stat-grid"><div><small>Credits remaining</small><strong>${num(u.creditsRemaining)}</strong></div><div><small>Credits used / allowance</small><strong>${num(u.creditsUsed)} / ${num(u.creditsLimit)}</strong></div>
       <div><small>Saved voices / capacity</small><strong>${num(u.voiceSlotsUsed)} / ${num(u.voiceSlotsLimit)}</strong></div>
       <div><small>Voice creations this period</small><strong>${num(u.voiceCreationUsed)} / ${num(u.voiceCreationLimit)}</strong></div></div>
       <div class="cf-api-progress"><span style="width:${u.creditsLimit>0&&u.creditsUsed!=null?Math.min(100,Math.max(0,u.creditsUsed/u.creditsLimit*100)):0}%"></span></div>
-      <div class="cf-api-account-meta">${esc(u.tier||'Unknown plan')} · ${esc(u.status||'Status not provided')} · Checked ${safeTime(u.checkedAt)}${u.creditResetAt?` · Credits reset ${safeTime(u.creditResetAt)}`:''}${u.nextInvoiceAmount!=null?` · Next provider invoice: ${cash(u.nextInvoiceAmount,u.nextInvoiceCurrency||'USD')}`:''}${u.hasOpenInvoices?' · Open invoice reported':''}</div>`)
-      :`<div class="cf-api-stat-grid"><div><small>Last recorded balance</small><strong>${a.manualBalance===null?'Not entered':`${num(a.manualBalance)} ${esc(a.balanceUnit||'')}`}</strong></div><div><small>Balance status</small><strong style="font-size:14px">Manually updated</strong></div></div><div class="cf-api-account-meta">Last edited ${safeTime(a.updatedAt)}</div>`;
+      <div class="cf-api-account-meta">${esc(u.tier||'Unknown plan')} · ${esc(u.status||'Status not provided')} · Checked ${safeTime(u.checkedAt)}${u.creditResetAt?` · Credits reset ${safeTime(u.creditResetAt)}`:''}${u.nextInvoiceAmount!=null?` · Next provider invoice: ${cash(u.nextInvoiceAmount,u.nextInvoiceCurrency||'USD')}`:''}${u.hasOpenInvoices?' · Open invoice reported':''}</div>`;
+    }else if(a.id==='openai-api'){
+      stats=ok?`<div class="cf-api-stat-grid"><div><small>Provider billed spend · last 30 days</small><strong>${cash(u.spend30dUsd,'USD')}</strong></div><div><small>Provider billed spend · today (UTC)</small><strong>${cash(u.spendTodayUsd,'USD')}</strong></div><div><small>Prepaid credit remaining</small><strong style="font-size:14px">Not available via this report</strong></div><div><small>Billing scope</small><strong style="font-size:15px">${u.scope==='project'?'CallFocus project':'Entire organization'}</strong></div></div><div class="cf-api-account-meta">Refreshed ${safeTime(u.checkedAt)}. Provider cost reporting may be delayed.${u.partial?' Some results were truncated.':''}</div>`:
+      `<p class="cf-api-account-error">${esc(u.error||'OpenAI billing not connected.')} No balance is being estimated.</p>`;
+      if(a.manualBalance!==null)stats+=`<p class="cf-api-account-meta">Manually recorded prepaid balance (not live): <strong>${num(a.manualBalance)} ${esc(a.balanceUnit||'USD')}</strong></p>`;
+    }else if(a.id==='xai-api'){
+      stats=ok?`<div class="cf-api-stat-grid"><div><small>Live team prepaid balance</small><strong>${cash(u.prepaidBalanceUsd,'USD')}</strong></div><div><small>Currency</small><strong>USD</strong></div></div><div class="cf-api-account-meta">Checked ${safeTime(u.checkedAt)}. Provider-reported prepaid balance, not an invoice or subscription renewal date.</div>`:
+      `<p class="cf-api-account-error">${esc(u.error||'xAI billing not connected.')} No live balance is being estimated.</p>`;
+      if(a.manualBalance!==null)stats+=`<p class="cf-api-account-meta">Manually recorded backup balance (not live): <strong>${num(a.manualBalance)} ${esc(a.balanceUnit||'USD')}</strong></p>`;
+    }else{
+      stats=`<div class="cf-api-stat-grid"><div><small>Last recorded balance</small><strong>${a.manualBalance===null?'Not entered':`${num(a.manualBalance)} ${esc(a.balanceUnit||'')}`}</strong></div><div><small>Balance status</small><strong style="font-size:14px">Manually updated</strong></div></div><div class="cf-api-account-meta">Last edited ${safeTime(a.updatedAt)}</div>`;
+    }
     return `<article class="cf-api-account" data-cf-api-card="${esc(a.id)}">
       <div class="cf-api-account-title"><div><h4>${esc(a.label)}</h4><small>${esc(a.provider)}</small></div>${badge}</div>
       ${stats}
       <div class="cf-api-account-date"><div><small>Next subscription payment</small><strong>${safeDate(a.nextRenewal)}</strong></div><span class="cf-api-due ${due.tone}">${esc(due.text)}</span></div>
-      <div class="cf-api-account-meta">${moneyLabel(a)} · ${esc(a.billingCycle==='none'?'One-time':a.billingCycle)}${a.autoRenew?' · Auto-renew noted':' · Manual renewal'}${a.notes?` · ${esc(a.notes)}`:''}</div>
-      <div class="cf-api-actions"><button class="btn btn-ghost" type="button" data-cf-api-edit="${esc(a.id)}">Edit billing details</button>${a.nextRenewal&&a.billingCycle!=='none'?`<button class="btn btn-ghost" type="button" data-cf-api-renew="${esc(a.id)}">Mark renewed</button>`:''}${!isLive?`<button class="btn btn-ghost" type="button" data-cf-api-delete="${esc(a.id)}">Remove</button>`:''}</div>
+      <div class="cf-api-account-meta">${moneyLabel(a)} · ${esc(a.billingCycle==='none'?'No recurring bill recorded':a.billingCycle)}${a.autoRenew?' · Auto-renew noted':' · Manual renewal'}${a.notes?` · ${esc(a.notes)}`:''}</div>
+      <div class="cf-api-actions"><button class="btn btn-ghost" type="button" data-cf-api-edit="${esc(a.id)}">Edit billing details</button>${a.nextRenewal&&a.billingCycle!=='none'?`<button class="btn btn-ghost" type="button" data-cf-api-renew="${esc(a.id)}">Mark renewed</button>`:''}${!live?`<button class="btn btn-ghost" type="button" data-cf-api-delete="${esc(a.id)}">Remove</button>`:''}</div>
     </article>`;
   }
-  function show(){const els=accounts.filter(a=>a.id.startsWith('el-')),others=accounts.filter(a=>!a.id.startsWith('el-'));
+  function show(){
+    const els=accounts.filter(isEleven),platforms=accounts.filter(isPlatform),others=accounts.filter(a=>!isEleven(a)&&!isPlatform(a));
     $('cfApiElevenCards').innerHTML=els.length?els.map(oneCard).join(''):'<p class="cf-api-empty">No ElevenLabs records found.</p>';
+    $('cfApiPlatformCards').innerHTML=platforms.length?platforms.map(oneCard).join(''):'<p class="cf-api-empty">OpenAI and xAI accounts are unavailable.</p>';
     $('cfApiOtherCards').innerHTML=others.length?others.map(oneCard).join(''):'<p class="cf-api-empty">No additional subscriptions yet. Tap “Track another subscription” to add one.</p>';
     const due=accounts.filter(a=>a.nextRenewal&&dueInfo(a).tone).length;
     const connected=els.filter(a=>usage[a.id]?.ok).length;
+    const providerLive=platforms.filter(a=>usage[a.id]?.ok).length;
     const totals={};for(const a of accounts){const amount=Number(a.billingAmount)||0,cycle=a.billingCycle,factor=cycle==='monthly'?1:cycle==='quarterly'?1/3:cycle==='annual'?1/12:0;
       totals[a.billingCurrency]=(totals[a.billingCurrency]||0)+amount*factor;}
     const estimate=Object.entries(totals).filter(([_,v])=>v>0).map(([code,v])=>cash(v,code)).join(' · ');
-    $('cfApiOverview').innerHTML=`<div class="cf-api-overview-card"><span>Live ElevenLabs accounts</span><strong>${connected} / 6</strong><small>Connected, read-only usage reports</small></div>
-      <div class="cf-api-overview-card"><span>Due or overdue (7 days)</span><strong>${due}</strong><small>Based on saved renewal dates</small></div>
-      <div class="cf-api-overview-card"><span>Tracked subscriptions</span><strong>${accounts.length}</strong><small>${estimate?'Estimated monthly: '+estimate:'Add amounts to see monthly cost'}</small></div>`;
+    $('cfApiOverview').innerHTML=`<div class="cf-api-overview-card"><span>Live ElevenLabs accounts</span><strong>${connected} / 6</strong><small>Voice account balances &amp; quotas</small></div>
+      <div class="cf-api-overview-card"><span>OpenAI / xAI billing feeds</span><strong>${providerLive} / 2</strong><small>OpenAI spend; xAI prepaid balance</small></div>
+      <div class="cf-api-overview-card"><span>Renewals due or overdue</span><strong>${due}</strong><small>${accounts.length} tracked accounts · ${estimate?'Est. monthly: '+estimate:'Add prices for cost totals'}</small></div>`;
   }
   async function call(options={}){const response=await fetch('/api/admin/api-accounts',{...options,credentials:'same-origin',cache:'no-store',headers:{'X-CallFocus-Admin-Key':token(),...(options.body?{'Content-Type':'application/json'}:{})}});
     const body=await response.json().catch(()=>({}));if(!response.ok||body.ok!==true)throw Error(body.error||'Could not load account tracker.');return body;}
   async function refresh(){if(loading||!token())return;loading=true;const btn=$('cfApiRefreshAll'),before=btn.textContent;btn.disabled=true;btn.textContent='Refreshing live balances…';
-    $('cfApiRefreshedAt').textContent='Querying all six provider accounts now…';
+    $('cfApiRefreshedAt').textContent='Checking six ElevenLabs accounts, OpenAI billing and xAI prepaid balance…';
     try{const data=await call();accounts=Array.isArray(data.accounts)?data.accounts:[];usage=data.usage||{};loaded=true;show();$('cfApiRefreshedAt').textContent='Refreshed '+safeTime(data.refreshedAt)+'. Provider results are checked live; renewal dates are tracked separately.'}
     catch(e){$('cfApiRefreshedAt').textContent=e.message;}
     finally{btn.disabled=false;btn.textContent=before;loading=false;}
   }
-  function showForm(id){const a=accounts.find(x=>x.id===id),fresh=!a,isLive=!fresh&&id.startsWith('el-');
-    $('cfApiEditTitle').textContent=fresh?'Add subscription':isLive?`Account ${id.slice(3)} billing details`:'Edit subscription';
+  function showForm(id){const a=accounts.find(x=>x.id===id),fresh=!a;
+    $('cfApiEditTitle').textContent=fresh?'Add subscription':isEleven(a)?`Account ${id.slice(3)} billing details`:'Edit subscription';
     $('cfApiEditId').value=a?.id||'custom-'+crypto.randomUUID();
-    $('cfApiEditName').value=a?.label||'';$('cfApiEditProvider').value=a?.provider||'';$('cfApiEditProvider').disabled=isLive;
+    $('cfApiEditName').value=a?.label||'';$('cfApiEditProvider').value=a?.provider||'';$('cfApiEditProvider').disabled=!fresh&&(isEleven(a)||isPlatform(a));
     $('cfApiEditAmount').value=a?.billingAmount??0;$('cfApiEditCurrency').value=a?.billingCurrency||'USD';
     $('cfApiEditCycle').value=a?.billingCycle||'monthly';$('cfApiEditRenewal').value=a?.nextRenewal||'';
     $('cfApiEditAutoRenew').checked=a?.autoRenew===true;
     $('cfApiEditBalance').value=a?.manualBalance??'';$('cfApiEditUnit').value=a?.balanceUnit||'';
-    $('cfApiManualBalanceWrap').hidden=isLive;$('cfApiManualUnitWrap').hidden=isLive;
+    $('cfApiManualBalanceWrap').hidden=!fresh&&isEleven(a);$('cfApiManualUnitWrap').hidden=!fresh&&isEleven(a);
     $('cfApiEditNotes').value=a?.notes||'';$('cfApiFormFeedback').textContent='';
     savedBodyOverflow=document.body.style.overflow;document.body.style.overflow='hidden';$('cfApiModal').hidden=false;
     $('cfApiEditName').focus();
@@ -81,7 +99,7 @@
   $('cfApiRefreshAll').addEventListener('click',refresh);
   $('cfApiAddAccount').addEventListener('click',()=>showForm(null));
   $('cfApiEditForm').addEventListener('submit',saveForm);
-  $('cfApiElevenCards').addEventListener('click',onCardClick);$('cfApiOtherCards').addEventListener('click',onCardClick);
+  $('cfApiElevenCards').addEventListener('click',onCardClick);$('cfApiPlatformCards').addEventListener('click',onCardClick);$('cfApiOtherCards').addEventListener('click',onCardClick);
   $('cfApiModal').addEventListener('click',e=>{if(e.target.closest('[data-cf-api-close]'))hideForm();});
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('cfApiModal').hidden)hideForm();});
   document.querySelector('[data-admin-tab="api-accounts"]')?.addEventListener('click',()=>{refresh()});
