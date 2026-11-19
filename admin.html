@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400..700&family=Manrope:wght@500..800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/admin.css?v=16.79-kora-currencies" />
+  <link rel="stylesheet" href="/admin.css?v=16.80-api-subscriptions" />
   <style>
 /* V16.79 foreign KoraPay pricing controls */
 .cf-kora-currency-admin{margin:18px 0;padding:20px;background:linear-gradient(150deg,#f0f8f5,#fff);border:1px solid #c9e1d9;border-radius:19px;color:#25443e}
@@ -70,6 +70,7 @@
           <button class="admin-tab" type="button" data-admin-tab="affiliate" aria-selected="false"><span>₦</span>Earn Referrals</button>
           <button class="admin-tab" type="button" data-admin-tab="image-video" aria-selected="false"><span>▧</span>Image to Video</button>
           <button class="admin-tab" type="button" data-admin-tab="ai" aria-selected="false"><span>✦</span>AI usage</button>
+          <button class="admin-tab" type="button" data-admin-tab="api-accounts" aria-selected="false"><span>◴</span>API Accounts &amp; Billing</button>
           <button class="admin-tab" type="button" data-admin-tab="voice" aria-selected="false"><span>◉</span>Voice</button>
           <button class="admin-tab" type="button" data-admin-tab="behavior" aria-selected="false"><span>≋</span>Behavior</button>
           <button class="admin-tab" type="button" data-admin-tab="appearance" aria-selected="false"><span>◌</span>Appearance</button>
@@ -77,6 +78,48 @@
           <button class="admin-tab" type="button" data-admin-tab="diagnostics" aria-selected="false"><span>⚙</span>Diagnostics</button>
         </div>
       </nav>
+
+      <!-- V16.80: Independent admin-only provider accounts / subscription tracker -->
+      <section class="admin-tab-panel cf-api-tracker" data-admin-panel="api-accounts" id="cfApiAccountsPanel">
+        <div class="admin-section-heading cf-api-page-heading">
+          <span class="kicker">Account operations</span>
+          <h2>API Accounts &amp; Subscriptions</h2>
+          <p>Manage renewal dates and costs across your services. Refresh all six connected ElevenLabs accounts for live provider-reported balances, quotas and voice capacity.</p>
+          <div class="cf-api-head-actions"><button class="btn btn-primary" type="button" id="cfApiRefreshAll">↻ Refresh all accounts</button><button class="btn btn-ghost" type="button" id="cfApiAddAccount">+ Track another subscription</button></div>
+          <small id="cfApiRefreshedAt" class="cf-api-last-refresh" aria-live="polite">Select this tab to load your accounts.</small>
+        </div>
+        <div class="cf-api-overview" id="cfApiOverview" aria-live="polite">
+          <div class="cf-api-overview-card"><span>Connected voice accounts</span><strong>6</strong><small>Live usage from ElevenLabs</small></div>
+          <div class="cf-api-overview-card"><span>Renewals due within 7 days</span><strong>—</strong><small>Based on tracked billing dates</small></div>
+          <div class="cf-api-overview-card"><span>Total tracked accounts</span><strong>—</strong><small>Including manually tracked services</small></div>
+        </div>
+        <div class="cf-api-section-head"><div><h3>ElevenLabs accounts</h3><p>Balances are read directly from each account. Dates and prices are independently managed; a credit reset is not necessarily a payment date.</p></div></div>
+        <div id="cfApiElevenCards" class="cf-api-account-grid"><p class="cf-api-empty">Open this section to load the six accounts.</p></div>
+        <div class="cf-api-section-head"><div><h3>Other API services &amp; subscriptions</h3><p>Add OpenAI, Grok, Resend, hosting, or any other recurring service. Until a provider API connection exists, balances here are manually recorded, never represented as live.</p></div></div>
+        <div id="cfApiOtherCards" class="cf-api-account-grid"><p class="cf-api-empty">No other services tracked yet.</p></div>
+        <div class="cf-api-help-note"><strong>Security:</strong> API keys remain in Cloudflare secrets. Do not enter passwords or API keys in the notes field. This page tracks renewals; it does not buy subscriptions, move money, or change voice provider assignments.</div>
+      </section>
+      <div class="cf-api-modal" id="cfApiModal" hidden>
+        <div class="cf-api-modal-backdrop" data-cf-api-close="1"></div>
+        <form id="cfApiEditForm" class="cf-api-modal-inner" aria-label="Edit subscription">
+          <div class="cf-api-modal-title"><div><span class="kicker">Subscription tracking</span><h3 id="cfApiEditTitle">Account details</h3></div><button class="cf-api-close" type="button" data-cf-api-close="1" aria-label="Close editor">×</button></div>
+          <input type="hidden" id="cfApiEditId">
+          <div class="cf-api-form-grid">
+            <label>Account name<input type="text" id="cfApiEditName" maxlength="80" required></label>
+            <label>Service / provider<input type="text" id="cfApiEditProvider" maxlength="60" required></label>
+            <label>Subscription price<input type="number" min="0" step="0.01" id="cfApiEditAmount" required></label>
+            <label>Currency<input type="text" id="cfApiEditCurrency" maxlength="3" placeholder="USD" required></label>
+            <label>Billing frequency<select id="cfApiEditCycle"><option value="monthly">Every month</option><option value="quarterly">Every 3 months</option><option value="annual">Every year</option><option value="none">No recurring bill</option></select></label>
+            <label>Next payment / renewal date<input type="date" id="cfApiEditRenewal"></label>
+            <label class="cf-api-checkrow"><input type="checkbox" id="cfApiEditAutoRenew"> Provider charges automatically (tracking only)</label>
+            <label id="cfApiManualBalanceWrap">Last known balance (manual)<input type="number" min="0" step="0.01" id="cfApiEditBalance" placeholder="Optional"></label>
+            <label id="cfApiManualUnitWrap">Balance unit<input type="text" id="cfApiEditUnit" maxlength="24" placeholder="e.g., credits or USD"></label>
+          </div>
+          <label class="cf-api-notes-label">Notes (never include credentials)<textarea id="cfApiEditNotes" maxlength="500" rows="2"></textarea></label>
+          <p class="cf-api-form-feedback" id="cfApiFormFeedback" role="status"></p>
+          <div class="cf-api-modal-actions"><button type="button" class="btn btn-ghost" data-cf-api-close="1">Cancel</button><button type="submit" class="btn btn-primary" id="cfApiSaveBtn">Save account</button></div>
+        </form>
+      </div>
 
       <section class="admin-tab-panel active" data-admin-panel="dashboard">
         <div class="admin-section-heading"><span class="kicker">CallFocus administration</span><h2>Dashboard</h2><p>A quick overview of the service and items that need your attention.</p></div>
@@ -755,5 +798,6 @@
 <script src="/cf-temp-voice-admin.js?v=16.34"></script>
 <script src="/cf-clone-availability-admin.js?v=16.44"></script><script src="/permanent-slots-admin.js?v=16.76" defer></script>
 <script>window.addEventListener('load',()=>{const panel=document.querySelector('[data-voice-admin-build="16.76"]');if(!panel)return;const status=document.getElementById('cfSlotAccount6Status');if(status&&!window.__cfVoiceAdmin1676Loaded){status.textContent='Account 6 controls did not load. Do not change voice-slot settings. Refresh this Admin page after confirming the V16.76 Cloudflare deployment is active.';}});</script>
+<script src="/cf-api-accounts-admin.js?v=16.80" defer></script>
 <script src="/affiliate-admin.js?v=16.37"></script></body>
 </html>

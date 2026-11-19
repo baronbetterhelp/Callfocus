@@ -1,3 +1,4 @@
+import {handleApiAccounts} from './cf-api-account-tracker-worker.js';
 import {slotCustomer,slotPopupConfig,slotAdmin,createSavedVoice,reassignPending,releasePending,toggleAccount4,toggleAccount5,toggleAccount6,setPublicAvailability,slotRenew,slotReleaseExpired} from './permanent-voice-slots-worker.js';
 import { elRequest, elCleanup, elAdminPurge, elAdminAvailability, elGetAvailability } from './elevenlabs-worker.js';
 import {resolveEarnReferral,affiliateLinkSignup,affiliateRecordPurchase,affiliateCustomerApi,affiliateAdminApi,affiliateEmailReview} from './affiliate-worker.js';
@@ -7593,6 +7594,10 @@ export default {
     if (url.pathname === '/api/admin/config') return handleAdminConfig(request, env);
     if (url.pathname === '/api/admin/purchase-offers') return handleAdminPurchaseOffers(request,env);
     if (url.pathname === '/api/admin/signup-email-verification') return handleAdminSignupEmailVerification(request, env);
+    if (url.pathname === '/api/admin/api-accounts') {
+      if (!await adminAuthorized(request, env)) return json({error:'Admin sign-in required.'},401,{'Cache-Control':'no-store'});
+      return safeCustomerRoute('api-accounts-tracker',()=>handleApiAccounts(request, env));
+    }
     if (url.pathname === '/api/admin/korapay-currencies') return handleAdminKorapayCurrencies(request, env);
     if (url.pathname === '/api/admin/availability') return handleAdminAvailability(request, env);
     if (url.pathname === '/api/admin/screenshot-limits') return handleAdminScreenshotLimits(request, env);

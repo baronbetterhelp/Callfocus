@@ -1065,3 +1065,73 @@ body.admin-page{
 .cf-clone-admin-toggle{display:flex!important;flex-direction:row!important;justify-content:space-between;align-items:center;gap:16px;background:white;border:1px solid #d5e9df;border-radius:16px;padding:15px 17px!important}
 .cf-clone-admin-toggle span{display:grid;gap:5px}.cf-clone-admin-toggle strong{font-size:15px}.cf-clone-admin-toggle small{font-size:12px;font-weight:500;color:#628076}.cf-clone-admin-toggle input{width:25px!important;height:25px!important;flex-shrink:0;accent-color:#13816a}
 .cf-clone-admin-card textarea{resize:vertical;min-height:100px;line-height:1.6}.cf-clone-admin-actions{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.cf-clone-admin-actions span{flex:1 1 190px;font-size:12px;line-height:1.5;color:#375c50}
+
+/* V16.74 monthly subscriptions: admin account summary and controlled release */
+.cf-monthly-admin{margin:16px 0;padding:18px;border:1px solid #cbded5;border-radius:18px;background:rgba(233,247,239,.5)}
+.cf-monthly-admin h4{font-size:1.1rem;margin:0 0 9px}.cf-monthly-admin h5{margin:8px 0}
+.cf-monthly-price{display:block;margin:12px 0}.cf-monthly-price input{display:block;width:100%;max-width:310px;margin-top:8px}
+.cf-monthly-price small{display:block;margin-top:5px;font-weight:400}
+.cf-monthly-accounts{display:grid;gap:8px;margin:12px 0}
+.cf-monthly-account-row{display:flex;flex-direction:column;gap:3px;background:#fff;border:1px solid #d8e8df;border-radius:12px;padding:11px 13px;color:#184337}
+.cf-monthly-account-row span{font-size:.9rem;line-height:1.5;color:#547268}
+.cf-monthly-release{border-top:1px solid #cbded5;padding-top:14px}.cf-monthly-release label{display:block;margin:10px 0}.cf-monthly-release input,.cf-monthly-release select{display:block;max-width:100%;width:100%;margin-top:6px;padding:10px;border:1px solid #b5cebf;border-radius:9px;background:#fff}
+
+.cf-monthly-due-details{margin:12px 0}.cf-monthly-due-details summary{cursor:pointer;color:#0e6550;font-weight:700}.cf-monthly-due{max-height:300px;overflow:auto;margin:8px 0;padding:4px}.cf-monthly-due-row{padding:10px;border-bottom:1px solid #d4e6da;overflow-wrap:anywhere;font-size:.88rem;color:#4a6659}
+
+/* V16.80 — API account & subscription tracking, isolated to its own admin tab */
+.cf-api-tracker{--cf-api-ink:#17473c;--cf-api-muted:#668078;color:var(--cf-api-ink)}
+.cf-api-tracker h3{color:#173b33;font:800 21px/1.25 'Manrope',sans-serif;letter-spacing:-.5px;margin:0}
+.cf-api-page-heading p{max-width:760px}
+.cf-api-head-actions{display:flex;gap:11px;flex-wrap:wrap;margin:20px 0 10px}
+.cf-api-head-actions .btn{font-size:13px;min-height:46px}
+.cf-api-last-refresh{font-size:12px;color:#638077}
+.cf-api-overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
+.cf-api-overview-card{background:linear-gradient(135deg,#f0f8f4,#fff);border:1px solid #d5e6dd;border-radius:18px;padding:20px;min-width:0}
+.cf-api-overview-card span,.cf-api-overview-card small{display:block;color:var(--cf-api-muted);font-size:12px;line-height:1.45}
+.cf-api-overview-card strong{display:block;color:var(--cf-api-ink);font-size:clamp(25px,4vw,35px);font-weight:800;letter-spacing:-.7px;margin:5px 0}
+.cf-api-section-head{margin-top:13px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.cf-api-section-head p{font-size:13px;color:#6b8179;line-height:1.6;margin:7px 0 0;max-width:760px}
+.cf-api-account-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.cf-api-account{background:#fff;border:1px solid #dce8e2;border-radius:19px;padding:18px;box-shadow:0 9px 30px rgba(23,79,61,.038);min-width:0}
+.cf-api-account-title{display:flex;align-items:start;justify-content:space-between;gap:10px}
+.cf-api-account-title h4{margin:0;color:#174238;font-size:16px;font-weight:800;line-height:1.3;overflow-wrap:anywhere}
+.cf-api-account-title small{color:#73877f;display:block;font-size:12px;margin-top:4px}
+.cf-api-chip{white-space:nowrap;background:#e4f5ed;color:#117050;border:1px solid #c9e8d8;border-radius:90px;padding:5px 9px;font-size:11px;font-weight:800}
+.cf-api-chip.error{background:#fff3ea;border-color:#f0d6c0;color:#9f572e}
+.cf-api-chip.manual{background:#f0f3f7;border-color:#e1e5e8;color:#63717b}
+.cf-api-stat-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:15px 0}
+.cf-api-stat-grid>div{padding:12px;background:#f6faf7;border:1px solid #e3ede8;border-radius:13px;min-width:0}
+.cf-api-stat-grid small{display:block;color:#6b8478;font-size:11px;line-height:1.4}
+.cf-api-stat-grid strong{display:block;color:#164b3e;margin:5px 0 0;font-size:19px;overflow-wrap:anywhere;line-height:1.4}
+.cf-api-progress{height:7px;border-radius:18px;background:#e5eee9;overflow:hidden}
+.cf-api-progress>span{display:block;height:100%;background:#16816a;border-radius:18px}
+.cf-api-account-date{border-top:1px solid #e6efea;padding-top:12px;margin-top:12px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.cf-api-account-date>div{min-width:0}
+.cf-api-account-date small{display:block;color:#70847e;font-size:11px}
+.cf-api-account-date strong{display:block;margin-top:4px;font-size:14px;color:#244c40}
+.cf-api-due{color:#1b6854;font-weight:800;font-size:11px;white-space:nowrap}
+.cf-api-due.soon{color:#ac6b25}.cf-api-due.overdue{color:#b34239}
+.cf-api-account-meta{color:#697f76;font-size:12px;line-height:1.5;margin:10px 0 0;overflow-wrap:anywhere}
+.cf-api-account-error{font-size:12px;line-height:1.5;color:#8d5140;background:#fff7f0;border:1px solid #f1dccb;padding:12px;border-radius:12px;margin:14px 0}
+.cf-api-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.cf-api-actions button{font-size:12px;min-height:36px;padding:8px 13px}
+.cf-api-empty{background:#f6faf7;padding:25px;border-radius:16px;border:1px dashed #d9e7df;color:#627b70;grid-column:1/-1}
+.cf-api-help-note{background:#f5f9f6;border:1px solid #d9e9df;color:#4e6b61;border-radius:14px;padding:14px 17px;font-size:12px;line-height:1.65}
+.cf-api-modal[hidden]{display:none!important}
+.cf-api-modal{position:fixed;inset:0;z-index:999999;display:grid;place-items:center;padding:18px}
+.cf-api-modal-backdrop{position:absolute;inset:0;background:rgba(15,38,32,.62)}
+.cf-api-modal-inner{position:relative;background:#fff;width:min(660px,100%);max-height:min(88vh,820px);overflow-y:auto;border-radius:23px;border:1px solid #dce9e2;padding:24px;box-shadow:0 25px 85px rgba(0,25,17,.25);color:#183d33}
+.cf-api-modal-title{display:flex;justify-content:space-between;gap:15px;align-items:start;margin-bottom:18px}
+.cf-api-modal-title h3{font-size:23px;margin:5px 0 0;color:#173b33}
+.cf-api-close{border:1px solid #d9e7df;border-radius:50%;background:#fff;color:#294c42;width:40px;height:40px;font-size:25px;cursor:pointer}
+.cf-api-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.cf-api-form-grid label,.cf-api-notes-label{display:flex;flex-direction:column;gap:6px;color:#46665c;font-size:12px;font-weight:700;min-width:0}
+.cf-api-form-grid input,.cf-api-form-grid select,.cf-api-notes-label textarea{width:100%;min-width:0;font-size:14px;background:#fff;border:1px solid #cdded5;border-radius:11px;padding:11px;color:#173f34;min-height:45px}
+.cf-api-form-grid input:disabled{background:#f4f7f5;color:#78877d}
+.cf-api-form-grid .cf-api-checkrow{align-self:center;flex-direction:row;align-items:center;line-height:1.45}
+.cf-api-checkrow input{width:18px!important;height:18px!important;min-height:auto!important;flex:0 0 18px}
+.cf-api-notes-label{margin-top:12px}
+.cf-api-form-feedback{color:#b13f32;font-size:12px;min-height:18px;margin:8px 0}
+.cf-api-modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
+@media(max-width:720px){.cf-api-overview{grid-template-columns:repeat(2,minmax(0,1fr))}.cf-api-overview-card:first-child{grid-column:1/-1}.cf-api-account-grid{grid-template-columns:1fr}.cf-api-head-actions .btn{flex:1 1 auto}.cf-api-modal-inner{padding:17px}}
+@media(max-width:430px){.cf-api-form-grid{grid-template-columns:1fr}.cf-api-account{padding:14px}.cf-api-overview-card{padding:15px}.cf-api-modal{padding:9px}.cf-api-modal-inner{max-height:92vh}}
