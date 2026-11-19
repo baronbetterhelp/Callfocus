@@ -1,4 +1,4 @@
-/* CallFocus V16.81 — independent client for the private API accounts tab. */
+/* CallFocus V16.82 — independent client for the private API accounts tab. */
 (()=>{'use strict';
   const root=document.getElementById('cfApiAccountsPanel');if(!root)return;
   const $=id=>document.getElementById(id);
@@ -20,7 +20,7 @@
   const isPlatform=a=>a.id==='openai-api'||a.id==='xai-api';
   function oneCard(a){
     const eleven=isEleven(a),platform=isPlatform(a),live=eleven||platform,u=usage[a.id]||{},due=dueInfo(a),ok=u.ok===true;
-    const badge=live?(ok?`<span class="cf-api-chip">${a.id==='openai-api'?'LIVE SPEND':a.id==='xai-api'?'LIVE BALANCE':'LIVE'}</span>`:'<span class="cf-api-chip error">NOT CONNECTED</span>'):'<span class="cf-api-chip manual">MANUAL</span>';
+    const badge=live?(ok?`<span class="cf-api-chip">${a.id==='openai-api'?'LIVE SPEND':a.id==='xai-api'?'LIVE BALANCE':'LIVE'}</span>`:`<span class="cf-api-chip error">${u.configured===false?'SETUP NEEDED':u.failureKind==='rate_limit'?'RATE LIMITED':u.failureKind==='quota'?'LIMIT REACHED':u.failureKind==='unknown_429'?'CHECK API LIMIT':'UNAVAILABLE'}</span>`):'<span class="cf-api-chip manual">MANUAL</span>';
     let stats;
     if(eleven){
       stats=!ok?`<p class="cf-api-account-error">${esc(u.error||'Provider data is currently unavailable.')} No balance is being estimated.</p>`:`
@@ -34,7 +34,7 @@
       `<p class="cf-api-account-error">${esc(u.error||'OpenAI billing not connected.')} No balance is being estimated.</p>`;
       if(a.manualBalance!==null)stats+=`<p class="cf-api-account-meta">Manually recorded prepaid balance (not live): <strong>${num(a.manualBalance)} ${esc(a.balanceUnit||'USD')}</strong></p>`;
     }else if(a.id==='xai-api'){
-      stats=ok?`<div class="cf-api-stat-grid"><div><small>Live team prepaid balance</small><strong>${cash(u.prepaidBalanceUsd,'USD')}</strong></div><div><small>Currency</small><strong>USD</strong></div></div><div class="cf-api-account-meta">Checked ${safeTime(u.checkedAt)}. Provider-reported prepaid balance, not an invoice or subscription renewal date.</div>`:
+      stats=ok?`<div class="cf-api-stat-grid"><div><small>Live team prepaid balance</small><strong>${cash(u.prepaidBalanceUsd,'USD')}</strong></div><div><small>Currency</small><strong>USD</strong></div></div><div class="cf-api-account-meta">Checked ${safeTime(u.checkedAt)}. xAI prepaid ledger correctly interpreted; this is not an invoice or subscription renewal date.</div>`:
       `<p class="cf-api-account-error">${esc(u.error||'xAI billing not connected.')} No live balance is being estimated.</p>`;
       if(a.manualBalance!==null)stats+=`<p class="cf-api-account-meta">Manually recorded backup balance (not live): <strong>${num(a.manualBalance)} ${esc(a.balanceUnit||'USD')}</strong></p>`;
     }else{

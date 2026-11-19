@@ -1,4 +1,4 @@
-// CallFocus V16.81 — admin-only subscription calendar and provider usage monitor.
+// CallFocus V16.82 — admin-only subscription calendar and provider usage monitor.
 // Read-only provider requests. Never exposes, stores, or changes provider credentials.
 const ELEVEN_IDS = Array.from({length:6}, (_,i)=>`el-${i+1}`);
 const API_ACCOUNT_IDS = [...ELEVEN_IDS,'openai-api','xai-api'];
@@ -65,10 +65,28 @@ async function providerUsage(env,index){const key=getKey(env,index);if(!key)retu
 }
 // Organization billing API is read-only. It reports spend, not the remaining prepaid wallet balance.
 // Never substitute the regular voice API key for the separate OpenAI Admin key.
+async function openaiApiFailure(response, checkedAt){
+  const status=response.status;
+  let code='';
+  try{
+    const data=await response.json();
+    code=asText(data?.error?.code||data?.error?.type||'',90).toLowerCase();
+  }catch{}
+  const base={ok:false,kind:'openai',configured:true,checkedAt};
+  if(status===401||status===403)return {...base,failureKind:'auth',error:'OpenAI Admin key cannot access organization cost reporting (HTTP '+status+'). Check organization and key permissions.'};
+  if(status===429){
+    if(['organization_spend_limit_exceeded','project_spend_limit_exceeded','organization_usage_limit_exceeded','credit_balance_exhausted','insufficient_quota'].includes(code))
+      return {...base,failureKind:'quota',error:'OpenAI reporting returned HTTP 429 ('+code+'). Review your OpenAI organization/project spending or credit limits. No balance is estimated.'};
+    if(['rate_limit_exceeded','rate_limit_error','slow_down'].includes(code))
+      return {...base,failureKind:'rate_limit',error:'OpenAI cost reporting is temporarily rate-limited ('+code+'). Try Refresh All later.'};
+    return {...base,failureKind:'unknown_429',error:'OpenAI cost API returned HTTP 429. This may indicate a temporary rate limit or a spending/credit limit. Check the OpenAI Platform usage and limits.'};
+  }
+  return {...base,failureKind:'api_error',error:'OpenAI cost API returned HTTP '+status+'. No balance is estimated.'};
+}
 async function openaiUsage(env){
   const checkedAt=nowISO();
   const key=String(env.OPENAI_ADMIN_KEY||'').trim();
-  if(!key)return {ok:false,kind:'openai',error:'Live spend not connected. Add OPENAI_ADMIN_KEY as a Cloudflare secret (an organization Admin API key).',checkedAt};
+  if(!key)return {ok:false,kind:'openai',configured:false,error:'Live spend not connected. Add OPENAI_ADMIN_KEY as a Cloudflare secret (an organization Admin API key).',checkedAt};
   const projectId=String(env.OPENAI_BILLING_PROJECT_ID||'').trim();
   const now=Math.floor(Date.now()/1000),start=Math.floor(now/86400)*86400-29*86400;
   const qs=new URLSearchParams({start_time:String(start),end_time:String(now),bucket_width:'1d',limit:'30'});
@@ -80,7 +98,7 @@ async function openaiUsage(env){
       const response=await fetch('https://api.openai.com/v1/organization/costs?'+qs.toString(),{
         headers:{Authorization:'Bearer '+key,Accept:'application/json'},cache:'no-store',signal:AbortSignal.timeout(12000)
       });
-      if(!response.ok)return {ok:false,kind:'openai',error:response.status===401||response.status===403?'OpenAI organization Admin key cannot access billing costs.':'OpenAI cost API returned HTTP '+response.status,checkedAt};
+      if(!response.ok)return await openaiApiFailure(response,checkedAt);
       const data=await response.json();if(!Array.isArray(data?.data))throw Error('Invalid cost response');
       for(const bucket of data.data){
         const day=typeof bucket.start_time==='number'?new Date(bucket.start_time*1000).toISOString().slice(0,10):'';
@@ -95,8 +113,8 @@ async function openaiUsage(env){
       if(!next)break;
       if(i===4)partial=true;
     }
-    return {ok:true,kind:'openai',checkedAt,scope:projectId?'project':'organization',spend30dUsd:total,spendTodayUsd:today,periodStart:new Date(start*1000).toISOString(),partial,prepaidBalanceAvailable:false};
-  }catch{return {ok:false,kind:'openai',error:'OpenAI billing could not be refreshed. Try again.',checkedAt};}
+    return {ok:true,kind:'openai',configured:true,checkedAt,scope:projectId?'project':'organization',spend30dUsd:total,spendTodayUsd:today,periodStart:new Date(start*1000).toISOString(),partial,prepaidBalanceAvailable:false};
+  }catch{return {ok:false,kind:'openai',configured:true,failureKind:'network',error:'OpenAI cost API could not be reached. Try Refresh All later.',checkedAt};}
 }
 // xAI balance requires its management key, not the inference XAI_API_KEY.
 async function xaiUsage(env){
@@ -113,7 +131,8 @@ async function xaiUsage(env){
     if(typeof raw!=='string'&&!Number.isSafeInteger(raw))throw Error('Missing xAI prepaid balance');
     if(!/^-?\d+$/.test(String(raw)))throw Error('Invalid xAI cents balance');
     const cents=Number(raw);if(!Number.isSafeInteger(cents))throw Error('Unsafe xAI cents balance');
-    return {ok:true,kind:'xai',checkedAt,prepaidBalanceUsd:cents/100,currency:'USD'};
+    // xAI's prepaid-balance total is an inverted ledger: -2200 cents means $22 remaining.
+    return {ok:true,kind:'xai',checkedAt,prepaidBalanceUsd:-cents/100,currency:'USD'};
   }catch{return {ok:false,kind:'xai',error:'xAI prepaid balance could not be refreshed. Try again.',checkedAt};}
 }
 function out(row){return {id:row.id,provider:row.provider,label:row.label,billingAmount:Number(row.billing_amount)||0,billingCurrency:row.billing_currency,billingCycle:row.billing_cycle,
